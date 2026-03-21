@@ -306,6 +306,354 @@ class MissileDialog(tk.Toplevel):
 
 
 # ---------------------------------------------------------------------------
+# Parametric sweep / sensitivity-analysis dialog
+# ---------------------------------------------------------------------------
+
+class ParametricSweepDialog(tk.Toplevel):
+    """Non-modal dialog for 1-D parametric trajectory sweep.
+
+    Reproduces the analyses Forden performs in all three worked examples:
+      • Table 2  — Range vs azimuth (vary azimuth, fixed loft / cutoff)
+      • Figure 7 — Range vs loft angle (vary loft_angle_deg)
+      • Ad hoc   — Range vs cutoff time (vary engine cutoff)
+
+    The user picks which parameter to vary plus a start/stop/step range;
+    the remaining parameters are taken from the main window at the moment
+    "Run Sweep" is clicked.  Results appear incrementally in a live plot
+    and a scrollable table.  An "Overplot trajectories" option shows all
+    altitude-vs-range profiles on one axes (≤ 20 curves).
+    """
+
+    _PARAM_INFO = {
+        "Azimuth":     dict(key="azimuth",    lo=0.0,  hi=360.0, step=5.0,  unit="°"),
+        "Loft Angle":  dict(key="loft_angle", lo=10.0, hi=80.0,  step=5.0,  unit="°"),
+        "Cutoff Time": dict(key="cutoff",     lo=None, hi=None,  step=5.0,  unit="s"),
+    }
+
+    def __init__(self, parent_app):
+        super().__init__(parent_app)
+        self.title("Parametric Sweep / Sensitivity Analysis")
+        self.geometry("820x680")
+        self.resizable(True, True)
+        self._app        = parent_app
+        self._stop_evt   = threading.Event()
+        self._results    = []          # list of (param_val, range_km, apogee_km)
+        self._traj_store = []          # list of (param_val, result_dict), for overplot
+        self._build()
+
+    # ------------------------------------------------------------------
+    def _build(self):
+        pad = dict(padx=8, pady=4)
+
+        # ── Sweep configuration ────────────────────────────────────────
+        cf = ttk.LabelFrame(self, text="Sweep Configuration")
+        cf.pack(fill=tk.X, **pad)
+
+        row0 = ttk.Frame(cf)
+        row0.pack(fill=tk.X, padx=6, pady=(4, 2))
+
+        ttk.Label(row0, text="Vary:").pack(side=tk.LEFT)
+        self._param_var = tk.StringVar(value="Azimuth")
+        pcb = ttk.Combobox(row0, textvariable=self._param_var,
+                           values=list(self._PARAM_INFO.keys()),
+                           state="readonly", width=14)
+        pcb.pack(side=tk.LEFT, padx=(4, 12))
+        pcb.bind("<<ComboboxSelected>>", self._on_param_changed)
+
+        self._lo_var   = tk.StringVar(value="0.0")
+        self._hi_var   = tk.StringVar(value="360.0")
+        self._step_var = tk.StringVar(value="5.0")
+        for lbl, var in [("From:", self._lo_var), ("To:", self._hi_var),
+                          ("Step:", self._step_var)]:
+            ttk.Label(row0, text=lbl).pack(side=tk.LEFT, padx=(4, 1))
+            ttk.Entry(row0, textvariable=var, width=7).pack(side=tk.LEFT)
+
+        opts = ttk.Frame(cf)
+        opts.pack(fill=tk.X, padx=6, pady=(2, 6))
+        ttk.Label(opts, text="Show:").pack(side=tk.LEFT)
+        self._show_range  = tk.BooleanVar(value=True)
+        self._show_apogee = tk.BooleanVar(value=True)
+        self._overplot    = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="Range",  variable=self._show_range ).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(opts, text="Apogee", variable=self._show_apogee).pack(side=tk.LEFT, padx=4)
+        ttk.Separator(opts, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8, pady=2)
+        ttk.Checkbutton(opts, text="Overplot trajectory profiles (≤ 20 pts)",
+                        variable=self._overplot).pack(side=tk.LEFT, padx=4)
+
+        # ── Buttons + progress ─────────────────────────────────────────
+        bf = ttk.Frame(self)
+        bf.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._run_btn = ttk.Button(bf, text="▶  Run Sweep", command=self._run)
+        self._run_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self._cancel_btn = ttk.Button(bf, text="■  Cancel",
+                                      command=self._cancel, state=tk.DISABLED)
+        self._cancel_btn.pack(side=tk.LEFT, padx=4)
+        ttk.Button(bf, text="Export CSV…", command=self._export).pack(side=tk.LEFT, padx=4)
+        self._prog_lbl = tk.StringVar(value="")
+        ttk.Label(bf, textvariable=self._prog_lbl).pack(side=tk.LEFT, padx=8)
+        self._progressbar = ttk.Progressbar(bf, mode="determinate", length=180)
+        self._progressbar.pack(side=tk.RIGHT, padx=(4, 0))
+
+        # ── Embedded matplotlib figure ─────────────────────────────────
+        self._fig     = Figure(figsize=(8, 3.2), dpi=96)
+        self._canvas  = FigureCanvasTkAgg(self._fig, master=self)
+        self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=8)
+        NavigationToolbar2Tk(self._canvas, self).update()
+        self._init_plot()
+
+        # ── Results table ──────────────────────────────────────────────
+        tf = ttk.LabelFrame(self, text="Results Table")
+        tf.pack(fill=tk.X, padx=8, pady=(4, 8))
+        self._tree = ttk.Treeview(tf,
+                                  columns=("param", "range", "apogee"),
+                                  show="headings", height=6)
+        self._tree.heading("param",  text="Parameter")
+        self._tree.heading("range",  text="Range (km)")
+        self._tree.heading("apogee", text="Apogee (km)")
+        for col in ("param", "range", "apogee"):
+            self._tree.column(col, width=120, anchor=tk.CENTER)
+        vsb = ttk.Scrollbar(tf, orient=tk.VERTICAL, command=self._tree.yview)
+        self._tree.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._tree.pack(fill=tk.X, padx=4, pady=4)
+
+    # ------------------------------------------------------------------
+    def _init_plot(self):
+        self._fig.clf()
+        ax = self._fig.add_subplot(111)
+        ax.set_title("Run a sweep to see results", fontsize=9)
+        ax.grid(True, alpha=0.35)
+        self._fig.tight_layout(pad=2.5)
+        self._canvas.draw()
+
+    # ------------------------------------------------------------------
+    def _on_param_changed(self, _event=None):
+        info = self._PARAM_INFO[self._param_var.get()]
+        lo   = info["lo"]
+        hi   = info["hi"]
+        if lo is None or hi is None:
+            # Cutoff: derive from selected missile
+            try:
+                missile, *_ = self._app._get_inputs()
+                total_burn = missile.burn_time_s
+                if missile.stage2:
+                    total_burn += missile.stage2.burn_time_s
+                lo, hi = 5.0, float(int(total_burn))
+            except Exception:
+                lo, hi = 5.0, 100.0
+        self._lo_var  .set(str(lo))
+        self._hi_var  .set(str(hi))
+        self._step_var.set(str(info["step"]))
+        # Update table column header
+        self._tree.heading("param", text=f"{self._param_var.get()} ({info['unit']})")
+
+    # ------------------------------------------------------------------
+    def _make_points(self):
+        lo   = float(self._lo_var.get())
+        hi   = float(self._hi_var.get())
+        step = float(self._step_var.get())
+        if step <= 0:
+            raise ValueError("Step must be > 0.")
+        n = max(2, int(round((hi - lo) / step)) + 1)
+        return np.linspace(lo, hi, n)
+
+    # ------------------------------------------------------------------
+    def _run(self):
+        self._stop_evt.clear()
+        try:
+            missile, lat, lon, az, cutoff, la, lar = self._app._get_inputs()
+        except Exception as e:
+            messagebox.showerror("Input error", str(e), parent=self)
+            return
+        try:
+            points = self._make_points()
+        except Exception as e:
+            messagebox.showerror("Sweep range error", str(e), parent=self)
+            return
+
+        total_burn = missile.burn_time_s + (missile.stage2.burn_time_s if missile.stage2 else 0)
+        if cutoff is None:
+            cutoff = total_burn
+
+        overplot = self._overplot.get()
+        if overplot and len(points) > 20:
+            messagebox.showwarning(
+                "Too many points for overplot",
+                f"Overplot is limited to 20 trajectory profiles.\n"
+                f"Your sweep has {len(points)} points — overplot will be skipped.\n"
+                "Increase the step size or disable 'Overplot trajectory profiles'.",
+                parent=self)
+            overplot = False
+
+        param_key = self._PARAM_INFO[self._param_var.get()]["key"]
+        self._results    = []
+        self._traj_store = []
+        self._tree.delete(*self._tree.get_children())
+        self._progressbar["maximum"] = len(points)
+        self._progressbar["value"]   = 0
+        self._prog_lbl.set(f"0 / {len(points)}")
+        self._run_btn   .config(state=tk.DISABLED)
+        self._cancel_btn.config(state=tk.NORMAL)
+        self._init_plot()
+
+        threading.Thread(
+            target=self._sweep_worker,
+            args=(missile, lat, lon, az, la, lar, cutoff,
+                  param_key, points, overplot),
+            daemon=True,
+        ).start()
+
+    # ------------------------------------------------------------------
+    def _sweep_worker(self, missile, lat, lon, az, la, lar, cutoff,
+                      param_key, points, store_trajs):
+        for i, val in enumerate(points):
+            if self._stop_evt.is_set():
+                break
+            run_az  = val if param_key == "azimuth"    else az
+            run_la  = val if param_key == "loft_angle" else la
+            run_cut = val if param_key == "cutoff"     else cutoff
+            try:
+                r = integrate_trajectory(
+                    missile, lat, lon, run_az,
+                    loft_angle_deg=run_la,
+                    loft_angle_rate_deg_s=lar,
+                    cutoff_time_s=run_cut,
+                )
+                row  = (val, r["range_km"], r["apogee_km"])
+                traj = (val, r) if store_trajs else None
+            except Exception:
+                row  = (val, float("nan"), float("nan"))
+                traj = None
+            self.after(0, self._add_point, row, traj, i + 1, len(points))
+        self.after(0, self._sweep_done)
+
+    # ------------------------------------------------------------------
+    def _add_point(self, row, traj, done, total):
+        self._results.append(row)
+        if traj is not None:
+            self._traj_store.append(traj)
+        val, rng, apo = row
+        self._tree.insert("", tk.END, values=(
+            f"{val:.2f}",
+            f"{rng:.1f}"  if np.isfinite(rng) else "—",
+            f"{apo:.1f}"  if np.isfinite(apo) else "—",
+        ))
+        self._tree.yview_moveto(1.0)
+        self._progressbar["value"] = done
+        self._prog_lbl.set(f"{done} / {total}")
+        self._redraw()
+
+    # ------------------------------------------------------------------
+    def _sweep_done(self):
+        self._run_btn   .config(state=tk.NORMAL)
+        self._cancel_btn.config(state=tk.DISABLED)
+        n = len(self._results)
+        cancelled = self._stop_evt.is_set()
+        self._prog_lbl.set(
+            f"{'Cancelled after' if cancelled else 'Done —'} {n} point{'s' if n != 1 else ''}.")
+        self._redraw()
+
+    # ------------------------------------------------------------------
+    def _cancel(self):
+        self._stop_evt.set()
+
+    # ------------------------------------------------------------------
+    def _redraw(self):
+        if not self._results:
+            return
+
+        info   = self._PARAM_INFO[self._param_var.get()]
+        xlabel = f"{self._param_var.get()} ({info['unit']})"
+
+        xs          = [r[0] for r in self._results]
+        ys_range    = [r[1] for r in self._results]
+        ys_apogee   = [r[2] for r in self._results]
+
+        self._fig.clf()
+
+        if self._traj_store:
+            # ── Overplot trajectory profiles ──────────────────────────
+            ax   = self._fig.add_subplot(111)
+            cmap = matplotlib.cm.viridis
+            vals = [t[0] for t in self._traj_store]
+            vmin, vmax = min(vals), max(vals)
+            span = max(vmax - vmin, 1e-9)
+            for pval, r in self._traj_store:
+                color = cmap((pval - vmin) / span)
+                ax.plot(r["range"] / 1000.0, r["alt"] / 1000.0,
+                        color=color, linewidth=1.0, alpha=0.85,
+                        label=f"{pval:.1f}")
+            ax.set_xlabel("Downrange (km)", fontsize=8)
+            ax.set_ylabel("Altitude (km)",  fontsize=8)
+            ax.set_title(f"Trajectory Profiles  —  {self._param_var.get()} sweep",
+                         fontsize=9)
+            ax.grid(True, alpha=0.35)
+            ax.tick_params(labelsize=7)
+            if len(self._traj_store) <= 12:
+                ax.legend(title=info["unit"], fontsize=6, title_fontsize=6,
+                          loc="upper right")
+            sm = matplotlib.cm.ScalarMappable(
+                cmap=cmap,
+                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax))
+            sm.set_array([])
+            cb = self._fig.colorbar(sm, ax=ax, pad=0.02)
+            cb.set_label(f"{self._param_var.get()} ({info['unit']})", fontsize=7)
+            cb.ax.tick_params(labelsize=6)
+        else:
+            # ── Range / apogee vs parameter ───────────────────────────
+            sr = self._show_range.get()
+            sa = self._show_apogee.get()
+
+            if sr and sa:
+                ax  = self._fig.add_subplot(111)
+                ax2 = ax.twinx()
+                ax .plot(xs, ys_range,  "b-o",  markersize=3, linewidth=1.5, label="Range")
+                ax2.plot(xs, ys_apogee, "r--s", markersize=3, linewidth=1.2, label="Apogee")
+                ax .set_ylabel("Range (km)",  color="royalblue",  fontsize=8)
+                ax2.set_ylabel("Apogee (km)", color="firebrick", fontsize=8)
+                ax .tick_params(axis="y", labelcolor="royalblue",  labelsize=7)
+                ax2.tick_params(axis="y", labelcolor="firebrick", labelsize=7)
+                lines  = ax.get_lines() + ax2.get_lines()
+                ax.legend(lines, [l.get_label() for l in lines], fontsize=7)
+            elif sr:
+                ax = self._fig.add_subplot(111)
+                ax.plot(xs, ys_range, "b-o", markersize=3, linewidth=1.5)
+                ax.set_ylabel("Range (km)", fontsize=8)
+            else:
+                ax = self._fig.add_subplot(111)
+                ax.plot(xs, ys_apogee, "r-s", markersize=3, linewidth=1.5)
+                ax.set_ylabel("Apogee (km)", fontsize=8)
+
+            ax.set_xlabel(xlabel, fontsize=8)
+            ax.set_title(f"{self._param_var.get()} Sweep", fontsize=9)
+            ax.grid(True, alpha=0.35)
+            ax.tick_params(labelsize=7)
+
+        self._fig.tight_layout(pad=2.5)
+        self._canvas.draw_idle()
+
+    # ------------------------------------------------------------------
+    def _export(self):
+        if not self._results:
+            messagebox.showinfo("No data", "Run a sweep first.", parent=self)
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export sweep results",
+            parent=self,
+        )
+        if not path:
+            return
+        info   = self._PARAM_INFO[self._param_var.get()]
+        header = f"{self._param_var.get()}_{info['unit']},Range_km,Apogee_km"
+        np.savetxt(path, np.array(self._results),
+                   delimiter=",", header=header, comments="")
+        self._app._status_var.set(f"Sweep exported: {path}")
+
+
+# ---------------------------------------------------------------------------
 # Helper: labelled decimal-degree row in a grid parent
 # ---------------------------------------------------------------------------
 def _dd_row(parent, label, row, default="0.0"):
@@ -351,6 +699,10 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=file_menu)
+
+        analysis_menu = tk.Menu(menubar, tearoff=0)
+        analysis_menu.add_command(label="Parametric Sweep…", command=self._open_sweep)
+        menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="About…", command=self._show_about)
@@ -484,10 +836,13 @@ class MissileFlyoutApp(tk.Tk):
         btn_frame.pack(fill=tk.X, padx=6, pady=6)
         ttk.Button(btn_frame, text="Run Flyout",
                    command=self._run_flyout).pack(
-            side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3), ipady=4)
-        ttk.Button(btn_frame, text="Maximize Range",
+            side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 2), ipady=4)
+        ttk.Button(btn_frame, text="Max Range",
                    command=self._maximize_range).pack(
-            side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0), ipady=4)
+            side=tk.LEFT, expand=True, fill=tk.X, padx=2, ipady=4)
+        ttk.Button(btn_frame, text="Sweep…",
+                   command=self._open_sweep).pack(
+            side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
 
         # ── Results display ───────────────────────────────────────────
         rf = ttk.LabelFrame(parent, text="Results")
@@ -714,6 +1069,9 @@ class MissileFlyoutApp(tk.Tk):
         la      = float(self._loft_angle_var.get())
         lar     = float(self._loft_rate_var.get())
         return missile, lat, lon, az, cutoff, la, lar
+
+    def _open_sweep(self):
+        ParametricSweepDialog(self)
 
     def _run_flyout(self):
         if self._running:
