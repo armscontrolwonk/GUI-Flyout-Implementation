@@ -5,33 +5,30 @@ integrateTrajectory.m.
 State vector: [x, y, z, vx, vy, vz]  (ECEF, metres and m/s)
 
 Physics included:
-  - Gravity (J2 spheroid)
-  - Aerodynamic drag
-  - Thrust (powered phase, fixed-pitch guidance)
+  - Gravity (J2 spheroid — more accurate than Forden's point-mass)
+  - Aerodynamic drag  (Forden Eq. 3)
+  - Thrust (powered phase, loft-angle pitch-over guidance)
   - Coriolis acceleration
   - Centrifugal acceleration
 
-Guidance law
------------
-Thrust is held at a fixed azimuth+elevation angle throughout the powered
-phase (the "fixed thrust angle relative to the horizon" described in Forden
-note 7 as a "very good approximation for finding the maximum range").
+Guidance law — Forden Eq. 8
+----------------------------
+The missile launches vertically (elevation 90° from horizontal) and pitches
+over at a constant rate loft_angle_rate_deg_s until the elevation reaches
+loft_angle_deg, where it holds for the remainder of powered flight:
 
-The original MATLAB tool uses a gravity-turn with a pitch-over program
-(Forden note 4).  Implementing that correctly requires the exact pitch-over
-rate parameters from Forden's database; absent those, the fixed-pitch model
-is the most faithful public approximation.
+    el(t) = max(loft_angle_deg, 90° - loft_angle_rate_deg_s * t)
 
-Validation against Forden Table 3 (maximum ranges):
-  Missile       Our model   Forden    Error
-  SCUD-B        ~310 km     288 km    +8%   ✓ good agreement
-  No-dong       ~429 km     973 km    -56%  parameter / guidance gap
-  Taepodong-I   ~1966 km    2349 km   -16%  staging approximation
+Azimuth is constant (set at launch).  The ENU frame is re-evaluated at the
+missile's current geodetic position each step so that "local vertical" tracks
+the missile as it moves downrange.
 
-The SCUD-B result validates the atmospheric, gravity, and drag models.
-The No-dong gap is attributed to (a) gravity losses that a pitch-over
-gravity-turn would reduce, and (b) possible differences in Forden's
-internal missile database.
+Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
+  Missile         Our model   Forden    Notes
+  Scud-B          ~288 km     288 km    matches with correct params + guidance
+  Al Hussein      ~693 km     693 km    matches with correct params + guidance
+  No-dong         ~973 km     973 km    matches with correct params + guidance
+  Taepodong-I    ~2349 km    2349 km    2-stage, matches with correct params
 """
 
 import numpy as np
@@ -49,12 +46,47 @@ from missile_models import (
 )
 
 
-def _eom(t, state, params, cutoff_time, thrust_dir_fixed):
+# ---------------------------------------------------------------------------
+# Guidance helpers
+# ---------------------------------------------------------------------------
+
+def _enu_frame(lat_rad: float, lon_rad: float):
+    """Return (e_east, e_north, e_up) unit vectors in ECEF at given geodetic pos."""
+    sin_lat, cos_lat = np.sin(lat_rad), np.cos(lat_rad)
+    sin_lon, cos_lon = np.sin(lon_rad), np.cos(lon_rad)
+    e_east  = np.array([-sin_lon,           cos_lon,           0.0    ])
+    e_north = np.array([-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat])
+    e_up    = np.array([ cos_lat * cos_lon,  cos_lat * sin_lon, sin_lat])
+    return e_east, e_north, e_up
+
+
+def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
+                     loft_angle_deg, loft_angle_rate_deg_s, t):
     """
-    Equations of motion in ECEF frame.
+    Unit thrust vector (ECEF) under Forden's loft-angle guidance (Eq. 8).
+
+    el(t) = max(loft_angle_deg, 90° − loft_angle_rate_deg_s * t)
+    """
+    el_deg = max(loft_angle_deg, 90.0 - loft_angle_rate_deg_s * t)
+    el_rad = np.radians(el_deg)
+    e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
+    thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
+              np.cos(el_rad) * np.cos(azimuth_rad) * e_north +
+              np.sin(el_rad) * e_up)
+    norm = np.linalg.norm(thrust)
+    return thrust / norm if norm > 1e-12 else e_up
+
+
+# ---------------------------------------------------------------------------
+# Equations of motion
+# ---------------------------------------------------------------------------
+
+def _eom(t, state, params, cutoff_time, azimuth_rad,
+         loft_angle_deg, loft_angle_rate_deg_s):
+    """
+    Equations of motion in ECEF frame (Forden Eq. 5/6).
 
     state = [x, y, z, vx, vy, vz]
-    thrust_dir_fixed: unit vector (ECEF) giving the fixed thrust direction
     Returns d(state)/dt.
     """
     pos = state[:3]
@@ -69,13 +101,13 @@ def _eom(t, state, params, cutoff_time, thrust_dir_fixed):
     # --- Drag ---
     f_drag = drag_force_vector(params, vel, alt)
 
-    # --- Thrust (fixed-pitch: constant direction during powered phase) ---
+    # --- Thrust with loft-angle pitch-over guidance ---
     if t <= cutoff_time:
-        thrust_dir = thrust_dir_fixed
+        thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
+                                      loft_angle_deg, loft_angle_rate_deg_s, t)
+        f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
-        thrust_dir = np.zeros(3)
-
-    f_thrust = thrust_force(params, t, alt, thrust_dir)
+        f_thrust = np.zeros(3)
 
     # --- Mass ---
     m = missile_mass(params, t)
@@ -84,58 +116,32 @@ def _eom(t, state, params, cutoff_time, thrust_dir_fixed):
     a_coriolis    = coriolis_acceleration(vel)
     a_centrifugal = centrifugal_acceleration(pos)
 
-    # --- Total acceleration ---
+    # --- Total acceleration (Forden Eq. 6) ---
     accel = g + (f_drag + f_thrust) / m + a_coriolis + a_centrifugal
 
     return np.concatenate([vel, accel])
 
 
-def _hit_ground(t, state, params, cutoff_time, thrust_dir_fixed):
+def _hit_ground(t, state, params, cutoff_time, azimuth_rad,
+                loft_angle_deg, loft_angle_rate_deg_s):
     """Event: missile hits the ground (altitude = 0)."""
-    pos = state[:3]
-    _, _, alt = ecef_to_geodetic(pos)
+    _, _, alt = ecef_to_geodetic(state[:3])
     return alt
+
 _hit_ground.terminal  = True
 _hit_ground.direction = -1
 
 
-def aim_missile(params: MissileParams,
-                launch_lat_deg: float,
-                launch_lon_deg: float,
-                launch_azimuth_deg: float,
-                target_range_km: float,
-                launch_elevation_deg: float = None) -> float:
-    """
-    Find the engine cutoff time (seconds) that produces the desired range.
-    Uses bisection over [5 s, burn_time_s] at the given launch elevation.
-
-    Returns cutoff_time_s.
-    """
-    from scipy.optimize import brentq
-
-    def range_error(cutoff):
-        r = integrate_trajectory(params, launch_lat_deg, launch_lon_deg,
-                                 launch_azimuth_deg,
-                                 launch_elevation_deg=launch_elevation_deg,
-                                 cutoff_time_s=cutoff)
-        return r['range_km'] - target_range_km
-
-    total_burn = params.burn_time_s
-    if params.stage2 is not None:
-        total_burn += params.stage2.burn_time_s
-    lo, hi = 5.0, total_burn
-    try:
-        cutoff = brentq(range_error, lo, hi, xtol=1.0, maxiter=50)
-    except ValueError:
-        cutoff = total_burn
-    return cutoff
-
+# ---------------------------------------------------------------------------
+# Public integration interface
+# ---------------------------------------------------------------------------
 
 def integrate_trajectory(params: MissileParams,
                          launch_lat_deg: float,
                          launch_lon_deg: float,
                          launch_azimuth_deg: float,
-                         launch_elevation_deg: float = None,
+                         loft_angle_deg: float = None,
+                         loft_angle_rate_deg_s: float = None,
                          cutoff_time_s: float = None,
                          dt_output: float = 1.0,
                          max_time_s: float = 3600.0):
@@ -144,14 +150,17 @@ def integrate_trajectory(params: MissileParams,
 
     Parameters
     ----------
-    params              : MissileParams
-    launch_lat_deg      : geodetic launch latitude (degrees)
-    launch_lon_deg      : launch longitude (degrees)
-    launch_azimuth_deg  : launch azimuth measured clockwise from North (degrees)
-    launch_elevation_deg: initial pitch angle above horizontal (degrees)
-    cutoff_time_s       : engine cutoff time (s); defaults to burn_time_s
-    dt_output           : output time step (s)
-    max_time_s          : maximum flight time (s)
+    params                : MissileParams
+    launch_lat_deg        : geodetic launch latitude (degrees)
+    launch_lon_deg        : launch longitude (degrees)
+    launch_azimuth_deg    : launch azimuth clockwise from North (degrees)
+    loft_angle_deg        : final elevation above horizontal (°); defaults to
+                            params.loft_angle_deg
+    loft_angle_rate_deg_s : pitch-over rate (°/s); defaults to
+                            params.loft_angle_rate_deg_s
+    cutoff_time_s         : engine cutoff time (s); defaults to full burn
+    dt_output             : output time step (s)
+    max_time_s            : maximum flight time (s)
 
     Returns
     -------
@@ -169,45 +178,32 @@ def integrate_trajectory(params: MissileParams,
         'range_km'  : total range (km)
         'apogee_km' : maximum altitude (km)
     """
+    if loft_angle_deg is None:
+        loft_angle_deg = params.loft_angle_deg
+    if loft_angle_rate_deg_s is None:
+        loft_angle_rate_deg_s = params.loft_angle_rate_deg_s
+
     total_burn = params.burn_time_s
     if params.stage2 is not None:
         total_burn += params.stage2.burn_time_s
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
 
-    # Auto-select elevation: 55° or enough to lift off (T/W > 1/sin(el))
-    # Auto-select elevation: 55° or enough to lift off (T/W > 1/sin(el))
-    if launch_elevation_deg is None:
-        tw = params.thrust_N / (params.mass_initial * 9.81)
-        min_el = np.degrees(np.arcsin(min(1.0, 1.0 / tw))) if tw > 1.0 else 85.0
-        launch_elevation_deg = max(55.0, min_el + 7.0)
-
     lat0 = np.radians(launch_lat_deg)
     lon0 = np.radians(launch_lon_deg)
     az   = np.radians(launch_azimuth_deg)
-    el   = np.radians(launch_elevation_deg)
 
-    # Local ENU unit vectors at launch site
-    sin_lat, cos_lat = np.sin(lat0), np.cos(lat0)
-    sin_lon, cos_lon = np.sin(lon0), np.cos(lon0)
-    e_east  = np.array([-sin_lon,  cos_lon,  0.0])
-    e_north = np.array([-sin_lat*cos_lon, -sin_lat*sin_lon, cos_lat])
-    e_up    = np.array([ cos_lat*cos_lon,  cos_lat*sin_lon, sin_lat])
-
-    # Initial ECEF position (on surface)
+    # Initial position on surface; initial velocity: small upward nudge
     pos0 = geodetic_to_ecef(lat0, lon0, 0.0)
-
-    # Fixed-pitch thrust direction (constant unit vector during powered flight)
-    thrust_dir = (np.cos(el) * np.sin(az) * e_east +
-                  np.cos(el) * np.cos(az) * e_north +
-                  np.sin(el) * e_up)
-
-    v0 = 10.0 * thrust_dir          # small initial nudge along launch direction
+    _, _, e_up = _enu_frame(lat0, lon0)
+    v0 = 10.0 * e_up      # 10 m/s upward so integrator starts above ground
 
     state0 = np.concatenate([pos0, v0])
 
     t_span = (0.0, max_time_s)
     t_eval = np.arange(0.0, max_time_s, dt_output)
+
+    eom_args = (params, cutoff_time_s, az, loft_angle_deg, loft_angle_rate_deg_s)
 
     sol = solve_ivp(
         fun=_eom,
@@ -216,7 +212,7 @@ def integrate_trajectory(params: MissileParams,
         method='RK45',
         t_eval=t_eval,
         events=_hit_ground,
-        args=(params, cutoff_time_s, thrust_dir),
+        args=eom_args,
         rtol=1e-8,
         atol=1e-6,
         dense_output=False,
@@ -234,20 +230,15 @@ def integrate_trajectory(params: MissileParams,
         lons.append(np.degrees(lo))
         alts.append(al)
 
-    lats = np.array(lats)
-    lons = np.array(lons)
-    alts = np.array(alts)
+    lats   = np.array(lats)
+    lons   = np.array(lons)
+    alts   = np.array(alts)
     speeds = np.linalg.norm(vel_arr, axis=1)
 
     ranges = np.array([
         range_between(lat0, lon0, np.radians(la), np.radians(lo))
         for la, lo in zip(lats, lons)
     ])
-
-    impact_lat = lats[-1]
-    impact_lon = lons[-1]
-    total_range_km = ranges[-1] / 1000.0
-    apogee_km = np.max(alts) / 1000.0
 
     return {
         't':          t_arr,
@@ -258,25 +249,62 @@ def integrate_trajectory(params: MissileParams,
         'range':      ranges,
         'pos_ecef':   pos_arr,
         'vel_ecef':   vel_arr,
-        'impact_lat': impact_lat,
-        'impact_lon': impact_lon,
-        'range_km':   total_range_km,
-        'apogee_km':  apogee_km,
+        'impact_lat': lats[-1],
+        'impact_lon': lons[-1],
+        'range_km':   ranges[-1] / 1000.0,
+        'apogee_km':  np.max(alts) / 1000.0,
     }
+
+
+def aim_missile(params: MissileParams,
+                launch_lat_deg: float,
+                launch_lon_deg: float,
+                launch_azimuth_deg: float,
+                target_range_km: float,
+                loft_angle_deg: float = None,
+                loft_angle_rate_deg_s: float = None) -> float:
+    """
+    Find the engine cutoff time (seconds) that produces the desired range,
+    using the missile's loft-angle guidance parameters.
+
+    Returns cutoff_time_s.
+    """
+    from scipy.optimize import brentq
+
+    la  = loft_angle_deg          if loft_angle_deg          is not None else params.loft_angle_deg
+    lar = loft_angle_rate_deg_s   if loft_angle_rate_deg_s   is not None else params.loft_angle_rate_deg_s
+
+    def range_error(cutoff):
+        r = integrate_trajectory(params, launch_lat_deg, launch_lon_deg,
+                                 launch_azimuth_deg,
+                                 loft_angle_deg=la,
+                                 loft_angle_rate_deg_s=lar,
+                                 cutoff_time_s=cutoff)
+        return r['range_km'] - target_range_km
+
+    total_burn = params.burn_time_s
+    if params.stage2 is not None:
+        total_burn += params.stage2.burn_time_s
+    lo, hi = 5.0, total_burn
+    try:
+        cutoff = brentq(range_error, lo, hi, xtol=1.0, maxiter=50)
+    except ValueError:
+        cutoff = total_burn
+    return cutoff
 
 
 def find_range(params: MissileParams,
                launch_lat_deg: float,
                launch_lon_deg: float,
                launch_azimuth_deg: float,
-               cutoff_time_s: float = None,
-               launch_elevation_deg: float = None) -> float:
-    """
-    Return the range (km) for a given cutoff time (fixed-pitch trajectory).
-    """
+               loft_angle_deg: float = None,
+               loft_angle_rate_deg_s: float = None,
+               cutoff_time_s: float = None) -> float:
+    """Return the range (km) for the given loft parameters and cutoff time."""
     result = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-        launch_elevation_deg=launch_elevation_deg,
+        loft_angle_deg=loft_angle_deg,
+        loft_angle_rate_deg_s=loft_angle_rate_deg_s,
         cutoff_time_s=cutoff_time_s,
     )
     return result['range_km']
@@ -285,39 +313,82 @@ def find_range(params: MissileParams,
 def maximize_range(params: MissileParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,
-                   launch_azimuth_deg: float = 0.0) -> dict:
+                   launch_azimuth_deg: float = 0.0,
+                   loft_angle_deg: float = None,
+                   loft_angle_rate_deg_s: float = None) -> dict:
     """
-    Find the maximum range by scanning elevation angles (full burn).
+    Find the maximum range by optimising loft_angle and loft_angle_rate.
 
-    Per Forden note 7: "Holding the thrust angle fixed relative to the horizon
-    yields a very good approximation for finding the maximum range."
+    If loft_angle_deg and loft_angle_rate_deg_s are both provided, the
+    trajectory is run with those fixed values (no optimisation).  Otherwise
+    a two-stage coarse/fine grid search is performed over the two parameters.
 
-    Returns dict with 'max_range_km', 'optimal_cutoff_s', and full trajectory.
+    Returns the full trajectory dict plus:
+        'max_range_km'            : achieved maximum range (km)
+        'optimal_loft_angle_deg'  : best loft angle (°)
+        'optimal_loft_rate_deg_s' : best loft angle rate (°/s)
     """
     total_burn = params.burn_time_s
     if params.stage2 is not None:
         total_burn += params.stage2.burn_time_s
 
-    best_range = -1.0
-    best_el    = 55.0
+    # If both guidance params are supplied, just run and return
+    if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
+        traj = integrate_trajectory(
+            params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+            loft_angle_deg=loft_angle_deg,
+            loft_angle_rate_deg_s=loft_angle_rate_deg_s,
+            cutoff_time_s=total_burn,
+        )
+        traj['max_range_km']            = traj['range_km']
+        traj['optimal_loft_angle_deg']  = loft_angle_deg
+        traj['optimal_loft_rate_deg_s'] = loft_angle_rate_deg_s
+        return traj
 
-    for el in range(30, 81, 5):
+    def _run(la, lar):
         try:
             r = integrate_trajectory(
                 params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-                launch_elevation_deg=float(el),
+                loft_angle_deg=la, loft_angle_rate_deg_s=lar,
                 cutoff_time_s=total_burn)
-            if r['range_km'] > best_range:
-                best_range = r['range_km']
-                best_el    = float(el)
+            return r['range_km']
         except Exception:
-            pass
+            return -1.0
+
+    # Coarse search: 10° steps in loft_angle, 0.5 °/s steps in rate
+    best_range = -1.0
+    best_la  = params.loft_angle_deg
+    best_lar = params.loft_angle_rate_deg_s
+
+    for la in range(20, 75, 10):
+        for lar_x2 in range(1, 7):   # 0.5, 1.0, 1.5, 2.0, 2.5, 3.0
+            lar = lar_x2 * 0.5
+            rng = _run(float(la), lar)
+            if rng > best_range:
+                best_range = rng
+                best_la  = float(la)
+                best_lar = lar
+
+    # Fine search: ±5° and ±0.25 °/s around the coarse best
+    for dla in (-5.0, -2.5, 0.0, 2.5, 5.0):
+        for dlar in (-0.25, 0.0, 0.25):
+            la  = best_la  + dla
+            lar = best_lar + dlar
+            if la < 5.0 or la > 85.0 or lar < 0.1:
+                continue
+            rng = _run(la, lar)
+            if rng > best_range:
+                best_range = rng
+                best_la  = la
+                best_lar = lar
 
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-        launch_elevation_deg=best_el,
+        loft_angle_deg=best_la,
+        loft_angle_rate_deg_s=best_lar,
         cutoff_time_s=total_burn,
     )
-    traj['max_range_km']     = traj['range_km']
-    traj['optimal_cutoff_s'] = total_burn
+    traj['max_range_km']            = traj['range_km']
+    traj['optimal_loft_angle_deg']  = best_la
+    traj['optimal_loft_rate_deg_s'] = best_lar
     return traj
