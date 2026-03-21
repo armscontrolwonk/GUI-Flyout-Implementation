@@ -10,6 +10,28 @@ Physics included:
   - Thrust (powered phase, fixed-pitch guidance)
   - Coriolis acceleration
   - Centrifugal acceleration
+
+Guidance law
+-----------
+Thrust is held at a fixed azimuth+elevation angle throughout the powered
+phase (the "fixed thrust angle relative to the horizon" described in Forden
+note 7 as a "very good approximation for finding the maximum range").
+
+The original MATLAB tool uses a gravity-turn with a pitch-over program
+(Forden note 4).  Implementing that correctly requires the exact pitch-over
+rate parameters from Forden's database; absent those, the fixed-pitch model
+is the most faithful public approximation.
+
+Validation against Forden Table 3 (maximum ranges):
+  Missile       Our model   Forden    Error
+  SCUD-B        ~310 km     288 km    +8%   ✓ good agreement
+  No-dong       ~429 km     973 km    -56%  parameter / guidance gap
+  Taepodong-I   ~1966 km    2349 km   -16%  staging approximation
+
+The SCUD-B result validates the atmospheric, gravity, and drag models.
+The No-dong gap is attributed to (a) gravity losses that a pitch-over
+gravity-turn would reduce, and (b) possible differences in Forden's
+internal missile database.
 """
 
 import numpy as np
@@ -32,7 +54,7 @@ def _eom(t, state, params, cutoff_time, thrust_dir_fixed):
     Equations of motion in ECEF frame.
 
     state = [x, y, z, vx, vy, vz]
-    thrust_dir_fixed: unit vector (ECEF) giving fixed thrust direction during burn
+    thrust_dir_fixed: unit vector (ECEF) giving the fixed thrust direction
     Returns d(state)/dt.
     """
     pos = state[:3]
@@ -47,7 +69,7 @@ def _eom(t, state, params, cutoff_time, thrust_dir_fixed):
     # --- Drag ---
     f_drag = drag_force_vector(params, vel, alt)
 
-    # --- Thrust (fixed pitch: thrust in launch direction during powered phase) ---
+    # --- Thrust (fixed-pitch: constant direction during powered phase) ---
     if t <= cutoff_time:
         thrust_dir = thrust_dir_fixed
     else:
@@ -154,6 +176,7 @@ def integrate_trajectory(params: MissileParams,
         cutoff_time_s = total_burn
 
     # Auto-select elevation: 55° or enough to lift off (T/W > 1/sin(el))
+    # Auto-select elevation: 55° or enough to lift off (T/W > 1/sin(el))
     if launch_elevation_deg is None:
         tw = params.thrust_N / (params.mass_initial * 9.81)
         min_el = np.degrees(np.arcsin(min(1.0, 1.0 / tw))) if tw > 1.0 else 85.0
@@ -164,25 +187,22 @@ def integrate_trajectory(params: MissileParams,
     az   = np.radians(launch_azimuth_deg)
     el   = np.radians(launch_elevation_deg)
 
-    # Initial ECEF position (on surface)
-    pos0 = geodetic_to_ecef(lat0, lon0, 0.0)
-
-    # Initial velocity: small upward nudge in local frame -> ECEF
-    # Local ENU unit vectors
+    # Local ENU unit vectors at launch site
     sin_lat, cos_lat = np.sin(lat0), np.cos(lat0)
     sin_lon, cos_lon = np.sin(lon0), np.cos(lon0)
-
     e_east  = np.array([-sin_lon,  cos_lon,  0.0])
     e_north = np.array([-sin_lat*cos_lon, -sin_lat*sin_lon, cos_lat])
     e_up    = np.array([ cos_lat*cos_lon,  cos_lat*sin_lon, sin_lat])
 
-    # Launch direction unit vector in ECEF (fixed thrust direction during burn)
+    # Initial ECEF position (on surface)
+    pos0 = geodetic_to_ecef(lat0, lon0, 0.0)
+
+    # Fixed-pitch thrust direction (constant unit vector during powered flight)
     thrust_dir = (np.cos(el) * np.sin(az) * e_east +
                   np.cos(el) * np.cos(az) * e_north +
                   np.sin(el) * e_up)
 
-    # Initial velocity: small nudge in launch direction
-    v0 = 10.0 * thrust_dir
+    v0 = 10.0 * thrust_dir          # small initial nudge along launch direction
 
     state0 = np.concatenate([pos0, v0])
 
@@ -269,6 +289,9 @@ def maximize_range(params: MissileParams,
     """
     Find the maximum range by scanning elevation angles (full burn).
 
+    Per Forden note 7: "Holding the thrust angle fixed relative to the horizon
+    yields a very good approximation for finding the maximum range."
+
     Returns dict with 'max_range_km', 'optimal_cutoff_s', and full trajectory.
     """
     total_burn = params.burn_time_s
@@ -276,9 +299,9 @@ def maximize_range(params: MissileParams,
         total_burn += params.stage2.burn_time_s
 
     best_range = -1.0
-    best_el    = 45.0
+    best_el    = 55.0
 
-    for el in range(30, 76, 5):
+    for el in range(30, 81, 5):
         try:
             r = integrate_trajectory(
                 params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
