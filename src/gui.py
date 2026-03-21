@@ -1,10 +1,11 @@
 """
-GUI Missile Flyout — Python/tkinter port of Forden's MATLAB GUIDE application.
+GUI Missile Flyout V1.1 — Python/tkinter port of Forden's MATLAB GUIDE application.
 
-Layout mirrors the original:
-  Left panel  : inputs (missile type, launch/target coordinates, cutoff time)
-  Right panel : tabbed plots (trajectory, altitude, speed, range footprint)
-  Bottom bar  : status / range output
+Layout mirrors the original MATLAB GUIDE application:
+  Left panel  : missile type, units, launch site (DMS), target (DMS),
+                cutoff time, run buttons, range/apogee results
+  Right panel : 4-up matplotlib plots (altitude, speed, trajectory, ground track)
+  Bottom bar  : status line
 """
 
 import tkinter as tk
@@ -18,47 +19,95 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
 from missile_models import MISSILE_DB, get_missile
-from trajectory import integrate_trajectory, maximize_range
+from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
 
 
 # ---------------------------------------------------------------------------
-# Helper: DMS entry widget
+# DMS entry widget  (Degrees / Minutes / Seconds  +  direction button)
 # ---------------------------------------------------------------------------
 class DMSEntry(ttk.Frame):
-    """Degrees / Minutes / Seconds entry that returns decimal degrees."""
+    """
+    Degrees-Minutes-Seconds entry with direction toggle (N/S or E/W).
+    Returns/sets signed decimal degrees.
+    """
 
-    def __init__(self, master, label, **kw):
+    def __init__(self, master, positive_label="N", negative_label="S", **kw):
         super().__init__(master, **kw)
-        ttk.Label(self, text=label, width=12).pack(side=tk.LEFT)
+        self._pos_lbl = positive_label
+        self._neg_lbl = negative_label
+
         self._deg = tk.StringVar(value="0")
         self._min = tk.StringVar(value="0")
         self._sec = tk.StringVar(value="0.0")
-        for var, lbl in [(self._deg, "°"), (self._min, "'"), (self._sec, '"')]:
-            ttk.Entry(self, textvariable=var, width=6).pack(side=tk.LEFT, padx=1)
-            ttk.Label(self, text=lbl).pack(side=tk.LEFT)
+        self._dir = tk.StringVar(value=positive_label)   # N/S or E/W
+
+        vcmd = (self.register(self._validate_num), '%P')
+        ttk.Entry(self, textvariable=self._deg, width=4,
+                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
+        ttk.Label(self, text="°").pack(side=tk.LEFT)
+        ttk.Entry(self, textvariable=self._min, width=3,
+                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
+        ttk.Label(self, text="'").pack(side=tk.LEFT)
+        ttk.Entry(self, textvariable=self._sec, width=6,
+                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
+        ttk.Label(self, text='"').pack(side=tk.LEFT)
+
+        # Direction toggle button
+        self._dir_btn = ttk.Button(self, textvariable=self._dir, width=3,
+                                   command=self._toggle_dir)
+        self._dir_btn.pack(side=tk.LEFT, padx=(3, 0))
+
+    @staticmethod
+    def _validate_num(value):
+        return value == "" or value == "-" or value.replace('.', '', 1).replace('-', '', 1).isdigit()
+
+    def _toggle_dir(self):
+        if self._dir.get() == self._pos_lbl:
+            self._dir.set(self._neg_lbl)
+        else:
+            self._dir.set(self._pos_lbl)
 
     def get_decimal(self):
-        d = float(self._deg.get())
-        m = float(self._min.get())
-        s = float(self._sec.get())
-        sign = -1 if d < 0 else 1
-        return sign * (abs(d) + m/60 + s/3600)
+        try:
+            d = abs(float(self._deg.get() or 0))
+            m = float(self._min.get() or 0)
+            s = float(self._sec.get() or 0)
+        except ValueError:
+            return 0.0
+        val = d + m / 60.0 + s / 3600.0
+        if self._dir.get() == self._neg_lbl:
+            val = -val
+        return val
 
     def set_decimal(self, val):
-        sign = -1 if val < 0 else 1
-        val = abs(val)
+        if val < 0:
+            self._dir.set(self._neg_lbl)
+            val = -val
+        else:
+            self._dir.set(self._pos_lbl)
         d = int(val)
         m = int((val - d) * 60)
-        s = (val - d - m/60) * 3600
-        self._deg.set(str(sign * d))
+        s = round((val - d - m / 60.0) * 3600.0, 2)
+        self._deg.set(str(d))
         self._min.set(str(m))
         self._sec.set(f"{s:.2f}")
+
+
+# ---------------------------------------------------------------------------
+# Helper: labelled DMS row in a grid parent
+# ---------------------------------------------------------------------------
+def _dms_row(parent, label, row, positive="N", negative="S"):
+    """Pack a label + DMSEntry into a grid row; return the DMSEntry widget."""
+    ttk.Label(parent, text=label).grid(row=row, column=0,
+                                       sticky=tk.W, padx=(8, 2), pady=2)
+    w = DMSEntry(parent, positive_label=positive, negative_label=negative)
+    w.grid(row=row, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+    return w
 
 
 # ---------------------------------------------------------------------------
@@ -68,16 +117,19 @@ class MissileFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("GUI Missile Flyout  (Python port of Forden v1.1)")
-        self.geometry("1200x750")
+        self.title("GUI Missile Flyout V1.1  —  Python port of Forden (2001)")
+        self.geometry("1280x780")
         self.resizable(True, True)
 
-        self._result = None          # last trajectory result
+        self._result  = None
         self._running = False
 
         self._build_menu()
         self._build_ui()
+        self._on_missile_changed()   # populate params tab with default missile
 
+    # ------------------------------------------------------------------
+    # Menu
     # ------------------------------------------------------------------
     def _build_menu(self):
         menubar = tk.Menu(self)
@@ -95,209 +147,268 @@ class MissileFlyoutApp(tk.Tk):
         self.config(menu=menubar)
 
     # ------------------------------------------------------------------
+    # Top-level layout
+    # ------------------------------------------------------------------
     def _build_ui(self):
-        # ── top frame ──────────────────────────────────────────────────
         top = ttk.Frame(self)
         top.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        # ── left panel: inputs ─────────────────────────────────────────
-        left = ttk.LabelFrame(top, text="Inputs", width=320)
-        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 4))
+        # Left control panel (fixed width, non-expanding)
+        left = ttk.Frame(top, width=310)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
         left.pack_propagate(False)
+        self._build_control_panel(left)
 
-        self._build_input_panel(left)
-
-        # ── right panel: plots ─────────────────────────────────────────
+        # Right plot panel
         right = ttk.Frame(top)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         self._build_plot_panel(right)
 
-        # ── bottom status bar ──────────────────────────────────────────
+        # Status bar
         self._status_var = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self._status_var,
                   relief=tk.SUNKEN, anchor=tk.W).pack(
             side=tk.BOTTOM, fill=tk.X, padx=4, pady=2)
 
     # ------------------------------------------------------------------
-    def _build_input_panel(self, parent):
-        pad = dict(padx=6, pady=3, sticky=tk.W)
+    # Control panel  (mirrors Forden's left-side panel)
+    # ------------------------------------------------------------------
+    def _build_control_panel(self, parent):
+        # ── Title ──────────────────────────────────────────────────────
+        ttk.Label(parent, text="GUI Missile Flyout V1.1",
+                  font=("", 11, "bold")).pack(pady=(6, 2))
+        ttk.Label(parent, text="Python port of Forden (2001)",
+                  font=("", 8, "italic"), foreground="grey").pack()
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=6)
 
-        # Missile type
-        ttk.Label(parent, text="Missile type:").grid(row=0, column=0, **pad)
+        # ── Missile type ───────────────────────────────────────────────
+        mf = ttk.LabelFrame(parent, text="Missile Type")
+        mf.pack(fill=tk.X, padx=6, pady=3)
         self._missile_var = tk.StringVar(value=list(MISSILE_DB.keys())[0])
-        cb = ttk.Combobox(parent, textvariable=self._missile_var,
-                          values=list(MISSILE_DB.keys()), state="readonly", width=18)
-        cb.grid(row=0, column=1, **pad)
+        cb = ttk.Combobox(mf, textvariable=self._missile_var,
+                          values=list(MISSILE_DB.keys()),
+                          state="readonly", width=24)
+        cb.pack(padx=6, pady=4)
         cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
 
-        # Units
-        ttk.Label(parent, text="Units:").grid(row=1, column=0, **pad)
+        # ── Units ──────────────────────────────────────────────────────
+        uf = ttk.LabelFrame(parent, text="Display Units")
+        uf.pack(fill=tk.X, padx=6, pady=3)
         self._units_var = tk.StringVar(value="km")
-        for col, (val, lbl) in enumerate([("km", "km"), ("nm", "nmi"), ("mi", "mi")]):
-            ttk.Radiobutton(parent, text=lbl, variable=self._units_var,
-                            value=val).grid(row=1, column=col+1, padx=2)
+        uf_inner = ttk.Frame(uf)
+        uf_inner.pack(pady=3)
+        for val, lbl in [("km", "km"), ("nm", "nmi"), ("mi", "miles")]:
+            ttk.Radiobutton(uf_inner, text=lbl, variable=self._units_var,
+                            value=val).pack(side=tk.LEFT, padx=8)
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(
-            row=2, columnspan=3, sticky=tk.EW, pady=4)
+        # ── Launch site ────────────────────────────────────────────────
+        lf = ttk.LabelFrame(parent, text="Launch Site")
+        lf.pack(fill=tk.X, padx=6, pady=3)
 
-        # Launch coordinates
-        ttk.Label(parent, text="Launch site", font=("", 9, "bold")).grid(
-            row=3, columnspan=2, **pad)
+        self._launch_lat = _dms_row(lf, "Latitude:",  row=0, positive="N", negative="S")
+        self._launch_lon = _dms_row(lf, "Longitude:", row=1, positive="E", negative="W")
 
-        self._launch_lat = self._coord_row(parent, "Latitude:",  row=4)
-        self._launch_lon = self._coord_row(parent, "Longitude:", row=5)
-
-        ttk.Label(parent, text="Azimuth (°):").grid(row=6, column=0, **pad)
+        ttk.Label(lf, text="Azimuth:").grid(row=2, column=0,
+                                             sticky=tk.W, padx=(8, 2), pady=2)
+        az_frame = ttk.Frame(lf)
+        az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._azimuth_var = tk.StringVar(value="0.0")
-        ttk.Entry(parent, textvariable=self._azimuth_var, width=10).grid(
-            row=6, column=1, **pad)
+        ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(
-            row=7, columnspan=3, sticky=tk.EW, pady=4)
+        # ── Target ────────────────────────────────────────────────────
+        tf = ttk.LabelFrame(parent, text="Target")
+        tf.pack(fill=tk.X, padx=6, pady=3)
 
-        # Target coordinates
-        ttk.Label(parent, text="Target", font=("", 9, "bold")).grid(
-            row=8, columnspan=2, **pad)
+        self._target_lat = _dms_row(tf, "Latitude:",  row=0, positive="N", negative="S")
+        self._target_lon = _dms_row(tf, "Longitude:", row=1, positive="E", negative="W")
 
-        self._target_lat = self._coord_row(parent, "Latitude:",  row=9)
-        self._target_lon = self._coord_row(parent, "Longitude:", row=10)
+        ttk.Button(tf, text="Aim at Target", command=self._aim_at_target,
+                   width=18).grid(row=2, column=0, columnspan=2, pady=(4, 6))
 
-        ttk.Button(parent, text="Aim at target",
-                   command=self._aim_at_target).grid(row=11, columnspan=2, pady=4)
-
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(
-            row=12, columnspan=3, sticky=tk.EW, pady=4)
-
-        # Engine cutoff
-        ttk.Label(parent, text="Cutoff time (s):").grid(row=13, column=0, **pad)
+        # ── Engine cutoff ─────────────────────────────────────────────
+        cf = ttk.LabelFrame(parent, text="Engine Cutoff")
+        cf.pack(fill=tk.X, padx=6, pady=3)
+        cf_inner = ttk.Frame(cf)
+        cf_inner.pack(padx=6, pady=4)
+        ttk.Label(cf_inner, text="Cutoff time:").pack(side=tk.LEFT)
         self._cutoff_var = tk.StringVar(value="")
-        ttk.Entry(parent, textvariable=self._cutoff_var, width=10).grid(
-            row=13, column=1, **pad)
-        ttk.Label(parent, text="(blank = full burn)").grid(row=14, column=1,
-                                                            sticky=tk.W, padx=6)
+        ttk.Entry(cf_inner, textvariable=self._cutoff_var, width=8).pack(
+            side=tk.LEFT, padx=4)
+        ttk.Label(cf_inner, text="s  (blank = full burn)").pack(side=tk.LEFT)
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(
-            row=15, columnspan=3, sticky=tk.EW, pady=4)
+        # ── Run buttons ───────────────────────────────────────────────
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, padx=6, pady=6)
+        ttk.Button(btn_frame, text="Run Flyout",
+                   command=self._run_flyout).pack(
+            side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3), ipady=4)
+        ttk.Button(btn_frame, text="Maximize Range",
+                   command=self._maximize_range).pack(
+            side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0), ipady=4)
 
-        # Buttons
-        ttk.Button(parent, text="Run Flyout",
-                   command=self._run_flyout).grid(row=16, columnspan=2, pady=4,
-                                                  ipadx=10)
-        ttk.Button(parent, text="Maximize Range",
-                   command=self._maximize_range).grid(row=17, columnspan=2,
-                                                      pady=2, ipadx=4)
+        # ── Results display ───────────────────────────────────────────
+        rf = ttk.LabelFrame(parent, text="Results")
+        rf.pack(fill=tk.X, padx=6, pady=3)
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(
-            row=18, columnspan=3, sticky=tk.EW, pady=4)
+        self._res_range_km  = tk.StringVar(value="Range (km):    —")
+        self._res_range_nm  = tk.StringVar(value="Range (nmi):   —")
+        self._res_range_mi  = tk.StringVar(value="Range (miles): —")
+        self._res_apogee    = tk.StringVar(value="Apogee (km):   —")
+        self._res_impact    = tk.StringVar(value="Impact:        —")
 
-        # Results display
-        self._range_var  = tk.StringVar(value="Range:   —")
-        self._apogee_var = tk.StringVar(value="Apogee:  —")
-        ttk.Label(parent, textvariable=self._range_var,
-                  font=("Courier", 10)).grid(row=19, columnspan=2, **pad)
-        ttk.Label(parent, textvariable=self._apogee_var,
-                  font=("Courier", 10)).grid(row=20, columnspan=2, **pad)
+        for var in (self._res_range_km, self._res_range_nm,
+                    self._res_range_mi, self._res_apogee, self._res_impact):
+            ttk.Label(rf, textvariable=var,
+                      font=("Courier", 9), anchor=tk.W).pack(
+                fill=tk.X, padx=8, pady=1)
 
-    def _coord_row(self, parent, label, row):
-        """Return a StringVar for decimal-degree entry with DMS label."""
-        ttk.Label(parent, text=label).grid(row=row, column=0, padx=6,
-                                            pady=2, sticky=tk.W)
-        var = tk.StringVar(value="0.0")
-        ttk.Entry(parent, textvariable=var, width=14).grid(
-            row=row, column=1, padx=6, pady=2, sticky=tk.W)
-        return var
+        # ── Missile parameters ────────────────────────────────────────
+        pf = ttk.LabelFrame(parent, text="Missile Parameters")
+        pf.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+        self._params_text = tk.Text(pf, width=36, height=8,
+                                    font=("Courier", 8), state=tk.DISABLED,
+                                    relief=tk.FLAT, bg=self.cget("bg"))
+        sb = ttk.Scrollbar(pf, command=self._params_text.yview)
+        self._params_text.configure(yscrollcommand=sb.set)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._params_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
+    # ------------------------------------------------------------------
+    # Plot panel  (4-subplot figure in a single tab + navigation toolbar)
     # ------------------------------------------------------------------
     def _build_plot_panel(self, parent):
-        self._notebook = ttk.Notebook(parent)
-        self._notebook.pack(fill=tk.BOTH, expand=True)
+        self._fig = Figure(figsize=(8, 6), dpi=96)
+        self._ax_alt  = self._fig.add_subplot(221)   # top-left:  alt vs time
+        self._ax_spd  = self._fig.add_subplot(222)   # top-right: speed vs time
+        self._ax_traj = self._fig.add_subplot(223)   # bot-left:  alt vs range
+        self._ax_trk  = self._fig.add_subplot(224)   # bot-right: ground track
+        self._fig.tight_layout(pad=2.8)
 
-        self._fig = Figure(figsize=(8, 5), dpi=96)
-        self._axes = {
-            "Altitude":   self._fig.add_subplot(221),
-            "Speed":      self._fig.add_subplot(222),
-            "Trajectory": self._fig.add_subplot(223),
-            "Footprint":  self._fig.add_subplot(224),
-        }
-        self._fig.tight_layout(pad=2.5)
-
-        canvas_frame = ttk.Frame(self._notebook)
-        self._notebook.add(canvas_frame, text="Plots")
-
-        self._canvas = FigureCanvasTkAgg(self._fig, master=canvas_frame)
+        self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        toolbar = NavigationToolbar2Tk(self._canvas, canvas_frame)
+        toolbar = NavigationToolbar2Tk(self._canvas, parent)
         toolbar.update()
 
-        # Parameters tab
-        params_frame = ttk.Frame(self._notebook)
-        self._notebook.add(params_frame, text="Missile Parameters")
-        self._params_text = tk.Text(params_frame, width=60, height=20,
-                                    font=("Courier", 10))
-        self._params_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self._update_params_tab()
+        # Initialise axes with placeholder labels
+        self._init_axes()
+        self._canvas.draw()
+
+    def _init_axes(self):
+        for ax, title, xl, yl in [
+            (self._ax_alt,  "Altitude vs Time",       "Time (s)",         "Altitude (km)"),
+            (self._ax_spd,  "Speed vs Time",           "Time (s)",         "Speed (km/s)"),
+            (self._ax_traj, "Altitude vs Range",       "Downrange (km)",   "Altitude (km)"),
+            (self._ax_trk,  "Ground Track",            "Longitude (°E)",   "Latitude (°N)"),
+        ]:
+            ax.set_title(title, fontsize=9)
+            ax.set_xlabel(xl, fontsize=8)
+            ax.set_ylabel(yl, fontsize=8)
+            ax.grid(True, alpha=0.35)
+            ax.tick_params(labelsize=7)
 
     # ------------------------------------------------------------------
+    # Missile selection
+    # ------------------------------------------------------------------
     def _on_missile_changed(self, _event=None):
-        self._update_params_tab()
         p = get_missile(self._missile_var.get())
         total = p.burn_time_s + (p.stage2.burn_time_s if p.stage2 else 0)
         self._cutoff_var.set(str(int(total)))
+        self._update_params_text(p)
 
-    def _update_params_tab(self):
-        p = get_missile(self._missile_var.get())
-        txt = (
-            f"Missile:          {p.name}\n"
-            f"Launch mass:      {p.mass_initial:,.0f} kg\n"
-            f"Propellant mass:  {p.mass_propellant:,.0f} kg\n"
-            f"Burnout mass:     {p.mass_final:,.0f} kg\n"
-            f"Diameter:         {p.diameter_m:.2f} m\n"
-            f"Length:           {p.length_m:.2f} m\n"
-            f"Thrust (vac):     {p.thrust_N:,.0f} N\n"
-            f"Stage-1 burn:     {p.burn_time_s:.1f} s\n"
-            f"Isp (stage 1):    {p.isp_s:.0f} s\n"
-        )
+    def _update_params_text(self, p=None):
+        if p is None:
+            p = get_missile(self._missile_var.get())
+
+        lines = [
+            f"{'Name:':<18}{p.name}",
+            f"{'Mass (launch):':<18}{p.mass_initial:,.0f} kg",
+            f"{'Propellant:':<18}{p.mass_propellant:,.0f} kg",
+            f"{'Mass (burnout):':<18}{p.mass_final:,.0f} kg",
+            f"{'Diameter:':<18}{p.diameter_m:.2f} m",
+            f"{'Length:':<18}{p.length_m:.2f} m",
+            f"{'Thrust (vac):':<18}{p.thrust_N/1000:,.0f} kN",
+            f"{'Burn time:':<18}{p.burn_time_s:.0f} s",
+            f"{'Isp:':<18}{p.isp_s:.0f} s",
+            f"{'T/W ratio:':<18}{p.thrust_N/(p.mass_initial*9.81):.2f}",
+        ]
         if p.stage2:
             p2 = p.stage2
-            txt += (
-                f"\n--- Stage 2 ---\n"
-                f"Mass:             {p2.mass_initial:,.0f} kg\n"
-                f"Propellant:       {p2.mass_propellant:,.0f} kg\n"
-                f"Thrust (vac):     {p2.thrust_N:,.0f} N\n"
-                f"Stage-2 burn:     {p2.burn_time_s:.1f} s\n"
-                f"Isp (stage 2):    {p2.isp_s:.0f} s\n"
-            )
+            lines += [
+                "─" * 28,
+                "Stage 2:",
+                f"{'  Mass:':<18}{p2.mass_initial:,.0f} kg",
+                f"{'  Propellant:':<18}{p2.mass_propellant:,.0f} kg",
+                f"{'  Thrust (vac):':<18}{p2.thrust_N/1000:,.0f} kN",
+                f"{'  Burn time:':<18}{p2.burn_time_s:.0f} s",
+                f"{'  Isp:':<18}{p2.isp_s:.0f} s",
+            ]
+
+        txt = "\n".join(lines)
         self._params_text.config(state=tk.NORMAL)
         self._params_text.delete("1.0", tk.END)
         self._params_text.insert(tk.END, txt)
         self._params_text.config(state=tk.DISABLED)
 
     # ------------------------------------------------------------------
+    # Aim at target
+    # ------------------------------------------------------------------
     def _aim_at_target(self):
-        """Set azimuth from launch to target (great-circle bearing)."""
+        """
+        Compute great-circle azimuth from launch to target and set the
+        cutoff time to hit the target range (using aim_missile bisection).
+        """
         try:
-            lat1 = np.radians(float(self._launch_lat.get()))
-            lon1 = np.radians(float(self._launch_lon.get()))
-            lat2 = np.radians(float(self._target_lat.get()))
-            lon2 = np.radians(float(self._target_lon.get()))
+            lat1_dd = self._launch_lat.get_decimal()
+            lon1_dd = self._launch_lon.get_decimal()
+            lat2_dd = self._target_lat.get_decimal()
+            lon2_dd = self._target_lon.get_decimal()
+
+            lat1 = np.radians(lat1_dd)
+            lon1 = np.radians(lon1_dd)
+            lat2 = np.radians(lat2_dd)
+            lon2 = np.radians(lon2_dd)
 
             dlon = lon2 - lon1
             x = np.sin(dlon) * np.cos(lat2)
             y = np.cos(lat1)*np.sin(lat2) - np.sin(lat1)*np.cos(lat2)*np.cos(dlon)
             az = np.degrees(np.arctan2(x, y)) % 360
             self._azimuth_var.set(f"{az:.2f}")
-            rng = range_between(lat1, lon1, lat2, lon2) / 1000
-            self._status_var.set(f"Target range: {rng:.1f} km  |  Azimuth: {az:.1f}°")
-        except ValueError as e:
-            messagebox.showerror("Input error", str(e))
 
+            rng_km = range_between(lat1, lon1, lat2, lon2) / 1000.0
+            self._status_var.set(
+                f"Target: {rng_km:.1f} km  |  Azimuth: {az:.1f}°  —  "
+                "Computing cutoff time…")
+
+            # Compute cutoff in a background thread
+            missile = get_missile(self._missile_var.get())
+            threading.Thread(
+                target=self._aim_thread,
+                args=(missile, lat1_dd, lon1_dd, az, rng_km),
+                daemon=True,
+            ).start()
+
+        except Exception as e:
+            messagebox.showerror("Aim error", str(e))
+
+    def _aim_thread(self, missile, lat, lon, az, rng_km):
+        try:
+            cutoff = aim_missile(missile, lat, lon, az, rng_km)
+            self.after(0, lambda: self._cutoff_var.set(f"{cutoff:.1f}"))
+            self.after(0, lambda: self._status_var.set(
+                f"Target: {rng_km:.1f} km  |  Azimuth: {az:.1f}°  |  "
+                f"Cutoff: {cutoff:.1f} s"))
+        except Exception as e:
+            self.after(0, lambda: self._status_var.set(f"Aim failed: {e}"))
+
+    # ------------------------------------------------------------------
+    # Run buttons
     # ------------------------------------------------------------------
     def _get_inputs(self):
         missile = get_missile(self._missile_var.get())
-        lat     = float(self._launch_lat.get())
-        lon     = float(self._launch_lon.get())
+        lat     = self._launch_lat.get_decimal()
+        lon     = self._launch_lon.get_decimal()
         az      = float(self._azimuth_var.get())
         cutoff_str = self._cutoff_var.get().strip()
         cutoff  = float(cutoff_str) if cutoff_str else None
@@ -339,7 +450,8 @@ class MissileFlyoutApp(tk.Tk):
         try:
             if maximise:
                 result = maximize_range(missile, lat, lon, az)
-                self._cutoff_var.set(f"{result['optimal_cutoff_s']:.1f}")
+                self.after(0, lambda: self._cutoff_var.set(
+                    f"{result['optimal_cutoff_s']:.1f}"))
             else:
                 result = integrate_trajectory(
                     missile, lat, lon, az, cutoff_time_s=cutoff)
@@ -350,69 +462,83 @@ class MissileFlyoutApp(tk.Tk):
         finally:
             self._running = False
 
+    # ------------------------------------------------------------------
+    # Display results
+    # ------------------------------------------------------------------
     def _on_result_ready(self):
         r = self._result
+        rng_km    = r['range_km']
+        rng_nm    = rng_km / 1.852
+        rng_mi    = rng_km / 1.60934
+        apogee_km = r['apogee_km']
+
+        self._res_range_km.set( f"Range (km):    {rng_km:>8.1f}")
+        self._res_range_nm.set( f"Range (nmi):   {rng_nm:>8.1f}")
+        self._res_range_mi.set( f"Range (miles): {rng_mi:>8.1f}")
+        self._res_apogee.set(   f"Apogee (km):   {apogee_km:>8.1f}")
+        self._res_impact.set(
+            f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E")
+
         units = self._units_var.get()
-        scale = {"km": 1.0, "nm": 1/1.852, "mi": 1/1.60934}[units]
+        scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
+        scale, ulbl = scale_map[units]
 
-        rng_disp    = r['range_km'] * scale
-        apogee_disp = r['apogee_km'] * scale
-
-        self._range_var.set(f"Range:   {rng_disp:,.1f} {units}")
-        self._apogee_var.set(f"Apogee:  {apogee_disp:,.1f} {units}")
         self._status_var.set(
-            f"Done.  Range: {rng_disp:.1f} {units}  |  "
-            f"Apogee: {apogee_disp:.1f} {units}  |  "
+            f"Done.  Range: {rng_km*scale:.1f} {ulbl}  |  "
+            f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
             f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E"
         )
-        self._plot_results(r, units, scale)
+        self._plot_results(r, scale, ulbl)
 
-    # ------------------------------------------------------------------
-    def _plot_results(self, r, units, scale):
+    def _plot_results(self, r, scale, ulbl):
         t   = r['t']
-        alt = r['alt'] / 1000 * scale   # km → display units
-        spd = r['speed'] / 1000         # m/s → km/s
-        rng = r['range'] / 1000 * scale
+        alt = r['alt'] / 1000.0 * scale
+        spd = r['speed'] / 1000.0            # always km/s for speed axis
+        rng = r['range'] / 1000.0 * scale
         lat = r['lat']
         lon = r['lon']
 
-        for ax in self._axes.values():
+        for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk):
             ax.cla()
+            ax.grid(True, alpha=0.35)
+            ax.tick_params(labelsize=7)
 
-        ax_alt = self._axes["Altitude"]
-        ax_alt.plot(t, alt, 'b-', linewidth=1.5)
-        ax_alt.set_xlabel("Time (s)")
-        ax_alt.set_ylabel(f"Altitude ({units})")
-        ax_alt.set_title("Altitude vs Time")
-        ax_alt.grid(True, alpha=0.4)
+        # Altitude vs time
+        self._ax_alt.plot(t, alt, color='royalblue', linewidth=1.5)
+        self._ax_alt.set_xlabel("Time (s)", fontsize=8)
+        self._ax_alt.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
+        self._ax_alt.set_title("Altitude vs Time", fontsize=9)
+        self._ax_alt.fill_between(t, 0, alt, alpha=0.12, color='royalblue')
 
-        ax_spd = self._axes["Speed"]
-        ax_spd.plot(t, spd, 'r-', linewidth=1.5)
-        ax_spd.set_xlabel("Time (s)")
-        ax_spd.set_ylabel("Speed (km/s)")
-        ax_spd.set_title("Speed vs Time")
-        ax_spd.grid(True, alpha=0.4)
+        # Speed vs time
+        self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5)
+        self._ax_spd.set_xlabel("Time (s)", fontsize=8)
+        self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
+        self._ax_spd.set_title("Speed vs Time", fontsize=9)
 
-        ax_traj = self._axes["Trajectory"]
-        ax_traj.plot(rng, alt, 'g-', linewidth=1.5)
-        ax_traj.set_xlabel(f"Downrange ({units})")
-        ax_traj.set_ylabel(f"Altitude ({units})")
-        ax_traj.set_title("Trajectory")
-        ax_traj.grid(True, alpha=0.4)
+        # Altitude vs range (trajectory profile)
+        self._ax_traj.plot(rng, alt, color='seagreen', linewidth=1.5)
+        self._ax_traj.set_xlabel(f"Downrange ({ulbl})", fontsize=8)
+        self._ax_traj.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
+        self._ax_traj.set_title("Altitude vs Range", fontsize=9)
+        self._ax_traj.fill_between(rng, 0, alt, alpha=0.12, color='seagreen')
 
-        ax_fp = self._axes["Footprint"]
-        ax_fp.plot(lon, lat, 'k-', linewidth=1.5)
-        ax_fp.plot(lon[0], lat[0], 'go', markersize=8, label="Launch")
-        ax_fp.plot(lon[-1], lat[-1], 'r*', markersize=10, label="Impact")
-        ax_fp.set_xlabel("Longitude (°)")
-        ax_fp.set_ylabel("Latitude (°)")
-        ax_fp.set_title("Ground Track")
-        ax_fp.legend(fontsize=8)
-        ax_fp.grid(True, alpha=0.4)
+        # Ground track
+        self._ax_trk.plot(lon, lat, color='black', linewidth=1.2)
+        self._ax_trk.plot(lon[0],  lat[0],  'go', markersize=7,
+                          label="Launch", zorder=5)
+        self._ax_trk.plot(lon[-1], lat[-1], 'r*', markersize=9,
+                          label="Impact", zorder=5)
+        self._ax_trk.set_xlabel("Longitude (°E)", fontsize=8)
+        self._ax_trk.set_ylabel("Latitude (°N)", fontsize=8)
+        self._ax_trk.set_title("Ground Track", fontsize=9)
+        self._ax_trk.legend(fontsize=7)
 
-        self._fig.tight_layout(pad=2.5)
+        self._fig.tight_layout(pad=2.8)
         self._canvas.draw()
 
+    # ------------------------------------------------------------------
+    # File / Help actions
     # ------------------------------------------------------------------
     def _save_trajectory(self):
         if self._result is None:
@@ -429,21 +555,22 @@ class MissileFlyoutApp(tk.Tk):
         r = self._result
         header = "time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"
         data = np.column_stack([r['t'], r['lat'], r['lon'],
-                                 r['alt'], r['speed'], r['range']/1000])
+                                 r['alt'], r['speed'], r['range'] / 1000.0])
         np.savetxt(path, data, delimiter=",", header=header, comments="")
-        self._status_var.set(f"Trajectory saved to {path}")
+        self._status_var.set(f"Saved: {path}")
 
     def _show_about(self):
         messagebox.showinfo(
-            "About",
-            "GUI Missile Flyout — Python port\n\n"
-            "Original MATLAB tool by Gerald Forden\n"
-            "Python implementation based on open physics\n\n"
-            "3-DOF trajectory integration with:\n"
+            "About GUI Missile Flyout V1.1",
+            "GUI Missile Flyout V1.1 — Python port\n\n"
+            "Original MATLAB application by Geoffrey Forden\n"
+            "Published: Sci. & Global Security 9 (2001)\n\n"
+            "3-DOF trajectory integration:\n"
             "  • COESA 1976 standard atmosphere\n"
-            "  • WGS-84 J2 gravity\n"
+            "  • WGS-84 J2 gravity (ECEF)\n"
             "  • Coriolis & centrifugal corrections\n"
-            "  • Gravity-turn guidance\n"
+            "  • Fixed-pitch guidance (Forden note 7)\n"
+            "  • 2-stage missile support\n"
         )
 
 
