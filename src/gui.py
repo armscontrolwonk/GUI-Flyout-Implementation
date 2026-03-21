@@ -158,6 +158,26 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Button(tf, text="Aim at Target", command=self._aim_at_target,
                    width=18).grid(row=2, column=0, columnspan=2, pady=(4, 6))
 
+        # ── Guidance — loft angle / pitch-over (Forden Eq. 8) ─────────
+        gf = ttk.LabelFrame(parent, text="Guidance")
+        gf.pack(fill=tk.X, padx=6, pady=3)
+
+        ttk.Label(gf, text="Loft Angle:").grid(
+            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        la_frame = ttk.Frame(gf)
+        la_frame.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._loft_angle_var = tk.StringVar(value="45.0")
+        ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(la_frame, text="°  (final elev.)").pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(gf, text="Loft Rate:").grid(
+            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        lr_frame = ttk.Frame(gf)
+        lr_frame.grid(row=1, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._loft_rate_var = tk.StringVar(value="2.0")
+        ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(lr_frame, text="°/s").pack(side=tk.LEFT, padx=2)
+
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
         cf.pack(fill=tk.X, padx=6, pady=3)
@@ -247,6 +267,8 @@ class MissileFlyoutApp(tk.Tk):
         p = get_missile(self._missile_var.get())
         total = p.burn_time_s + (p.stage2.burn_time_s if p.stage2 else 0)
         self._cutoff_var.set(str(int(total)))
+        self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
+        self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_params_text(p)
 
     def _update_params_text(self, p=None):
@@ -313,20 +335,23 @@ class MissileFlyoutApp(tk.Tk):
                 f"Target: {rng_km:.1f} km  |  Azimuth: {az:.1f}°  —  "
                 "Computing cutoff time…")
 
-            # Compute cutoff in a background thread
             missile = get_missile(self._missile_var.get())
+            la  = float(self._loft_angle_var.get())
+            lar = float(self._loft_rate_var.get())
             threading.Thread(
                 target=self._aim_thread,
-                args=(missile, lat1_dd, lon1_dd, az, rng_km),
+                args=(missile, lat1_dd, lon1_dd, az, rng_km, la, lar),
                 daemon=True,
             ).start()
 
         except Exception as e:
             messagebox.showerror("Aim error", str(e))
 
-    def _aim_thread(self, missile, lat, lon, az, rng_km):
+    def _aim_thread(self, missile, lat, lon, az, rng_km, la, lar):
         try:
-            cutoff = aim_missile(missile, lat, lon, az, rng_km)
+            cutoff = aim_missile(missile, lat, lon, az, rng_km,
+                                 loft_angle_deg=la,
+                                 loft_angle_rate_deg_s=lar)
             self.after(0, lambda: self._cutoff_var.set(f"{cutoff:.1f}"))
             self.after(0, lambda: self._status_var.set(
                 f"Target: {rng_km:.1f} km  |  Azimuth: {az:.1f}°  |  "
@@ -344,13 +369,15 @@ class MissileFlyoutApp(tk.Tk):
         az      = float(self._azimuth_var.get())
         cutoff_str = self._cutoff_var.get().strip()
         cutoff  = float(cutoff_str) if cutoff_str else None
-        return missile, lat, lon, az, cutoff
+        la      = float(self._loft_angle_var.get())
+        lar     = float(self._loft_rate_var.get())
+        return missile, lat, lon, az, cutoff, la, lar
 
     def _run_flyout(self):
         if self._running:
             return
         try:
-            missile, lat, lon, az, cutoff = self._get_inputs()
+            missile, lat, lon, az, cutoff, la, lar = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -358,7 +385,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Running simulation…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, lat, lon, az, cutoff, False),
+            args=(missile, lat, lon, az, cutoff, la, lar, False),
             daemon=True,
         ).start()
 
@@ -366,7 +393,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            missile, lat, lon, az, _ = self._get_inputs()
+            missile, lat, lon, az, _, la, lar = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -374,19 +401,24 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, lat, lon, az, None, True),
+            args=(missile, lat, lon, az, None, la, lar, True),
             daemon=True,
         ).start()
 
-    def _run_thread(self, missile, lat, lon, az, cutoff, maximise):
+    def _run_thread(self, missile, lat, lon, az, cutoff, la, lar, maximise):
         try:
             if maximise:
                 result = maximize_range(missile, lat, lon, az)
-                self.after(0, lambda: self._cutoff_var.set(
-                    f"{result['optimal_cutoff_s']:.1f}"))
+                opt_la  = result.get('optimal_loft_angle_deg',  la)
+                opt_lar = result.get('optimal_loft_rate_deg_s', lar)
+                self.after(0, lambda: self._loft_angle_var.set(f"{opt_la:.4f}"))
+                self.after(0, lambda: self._loft_rate_var.set(f"{opt_lar:.3f}"))
             else:
                 result = integrate_trajectory(
-                    missile, lat, lon, az, cutoff_time_s=cutoff)
+                    missile, lat, lon, az,
+                    loft_angle_deg=la,
+                    loft_angle_rate_deg_s=lar,
+                    cutoff_time_s=cutoff)
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
@@ -496,13 +528,15 @@ class MissileFlyoutApp(tk.Tk):
             "About GUI Missile Flyout V1.1",
             "GUI Missile Flyout V1.1 — Python port\n\n"
             "Original MATLAB application by Geoffrey Forden\n"
-            "Published: Sci. & Global Security 9 (2001)\n\n"
+            "Published: Sci. & Global Security 15 (2007)\n\n"
             "3-DOF trajectory integration:\n"
             "  • COESA 1976 standard atmosphere\n"
             "  • WGS-84 J2 gravity (ECEF)\n"
             "  • Coriolis & centrifugal corrections\n"
-            "  • Fixed-pitch guidance (Forden note 7)\n"
-            "  • 2-stage missile support\n"
+            "  • Loft-angle pitch-over guidance (Forden Eq. 8)\n"
+            "  • 2-stage missile support\n\n"
+            "Packaged missiles (Forden Table 1):\n"
+            "  Scud-B, Al Hussein, No-dong, Taepodong-I\n"
         )
 
 

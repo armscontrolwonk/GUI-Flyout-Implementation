@@ -3,14 +3,22 @@ Missile parameter models matching Forden's:
   missileMass.m, missileRadius.m, thrust.m, thrustAngle.m,
   dragForce.m, Drag.m, calcCm_delta.m, aeroQ.m, calcMissileParameters.m
 
-Built-in missile definitions follow Forden's published parameters for
-Scud-B (R-17), No-dong, Shahab-3, and a generic ICBM.
+Built-in missile definitions follow Forden (2007) Table 1 parameters for the
+four packaged models: Scud-B, Al Hussein, No-dong, and Taepodong-I.
+Loft angle / loft angle rate for Scud-B taken from Figure 3 of the same paper.
 """
 
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 from atmosphere import atmosphere, dynamic_pressure
+
+_G0 = 9.80665   # standard gravity (m/s²)
+
+
+def _thrust_from_isp(isp_s: float, propellant_kg: float, burn_s: float) -> float:
+    """Vacuum thrust (N) derived from Isp, propellant mass, and burn time."""
+    return isp_s * _G0 * propellant_kg / burn_s
 
 
 @dataclass
@@ -19,9 +27,9 @@ class MissileParams:
     name: str
 
     # Mass (kg)
-    mass_initial: float       # launch mass
+    mass_initial: float       # launch mass (structure + propellant + payload)
     mass_propellant: float    # propellant mass
-    mass_final: float         # burnout mass (= mass_initial - mass_propellant)
+    mass_final: float         # burnout mass (structure + payload)
 
     # Geometry
     diameter_m: float         # body diameter (m)
@@ -32,6 +40,12 @@ class MissileParams:
     burn_time_s: float        # powered flight duration (s)
     isp_s: float              # specific impulse (s)
 
+    # Guidance — Forden pitch-over / gravity-turn model (Eq. 8)
+    # Elevation from horizontal: starts at 90° (vertical), pitches over at
+    # loft_angle_rate_deg_s until it reaches loft_angle_deg, then holds.
+    loft_angle_deg: float = 45.0        # final elevation above horizontal (°)
+    loft_angle_rate_deg_s: float = 2.0  # pitch-over rate (°/s)
+
     # Aerodynamics — Cd vs Mach lookup table
     mach_table: list = field(default_factory=list)
     cd_table:   list = field(default_factory=list)
@@ -41,87 +55,181 @@ class MissileParams:
 
 
 # ---------------------------------------------------------------------------
+# Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
+# All packaged missiles use this same curve (Forden note 6).
+# ---------------------------------------------------------------------------
+_FORDEN_MACH = [0.0, 0.85, 1.0,  1.2,  2.0,  4.5]
+_FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
+
+
+# ---------------------------------------------------------------------------
 # Built-in missile database
-# Values from Forden (2001) "Measures and Provocations" and open literature
+# Parameters from Forden (2007) Table 1.  Thrust = Isp * g0 * m_dot.
+# mass_initial  = Fueled Weight + Payload
+# mass_propellant = Fueled Weight − Dry Weight
+# mass_final    = Dry Weight + Payload
 # ---------------------------------------------------------------------------
 
 def _scud_b():
-    mach = [0.0, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 5.0]
-    cd   = [0.20, 0.20, 0.22, 0.35, 0.40, 0.38, 0.32, 0.25, 0.18]
+    # Forden Table 1: Dry=1198, Fueled=4897, Isp=230, Burn=75, Dia=0.84, Payload=1000
+    prop = 4897 - 1198   # = 3699 kg
     return MissileParams(
         name="Scud-B (R-17)",
-        mass_initial=5900.0,
-        mass_propellant=3700.0,
-        mass_final=2200.0,
-        diameter_m=0.88,
+        mass_initial=4897 + 1000,   # 5897 kg
+        mass_propellant=prop,        # 3699 kg
+        mass_final=1198 + 1000,      # 2198 kg
+        diameter_m=0.84,
         length_m=11.25,
-        thrust_N=132000.0,
-        burn_time_s=65.0,
+        thrust_N=round(_thrust_from_isp(230, prop, 75)),   # ≈ 111 200 N
+        burn_time_s=75.0,
         isp_s=230.0,
-        mach_table=mach,
-        cd_table=cd,
+        # Loft angle / rate from Forden Figure 3 (SCUD-B example trajectory)
+        loft_angle_deg=47.6563,
+        loft_angle_rate_deg_s=1.348,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
     )
+
+
+def _al_hussein():
+    # Forden Table 1: Dry=1334, Fueled=6073, Isp=230, Burn=90, Dia=0.84, Payload=191
+    prop = 6073 - 1334   # = 4739 kg
+    return MissileParams(
+        name="Al Hussein",
+        mass_initial=6073 + 191,    # 6264 kg
+        mass_propellant=prop,        # 4739 kg
+        mass_final=1334 + 191,       # 1525 kg
+        diameter_m=0.84,
+        length_m=12.0,
+        thrust_N=round(_thrust_from_isp(230, prop, 90)),   # ≈ 118 900 N
+        burn_time_s=90.0,
+        isp_s=230.0,
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=1.0,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+    )
+
 
 def _nodong():
-    mach = [0.0, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 5.0]
-    cd   = [0.20, 0.20, 0.22, 0.38, 0.42, 0.38, 0.30, 0.23, 0.16]
+    # Forden Table 1: Dry=3900, Fueled=19900, Isp=240, Burn=70, Dia=0.88, Payload=1000
+    prop = 19900 - 3900  # = 16 000 kg
     return MissileParams(
         name="No-dong",
-        mass_initial=16000.0,
-        mass_propellant=11000.0,
-        mass_final=5000.0,
-        diameter_m=1.32,
-        length_m=16.0,
-        thrust_N=270000.0,
-        burn_time_s=95.0,
-        isp_s=228.0,
-        mach_table=mach,
-        cd_table=cd,
+        mass_initial=19900 + 1000,  # 20 900 kg
+        mass_propellant=prop,        # 16 000 kg
+        mass_final=3900 + 1000,      # 4 900 kg
+        diameter_m=0.88,
+        length_m=15.6,
+        thrust_N=round(_thrust_from_isp(240, prop, 70)),   # ≈ 537 600 N
+        burn_time_s=70.0,
+        isp_s=240.0,
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=1.5,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
     )
 
+
+def _taepodong_i():
+    # Forden Table 1: Stage 1 = Nodong body, Stage 2 = Scud-B body, Payload = 454 kg
+    #
+    # Stage 2 (ignites after stage-1 separation):
+    #   Fueled=4897, Dry=1198, Isp=230, Burn=75, Dia=0.84
+    prop2 = 4897 - 1198  # = 3699 kg
+    stage2 = MissileParams(
+        name="Taepodong-I Stage 2",
+        mass_initial=4897 + 454,    # 5 351 kg  (stage-2 wet + payload)
+        mass_propellant=prop2,       # 3 699 kg
+        mass_final=1198 + 454,       # 1 652 kg  (stage-2 dry + payload)
+        diameter_m=0.84,
+        length_m=11.25,
+        thrust_N=round(_thrust_from_isp(230, prop2, 75)),   # ≈ 111 200 N
+        burn_time_s=75.0,
+        isp_s=230.0,
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=1.0,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+    )
+
+    # Stage 1 (launched with stage-2 and payload riding on top):
+    #   Fueled=19900, Dry=3800, Isp=240, Burn=70, Dia=0.88
+    prop1 = 19900 - 3800  # = 16 100 kg
+    return MissileParams(
+        name="Taepodong-I",
+        # Total stack at launch = stage-1 propellant+structure + stage-2 wet + payload
+        mass_initial=19900 + 4897 + 454,   # 25 251 kg
+        mass_propellant=prop1,              # 16 100 kg  (stage-1 only)
+        mass_final=3800,                    # stage-1 dry (jettisoned at separation)
+        diameter_m=0.88,
+        length_m=25.5,
+        thrust_N=round(_thrust_from_isp(240, prop1, 70)),   # ≈ 540 900 N
+        burn_time_s=70.0,
+        isp_s=240.0,
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=1.0,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+        stage2=stage2,
+    )
+
+
 def _shahab3():
-    mach = [0.0, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 5.0]
-    cd   = [0.20, 0.20, 0.22, 0.38, 0.42, 0.38, 0.30, 0.23, 0.16]
+    # Iranian Shahab-3, No-dong derivative; not in Forden (2007) but added
+    # for completeness.  Parameters from open-source estimates.
+    mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5]
+    cd   = [0.20, 0.20, 0.27, 0.27, 0.20, 0.20]
+    prop = 11200
     return MissileParams(
         name="Shahab-3",
         mass_initial=16000.0,
-        mass_propellant=11200.0,
+        mass_propellant=prop,
         mass_final=4800.0,
         diameter_m=1.32,
         length_m=16.5,
-        thrust_N=275000.0,
+        thrust_N=round(_thrust_from_isp(230, prop, 97)),
         burn_time_s=97.0,
         isp_s=230.0,
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=1.5,
         mach_table=mach,
         cd_table=cd,
     )
 
+
 def _generic_icbm():
-    mach = [0.0, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 5.0, 8.0]
-    cd   = [0.18, 0.18, 0.20, 0.32, 0.36, 0.32, 0.26, 0.20, 0.14, 0.10]
+    mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5, 8.0]
+    cd   = [0.18, 0.18, 0.25, 0.25, 0.18, 0.18, 0.14]
+    prop2 = 16000
     stage2 = MissileParams(
         name="Generic ICBM Stage 2",
         mass_initial=20000.0,
-        mass_propellant=16000.0,
+        mass_propellant=prop2,
         mass_final=4000.0,
         diameter_m=1.5,
         length_m=8.0,
-        thrust_N=300000.0,
+        thrust_N=round(_thrust_from_isp(290, prop2, 120)),
         burn_time_s=120.0,
         isp_s=290.0,
+        loft_angle_deg=30.0,
+        loft_angle_rate_deg_s=0.5,
         mach_table=mach,
         cd_table=cd,
     )
+    prop1 = 55000
     return MissileParams(
         name="Generic ICBM",
         mass_initial=80000.0,
-        mass_propellant=55000.0,
+        mass_propellant=prop1,
         mass_final=25000.0,
         diameter_m=2.0,
         length_m=20.0,
-        thrust_N=800000.0,
+        thrust_N=round(_thrust_from_isp(280, prop1, 150)),
         burn_time_s=150.0,
         isp_s=280.0,
+        loft_angle_deg=30.0,
+        loft_angle_rate_deg_s=0.5,
         mach_table=mach,
         cd_table=cd,
         stage2=stage2,
@@ -129,10 +237,12 @@ def _generic_icbm():
 
 
 MISSILE_DB = {
-    "Scud-B":       _scud_b,
-    "No-dong":      _nodong,
-    "Shahab-3":     _shahab3,
-    "Generic ICBM": _generic_icbm,
+    "Scud-B":        _scud_b,
+    "Al Hussein":    _al_hussein,
+    "No-dong":       _nodong,
+    "Taepodong-I":   _taepodong_i,
+    "Shahab-3":      _shahab3,
+    "Generic ICBM":  _generic_icbm,
 }
 
 
