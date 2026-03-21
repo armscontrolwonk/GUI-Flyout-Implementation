@@ -252,6 +252,51 @@ def get_missile(name: str) -> MissileParams:
     return MISSILE_DB[name]()
 
 
+def missile_to_dict(p: MissileParams) -> dict:
+    """Serialise a MissileParams to a JSON-compatible dict."""
+    d = {
+        'name':                  p.name,
+        'mass_initial':          p.mass_initial,
+        'mass_propellant':       p.mass_propellant,
+        'diameter_m':            p.diameter_m,
+        'length_m':              p.length_m,
+        'burn_time_s':           p.burn_time_s,
+        'isp_s':                 p.isp_s,
+        'loft_angle_deg':        p.loft_angle_deg,
+        'loft_angle_rate_deg_s': p.loft_angle_rate_deg_s,
+        'mach_table':            list(p.mach_table),
+        'cd_table':              list(p.cd_table),
+    }
+    if p.stage2 is not None:
+        d['stage2'] = missile_to_dict(p.stage2)
+    return d
+
+
+def missile_from_dict(d: dict) -> MissileParams:
+    """Reconstruct a MissileParams from a dict produced by missile_to_dict."""
+    prop  = float(d['mass_propellant'])
+    burn  = float(d['burn_time_s'])
+    isp   = float(d['isp_s'])
+    m0    = float(d['mass_initial'])
+    stage2 = missile_from_dict(d['stage2']) if d.get('stage2') else None
+    return MissileParams(
+        name=d['name'],
+        mass_initial=m0,
+        mass_propellant=prop,
+        mass_final=m0 - prop,
+        diameter_m=float(d['diameter_m']),
+        length_m=float(d['length_m']),
+        thrust_N=round(_thrust_from_isp(isp, prop, burn)),
+        burn_time_s=burn,
+        isp_s=isp,
+        loft_angle_deg=float(d.get('loft_angle_deg', 45.0)),
+        loft_angle_rate_deg_s=float(d.get('loft_angle_rate_deg_s', 2.0)),
+        mach_table=list(d.get('mach_table', _FORDEN_MACH)),
+        cd_table=list(d.get('cd_table', _FORDEN_CD)),
+        stage2=stage2,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Physics helper functions
 # ---------------------------------------------------------------------------

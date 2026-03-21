@@ -14,6 +14,8 @@ import threading
 import numpy as np
 import sys
 import os
+import json
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -22,9 +24,285 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
-from missile_models import MISSILE_DB, get_missile
+from missile_models import (MISSILE_DB, get_missile,
+                           missile_to_dict, missile_from_dict)
 from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
+
+# ---------------------------------------------------------------------------
+# Custom missile persistence
+# ---------------------------------------------------------------------------
+
+# Names that ship with the program and cannot be deleted
+_PACKAGED_NAMES = set(MISSILE_DB.keys())
+
+# Where user-created missiles are saved
+_CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
+
+
+def _load_custom_missiles():
+    """Read custom_missiles.json and register any saved missiles in MISSILE_DB."""
+    if not _CUSTOM_PATH.exists():
+        return
+    try:
+        data = json.loads(_CUSTOM_PATH.read_text())
+        for name, d in data.items():
+            p = missile_from_dict(d)
+            MISSILE_DB[name] = lambda _p=p: _p
+    except Exception as exc:
+        print(f"Warning: could not load custom missiles: {exc}")
+
+
+def _save_custom_missiles():
+    """Write all non-packaged missiles from MISSILE_DB to custom_missiles.json."""
+    _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data = {}
+    for name in MISSILE_DB:
+        if name not in _PACKAGED_NAMES:
+            data[name] = missile_to_dict(MISSILE_DB[name]())
+    _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# Reusable labelled entry helper
+# ---------------------------------------------------------------------------
+
+def _entry_row(parent, label, row, default, unit="", width=10):
+    """Grid a Label + Entry + unit-label; return the StringVar."""
+    ttk.Label(parent, text=label).grid(row=row, column=0,
+                                       sticky=tk.W, padx=(6, 2), pady=2)
+    var = tk.StringVar(value=default)
+    inner = ttk.Frame(parent)
+    inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+    ttk.Entry(inner, textvariable=var, width=width).pack(side=tk.LEFT)
+    if unit:
+        ttk.Label(inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
+    return var
+
+
+# ---------------------------------------------------------------------------
+# Stage sub-frame used inside MissileDialog
+# ---------------------------------------------------------------------------
+
+class _StageFrame(ttk.LabelFrame):
+    """Entry widgets for one rocket stage."""
+
+    _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
+                     length="12.0", burn="70", isp="230")
+
+    def __init__(self, parent, label, defaults=None):
+        super().__init__(parent, text=label)
+        d = {**self._DEFAULTS, **(defaults or {})}
+        self._fueled = _entry_row(self, "Fueled wt (kg):", 0, d["fueled"], "kg")
+        self._dry    = _entry_row(self, "Dry wt (kg):",    1, d["dry"],    "kg")
+        self._dia    = _entry_row(self, "Diameter (m):",   2, d["dia"],    "m")
+        self._length = _entry_row(self, "Length (m):",     3, d["length"], "m")
+        self._burn   = _entry_row(self, "Burn time (s):",  4, d["burn"],   "s")
+        self._isp    = _entry_row(self, "Isp (s):",        5, d["isp"],    "s")
+
+    def get(self):
+        return {k: float(v.get()) for k, v in [
+            ("fueled", self._fueled), ("dry",    self._dry),
+            ("dia",    self._dia),    ("length", self._length),
+            ("burn",   self._burn),   ("isp",    self._isp),
+        ]}
+
+    def populate(self, d):
+        self._fueled.set(str(d["fueled"]))
+        self._dry   .set(str(d["dry"]))
+        self._dia   .set(str(d["dia"]))
+        self._length.set(str(d["length"]))
+        self._burn  .set(str(d["burn"]))
+        self._isp   .set(str(d["isp"]))
+
+
+# ---------------------------------------------------------------------------
+# New / Edit missile dialog
+# ---------------------------------------------------------------------------
+
+class MissileDialog(tk.Toplevel):
+    """Modal dialog for creating or editing a custom missile."""
+
+    def __init__(self, parent, on_save, existing_name=None):
+        super().__init__(parent)
+        self.title("Edit Missile" if existing_name else "New Missile")
+        self.resizable(False, False)
+        self.grab_set()               # modal
+        self._on_save = on_save
+        self._existing_name = existing_name
+        self._build(existing_name)
+        # Centre over parent
+        self.update_idletasks()
+        px = parent.winfo_rootx() + (parent.winfo_width()  - self.winfo_width())  // 2
+        py = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 2
+        self.geometry(f"+{px}+{py}")
+
+    # ------------------------------------------------------------------
+    def _build(self, existing_name):
+        pad = dict(padx=8, pady=4)
+
+        # Name
+        nf = ttk.Frame(self)
+        nf.pack(fill=tk.X, **pad)
+        ttk.Label(nf, text="Missile name:").pack(side=tk.LEFT)
+        self._name_var = tk.StringVar(value=existing_name or "My Missile")
+        ttk.Entry(nf, textvariable=self._name_var, width=24).pack(
+            side=tk.LEFT, padx=(6, 0))
+
+        # Stage 1
+        self._s1 = _StageFrame(self, "Stage 1")
+        self._s1.pack(fill=tk.X, **pad)
+
+        # Payload
+        pf = ttk.Frame(self)
+        pf.pack(fill=tk.X, padx=8, pady=2)
+        ttk.Label(pf, text="Payload (kg):").pack(side=tk.LEFT)
+        self._payload_var = tk.StringVar(value="1000")
+        ttk.Entry(pf, textvariable=self._payload_var, width=10).pack(
+            side=tk.LEFT, padx=6)
+        ttk.Label(pf, text="kg  (warhead / instrument)").pack(side=tk.LEFT)
+
+        # Two-stage checkbox
+        self._two_stage = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self, text="Two-stage missile",
+                        variable=self._two_stage,
+                        command=self._toggle_stage2).pack(
+            anchor=tk.W, padx=8, pady=(4, 0))
+
+        # Stage 2
+        self._s2 = _StageFrame(self, "Stage 2")
+        # (packed/unpacked dynamically by _toggle_stage2)
+
+        # Guidance
+        gf = ttk.LabelFrame(self, text="Guidance")
+        gf.pack(fill=tk.X, **pad)
+        self._loft_a = _entry_row(gf, "Loft angle (°):",  0, "45.0",
+                                  "° (final elevation above horizontal)")
+        self._loft_r = _entry_row(gf, "Loft rate (°/s):", 1, "1.5",
+                                  "°/s (pitch-over speed)")
+
+        # Buttons
+        bf = ttk.Frame(self)
+        bf.pack(fill=tk.X, padx=8, pady=(4, 8))
+        ttk.Button(bf, text="Cancel", command=self.destroy).pack(
+            side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(bf, text="Save Missile", command=self._save).pack(
+            side=tk.RIGHT)
+
+        # Pre-fill if editing
+        if existing_name and existing_name not in _PACKAGED_NAMES:
+            self._prefill(existing_name)
+
+    # ------------------------------------------------------------------
+    def _toggle_stage2(self):
+        if self._two_stage.get():
+            self._s2.pack(fill=tk.X, padx=8, pady=4,
+                          before=self._s2.master.nametowidget(
+                              self._s2.master.children.get(
+                                  list(self._s2.master.children)[-1], '')))
+            # Re-pack s2 before guidance frame (simplest: destroy + rebuild order)
+            # easier: just pack it; it appears after s1 naturally
+            self._s2.pack(fill=tk.X, padx=8, pady=4)
+        else:
+            self._s2.pack_forget()
+
+    # ------------------------------------------------------------------
+    def _prefill(self, name):
+        """Populate fields from an existing custom missile."""
+        p = MISSILE_DB[name]()
+        s1d = {
+            "fueled": p.mass_initial - (p.stage2.mass_initial if p.stage2 else 0),
+            "dry":    p.mass_final   - (p.stage2.mass_initial if p.stage2 else 0),
+            "dia":    p.diameter_m,
+            "length": p.length_m,
+            "burn":   p.burn_time_s,
+            "isp":    p.isp_s,
+        }
+        # For single-stage, payload = mass_final - dry_structure; approximate
+        payload = 0.0
+        if p.stage2:
+            s1d["fueled"] = p.mass_initial - p.stage2.mass_initial
+            s1d["dry"]    = p.mass_final
+            payload = p.stage2.mass_final - (p.stage2.mass_initial - p.stage2.mass_propellant)
+            self._two_stage.set(True)
+            self._toggle_stage2()
+            p2 = p.stage2
+            self._s2.populate({
+                "fueled": p2.mass_propellant + (p2.mass_initial - p2.mass_propellant),
+                "dry":    p2.mass_initial - p2.mass_propellant,
+                "dia":    p2.diameter_m, "length": p2.length_m,
+                "burn":   p2.burn_time_s, "isp":   p2.isp_s,
+            })
+        self._s1.populate(s1d)
+        self._payload_var.set(str(payload))
+        self._name_var.set(name)
+        self._loft_a.set(str(p.loft_angle_deg))
+        self._loft_r.set(str(p.loft_angle_rate_deg_s))
+
+    # ------------------------------------------------------------------
+    def _collect(self) -> 'MissileParams':
+        """Read and validate all fields; return a MissileParams."""
+        from missile_models import MissileParams, _FORDEN_MACH, _FORDEN_CD, _thrust_from_isp
+
+        name = self._name_var.get().strip()
+        if not name:
+            raise ValueError("Missile name cannot be blank.")
+        if name in _PACKAGED_NAMES:
+            raise ValueError(f"'{name}' is a built-in missile name and cannot be overwritten.")
+
+        payload = float(self._payload_var.get())
+        la  = float(self._loft_a.get())
+        lar = float(self._loft_r.get())
+
+        s1 = self._s1.get()
+        if s1["fueled"] <= s1["dry"]:
+            raise ValueError("Stage 1: fueled weight must exceed dry weight.")
+        prop1 = s1["fueled"] - s1["dry"]
+
+        stage2 = None
+        if self._two_stage.get():
+            s2 = self._s2.get()
+            if s2["fueled"] <= s2["dry"]:
+                raise ValueError("Stage 2: fueled weight must exceed dry weight.")
+            prop2 = s2["fueled"] - s2["dry"]
+            stage2 = MissileParams(
+                name=f"{name} Stage 2",
+                mass_initial=s2["fueled"] + payload,
+                mass_propellant=prop2,
+                mass_final=s2["dry"] + payload,
+                diameter_m=s2["dia"],  length_m=s2["length"],
+                thrust_N=round(_thrust_from_isp(s2["isp"], prop2, s2["burn"])),
+                burn_time_s=s2["burn"], isp_s=s2["isp"],
+                loft_angle_deg=la, loft_angle_rate_deg_s=lar,
+                mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
+            )
+            mass_initial = s1["fueled"] + s2["fueled"] + payload
+        else:
+            mass_initial = s1["fueled"] + payload
+
+        from missile_models import MissileParams
+        return MissileParams(
+            name=name,
+            mass_initial=mass_initial,
+            mass_propellant=prop1,
+            mass_final=s1["dry"] + (0 if self._two_stage.get() else payload),
+            diameter_m=s1["dia"], length_m=s1["length"],
+            thrust_N=round(_thrust_from_isp(s1["isp"], prop1, s1["burn"])),
+            burn_time_s=s1["burn"], isp_s=s1["isp"],
+            loft_angle_deg=la, loft_angle_rate_deg_s=lar,
+            mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
+            stage2=stage2,
+        )
+
+    # ------------------------------------------------------------------
+    def _save(self):
+        try:
+            p = self._collect()
+        except ValueError as e:
+            messagebox.showerror("Invalid input", str(e), parent=self)
+            return
+        self._on_save(p)
+        self.destroy()
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +333,8 @@ class MissileFlyoutApp(tk.Tk):
 
         self._result  = None
         self._running = False
+
+        _load_custom_missiles()      # restore any user-saved missiles
 
         self._build_menu()
         self._build_ui()
@@ -117,11 +397,21 @@ class MissileFlyoutApp(tk.Tk):
         mf = ttk.LabelFrame(parent, text="Missile Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
         self._missile_var = tk.StringVar(value=list(MISSILE_DB.keys())[0])
-        cb = ttk.Combobox(mf, textvariable=self._missile_var,
-                          values=list(MISSILE_DB.keys()),
-                          state="readonly", width=24)
-        cb.pack(padx=6, pady=4)
-        cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
+        self._missile_cb = ttk.Combobox(mf, textvariable=self._missile_var,
+                                        values=list(MISSILE_DB.keys()),
+                                        state="readonly", width=24)
+        self._missile_cb.pack(padx=6, pady=(4, 2))
+        self._missile_cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
+
+        mb = ttk.Frame(mf)
+        mb.pack(padx=6, pady=(0, 4))
+        ttk.Button(mb, text="New…",    width=7,
+                   command=self._new_missile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(mb, text="Edit…",   width=7,
+                   command=self._edit_missile).pack(side=tk.LEFT, padx=2)
+        self._del_btn = ttk.Button(mb, text="Delete", width=7,
+                                   command=self._delete_missile)
+        self._del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Units ──────────────────────────────────────────────────────
         uf = ttk.LabelFrame(parent, text="Display Units")
@@ -270,6 +560,58 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_params_text(p)
+        # Only allow deleting user-created missiles
+        is_custom = self._missile_var.get() not in _PACKAGED_NAMES
+        self._del_btn.config(state=tk.NORMAL if is_custom else tk.DISABLED)
+
+    # ------------------------------------------------------------------
+    # Custom missile management
+    # ------------------------------------------------------------------
+    def _refresh_missile_list(self, select_name=None):
+        """Rebuild the combobox values from the current MISSILE_DB."""
+        names = list(MISSILE_DB.keys())
+        self._missile_cb.configure(values=names)
+        target = select_name or self._missile_var.get()
+        if target not in names:
+            target = names[0]
+        self._missile_var.set(target)
+        self._on_missile_changed()
+
+    def _on_missile_saved(self, p):
+        """Callback invoked by MissileDialog when the user clicks Save."""
+        name = p.name
+        MISSILE_DB[name] = lambda _p=p: _p
+        _save_custom_missiles()
+        self._refresh_missile_list(select_name=name)
+        self._status_var.set(f"Missile '{name}' saved.")
+
+    def _new_missile(self):
+        MissileDialog(self, on_save=self._on_missile_saved)
+
+    def _edit_missile(self):
+        name = self._missile_var.get()
+        if name in _PACKAGED_NAMES:
+            messagebox.showinfo(
+                "Built-in missile",
+                f"'{name}' is a built-in missile.\n\n"
+                "Use 'New…' to create a copy with a different name.",
+                parent=self)
+            return
+        MissileDialog(self, on_save=self._on_missile_saved, existing_name=name)
+
+    def _delete_missile(self):
+        name = self._missile_var.get()
+        if name in _PACKAGED_NAMES:
+            return   # button should already be disabled
+        if not messagebox.askyesno(
+                "Delete missile",
+                f"Permanently delete '{name}'?",
+                parent=self):
+            return
+        del MISSILE_DB[name]
+        _save_custom_missiles()
+        self._refresh_missile_list()
+        self._status_var.set(f"Missile '{name}' deleted.")
 
     def _update_params_text(self, p=None):
         if p is None:
