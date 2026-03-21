@@ -2,7 +2,7 @@
 GUI Missile Flyout V1.1 — Python/tkinter port of Forden's MATLAB GUIDE application.
 
 Layout mirrors the original MATLAB GUIDE application:
-  Left panel  : missile type, units, launch site (DMS), target (DMS),
+  Left panel  : missile type, units, launch site (decimal °), target (decimal °),
                 cutoff time, run buttons, range/apogee results
   Right panel : 4-up matplotlib plots (altitude, speed, trajectory, ground track)
   Bottom bar  : status line
@@ -28,86 +28,18 @@ from coordinates import range_between
 
 
 # ---------------------------------------------------------------------------
-# DMS entry widget  (Degrees / Minutes / Seconds  +  direction button)
+# Helper: labelled decimal-degree row in a grid parent
 # ---------------------------------------------------------------------------
-class DMSEntry(ttk.Frame):
-    """
-    Degrees-Minutes-Seconds entry with direction toggle (N/S or E/W).
-    Returns/sets signed decimal degrees.
-    """
-
-    def __init__(self, master, positive_label="N", negative_label="S", **kw):
-        super().__init__(master, **kw)
-        self._pos_lbl = positive_label
-        self._neg_lbl = negative_label
-
-        self._deg = tk.StringVar(value="0")
-        self._min = tk.StringVar(value="0")
-        self._sec = tk.StringVar(value="0.0")
-        self._dir = tk.StringVar(value=positive_label)   # N/S or E/W
-
-        vcmd = (self.register(self._validate_num), '%P')
-        ttk.Entry(self, textvariable=self._deg, width=4,
-                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
-        ttk.Label(self, text="°").pack(side=tk.LEFT)
-        ttk.Entry(self, textvariable=self._min, width=3,
-                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
-        ttk.Label(self, text="'").pack(side=tk.LEFT)
-        ttk.Entry(self, textvariable=self._sec, width=6,
-                  validate='key', validatecommand=vcmd).pack(side=tk.LEFT)
-        ttk.Label(self, text='"').pack(side=tk.LEFT)
-
-        # Direction toggle button
-        self._dir_btn = ttk.Button(self, textvariable=self._dir, width=3,
-                                   command=self._toggle_dir)
-        self._dir_btn.pack(side=tk.LEFT, padx=(3, 0))
-
-    @staticmethod
-    def _validate_num(value):
-        return value == "" or value == "-" or value.replace('.', '', 1).replace('-', '', 1).isdigit()
-
-    def _toggle_dir(self):
-        if self._dir.get() == self._pos_lbl:
-            self._dir.set(self._neg_lbl)
-        else:
-            self._dir.set(self._pos_lbl)
-
-    def get_decimal(self):
-        try:
-            d = abs(float(self._deg.get() or 0))
-            m = float(self._min.get() or 0)
-            s = float(self._sec.get() or 0)
-        except ValueError:
-            return 0.0
-        val = d + m / 60.0 + s / 3600.0
-        if self._dir.get() == self._neg_lbl:
-            val = -val
-        return val
-
-    def set_decimal(self, val):
-        if val < 0:
-            self._dir.set(self._neg_lbl)
-            val = -val
-        else:
-            self._dir.set(self._pos_lbl)
-        d = int(val)
-        m = int((val - d) * 60)
-        s = round((val - d - m / 60.0) * 3600.0, 2)
-        self._deg.set(str(d))
-        self._min.set(str(m))
-        self._sec.set(f"{s:.2f}")
-
-
-# ---------------------------------------------------------------------------
-# Helper: labelled DMS row in a grid parent
-# ---------------------------------------------------------------------------
-def _dms_row(parent, label, row, positive="N", negative="S"):
-    """Pack a label + DMSEntry into a grid row; return the DMSEntry widget."""
+def _dd_row(parent, label, row, default="0.0"):
+    """Pack a label + decimal-degree Entry into a grid row; return the StringVar."""
     ttk.Label(parent, text=label).grid(row=row, column=0,
                                        sticky=tk.W, padx=(8, 2), pady=2)
-    w = DMSEntry(parent, positive_label=positive, negative_label=negative)
-    w.grid(row=row, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-    return w
+    var = tk.StringVar(value=default)
+    inner = ttk.Frame(parent)
+    inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+    ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
+    ttk.Label(inner, text="°").pack(side=tk.LEFT, padx=(2, 0))
+    return var
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +137,8 @@ class MissileFlyoutApp(tk.Tk):
         lf = ttk.LabelFrame(parent, text="Launch Site")
         lf.pack(fill=tk.X, padx=6, pady=3)
 
-        self._launch_lat = _dms_row(lf, "Latitude:",  row=0, positive="N", negative="S")
-        self._launch_lon = _dms_row(lf, "Longitude:", row=1, positive="E", negative="W")
+        self._launch_lat = _dd_row(lf, "Latitude:",  row=0, default="0.0")
+        self._launch_lon = _dd_row(lf, "Longitude:", row=1, default="0.0")
 
         ttk.Label(lf, text="Azimuth:").grid(row=2, column=0,
                                              sticky=tk.W, padx=(8, 2), pady=2)
@@ -220,8 +152,8 @@ class MissileFlyoutApp(tk.Tk):
         tf = ttk.LabelFrame(parent, text="Target")
         tf.pack(fill=tk.X, padx=6, pady=3)
 
-        self._target_lat = _dms_row(tf, "Latitude:",  row=0, positive="N", negative="S")
-        self._target_lon = _dms_row(tf, "Longitude:", row=1, positive="E", negative="W")
+        self._target_lat = _dd_row(tf, "Latitude:",  row=0, default="0.0")
+        self._target_lon = _dd_row(tf, "Longitude:", row=1, default="0.0")
 
         ttk.Button(tf, text="Aim at Target", command=self._aim_at_target,
                    width=18).grid(row=2, column=0, columnspan=2, pady=(4, 6))
@@ -360,10 +292,10 @@ class MissileFlyoutApp(tk.Tk):
         cutoff time to hit the target range (using aim_missile bisection).
         """
         try:
-            lat1_dd = self._launch_lat.get_decimal()
-            lon1_dd = self._launch_lon.get_decimal()
-            lat2_dd = self._target_lat.get_decimal()
-            lon2_dd = self._target_lon.get_decimal()
+            lat1_dd = float(self._launch_lat.get())
+            lon1_dd = float(self._launch_lon.get())
+            lat2_dd = float(self._target_lat.get())
+            lon2_dd = float(self._target_lon.get())
 
             lat1 = np.radians(lat1_dd)
             lon1 = np.radians(lon1_dd)
@@ -407,8 +339,8 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _get_inputs(self):
         missile = get_missile(self._missile_var.get())
-        lat     = self._launch_lat.get_decimal()
-        lon     = self._launch_lon.get_decimal()
+        lat     = float(self._launch_lat.get())
+        lon     = float(self._launch_lon.get())
         az      = float(self._azimuth_var.get())
         cutoff_str = self._cutoff_var.get().strip()
         cutoff  = float(cutoff_str) if cutoff_str else None
