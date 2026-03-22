@@ -335,6 +335,11 @@ def _zoljanah():
     # scales with propellant mass: 71 s × (21 076 / 20 500) ≈ 73.0 s
     burn    = round(71.0 * prop / 20500, 1)   # 73.0 s
 
+    isp1    = 255.0                # Stage 1 ISP (s) — near sea level
+    isp2    = round(isp1 * 1.15)  # Stage 2 ISP +15 % vacuum bonus → 293 s
+    # Thrust scales with ISP at the same mass flow rate, so stage 2 thrust
+    # is also 15 % higher than stage 1 for no extra cost.
+
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
     stage2 = MissileParams(
         name="Zoljanah Stage 2",
@@ -343,9 +348,9 @@ def _zoljanah():
         mass_final=dry,                      #  2 874 kg (dry only; RV separates)
         diameter_m=1.5,
         length_m=9.9,
-        thrust_N=round(_thrust_from_isp(265, prop, burn)),
+        thrust_N=round(_thrust_from_isp(isp2, prop, burn)),
         burn_time_s=burn,
-        isp_s=265.0,
+        isp_s=isp2,
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
         mach_table=_FORDEN_MACH,
@@ -364,9 +369,9 @@ def _zoljanah():
         mass_final=dry,                                  #  2 874 kg (jettisoned)
         diameter_m=1.5,
         length_m=10.3,
-        thrust_N=round(_thrust_from_isp(255, prop, burn)),
+        thrust_N=round(_thrust_from_isp(isp1, prop, burn)),
         burn_time_s=burn,
-        isp_s=255.0,
+        isp_s=isp1,
         loft_angle_deg=35.0,
         loft_angle_rate_deg_s=0.8,
         mach_table=_FORDEN_MACH,
