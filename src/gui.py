@@ -196,14 +196,18 @@ class MissileDialog(tk.Toplevel):
                                for i in range(4)]
         self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
-        # Payload
+        # Payload + RV beta
         pf = ttk.Frame(self)
         pf.pack(fill=tk.X, padx=8, pady=2)
         ttk.Label(pf, text="Payload (kg):").pack(side=tk.LEFT)
         self._payload_var = tk.StringVar(value="1000")
-        ttk.Entry(pf, textvariable=self._payload_var, width=10).pack(
-            side=tk.LEFT, padx=6)
-        ttk.Label(pf, text="kg  (warhead / instrument)").pack(side=tk.LEFT)
+        ttk.Entry(pf, textvariable=self._payload_var, width=8).pack(
+            side=tk.LEFT, padx=(4, 12))
+        ttk.Label(pf, text="RV β (kg/m²):").pack(side=tk.LEFT)
+        self._rv_beta_var = tk.StringVar(value="0")
+        ttk.Entry(pf, textvariable=self._rv_beta_var, width=8).pack(
+            side=tk.LEFT, padx=(4, 8))
+        ttk.Label(pf, text="(0 = use stage body aero)").pack(side=tk.LEFT)
 
         # Buttons
         bf = ttk.Frame(self)
@@ -266,6 +270,7 @@ class MissileDialog(tk.Toplevel):
         for i, sd in enumerate(stage_data):
             self._stage_frames[i].populate(sd)
         self._payload_var.set(f"{payload:.0f}")
+        self._rv_beta_var.set(f"{p.rv_beta_kg_m2:.0f}")
         self._name_var.set(name)
 
     # ------------------------------------------------------------------
@@ -282,6 +287,7 @@ class MissileDialog(tk.Toplevel):
 
         n       = int(self._n_stages_var.get())
         payload = float(self._payload_var.get())
+        rv_beta = float(self._rv_beta_var.get())
 
         # Read and validate all active stage frames
         stages = []
@@ -323,8 +329,9 @@ class MissileDialog(tk.Toplevel):
                 stage2=node,
             )
 
-        node.name = name       # top-level gets the missile's proper name
-        node.payload_kg = payload  # store so _prefill can round-trip correctly
+        node.name = name            # top-level gets the missile's proper name
+        node.payload_kg  = payload  # store so _prefill can round-trip correctly
+        node.rv_beta_kg_m2 = rv_beta
         return node
 
     # ------------------------------------------------------------------
