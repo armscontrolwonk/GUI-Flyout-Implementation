@@ -331,6 +331,10 @@ def _zoljanah():
     dry     = 2874   # kg  per stage  (12 % of 23 950 kg wet)
     prop    = 21076  # kg  per stage  (88 % of 23 950 kg wet)
 
+    # Burn time: same engine as original (thrust unchanged), so burn time
+    # scales with propellant mass: 71 s × (21 076 / 20 500) ≈ 73.0 s
+    burn    = round(71.0 * prop / 20500, 1)   # 73.0 s
+
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
     stage2 = MissileParams(
         name="Zoljanah Stage 2",
@@ -339,8 +343,8 @@ def _zoljanah():
         mass_final=dry,                      #  2 874 kg (dry only; RV separates)
         diameter_m=1.5,
         length_m=9.9,
-        thrust_N=round(_thrust_from_isp(265, prop, 71)),
-        burn_time_s=71.0,
+        thrust_N=round(_thrust_from_isp(265, prop, burn)),
+        burn_time_s=burn,
         isp_s=265.0,
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
@@ -360,8 +364,8 @@ def _zoljanah():
         mass_final=dry,                                  #  2 874 kg (jettisoned)
         diameter_m=1.5,
         length_m=10.3,
-        thrust_N=round(_thrust_from_isp(255, prop, 71)),
-        burn_time_s=71.0,
+        thrust_N=round(_thrust_from_isp(255, prop, burn)),
+        burn_time_s=burn,
         isp_s=255.0,
         loft_angle_deg=35.0,
         loft_angle_rate_deg_s=0.8,
