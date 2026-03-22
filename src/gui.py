@@ -153,7 +153,7 @@ class _StageFrame(ttk.LabelFrame):
     # T = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
                      length="12.0", thrust_kn="112.9", isp="230",
-                     loft_a="45.0", loft_r="1.5", coast="0")
+                     coast="0")
 
     _G0 = 9.80665  # m/s²
 
@@ -178,16 +178,12 @@ class _StageFrame(ttk.LabelFrame):
         self._burn_entry.pack(side=tk.LEFT)
         ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
 
-        self._loft_a = _entry_row(self, "Loft angle (°):", 7, d["loft_a"],
-                                  "° (final elev.)")
-        self._loft_r = _entry_row(self, "Loft rate (°/s):", 8, d["loft_r"], "°/s")
-
-        # Coast-time row (row 9) — shown only for non-last stages
+        # Coast-time row (row 7) — shown only for non-last stages
         self._coast_var = tk.StringVar(value=d["coast"])
         self._coast_lbl = ttk.Label(self, text="Coast after (s):")
-        self._coast_lbl.grid(row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._coast_lbl.grid(row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         coast_inner = ttk.Frame(self)
-        coast_inner.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        coast_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
         ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
             side=tk.LEFT, padx=(2, 0))
@@ -246,7 +242,6 @@ class _StageFrame(ttk.LabelFrame):
             ("fueled",    self._fueled),    ("dry",    self._dry),
             ("dia",       self._dia),       ("length", self._length),
             ("thrust_kn", self._thrust_kn), ("isp",    self._isp),
-            ("loft_a",    self._loft_a),    ("loft_r", self._loft_r),
             ("coast",     self._coast_var),
         ]} | {"burn": float(burn_str)}
 
@@ -265,8 +260,6 @@ class _StageFrame(ttk.LabelFrame):
         self._thrust_kn .set(f"{thrust_kn:.1f}")
         self._isp       .set(str(d["isp"]))
         # _burn_var is updated automatically by the trace
-        self._loft_a    .set(str(d.get("loft_a", 45.0)))
-        self._loft_r    .set(str(d.get("loft_r", 1.5)))
         self._coast_var .set(str(d.get("coast", 0)))
 
 
@@ -528,8 +521,6 @@ class MissileDialog(tk.Toplevel):
                 "fueled": fueled, "dry": dry,
                 "dia":    node.diameter_m, "length": node.length_m,
                 "burn":   node.burn_time_s, "isp":   node.isp_s,
-                "loft_a": node.loft_angle_deg,
-                "loft_r": node.loft_angle_rate_deg_s,
                 "coast":  node.coast_time_s,
             })
             node = nxt
@@ -627,8 +618,6 @@ class MissileDialog(tk.Toplevel):
                 thrust_N=round(sd["thrust_kn"] * 1000.0),
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
                 coast_time_s=sd["coast"] if not is_last else 0.0,
-                loft_angle_deg=sd["loft_a"],
-                loft_angle_rate_deg_s=sd["loft_r"],
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
             )
