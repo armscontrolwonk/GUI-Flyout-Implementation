@@ -287,55 +287,60 @@ class MissileDialog(tk.Toplevel):
         body.bind("<Button-4>",   _on_mousewheel_linux_up)
         body.bind("<Button-5>",   _on_mousewheel_linux_down)
 
-        # ── Payload panel (bus + RVs + RV β + shroud) ───────────────────────
+        # ── Payload panel — grid layout matching stage entries ───────────────
         pl = ttk.LabelFrame(body, text="Payload")
         pl.pack(fill=tk.X, padx=8, pady=4)
 
-        # Row 1 — bus + RV decomposition
-        prow1 = ttk.Frame(pl)
-        prow1.pack(fill=tk.X, padx=6, pady=(4, 2))
-        ttk.Label(prow1, text="Bus (kg):").pack(side=tk.LEFT)
-        self._bus_var = tk.StringVar(value="0")
-        ttk.Entry(prow1, textvariable=self._bus_var, width=8).pack(
-            side=tk.LEFT, padx=(4, 12))
-        ttk.Label(prow1, text="RVs:").pack(side=tk.LEFT)
+        # Row 0: Bus mass
+        self._bus_var = _entry_row(pl, "Bus mass (kg):", 0, "0", "kg")
+
+        # Row 1: Number of RVs (spinbox)
+        ttk.Label(pl, text="No. of RVs:").grid(
+            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._num_rvs_var = tk.StringVar(value="1")
-        ttk.Spinbox(prow1, textvariable=self._num_rvs_var,
-                    from_=1, to=24, width=4).pack(side=tk.LEFT, padx=(4, 12))
-        ttk.Label(prow1, text="Per-RV mass (kg):").pack(side=tk.LEFT)
+        _rvn_inner = ttk.Frame(pl)
+        _rvn_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Spinbox(_rvn_inner, textvariable=self._num_rvs_var,
+                    from_=1, to=24, width=4).pack(side=tk.LEFT)
+
+        # Row 2: Per-RV mass + computed total (in the unit label position)
+        ttk.Label(pl, text="Per-RV mass (kg):").grid(
+            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._rv_mass_var = tk.StringVar(value="1000")
-        ttk.Entry(prow1, textvariable=self._rv_mass_var, width=8).pack(
-            side=tk.LEFT, padx=(4, 8))
-        self._total_payload_lbl = ttk.Label(prow1, text="= 1000 kg total",
+        _rvm_inner = ttk.Frame(pl)
+        _rvm_inner.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10).pack(side=tk.LEFT)
+        self._total_payload_lbl = ttk.Label(_rvm_inner, text="kg  = 1000 total",
                                             foreground="gray40")
-        self._total_payload_lbl.pack(side=tk.LEFT)
+        self._total_payload_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 2 — RV ballistic coefficient
-        prow2 = ttk.Frame(pl)
-        prow2.pack(fill=tk.X, padx=6, pady=2)
-        ttk.Label(prow2, text="RV β (kg/m²):").pack(side=tk.LEFT)
-        self._rv_beta_var = tk.StringVar(value="0")
-        ttk.Entry(prow2, textvariable=self._rv_beta_var, width=8).pack(
-            side=tk.LEFT, padx=(4, 8))
-        ttk.Label(prow2, text="(0 = use stage body aero)").pack(side=tk.LEFT)
+        # Row 3: RV ballistic coefficient
+        self._rv_beta_var = _entry_row(pl, "RV β (kg/m²):", 3, "0",
+                                       "(0 = use stage body aero)")
 
-        # Row 3 — shroud checkbox + mass + jettison altitude
-        prow3 = ttk.Frame(pl)
-        prow3.pack(fill=tk.X, padx=6, pady=(2, 6))
+        # Row 4: Shroud — checkbutton acts as label; entry starts disabled
         self._shroud_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(prow3, text="Shroud", variable=self._shroud_var,
-                        command=self._update_shroud_state).pack(side=tk.LEFT)
-        ttk.Label(prow3, text="mass:").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Checkbutton(pl, text="Shroud mass (kg):", variable=self._shroud_var,
+                        command=self._update_shroud_state).grid(
+            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_mass_var = tk.StringVar(value="0")
+        _sm_inner = ttk.Frame(pl)
+        _sm_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_mass_entry = ttk.Entry(
-            prow3, textvariable=self._shroud_mass_var, width=8, state="disabled")
-        self._shroud_mass_entry.pack(side=tk.LEFT, padx=(4, 4))
-        ttk.Label(prow3, text="kg    jettison:").pack(side=tk.LEFT)
+            _sm_inner, textvariable=self._shroud_mass_var, width=10, state="disabled")
+        self._shroud_mass_entry.pack(side=tk.LEFT)
+        ttk.Label(_sm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Row 5: Jettison altitude (indented label to signal dependence on shroud)
+        ttk.Label(pl, text="  Jettison alt (km):").grid(
+            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
         self._shroud_alt_var = tk.StringVar(value="80")
+        _sa_inner = ttk.Frame(pl)
+        _sa_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
         self._shroud_alt_entry = ttk.Entry(
-            prow3, textvariable=self._shroud_alt_var, width=5, state="disabled")
-        self._shroud_alt_entry.pack(side=tk.LEFT, padx=(4, 4))
-        ttk.Label(prow3, text="km").pack(side=tk.LEFT)
+            _sa_inner, textvariable=self._shroud_alt_var, width=10, state="disabled")
+        self._shroud_alt_entry.pack(side=tk.LEFT)
+        ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
 
         # Live total-payload label update
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
@@ -366,12 +371,12 @@ class MissileDialog(tk.Toplevel):
     def _update_total_payload(self, *_):
         """Recompute and display the total payload label."""
         try:
-            bus  = float(self._bus_var.get())
-            n    = max(1, int(self._num_rvs_var.get()))
-            rv   = float(self._rv_mass_var.get())
-            self._total_payload_lbl.config(text=f"= {bus + n * rv:.0f} kg total")
+            bus = float(self._bus_var.get())
+            n   = max(1, int(self._num_rvs_var.get()))
+            rv  = float(self._rv_mass_var.get())
+            self._total_payload_lbl.config(text=f"kg  = {bus + n * rv:.0f} total")
         except (ValueError, tk.TclError):
-            self._total_payload_lbl.config(text="= ? kg total")
+            self._total_payload_lbl.config(text="kg  = ? total")
 
     def _update_shroud_state(self):
         """Enable/disable shroud mass and altitude entries."""
