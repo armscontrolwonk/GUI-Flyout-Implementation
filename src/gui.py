@@ -1615,12 +1615,15 @@ class MissileFlyoutApp(tk.Tk):
 
         # Capture the trajectory-fitted limits, draw borders, then restore so
         # the world-spanning border lines cannot expand the view.
+        # Add 20% padding on each side beyond matplotlib's default 5% margin.
         self._ax_trk.autoscale()
-        xlim = self._ax_trk.get_xlim()
-        ylim = self._ax_trk.get_ylim()
+        xlo, xhi = self._ax_trk.get_xlim()
+        ylo, yhi = self._ax_trk.get_ylim()
+        xpad = (xhi - xlo) * 0.20
+        ypad = (yhi - ylo) * 0.20
         _draw_borders(self._ax_trk, center_lon)
-        self._ax_trk.set_xlim(xlim)
-        self._ax_trk.set_ylim(ylim)
+        self._ax_trk.set_xlim(xlo - xpad, xhi + xpad)
+        self._ax_trk.set_ylim(ylo - ypad, yhi + ypad)
 
         # Tick labels show absolute longitudes (convert back from centred frame)
         self._ax_trk.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
