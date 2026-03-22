@@ -34,6 +34,10 @@ from coordinates import range_between
 # Custom missile persistence
 # ---------------------------------------------------------------------------
 
+# Sentinel string inserted into the missile combobox between non-Forden and
+# Forden entries.  It is never a valid missile name.
+_FORDEN_SEPARATOR = "── Forden Reference ──"
+
 # Names that ship with the program and cannot be deleted
 _PACKAGED_NAMES    = set(MISSILE_DB.keys())
 _PACKAGED_ORIGINALS = dict(MISSILE_DB)   # original factory lambdas for reset
@@ -116,8 +120,9 @@ class _StageFrame(ttk.LabelFrame):
         self._burn_var = tk.StringVar()
         _burn_inner = ttk.Frame(self)
         _burn_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Entry(_burn_inner, textvariable=self._burn_var, width=10,
-                  state="readonly").pack(side=tk.LEFT)
+        self._burn_entry = ttk.Entry(_burn_inner, textvariable=self._burn_var,
+                                     width=10, state="readonly")
+        self._burn_entry.pack(side=tk.LEFT)
         ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
 
         self._loft_a = _entry_row(self, "Loft angle (°):", 7, d["loft_a"],
@@ -154,6 +159,22 @@ class _StageFrame(ttk.LabelFrame):
             self._burn_var.set(f"{isp * self._G0 * prop / thrust_n:.1f}")
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
+
+    @staticmethod
+    def _iter_entries(widget):
+        """Yield all ttk.Entry descendants of widget."""
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.Entry):
+                yield child
+            else:
+                yield from _StageFrame._iter_entries(child)
+
+    def set_readonly(self, readonly: bool):
+        """Set all editable entry fields to readonly (for Forden reference missiles)."""
+        state = "readonly" if readonly else "normal"
+        for entry in self._iter_entries(self):
+            if entry is not self._burn_entry:   # burn time is always readonly
+                entry.config(state=state)
 
     def set_coast_visible(self, visible: bool):
         """Show or hide the inter-stage coast-time row."""
@@ -205,11 +226,18 @@ class MissileDialog(tk.Toplevel):
 
     def __init__(self, parent, on_save, existing_name=None):
         super().__init__(parent)
-        self.title("Edit Missile" if existing_name else "New Missile")
-        self.resizable(False, True)
-        self.grab_set()               # modal
         self._on_save = on_save
         self._existing_name = existing_name
+        self._readonly_mode = (existing_name is not None
+                               and existing_name.endswith(" (Forden)"))
+        if self._readonly_mode:
+            self.title("View Missile — Forden Reference")
+        elif existing_name:
+            self.title("Edit Missile")
+        else:
+            self.title("New Missile")
+        self.resizable(False, True)
+        self.grab_set()               # modal
         self._build(existing_name)
         # Centre over parent; cap height to 90 % of screen so dialog is scrollable
         self.update_idletasks()
@@ -230,16 +258,16 @@ class MissileDialog(tk.Toplevel):
         nf.pack(fill=tk.X, **pad)
         ttk.Label(nf, text="Missile name:").pack(side=tk.LEFT)
         self._name_var = tk.StringVar(value=existing_name or "My Missile")
-        ttk.Entry(nf, textvariable=self._name_var, width=24).pack(
-            side=tk.LEFT, padx=(6, 16))
+        self._name_entry = ttk.Entry(nf, textvariable=self._name_var, width=24)
+        self._name_entry.pack(side=tk.LEFT, padx=(6, 16))
         ttk.Label(nf, text="Stages:").pack(side=tk.LEFT)
         self._n_stages_var = tk.StringVar(value="1")
-        stages_cb = ttk.Combobox(nf, textvariable=self._n_stages_var,
-                                 values=["1", "2", "3", "4"],
-                                 state="readonly", width=3)
-        stages_cb.pack(side=tk.LEFT, padx=(4, 0))
-        stages_cb.bind("<<ComboboxSelected>>",
-                       lambda _: self._update_stage_frames())
+        self._stages_cb = ttk.Combobox(nf, textvariable=self._n_stages_var,
+                                       values=["1", "2", "3", "4"],
+                                       state="readonly", width=3)
+        self._stages_cb.pack(side=tk.LEFT, padx=(4, 0))
+        self._stages_cb.bind("<<ComboboxSelected>>",
+                             lambda _: self._update_stage_frames())
 
         # Scrollable body: canvas + scrollbar sandwiched between the name row
         # and the Save/Cancel buttons so buttons are always visible.
@@ -291,8 +319,12 @@ class MissileDialog(tk.Toplevel):
         pl = ttk.LabelFrame(body, text="Payload")
         pl.pack(fill=tk.X, padx=8, pady=4)
 
+        # Track payload input widgets so _apply_readonly can disable them.
+        self._payload_inputs = []
+
         # Row 0: Bus mass
         self._bus_var = _entry_row(pl, "Bus mass (kg):", 0, "0", "kg")
+        self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
 
         # Row 1: Number of RVs (spinbox)
         ttk.Label(pl, text="No. of RVs:").grid(
@@ -300,8 +332,10 @@ class MissileDialog(tk.Toplevel):
         self._num_rvs_var = tk.StringVar(value="1")
         _rvn_inner = ttk.Frame(pl)
         _rvn_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Spinbox(_rvn_inner, textvariable=self._num_rvs_var,
-                    from_=1, to=24, width=4).pack(side=tk.LEFT)
+        self._num_rvs_spinbox = ttk.Spinbox(_rvn_inner, textvariable=self._num_rvs_var,
+                                            from_=1, to=24, width=4)
+        self._num_rvs_spinbox.pack(side=tk.LEFT)
+        self._payload_inputs.append(self._num_rvs_spinbox)
 
         # Row 2: Per-RV mass + computed total (in the unit label position)
         ttk.Label(pl, text="Per-RV mass (kg):").grid(
@@ -309,7 +343,9 @@ class MissileDialog(tk.Toplevel):
         self._rv_mass_var = tk.StringVar(value="1000")
         _rvm_inner = ttk.Frame(pl)
         _rvm_inner.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10).pack(side=tk.LEFT)
+        _rv_mass_entry = ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10)
+        _rv_mass_entry.pack(side=tk.LEFT)
+        self._payload_inputs.append(_rv_mass_entry)
         self._total_payload_lbl = ttk.Label(_rvm_inner, text="kg  = 1000 total",
                                             foreground="gray40")
         self._total_payload_lbl.pack(side=tk.LEFT, padx=(2, 0))
@@ -317,12 +353,14 @@ class MissileDialog(tk.Toplevel):
         # Row 3: RV ballistic coefficient
         self._rv_beta_var = _entry_row(pl, "RV β (kg/m²):", 3, "0",
                                        "(0 = use stage body aero)")
+        self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
 
         # Row 4: Shroud — checkbutton acts as label; entry starts disabled
         self._shroud_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(pl, text="Shroud mass (kg):", variable=self._shroud_var,
-                        command=self._update_shroud_state).grid(
-            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._shroud_check = ttk.Checkbutton(pl, text="Shroud mass (kg):",
+                                             variable=self._shroud_var,
+                                             command=self._update_shroud_state)
+        self._shroud_check.grid(row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_mass_var = tk.StringVar(value="0")
         _sm_inner = ttk.Frame(pl)
         _sm_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
@@ -360,12 +398,28 @@ class MissileDialog(tk.Toplevel):
         bf.pack(fill=tk.X, padx=8, pady=(4, 8))
         ttk.Button(bf, text="Cancel", command=self.destroy).pack(
             side=tk.RIGHT, padx=(4, 0))
-        ttk.Button(bf, text="Save Missile", command=self._save).pack(
-            side=tk.RIGHT)
+        self._save_btn = ttk.Button(bf, text="Save Missile", command=self._save)
+        self._save_btn.pack(side=tk.RIGHT)
 
         # Pre-fill if editing an existing missile
         if existing_name:
             self._prefill(existing_name)
+            if self._readonly_mode:
+                self._apply_readonly()
+
+    # ------------------------------------------------------------------
+    def _apply_readonly(self):
+        """Lock all input fields for Forden reference missiles."""
+        for sf in self._stage_frames:
+            sf.set_readonly(True)
+        self._name_entry.config(state="readonly")
+        self._stages_cb.config(state="disabled")
+        for w in self._payload_inputs:
+            w.config(state="readonly")
+        self._shroud_check.config(state="disabled")
+        self._shroud_mass_entry.config(state="disabled")
+        self._shroud_alt_entry.config(state="disabled")
+        self._save_btn.pack_forget()
 
     # ------------------------------------------------------------------
     def _update_total_payload(self, *_):
@@ -986,9 +1040,16 @@ class MissileFlyoutApp(tk.Tk):
         # ── Missile type ───────────────────────────────────────────────
         mf = ttk.LabelFrame(parent, text="Missile Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
-        self._missile_var = tk.StringVar(value=list(MISSILE_DB.keys())[0])
+        _non_forden = [n for n in MISSILE_DB if not n.endswith(" (Forden)")]
+        _forden     = [n for n in MISSILE_DB if n.endswith(" (Forden)")]
+        _cb_values  = (_non_forden
+                       + ([_FORDEN_SEPARATOR] if _forden else [])
+                       + _forden)
+        _first_valid = (_non_forden + _forden)[0]
+        self._last_valid_missile = _first_valid
+        self._missile_var = tk.StringVar(value=_first_valid)
         self._missile_cb = ttk.Combobox(mf, textvariable=self._missile_var,
-                                        values=list(MISSILE_DB.keys()),
+                                        values=_cb_values,
                                         state="readonly", width=24)
         self._missile_cb.pack(padx=6, pady=(4, 2))
         self._missile_cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
@@ -1151,13 +1212,17 @@ class MissileFlyoutApp(tk.Tk):
     # Missile selection
     # ------------------------------------------------------------------
     def _on_missile_changed(self, _event=None):
-        p = get_missile(self._missile_var.get())
+        name = self._missile_var.get()
+        if name not in MISSILE_DB:          # separator was clicked — revert
+            self._missile_var.set(self._last_valid_missile)
+            return
+        self._last_valid_missile = name
+        p = get_missile(name)
         self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_params_text(p)
         # Allow deleting custom missiles and resetting overridden packaged ones
-        name = self._missile_var.get()
         is_custom = name not in _PACKAGED_NAMES
         is_overridden = name in _OVERRIDDEN_PACKAGED
         if is_custom:
@@ -1172,11 +1237,15 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _refresh_missile_list(self, select_name=None):
         """Rebuild the combobox values from the current MISSILE_DB."""
-        names = list(MISSILE_DB.keys())
+        non_forden = [n for n in MISSILE_DB if not n.endswith(" (Forden)")]
+        forden     = [n for n in MISSILE_DB if n.endswith(" (Forden)")]
+        names = (non_forden
+                 + ([_FORDEN_SEPARATOR] if forden else [])
+                 + forden)
         self._missile_cb.configure(values=names)
         target = select_name or self._missile_var.get()
-        if target not in names:
-            target = names[0]
+        if target not in MISSILE_DB:
+            target = (non_forden + forden)[0]
         self._missile_var.set(target)
         self._on_missile_changed()
 
