@@ -243,9 +243,10 @@ class MissileDialog(tk.Toplevel):
         while node is not None:
             nxt = node.stage2
             if nxt is None:
-                # Last stage: payload is baked into mass_initial / mass_final.
+                # Last stage: payload is in mass_initial but NOT mass_final
+                # (payload separates at burnout), so dry = mass_final directly.
                 fueled = node.mass_initial - payload
-                dry    = node.mass_final   - payload
+                dry    = node.mass_final
             else:
                 fueled = node.mass_initial - nxt.mass_initial
                 dry    = node.mass_final
@@ -301,7 +302,7 @@ class MissileDialog(tk.Toplevel):
             prop = sd["fueled"] - sd["dry"]
             if is_last:
                 m0     = sd["fueled"] + payload
-                mfinal = sd["dry"]    + payload
+                mfinal = sd["dry"]              # payload separates at burnout
                 upper_mass = m0
             else:
                 m0     = sd["fueled"] + upper_mass
