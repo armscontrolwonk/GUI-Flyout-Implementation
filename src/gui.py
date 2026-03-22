@@ -287,18 +287,59 @@ class MissileDialog(tk.Toplevel):
         body.bind("<Button-4>",   _on_mousewheel_linux_up)
         body.bind("<Button-5>",   _on_mousewheel_linux_down)
 
-        # Payload + RV beta (inside scrollable body)
-        pf = ttk.Frame(body)
-        pf.pack(fill=tk.X, padx=8, pady=2)
-        ttk.Label(pf, text="Payload (kg):").pack(side=tk.LEFT)
-        self._payload_var = tk.StringVar(value="1000")
-        ttk.Entry(pf, textvariable=self._payload_var, width=8).pack(
+        # ── Payload panel (bus + RVs + RV β + shroud) ───────────────────────
+        pl = ttk.LabelFrame(body, text="Payload")
+        pl.pack(fill=tk.X, padx=8, pady=4)
+
+        # Row 1 — bus + RV decomposition
+        prow1 = ttk.Frame(pl)
+        prow1.pack(fill=tk.X, padx=6, pady=(4, 2))
+        ttk.Label(prow1, text="Bus (kg):").pack(side=tk.LEFT)
+        self._bus_var = tk.StringVar(value="0")
+        ttk.Entry(prow1, textvariable=self._bus_var, width=8).pack(
             side=tk.LEFT, padx=(4, 12))
-        ttk.Label(pf, text="RV β (kg/m²):").pack(side=tk.LEFT)
-        self._rv_beta_var = tk.StringVar(value="0")
-        ttk.Entry(pf, textvariable=self._rv_beta_var, width=8).pack(
+        ttk.Label(prow1, text="RVs:").pack(side=tk.LEFT)
+        self._num_rvs_var = tk.StringVar(value="1")
+        ttk.Spinbox(prow1, textvariable=self._num_rvs_var,
+                    from_=1, to=24, width=4).pack(side=tk.LEFT, padx=(4, 12))
+        ttk.Label(prow1, text="Per-RV mass (kg):").pack(side=tk.LEFT)
+        self._rv_mass_var = tk.StringVar(value="1000")
+        ttk.Entry(prow1, textvariable=self._rv_mass_var, width=8).pack(
             side=tk.LEFT, padx=(4, 8))
-        ttk.Label(pf, text="(0 = use stage body aero)").pack(side=tk.LEFT)
+        self._total_payload_lbl = ttk.Label(prow1, text="= 1000 kg total",
+                                            foreground="gray40")
+        self._total_payload_lbl.pack(side=tk.LEFT)
+
+        # Row 2 — RV ballistic coefficient
+        prow2 = ttk.Frame(pl)
+        prow2.pack(fill=tk.X, padx=6, pady=2)
+        ttk.Label(prow2, text="RV β (kg/m²):").pack(side=tk.LEFT)
+        self._rv_beta_var = tk.StringVar(value="0")
+        ttk.Entry(prow2, textvariable=self._rv_beta_var, width=8).pack(
+            side=tk.LEFT, padx=(4, 8))
+        ttk.Label(prow2, text="(0 = use stage body aero)").pack(side=tk.LEFT)
+
+        # Row 3 — shroud checkbox + mass + jettison altitude
+        prow3 = ttk.Frame(pl)
+        prow3.pack(fill=tk.X, padx=6, pady=(2, 6))
+        self._shroud_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(prow3, text="Shroud", variable=self._shroud_var,
+                        command=self._update_shroud_state).pack(side=tk.LEFT)
+        ttk.Label(prow3, text="mass:").pack(side=tk.LEFT, padx=(8, 0))
+        self._shroud_mass_var = tk.StringVar(value="0")
+        self._shroud_mass_entry = ttk.Entry(
+            prow3, textvariable=self._shroud_mass_var, width=8, state="disabled")
+        self._shroud_mass_entry.pack(side=tk.LEFT, padx=(4, 4))
+        ttk.Label(prow3, text="kg    jettison:").pack(side=tk.LEFT)
+        self._shroud_alt_var = tk.StringVar(value="80")
+        self._shroud_alt_entry = ttk.Entry(
+            prow3, textvariable=self._shroud_alt_var, width=5, state="disabled")
+        self._shroud_alt_entry.pack(side=tk.LEFT, padx=(4, 4))
+        ttk.Label(prow3, text="km").pack(side=tk.LEFT)
+
+        # Live total-payload label update
+        for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
+            _v.trace_add("write", self._update_total_payload)
 
         # Stage frames (1 always visible; 2-4 toggled).
         # A dedicated container ensures dynamically-packed stages always appear
@@ -322,6 +363,23 @@ class MissileDialog(tk.Toplevel):
             self._prefill(existing_name)
 
     # ------------------------------------------------------------------
+    def _update_total_payload(self, *_):
+        """Recompute and display the total payload label."""
+        try:
+            bus  = float(self._bus_var.get())
+            n    = max(1, int(self._num_rvs_var.get()))
+            rv   = float(self._rv_mass_var.get())
+            self._total_payload_lbl.config(text=f"= {bus + n * rv:.0f} kg total")
+        except (ValueError, tk.TclError):
+            self._total_payload_lbl.config(text="= ? kg total")
+
+    def _update_shroud_state(self):
+        """Enable/disable shroud mass and altitude entries."""
+        state = "normal" if self._shroud_var.get() else "disabled"
+        self._shroud_mass_entry.config(state=state)
+        self._shroud_alt_entry.config(state=state)
+
+    # ------------------------------------------------------------------
     def _update_stage_frames(self):
         """Show the right number of stage frames and coast-time rows."""
         n = int(self._n_stages_var.get())
@@ -339,17 +397,17 @@ class MissileDialog(tk.Toplevel):
         """Populate all fields from an existing missile (custom or packaged)."""
         p = MISSILE_DB[name]()
 
-        # Walk the linked list to collect per-stage data and payload.
-        # payload_kg is stored on the top-level node by _collect at save time.
-        payload = p.payload_kg
+        payload      = p.payload_kg
+        shroud_mass  = p.shroud_mass_kg
+
+        # Walk the linked list to collect per-stage data.
         stage_data = []
         node = p
         while node is not None:
             nxt = node.stage2
             if nxt is None:
-                # Last stage: payload is in mass_initial but NOT mass_final
-                # (payload separates at burnout), so dry = mass_final directly.
-                fueled = node.mass_initial - payload
+                # Last stage: mass_initial = fueled + payload + shroud
+                fueled = node.mass_initial - payload - shroud_mass
                 dry    = node.mass_final
             else:
                 fueled = node.mass_initial - nxt.mass_initial
@@ -369,8 +427,26 @@ class MissileDialog(tk.Toplevel):
         self._update_stage_frames()
         for i, sd in enumerate(stage_data):
             self._stage_frames[i].populate(sd)
-        self._payload_var.set(f"{payload:.0f}")
+
+        # Payload decomposition
+        if p.rv_mass_kg > 0:
+            self._bus_var.set(f"{p.bus_mass_kg:.0f}")
+            self._num_rvs_var.set(str(p.num_rvs))
+            self._rv_mass_var.set(f"{p.rv_mass_kg:.0f}")
+        else:
+            # Old-style missile: treat entire payload as a single RV
+            self._bus_var.set("0")
+            self._num_rvs_var.set("1")
+            self._rv_mass_var.set(f"{payload:.0f}")
         self._rv_beta_var.set(f"{p.rv_beta_kg_m2:.0f}")
+
+        # Shroud
+        has_shroud = shroud_mass > 0
+        self._shroud_var.set(has_shroud)
+        self._shroud_mass_var.set(f"{shroud_mass:.0f}")
+        self._shroud_alt_var.set(f"{p.shroud_jettison_alt_km:.0f}")
+        self._update_shroud_state()
+
         self._name_var.set(name)
 
     # ------------------------------------------------------------------
@@ -382,9 +458,27 @@ class MissileDialog(tk.Toplevel):
         if not name:
             raise ValueError("Missile name cannot be blank.")
 
-        n       = int(self._n_stages_var.get())
-        payload = float(self._payload_var.get())
+        n = int(self._n_stages_var.get())
+
+        # Payload decomposition
+        try:
+            bus_mass = float(self._bus_var.get())
+            num_rvs  = max(1, int(self._num_rvs_var.get()))
+            rv_mass  = float(self._rv_mass_var.get())
+        except ValueError:
+            raise ValueError("Bus and per-RV mass must be numbers.")
+        payload = bus_mass + num_rvs * rv_mass
         rv_beta = float(self._rv_beta_var.get())
+
+        # Shroud
+        shroud_mass   = 0.0
+        shroud_alt_km = 80.0
+        if self._shroud_var.get():
+            try:
+                shroud_mass   = float(self._shroud_mass_var.get())
+                shroud_alt_km = float(self._shroud_alt_var.get())
+            except ValueError:
+                raise ValueError("Shroud mass and jettison altitude must be numbers.")
 
         # Read and validate all active stage frames
         stages = []
@@ -396,20 +490,21 @@ class MissileDialog(tk.Toplevel):
             stages.append(sd)
 
         # Build the linked list from the last stage back to the first.
-        # Last stage carries payload; upper stages are jettisoned at burnout.
+        # The top (last) stage carries payload + shroud; shroud is jettisoned
+        # at altitude during flight; payload separates at final burnout.
         node = None
-        upper_mass = 0.0   # cumulative mass of stages above the current one
+        upper_mass = 0.0
         for idx, sd in enumerate(reversed(stages)):
-            stage_num = n - idx           # stage number (1-based), decreasing
-            is_last   = (node is None)    # first iteration = topmost (last) stage
+            stage_num = n - idx
+            is_last   = (node is None)
             prop = sd["fueled"] - sd["dry"]
             if is_last:
-                m0     = sd["fueled"] + payload
-                mfinal = sd["dry"]              # payload separates at burnout
+                m0     = sd["fueled"] + payload + shroud_mass
+                mfinal = sd["dry"]      # payload/shroud both gone at burnout
                 upper_mass = m0
             else:
                 m0     = sd["fueled"] + upper_mass
-                mfinal = sd["dry"]    # jettisoned structure only
+                mfinal = sd["dry"]
                 upper_mass = m0
             node = MissileParams(
                 name=f"{name} Stage {stage_num}",
@@ -426,9 +521,14 @@ class MissileDialog(tk.Toplevel):
                 stage2=node,
             )
 
-        node.name = name            # top-level gets the missile's proper name
-        node.payload_kg  = payload  # store so _prefill can round-trip correctly
-        node.rv_beta_kg_m2 = rv_beta
+        node.name              = name
+        node.payload_kg        = payload
+        node.rv_beta_kg_m2     = rv_beta
+        node.bus_mass_kg       = bus_mass
+        node.num_rvs           = num_rvs
+        node.rv_mass_kg        = rv_mass
+        node.shroud_mass_kg        = shroud_mass
+        node.shroud_jettison_alt_km = shroud_alt_km
         return node
 
     # ------------------------------------------------------------------

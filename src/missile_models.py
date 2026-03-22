@@ -57,8 +57,8 @@ class MissileParams:
     # Ignored (irrelevant) for the last / only stage.
     coast_time_s: float = 0.0
 
-    # Payload (kg) carried by this missile — stored on the top-level stage only
-    # so that _prefill can round-trip the user-entered payload value exactly.
+    # Payload (kg) — total mass carried to burnout (bus + all RVs).
+    # Stored on the top-level stage only so _prefill can round-trip correctly.
     payload_kg: float = 0.0
 
     # RV ballistic coefficient β = m / (Cd·A) in kg/m².
@@ -66,6 +66,20 @@ class MissileParams:
     # separating RV instead of the final-stage body aerodynamics.
     # Stored on the top-level node only (same convention as payload_kg).
     rv_beta_kg_m2: float = 0.0
+
+    # Payload decomposition: bus (post-boost vehicle) + N reentry vehicles.
+    # bus_mass_kg + num_rvs * rv_mass_kg should equal payload_kg.
+    # When rv_mass_kg == 0 the decomposition is not specified; terminal drag
+    # falls back to payload_kg as a proxy for RV mass.
+    bus_mass_kg: float = 0.0
+    num_rvs:     int   = 1
+    rv_mass_kg:  float = 0.0   # mass of one RV
+
+    # Shroud / payload fairing jettisoned during ascent.
+    # shroud_mass_kg is included in mass_initial at launch and subtracted once
+    # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
+    shroud_mass_kg:        float = 0.0
+    shroud_jettison_alt_km: float = 80.0
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +432,11 @@ def missile_to_dict(p: MissileParams) -> dict:
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
         'rv_beta_kg_m2':         p.rv_beta_kg_m2,
+        'bus_mass_kg':           p.bus_mass_kg,
+        'num_rvs':               p.num_rvs,
+        'rv_mass_kg':            p.rv_mass_kg,
+        'shroud_mass_kg':        p.shroud_mass_kg,
+        'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -449,6 +468,11 @@ def missile_from_dict(d: dict) -> MissileParams:
         stage2=stage2,
         payload_kg=float(d.get('payload_kg', 0.0)),
         rv_beta_kg_m2=float(d.get('rv_beta_kg_m2', 0.0)),
+        bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
+        num_rvs=int(d.get('num_rvs', 1)),
+        rv_mass_kg=float(d.get('rv_mass_kg', 0.0)),
+        shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
+        shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
     )
 
 
@@ -506,18 +530,28 @@ def active_stage_and_t(params: MissileParams, t: float):
     return s, t_rem   # last stage
 
 
-def missile_mass(params: MissileParams, t: float) -> float:
-    """Current mass (kg) at time t seconds after launch.  Handles N stages."""
+def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
+    """Current mass (kg) at time t seconds after launch.  Handles N stages.
+
+    alt_m is the current altitude in metres; it is used to determine whether
+    a shroud has been jettisoned (when alt_m / 1000 >= shroud_jettison_alt_km).
+    """
     if t <= 0:
         return params.mass_initial
     t_rem, s = t, params
     while s is not None:
         if t_rem < s.burn_time_s:
             mdot = s.mass_propellant / s.burn_time_s
-            return s.mass_initial - mdot * t_rem
+            mass = s.mass_initial - mdot * t_rem
+            # Subtract shroud once jettison altitude is crossed (during powered flight)
+            if (params.shroud_mass_kg > 0
+                    and alt_m / 1000.0 >= params.shroud_jettison_alt_km):
+                mass -= params.shroud_mass_kg
+            return mass
         t_rem -= s.burn_time_s
         if s.stage2 is None:
             # RV separates at last-stage burnout; coast on payload mass if known.
+            # (Shroud is assumed already jettisoned before burnout.)
             return params.payload_kg if params.payload_kg > 0 else s.mass_final
         if t_rem < s.coast_time_s:
             return s.stage2.mass_initial   # stage s jettisoned, next stage is vehicle
