@@ -235,31 +235,17 @@ class MissileDialog(tk.Toplevel):
         """Populate all fields from an existing custom missile."""
         p = MISSILE_DB[name]()
 
-        # Walk the linked list to collect per-stage data and payload
+        # Walk the linked list to collect per-stage data and payload.
+        # payload_kg is stored on the top-level node by _collect at save time.
+        payload = p.payload_kg
         stage_data = []
-        payload = 0.0
         node = p
         while node is not None:
             nxt = node.stage2
             if nxt is None:
-                # Last (or only) stage carries the payload in its masses
-                fueled = node.mass_initial - payload   # first pass: unknown payload
+                # Last stage: payload is baked into mass_initial / mass_final.
+                fueled = node.mass_initial - payload
                 dry    = node.mass_final   - payload
-                # Recover payload from the bottommost stage's mass_final minus
-                # its structural dry mass.  Use mass_propellant as a proxy:
-                # mass_final = dry_structure + payload, prop = fueled - dry_structure
-                # => dry_structure = mass_initial - mass_propellant - payload
-                # We don't know payload directly, so approximate:
-                # payload ≈ mass_final - (mass_initial - mass_propellant - mass_final)
-                # Simpler: just back-compute from the stored values.
-                prop         = node.mass_propellant
-                fueled_body  = prop + (node.mass_final if nxt is None else 0)
-                # If this is the only stage, payload = mass_final - (mass_initial - prop - mass_final)
-                # i.e. payload = 2*mass_final - mass_initial + prop
-                payload_est  = 2 * node.mass_final - node.mass_initial + prop
-                payload      = max(0.0, payload_est)
-                fueled       = node.mass_initial - payload
-                dry          = node.mass_final   - payload
             else:
                 fueled = node.mass_initial - nxt.mass_initial
                 dry    = node.mass_final
@@ -336,7 +322,8 @@ class MissileDialog(tk.Toplevel):
                 stage2=node,
             )
 
-        node.name = name   # top-level gets the missile's proper name
+        node.name = name       # top-level gets the missile's proper name
+        node.payload_kg = payload  # store so _prefill can round-trip correctly
         return node
 
     # ------------------------------------------------------------------
