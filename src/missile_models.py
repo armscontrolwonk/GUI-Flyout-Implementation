@@ -316,26 +316,30 @@ def _zoljanah():
     # Iranian Zoljanah (Zuljanah) space launch vehicle / ballistic missile.
     # 2-stage liquid-propellant vehicle with 100 kg RV payload.
     #
-    # Source data (open-source estimates):
-    #   Stage 1:  Fueled=24 100 kg, Dry=3 600 kg, Prop=20 500 kg,
-    #             ISP=255 s, Burn=71 s, Dia=1.5 m, Length=10.3 m
-    #   Stage 2:  Fueled=24 100 kg, Dry=3 600 kg, Prop=20 500 kg,
-    #             ISP=265 s, Burn=71 s, Dia=1.5 m, Length=9.9 m
+    # Mass model: total launch mass = 48 000 kg, payload = 100 kg.
+    # Both stages share the remaining 47 900 kg equally → 23 950 kg wet each.
+    # Dry mass fraction = 12 % per stage (improved structural efficiency):
+    #   Dry  = 0.12 × 23 950 =  2 874 kg
+    #   Prop = 0.88 × 23 950 = 21 076 kg
+    #
+    # Propulsion (open-source estimates):
+    #   Stage 1:  ISP=255 s, Burn=71 s, Dia=1.5 m, Length=10.3 m
+    #   Stage 2:  ISP=265 s, Burn=71 s, Dia=1.5 m, Length=9.9 m
     #   Payload:  100 kg RV (separates at stage-2 burnout)
 
-    payload = 100   # kg  RV
+    payload = 100    # kg  RV
+    dry     = 2874   # kg  per stage  (12 % of 23 950 kg wet)
+    prop    = 21076  # kg  per stage  (88 % of 23 950 kg wet)
 
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
-    prop2 = 20500
-    dry2  = 3600   # source table: both stages identical 3 600 kg dry mass
     stage2 = MissileParams(
         name="Zoljanah Stage 2",
-        mass_initial=prop2 + dry2 + payload,   # 24 200 kg
-        mass_propellant=prop2,                  # 20 500 kg
-        mass_final=dry2,                        #  3 600 kg (dry only; RV separates)
+        mass_initial=prop + dry + payload,   # 24 050 kg
+        mass_propellant=prop,                # 21 076 kg
+        mass_final=dry,                      #  2 874 kg (dry only; RV separates)
         diameter_m=1.5,
         length_m=9.9,
-        thrust_N=round(_thrust_from_isp(265, prop2, 71)),   # ≈ 750 700 N
+        thrust_N=round(_thrust_from_isp(265, prop, 71)),
         burn_time_s=71.0,
         isp_s=265.0,
         loft_angle_deg=25.0,
@@ -345,20 +349,18 @@ def _zoljanah():
     )
 
     # ── Stage 1 (liquid) ─────────────────────────────────────────────────────
-    prop1 = 20500
-    dry1  = 3600
     # RV ballistic coefficient estimate: cone-shaped RV, dia≈0.6 m, Cd≈0.25
     #   β = m / (Cd·A) = 100 / (0.25 · π·0.09) ≈ 1 415 kg/m²
     rv_beta = 1400.0   # kg/m²  (round estimate)
 
     p = MissileParams(
         name="Zoljanah",
-        mass_initial=prop1 + dry1 + stage2.mass_initial,   # 48 300 kg
-        mass_propellant=prop1,                              # 20 500 kg
-        mass_final=dry1,                                    #  3 600 kg (jettisoned)
+        mass_initial=prop + dry + stage2.mass_initial,   # 48 000 kg
+        mass_propellant=prop,                            # 21 076 kg
+        mass_final=dry,                                  #  2 874 kg (jettisoned)
         diameter_m=1.5,
         length_m=10.3,
-        thrust_N=round(_thrust_from_isp(255, prop1, 71)),   # ≈ 722 800 N
+        thrust_N=round(_thrust_from_isp(255, prop, 71)),
         burn_time_s=71.0,
         isp_s=255.0,
         loft_angle_deg=35.0,
