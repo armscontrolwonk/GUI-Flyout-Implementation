@@ -1606,12 +1606,22 @@ class MissileFlyoutApp(tk.Tk):
 
         impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
 
-        _draw_borders(self._ax_trk, center_lon)
-        self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2)
+        # Plot trajectory + markers first so matplotlib autoscales to them.
+        self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2, zorder=2)
         self._ax_trk.plot(0.0,          lat_arr[0],  'go', markersize=7,
                           label="Launch", zorder=5)
         self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
                           label="Impact", zorder=5)
+
+        # Capture the trajectory-fitted limits, draw borders, then restore so
+        # the world-spanning border lines cannot expand the view.
+        self._ax_trk.autoscale()
+        xlim = self._ax_trk.get_xlim()
+        ylim = self._ax_trk.get_ylim()
+        _draw_borders(self._ax_trk, center_lon)
+        self._ax_trk.set_xlim(xlim)
+        self._ax_trk.set_ylim(ylim)
+
         # Tick labels show absolute longitudes (convert back from centred frame)
         self._ax_trk.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
             lambda v, _: f"{((v + center_lon + 180) % 360) - 180:.0f}°"))
