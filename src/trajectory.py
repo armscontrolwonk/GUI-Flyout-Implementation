@@ -102,9 +102,25 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     # --- Gravity ---
     g = gravity_ecef(pos)
 
-    # --- Drag (use active stage geometry — diameter shrinks after separation) ---
+    # Active stage (needed for thrust guidance and fallback drag)
     astage, t_stage = active_stage_and_t(params, t)
-    f_drag = drag_force_vector(astage, vel, alt)
+
+    # --- Drag ---
+    # After final-stage burnout, if an RV ballistic coefficient is supplied,
+    # use β-based drag for the separating warhead (a = q/β).
+    # Otherwise use the active stage's body aerodynamics.
+    if (params.rv_beta_kg_m2 > 0 and params.payload_kg > 0
+            and t > total_burn_time(params)):
+        speed = np.linalg.norm(vel)
+        if speed > 1e-6:
+            _, _, rho, _ = atmosphere(alt)
+            q = 0.5 * rho * speed ** 2
+            drag_mag = q * params.payload_kg / params.rv_beta_kg_m2
+            f_drag = -drag_mag * (vel / speed)
+        else:
+            f_drag = np.zeros(3)
+    else:
+        f_drag = drag_force_vector(astage, vel, alt)
 
     # --- Thrust with per-stage loft-angle pitch-over guidance ---
     if t <= cutoff_time:

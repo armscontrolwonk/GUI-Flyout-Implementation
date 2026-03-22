@@ -61,6 +61,12 @@ class MissileParams:
     # so that _prefill can round-trip the user-entered payload value exactly.
     payload_kg: float = 0.0
 
+    # RV ballistic coefficient β = m / (Cd·A) in kg/m².
+    # When > 0, the post-burnout coast phase uses β-based drag for the
+    # separating RV instead of the final-stage body aerodynamics.
+    # Stored on the top-level node only (same convention as payload_kg).
+    rv_beta_kg_m2: float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
@@ -341,6 +347,10 @@ def _zoljanah():
     # ── Stage 1 (liquid) ─────────────────────────────────────────────────────
     prop1 = 20500
     dry1  = 3600
+    # RV ballistic coefficient estimate: cone-shaped RV, dia≈0.6 m, Cd≈0.25
+    #   β = m / (Cd·A) = 100 / (0.25 · π·0.09) ≈ 1 415 kg/m²
+    rv_beta = 1400.0   # kg/m²  (round estimate)
+
     p = MissileParams(
         name="Zoljanah",
         mass_initial=prop1 + dry1 + stage2.mass_initial,   # 48 300 kg
@@ -357,6 +367,7 @@ def _zoljanah():
         cd_table=_FORDEN_CD,
         stage2=stage2,
         payload_kg=float(payload),
+        rv_beta_kg_m2=rv_beta,
     )
     return p
 
@@ -395,6 +406,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'mach_table':            list(p.mach_table),
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
+        'rv_beta_kg_m2':         p.rv_beta_kg_m2,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -425,6 +437,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         cd_table=list(d.get('cd_table', _FORDEN_CD)),
         stage2=stage2,
         payload_kg=float(d.get('payload_kg', 0.0)),
+        rv_beta_kg_m2=float(d.get('rv_beta_kg_m2', 0.0)),
     )
 
 
@@ -493,7 +506,8 @@ def missile_mass(params: MissileParams, t: float) -> float:
             return s.mass_initial - mdot * t_rem
         t_rem -= s.burn_time_s
         if s.stage2 is None:
-            return s.mass_final   # coasting after last stage burns out
+            # RV separates at last-stage burnout; coast on payload mass if known.
+            return params.payload_kg if params.payload_kg > 0 else s.mass_final
         if t_rem < s.coast_time_s:
             return s.stage2.mass_initial   # stage s jettisoned, next stage is vehicle
         t_rem -= s.coast_time_s
