@@ -1155,10 +1155,6 @@ class MissileFlyoutApp(tk.Tk):
         try:
             if maximise:
                 result = maximize_range(missile, lat, lon, az)
-                opt_la  = result.get('optimal_loft_angle_deg',  la)
-                opt_lar = result.get('optimal_loft_rate_deg_s', lar)
-                self.after(0, lambda: self._loft_angle_var.set(f"{opt_la:.4f}"))
-                self.after(0, lambda: self._loft_rate_var.set(f"{opt_lar:.3f}"))
             else:
                 result = integrate_trajectory(
                     missile, lat, lon, az,
@@ -1177,6 +1173,14 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _on_result_ready(self):
         r = self._result
+
+        # If this was a Max Range run, update guidance fields now — all GUI
+        # mutations happen here in one batch so nothing fires between the field
+        # updates and the canvas redraw.
+        if 'optimal_loft_angle_deg' in r:
+            self._loft_angle_var.set(f"{r['optimal_loft_angle_deg']:.4f}")
+            self._loft_rate_var .set(f"{r['optimal_loft_rate_deg_s']:.3f}")
+
         rng_km    = r['range_km']
         rng_nm    = rng_km / 1.852
         rng_mi    = rng_km / 1.60934
@@ -1256,7 +1260,8 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_trk.legend(fontsize=7)
 
         self._fig.tight_layout(pad=2.8)
-        self._canvas.draw()
+        self._canvas.draw_idle()
+        self._canvas.flush_events()
 
     # ------------------------------------------------------------------
     # File / Help actions
