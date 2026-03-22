@@ -297,7 +297,8 @@ def aim_missile(params: MissileParams,
                                  cutoff_time_s=cutoff)
         return r['range_km'] - target_range_km
 
-    lo, hi = 5.0, total_burn_time(params)
+    total_burn = total_burn_time(params)
+    lo, hi = 5.0, total_burn
     try:
         cutoff = brentq(range_error, lo, hi, xtol=1.0, maxiter=50)
     except ValueError:
