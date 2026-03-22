@@ -57,6 +57,10 @@ class MissileParams:
     # Ignored (irrelevant) for the last / only stage.
     coast_time_s: float = 0.0
 
+    # Payload (kg) carried by this missile — stored on the top-level stage only
+    # so that _prefill can round-trip the user-entered payload value exactly.
+    payload_kg: float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
@@ -390,6 +394,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'loft_angle_rate_deg_s': p.loft_angle_rate_deg_s,
         'mach_table':            list(p.mach_table),
         'cd_table':              list(p.cd_table),
+        'payload_kg':            p.payload_kg,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -419,6 +424,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         mach_table=list(d.get('mach_table', _FORDEN_MACH)),
         cd_table=list(d.get('cd_table', _FORDEN_CD)),
         stage2=stage2,
+        payload_kg=float(d.get('payload_kg', 0.0)),
     )
 
 
