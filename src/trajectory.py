@@ -61,40 +61,18 @@ def _enu_frame(lat_rad: float, lon_rad: float):
     return e_east, e_north, e_up
 
 
-def _stage_initial_el(params, t: float) -> float:
-    """Elevation angle (°) at which the active stage begins its pitch-over.
-
-    Stage 1 always starts vertical (90°).  Each subsequent stage starts from
-    the elevation reached at the end of the previous stage's burn, so the
-    vehicle attitude is continuous across staging events.
-    """
-    t_rem, s = t, params
-    el = 90.0
-    while s.stage2 is not None:
-        if t_rem < s.burn_time_s:
-            return el
-        el = max(s.loft_angle_deg, el - s.loft_angle_rate_deg_s * s.burn_time_s)
-        t_rem -= s.burn_time_s
-        if t_rem < s.coast_time_s:
-            return el   # coasting; next stage has not yet ignited
-        t_rem -= s.coast_time_s
-        s = s.stage2
-    return el
-
-
 def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                     loft_angle_deg, loft_angle_rate_deg_s, t,
-                     initial_el_deg=90.0):
+                     loft_angle_deg, loft_angle_rate_deg_s, t):
     """
     Unit thrust vector (ECEF) under Forden's loft-angle guidance (Eq. 8).
 
-    el(t) = max(loft_angle_deg, initial_el_deg − loft_angle_rate_deg_s * t)
+    el(t) = max(loft_angle_deg, 90° − loft_angle_rate_deg_s * t)
 
-    initial_el_deg defaults to 90° (vertical) for stage 1.  Upper stages
-    pass the elevation reached at the end of the previous stage's burn so
-    that attitude is continuous across staging events.
+    t is mission elapsed time (seconds since launch).  The curve runs
+    continuously through all stages and coast phases; during coast no thrust
+    is applied so the instantaneous attitude has no effect on the trajectory.
     """
-    el_deg = max(loft_angle_deg, initial_el_deg - loft_angle_rate_deg_s * t)
+    el_deg = max(loft_angle_deg, 90.0 - loft_angle_rate_deg_s * t)
     el_rad = np.radians(el_deg)
     e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
     thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
@@ -115,11 +93,10 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     state = [x, y, z, vx, vy, vz]
     Returns d(state)/dt.
 
-    Guidance uses each stage's own loft_angle_deg / loft_angle_rate_deg_s
-    evaluated at the time elapsed since that stage ignited (stage-relative
-    time).  Each stage starts its pitch-over from the elevation reached at
-    the end of the previous stage's burn, so attitude is continuous across
-    staging events.
+    Guidance uses a single continuous pitch-over driven by mission elapsed
+    time t and the top-level params.loft_angle_deg / loft_angle_rate_deg_s.
+    The curve runs through all stages and coast phases; thrust_force() returns
+    zero during coast so attitude during coast has no effect on the trajectory.
     """
     pos = state[:3]
     vel = state[3:]
@@ -130,8 +107,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     # --- Gravity ---
     g = gravity_ecef(pos)
 
-    # Active stage (needed for thrust guidance and fallback drag)
-    astage, t_stage = active_stage_and_t(params, t)
+    # Active stage (needed for drag and mass; guidance uses top-level params)
+    astage, _ = active_stage_and_t(params, t)
 
     # --- Drag ---
     # After final-stage burnout, if an RV ballistic coefficient is supplied,
@@ -152,14 +129,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     else:
         f_drag = drag_force_vector(astage, vel, alt)
 
-    # --- Thrust with per-stage loft-angle pitch-over guidance ---
+    # --- Thrust with continuous loft-angle pitch-over guidance ---
     if t <= cutoff_time:
-        initial_el = _stage_initial_el(params, t)
         thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
-                                      astage.loft_angle_deg,
-                                      astage.loft_angle_rate_deg_s,
-                                      t_stage,
-                                      initial_el_deg=initial_el)
+                                      params.loft_angle_deg,
+                                      params.loft_angle_rate_deg_s,
+                                      t)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
