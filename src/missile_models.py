@@ -317,7 +317,7 @@ def _zoljanah():
     # Stage 2 dry mass (3 700 kg) accounts for the 100 kg discrepancy
     # between the source table fueled value (24 200) and prop+dry (24 100).
 
-    payload = 500   # kg  RV
+    payload = 100   # kg  RV
 
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
     prop2 = 20500
