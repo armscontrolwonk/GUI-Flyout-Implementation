@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+import matplotlib.ticker
 
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
@@ -1532,12 +1533,35 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_traj.set_title("Altitude vs Range", fontsize=9)
         self._ax_traj.fill_between(rng, 0, alt, alpha=0.12, color='seagreen')
 
-        # Ground track
-        self._ax_trk.plot(lon, lat, color='black', linewidth=1.2)
-        self._ax_trk.plot(lon[0],  lat[0],  'go', markersize=7,
+        # Ground track — re-centre on the launch longitude so the trajectory
+        # never crosses the plot's ±180° boundary (antimeridian artefact fix).
+        lon_arr    = np.asarray(lon)
+        lat_arr    = np.asarray(lat)
+        center_lon = float(lon_arr[0])          # launch meridian as the new 0°
+        lon_c      = ((lon_arr - center_lon + 180.0) % 360.0) - 180.0
+
+        # NaN-break any residual jumps > 180° (trajectories spanning > 1 hemisphere)
+        lon_c = list(lon_c)
+        lat_c = list(lat_arr)
+        i = 1
+        while i < len(lon_c):
+            if abs(lon_c[i] - lon_c[i - 1]) > 180:
+                lon_c.insert(i, np.nan)
+                lat_c.insert(i, np.nan)
+                i += 2
+            else:
+                i += 1
+
+        impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
+
+        self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2)
+        self._ax_trk.plot(0.0,          lat_arr[0],  'go', markersize=7,
                           label="Launch", zorder=5)
-        self._ax_trk.plot(lon[-1], lat[-1], 'r*', markersize=9,
+        self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
                           label="Impact", zorder=5)
+        # Tick labels show absolute longitudes (convert back from centred frame)
+        self._ax_trk.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
+            lambda v, _: f"{((v + center_lon + 180) % 360) - 180:.0f}°"))
         self._ax_trk.set_xlabel("Longitude (°E)", fontsize=8)
         self._ax_trk.set_ylabel("Latitude (°N)", fontsize=8)
         self._ax_trk.set_title("Ground Track", fontsize=9)
