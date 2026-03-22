@@ -43,7 +43,7 @@ from coordinates import (
 )
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
-    active_stage, total_burn_time,
+    active_stage, active_stage_and_t, total_burn_time,
 )
 
 
@@ -82,13 +82,16 @@ def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 # Equations of motion
 # ---------------------------------------------------------------------------
 
-def _eom(t, state, params, cutoff_time, azimuth_rad,
-         loft_angle_deg, loft_angle_rate_deg_s):
+def _eom(t, state, params, cutoff_time, azimuth_rad):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
     state = [x, y, z, vx, vy, vz]
     Returns d(state)/dt.
+
+    Guidance uses each stage's own loft_angle_deg / loft_angle_rate_deg_s
+    evaluated at the time elapsed since that stage ignited (stage-relative
+    time), so each stage independently pitches over to its final angle.
     """
     pos = state[:3]
     vel = state[3:]
@@ -100,12 +103,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad,
     g = gravity_ecef(pos)
 
     # --- Drag (use active stage geometry — diameter shrinks after separation) ---
-    f_drag = drag_force_vector(active_stage(params, t), vel, alt)
+    astage, t_stage = active_stage_and_t(params, t)
+    f_drag = drag_force_vector(astage, vel, alt)
 
-    # --- Thrust with loft-angle pitch-over guidance ---
+    # --- Thrust with per-stage loft-angle pitch-over guidance ---
     if t <= cutoff_time:
         thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
-                                      loft_angle_deg, loft_angle_rate_deg_s, t)
+                                      astage.loft_angle_deg,
+                                      astage.loft_angle_rate_deg_s,
+                                      t_stage)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -123,8 +129,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad,
     return np.concatenate([vel, accel])
 
 
-def _hit_ground(t, state, params, cutoff_time, azimuth_rad,
-                loft_angle_deg, loft_angle_rate_deg_s):
+def _hit_ground(t, state, params, cutoff_time, azimuth_rad):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -179,10 +184,15 @@ def integrate_trajectory(params: MissileParams,
         'range_km'  : total range (km)
         'apogee_km' : maximum altitude (km)
     """
-    if loft_angle_deg is None:
-        loft_angle_deg = params.loft_angle_deg
-    if loft_angle_rate_deg_s is None:
-        loft_angle_rate_deg_s = params.loft_angle_rate_deg_s
+    import copy
+    # Apply stage-1 overrides non-destructively so the caller's object is
+    # unchanged and stages 2+ keep their own stored guidance values.
+    if loft_angle_deg is not None or loft_angle_rate_deg_s is not None:
+        params = copy.copy(params)
+        if loft_angle_deg is not None:
+            params.loft_angle_deg = loft_angle_deg
+        if loft_angle_rate_deg_s is not None:
+            params.loft_angle_rate_deg_s = loft_angle_rate_deg_s
 
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
@@ -202,7 +212,7 @@ def integrate_trajectory(params: MissileParams,
     t_span = (0.0, max_time_s)
     t_eval = np.arange(0.0, max_time_s, dt_output)
 
-    eom_args = (params, cutoff_time_s, az, loft_angle_deg, loft_angle_rate_deg_s)
+    eom_args = (params, cutoff_time_s, az)
 
     sol = solve_ivp(
         fun=_eom,
@@ -239,19 +249,25 @@ def integrate_trajectory(params: MissileParams,
         for la, lo in zip(lats, lons)
     ])
 
+    apo_idx = int(np.argmax(alts))
+
     return {
-        't':          t_arr,
-        'lat':        lats,
-        'lon':        lons,
-        'alt':        alts,
-        'speed':      speeds,
-        'range':      ranges,
-        'pos_ecef':   pos_arr,
-        'vel_ecef':   vel_arr,
-        'impact_lat': lats[-1],
-        'impact_lon': lons[-1],
-        'range_km':   ranges[-1] / 1000.0,
-        'apogee_km':  np.max(alts) / 1000.0,
+        't':                  t_arr,
+        'lat':                lats,
+        'lon':                lons,
+        'alt':                alts,
+        'speed':              speeds,
+        'range':              ranges,
+        'pos_ecef':           pos_arr,
+        'vel_ecef':           vel_arr,
+        'impact_lat':         lats[-1],
+        'impact_lon':         lons[-1],
+        'range_km':           ranges[-1] / 1000.0,
+        'apogee_km':          np.max(alts) / 1000.0,
+        'apogee_lat_deg':     lats[apo_idx],
+        'apogee_lon_deg':     lons[apo_idx],
+        'time_of_flight_s':   t_arr[-1],
+        'impact_speed_ms':    speeds[-1],
     }
 
 
