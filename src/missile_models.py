@@ -310,23 +310,21 @@ def _zoljanah():
     # Source data (open-source estimates):
     #   Stage 1:  Fueled=24 100 kg, Dry=3 600 kg, Prop=20 500 kg,
     #             ISP=255 s, Burn=71 s, Dia=1.5 m, Length=10.3 m
-    #   Stage 2:  Fueled=24 200 kg, Dry=3 700 kg, Prop=20 500 kg,
+    #   Stage 2:  Fueled=24 200 kg, Dry=3 600 kg, Prop=20 500 kg,
     #             ISP=265 s, Burn=71 s, Dia=1.5 m, Length=9.9 m
-    #   Payload:  500 kg RV
-    #
-    # Stage 2 dry mass (3 700 kg) accounts for the 100 kg discrepancy
-    # between the source table fueled value (24 200) and prop+dry (24 100).
+    #             (100 kg discrepancy vs prop+dry is residual/pressurant mass)
+    #   Payload:  100 kg RV
 
     payload = 100   # kg  RV
 
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
     prop2 = 20500
-    dry2  = 3700
+    dry2  = 3600   # source table: both stages identical 3 600 kg dry mass
     stage2 = MissileParams(
         name="Zoljanah Stage 2",
-        mass_initial=prop2 + dry2 + payload,   # 24 700 kg
+        mass_initial=prop2 + dry2 + payload,   # 24 200 kg
         mass_propellant=prop2,                  # 20 500 kg
-        mass_final=dry2 + payload,              #  4 200 kg (dry + RV)
+        mass_final=dry2 + payload,              #  3 700 kg (dry + RV)
         diameter_m=1.5,
         length_m=9.9,
         thrust_N=round(_thrust_from_isp(265, prop2, 71)),   # ≈ 750 700 N
