@@ -35,7 +35,9 @@ from coordinates import range_between
 # ---------------------------------------------------------------------------
 
 # Names that ship with the program and cannot be deleted
-_PACKAGED_NAMES = set(MISSILE_DB.keys())
+_PACKAGED_NAMES    = set(MISSILE_DB.keys())
+_PACKAGED_ORIGINALS = dict(MISSILE_DB)   # original factory lambdas for reset
+_OVERRIDDEN_PACKAGED: set = set()        # packaged missiles the user has edited
 
 # Where user-created missiles are saved
 _CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
@@ -50,16 +52,18 @@ def _load_custom_missiles():
         for name, d in data.items():
             p = missile_from_dict(d)
             MISSILE_DB[name] = lambda _p=p: _p
+            if name in _PACKAGED_NAMES:
+                _OVERRIDDEN_PACKAGED.add(name)
     except Exception as exc:
         print(f"Warning: could not load custom missiles: {exc}")
 
 
 def _save_custom_missiles():
-    """Write all non-packaged missiles from MISSILE_DB to custom_missiles.json."""
+    """Write all non-packaged and overridden-packaged missiles to custom_missiles.json."""
     _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {}
     for name in MISSILE_DB:
-        if name not in _PACKAGED_NAMES:
+        if name not in _PACKAGED_NAMES or name in _OVERRIDDEN_PACKAGED:
             data[name] = missile_to_dict(MISSILE_DB[name]())
     _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
 
@@ -217,8 +221,8 @@ class MissileDialog(tk.Toplevel):
         ttk.Button(bf, text="Save Missile", command=self._save).pack(
             side=tk.RIGHT)
 
-        # Pre-fill if editing an existing custom missile
-        if existing_name and existing_name not in _PACKAGED_NAMES:
+        # Pre-fill if editing an existing missile
+        if existing_name:
             self._prefill(existing_name)
 
     # ------------------------------------------------------------------
@@ -236,7 +240,7 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _prefill(self, name):
-        """Populate all fields from an existing custom missile."""
+        """Populate all fields from an existing missile (custom or packaged)."""
         p = MISSILE_DB[name]()
 
         # Walk the linked list to collect per-stage data and payload.
@@ -281,9 +285,6 @@ class MissileDialog(tk.Toplevel):
         name = self._name_var.get().strip()
         if not name:
             raise ValueError("Missile name cannot be blank.")
-        if name in _PACKAGED_NAMES:
-            raise ValueError(
-                f"'{name}' is a built-in missile name and cannot be overwritten.")
 
         n       = int(self._n_stages_var.get())
         payload = float(self._payload_var.get())
@@ -954,9 +955,16 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_params_text(p)
-        # Only allow deleting user-created missiles
-        is_custom = self._missile_var.get() not in _PACKAGED_NAMES
-        self._del_btn.config(state=tk.NORMAL if is_custom else tk.DISABLED)
+        # Allow deleting custom missiles and resetting overridden packaged ones
+        name = self._missile_var.get()
+        is_custom = name not in _PACKAGED_NAMES
+        is_overridden = name in _OVERRIDDEN_PACKAGED
+        if is_custom:
+            self._del_btn.config(state=tk.NORMAL, text="Delete")
+        elif is_overridden:
+            self._del_btn.config(state=tk.NORMAL, text="Reset")
+        else:
+            self._del_btn.config(state=tk.DISABLED, text="Delete")
 
     # ------------------------------------------------------------------
     # Custom missile management
@@ -975,6 +983,8 @@ class MissileFlyoutApp(tk.Tk):
         """Callback invoked by MissileDialog when the user clicks Save."""
         name = p.name
         MISSILE_DB[name] = lambda _p=p: _p
+        if name in _PACKAGED_NAMES:
+            _OVERRIDDEN_PACKAGED.add(name)
         _save_custom_missiles()
         self._refresh_missile_list(select_name=name)
         self._status_var.set(f"Missile '{name}' saved.")
@@ -984,28 +994,32 @@ class MissileFlyoutApp(tk.Tk):
 
     def _edit_missile(self):
         name = self._missile_var.get()
-        if name in _PACKAGED_NAMES:
-            messagebox.showinfo(
-                "Built-in missile",
-                f"'{name}' is a built-in missile.\n\n"
-                "Use 'New…' to create a copy with a different name.",
-                parent=self)
-            return
         MissileDialog(self, on_save=self._on_missile_saved, existing_name=name)
 
     def _delete_missile(self):
         name = self._missile_var.get()
-        if name in _PACKAGED_NAMES:
-            return   # button should already be disabled
-        if not messagebox.askyesno(
-                "Delete missile",
-                f"Permanently delete '{name}'?",
-                parent=self):
-            return
-        del MISSILE_DB[name]
-        _save_custom_missiles()
-        self._refresh_missile_list()
-        self._status_var.set(f"Missile '{name}' deleted.")
+        if name in _OVERRIDDEN_PACKAGED:
+            # Reset overridden built-in missile back to its packaged defaults
+            if not messagebox.askyesno(
+                    "Reset missile",
+                    f"Reset '{name}' to its built-in defaults?",
+                    parent=self):
+                return
+            MISSILE_DB[name] = _PACKAGED_ORIGINALS[name]
+            _OVERRIDDEN_PACKAGED.discard(name)
+            _save_custom_missiles()
+            self._refresh_missile_list(select_name=name)
+            self._status_var.set(f"Missile '{name}' reset to defaults.")
+        elif name not in _PACKAGED_NAMES:
+            if not messagebox.askyesno(
+                    "Delete missile",
+                    f"Permanently delete '{name}'?",
+                    parent=self):
+                return
+            del MISSILE_DB[name]
+            _save_custom_missiles()
+            self._refresh_missile_list()
+            self._status_var.set(f"Missile '{name}' deleted.")
 
     def _update_params_text(self, p=None):
         if p is None:
