@@ -308,16 +308,14 @@ def _taepodong_ii():
 
 def _zoljanah():
     # Iranian Zoljanah (Zuljanah) space launch vehicle / ballistic missile.
-    # 2-stage liquid-propellant vehicle with 500 kg RV payload.
-    # (Third stage removed; payload increased from 260 kg to 500 kg.)
+    # 2-stage liquid-propellant vehicle with 100 kg RV payload.
     #
     # Source data (open-source estimates):
     #   Stage 1:  Fueled=24 100 kg, Dry=3 600 kg, Prop=20 500 kg,
     #             ISP=255 s, Burn=71 s, Dia=1.5 m, Length=10.3 m
-    #   Stage 2:  Fueled=24 200 kg, Dry=3 600 kg, Prop=20 500 kg,
+    #   Stage 2:  Fueled=24 100 kg, Dry=3 600 kg, Prop=20 500 kg,
     #             ISP=265 s, Burn=71 s, Dia=1.5 m, Length=9.9 m
-    #             (100 kg discrepancy vs prop+dry is residual/pressurant mass)
-    #   Payload:  100 kg RV
+    #   Payload:  100 kg RV (separates at stage-2 burnout)
 
     payload = 100   # kg  RV
 
@@ -328,7 +326,7 @@ def _zoljanah():
         name="Zoljanah Stage 2",
         mass_initial=prop2 + dry2 + payload,   # 24 200 kg
         mass_propellant=prop2,                  # 20 500 kg
-        mass_final=dry2 + payload,              #  3 700 kg (dry + RV)
+        mass_final=dry2,                        #  3 600 kg (dry only; RV separates)
         diameter_m=1.5,
         length_m=9.9,
         thrust_N=round(_thrust_from_isp(265, prop2, 71)),   # ≈ 750 700 N
@@ -343,9 +341,9 @@ def _zoljanah():
     # ── Stage 1 (liquid) ─────────────────────────────────────────────────────
     prop1 = 20500
     dry1  = 3600
-    return MissileParams(
+    p = MissileParams(
         name="Zoljanah",
-        mass_initial=prop1 + dry1 + stage2.mass_initial,   # 48 800 kg
+        mass_initial=prop1 + dry1 + stage2.mass_initial,   # 48 300 kg
         mass_propellant=prop1,                              # 20 500 kg
         mass_final=dry1,                                    #  3 600 kg (jettisoned)
         diameter_m=1.5,
@@ -358,7 +356,9 @@ def _zoljanah():
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
+        payload_kg=float(payload),
     )
+    return p
 
 
 MISSILE_DB = {
