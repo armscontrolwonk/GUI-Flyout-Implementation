@@ -195,8 +195,12 @@ class MissileDialog(tk.Toplevel):
         stages_cb.bind("<<ComboboxSelected>>",
                        lambda _: self._update_stage_frames())
 
-        # Stage frames (1 always visible; 2-4 toggled)
-        self._stage_frames = [_StageFrame(self, f"Stage {i+1}")
+        # Stage frames (1 always visible; 2-4 toggled).
+        # A dedicated container ensures dynamically-packed stages always appear
+        # between the name row and the payload row (not after the buttons).
+        self._stages_container = ttk.Frame(self)
+        self._stages_container.pack(fill=tk.X)
+        self._stage_frames = [_StageFrame(self._stages_container, f"Stage {i+1}")
                                for i in range(4)]
         self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
