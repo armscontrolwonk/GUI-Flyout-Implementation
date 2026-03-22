@@ -40,11 +40,18 @@ class MissileParams:
     burn_time_s: float        # powered flight duration (s)
     isp_s: float              # specific impulse (s)
 
-    # Guidance — Forden pitch-over / gravity-turn model (Eq. 8)
-    # Elevation from horizontal: starts at 90° (vertical), pitches over at
-    # loft_angle_rate_deg_s until it reaches loft_angle_deg, then holds.
-    loft_angle_deg: float = 45.0        # final elevation above horizontal (°)
-    loft_angle_rate_deg_s: float = 2.0  # pitch-over rate (°/s)
+    # Guidance mode
+    #   "loft"         — Forden pitch-over (SRBM/MRBM): pitch to loft_angle_deg
+    #                    at loft_angle_rate_deg_s then hold.  Floor preserved.
+    #   "gravity_turn" — kick off vertical to loft_angle_deg at
+    #                    loft_angle_rate_deg_s, then lock thrust to velocity
+    #                    vector (IRBM/ICBM).  loft_angle_deg here is the kick
+    #                    elevation (°, above horizontal; e.g. 85° = 5° from
+    #                    vertical) and loft_angle_rate_deg_s is the kick rate.
+    guidance: str = "loft"
+
+    loft_angle_deg: float = 45.0        # Forden: final elev (°); GT: kick elev (°)
+    loft_angle_rate_deg_s: float = 2.0  # Forden: pitch rate (°/s); GT: kick rate
 
     # Aerodynamics — Cd vs Mach lookup table
     mach_table: list = field(default_factory=list)
@@ -428,6 +435,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'burn_time_s':           p.burn_time_s,
         'coast_time_s':          p.coast_time_s,
         'isp_s':                 p.isp_s,
+        'guidance':               p.guidance,
         'loft_angle_deg':        p.loft_angle_deg,
         'loft_angle_rate_deg_s': p.loft_angle_rate_deg_s,
         'mach_table':            list(p.mach_table),
@@ -463,6 +471,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         burn_time_s=burn,
         coast_time_s=float(d.get('coast_time_s', 0.0)),
         isp_s=isp,
+        guidance=d.get('guidance', 'loft'),
         loft_angle_deg=float(d.get('loft_angle_deg', 45.0)),
         loft_angle_rate_deg_s=float(d.get('loft_angle_rate_deg_s', 2.0)),
         mach_table=list(d.get('mach_table', _FORDEN_MACH)),

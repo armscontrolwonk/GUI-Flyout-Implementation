@@ -430,6 +430,17 @@ class MissileDialog(tk.Toplevel):
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
             _v.trace_add("write", self._update_total_payload)
 
+        # ── Guidance mode ────────────────────────────────────────────────
+        gf = ttk.LabelFrame(body, text="Guidance Mode")
+        gf.pack(fill=tk.X, padx=8, pady=4)
+        self._guidance_var = tk.StringVar(value="loft")
+        ttk.Radiobutton(gf, text="Forden Loft (SRBM / MRBM)",
+                        variable=self._guidance_var, value="loft").pack(
+            anchor=tk.W, padx=8, pady=(4, 0))
+        ttk.Radiobutton(gf, text="Gravity Turn (IRBM / ICBM)",
+                        variable=self._guidance_var, value="gravity_turn").pack(
+            anchor=tk.W, padx=8, pady=(0, 4))
+
         # Stage frames (1 always visible; 2-4 toggled).
         # A dedicated container ensures dynamically-packed stages always appear
         # between the payload row and the buttons (not after the buttons).
@@ -551,6 +562,7 @@ class MissileDialog(tk.Toplevel):
         self._update_shroud_state()
 
         self._name_var.set(name)
+        self._guidance_var.set(p.guidance)
 
     # ------------------------------------------------------------------
     def _collect(self) -> 'MissileParams':
@@ -623,6 +635,7 @@ class MissileDialog(tk.Toplevel):
             )
 
         node.name              = name
+        node.guidance          = self._guidance_var.get()
         node.payload_kg        = payload
         node.rv_beta_kg_m2     = rv_beta
         node.bus_mass_kg       = bus_mass
@@ -1145,21 +1158,23 @@ class MissileFlyoutApp(tk.Tk):
         gf = ttk.LabelFrame(parent, text="Guidance")
         gf.pack(fill=tk.X, padx=6, pady=3)
 
-        ttk.Label(gf, text="Loft Angle:").grid(
-            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._loft_angle_lbl = ttk.Label(gf, text="Loft Angle:")
+        self._loft_angle_lbl.grid(row=0, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         la_frame = ttk.Frame(gf)
         la_frame.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._loft_angle_var = tk.StringVar(value="45.0")
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
-        ttk.Label(la_frame, text="°  (final elev.)").pack(side=tk.LEFT, padx=2)
+        self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
+        self._loft_angle_unit_lbl.pack(side=tk.LEFT, padx=2)
 
-        ttk.Label(gf, text="Loft Rate:").grid(
-            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._loft_rate_lbl = ttk.Label(gf, text="Loft Rate:")
+        self._loft_rate_lbl.grid(row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         lr_frame = ttk.Frame(gf)
         lr_frame.grid(row=1, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._loft_rate_var = tk.StringVar(value="2.0")
         ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8).pack(side=tk.LEFT)
-        ttk.Label(lr_frame, text="°/s").pack(side=tk.LEFT, padx=2)
+        self._loft_rate_unit_lbl = ttk.Label(lr_frame, text="°/s")
+        self._loft_rate_unit_lbl.pack(side=tk.LEFT, padx=2)
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -1263,6 +1278,7 @@ class MissileFlyoutApp(tk.Tk):
         self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
+        self._update_guidance_labels(p.guidance)
         self._update_params_text(p)
         # Allow deleting custom missiles and resetting overridden packaged ones
         is_custom = name not in _PACKAGED_NAMES
@@ -1273,6 +1289,18 @@ class MissileFlyoutApp(tk.Tk):
             self._del_btn.config(state=tk.NORMAL, text="Reset")
         else:
             self._del_btn.config(state=tk.DISABLED, text="Delete")
+
+    # ------------------------------------------------------------------
+    def _update_guidance_labels(self, guidance: str):
+        """Relabel the main-panel guidance fields to match the active mode."""
+        if guidance == "gravity_turn":
+            self._loft_angle_lbl.config(text="Kick Angle:")
+            self._loft_angle_unit_lbl.config(text="°  (elev. above horiz.)")
+            self._loft_rate_lbl.config(text="Kick Rate:")
+        else:
+            self._loft_angle_lbl.config(text="Loft Angle:")
+            self._loft_angle_unit_lbl.config(text="°  (final elev.)")
+            self._loft_rate_lbl.config(text="Loft Rate:")
 
     # ------------------------------------------------------------------
     # Custom missile management
