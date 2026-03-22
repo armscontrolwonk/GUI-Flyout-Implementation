@@ -342,7 +342,7 @@ def _zoljanah():
 
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
     stage2 = MissileParams(
-        name="Zoljanah Stage 2",
+        name="Zoljanah (IRBM) Stage 2",
         mass_initial=prop + dry + payload,   # 24 050 kg
         mass_propellant=prop,                # 21 076 kg
         mass_final=dry,                      #  2 874 kg (dry only; RV separates)
@@ -363,7 +363,7 @@ def _zoljanah():
     rv_beta = 1400.0   # kg/m²  (round estimate)
 
     p = MissileParams(
-        name="Zoljanah",
+        name="Zoljanah (IRBM)",
         mass_initial=prop + dry + stage2.mass_initial,   # 48 000 kg
         mass_propellant=prop,                            # 21 076 kg
         mass_final=dry,                                  #  2 874 kg (jettisoned)
@@ -389,7 +389,7 @@ MISSILE_DB = {
     "No-dong":       _nodong,
     "Taepodong-I":   _taepodong_i,
     "Taepodong-II":  _taepodong_ii,
-    "Zoljanah":      _zoljanah,
+    "Zoljanah (IRBM)": _zoljanah,
     "Shahab-3":      _shahab3,
     "Generic ICBM":  _generic_icbm,
 }
