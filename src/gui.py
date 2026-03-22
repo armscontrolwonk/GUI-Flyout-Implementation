@@ -92,22 +92,55 @@ def _entry_row(parent, label, row, default, unit="", width=10):
 class _StageFrame(ttk.LabelFrame):
     """Entry widgets for one rocket stage."""
 
+    # Default thrust derived from default prop/isp/burn:
+    # T = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
-                     length="12.0", burn="70", isp="230",
+                     length="12.0", thrust_kn="112.9", isp="230",
                      loft_a="45.0", loft_r="1.5", coast="0")
+
+    _G0 = 9.80665  # m/s²
 
     def __init__(self, parent, label, defaults=None):
         super().__init__(parent, text=label)
         d = {**self._DEFAULTS, **(defaults or {})}
-        self._fueled = _entry_row(self, "Fueled wt (kg):", 0, d["fueled"], "kg")
-        self._dry    = _entry_row(self, "Dry wt (kg):",    1, d["dry"],    "kg")
-        self._dia    = _entry_row(self, "Diameter (m):",   2, d["dia"],    "m")
-        self._length = _entry_row(self, "Length (m):",     3, d["length"], "m")
-        self._burn   = _entry_row(self, "Burn time (s):",  4, d["burn"],   "s")
-        self._isp    = _entry_row(self, "Isp (s):",        5, d["isp"],    "s")
-        self._loft_a = _entry_row(self, "Loft angle (°):", 6, d["loft_a"],
+        self._fueled    = _entry_row(self, "Fueled wt (kg):", 0, d["fueled"],    "kg")
+        self._dry       = _entry_row(self, "Dry wt (kg):",    1, d["dry"],       "kg")
+        self._dia       = _entry_row(self, "Diameter (m):",   2, d["dia"],       "m")
+        self._length    = _entry_row(self, "Length (m):",     3, d["length"],    "m")
+        self._thrust_kn = _entry_row(self, "Thrust (kN):",    4, d["thrust_kn"], "kN")
+        self._isp       = _entry_row(self, "Isp (s):",        5, d["isp"],       "s")
+
+        # Burn time — read-only computed field
+        ttk.Label(self, text="Burn time (s):").grid(
+            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._burn_var = tk.StringVar()
+        _burn_inner = ttk.Frame(self)
+        _burn_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(_burn_inner, textvariable=self._burn_var, width=10,
+                  state="readonly").pack(side=tk.LEFT)
+        ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
+
+        self._loft_a = _entry_row(self, "Loft angle (°):", 7, d["loft_a"],
                                   "° (final elev.)")
-        self._loft_r = _entry_row(self, "Loft rate (°/s):",7, d["loft_r"], "°/s")
+        self._loft_r = _entry_row(self, "Loft rate (°/s):", 8, d["loft_r"], "°/s")
+
+        # Recompute burn whenever any of the four driving fields change
+        for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
+            _v.trace_add("write", self._recompute_burn)
+        self._recompute_burn()
+
+    def _recompute_burn(self, *_):
+        """Compute burn time = Isp × g₀ × prop / thrust and update the display."""
+        try:
+            prop      = float(self._fueled.get()) - float(self._dry.get())
+            thrust_n  = float(self._thrust_kn.get()) * 1000.0
+            isp       = float(self._isp.get())
+            if thrust_n <= 0 or isp <= 0 or prop <= 0:
+                raise ValueError
+            burn = isp * self._G0 * prop / thrust_n
+            self._burn_var.set(f"{burn:.1f}")
+        except (ValueError, ZeroDivisionError):
+            self._burn_var.set("—")
 
         # Coast-time row — shown only when this stage is not the last stage.
         # Stored as grid row 8; hidden/shown via set_coast_visible().
@@ -134,24 +167,35 @@ class _StageFrame(ttk.LabelFrame):
             self._coast_inner.grid_remove()
 
     def get(self):
+        burn_str = self._burn_var.get()
+        if burn_str == "—":
+            raise ValueError("Burn time could not be computed — check thrust, Isp, and weights.")
         return {k: float(v.get()) for k, v in [
-            ("fueled", self._fueled), ("dry",    self._dry),
-            ("dia",    self._dia),    ("length", self._length),
-            ("burn",   self._burn),   ("isp",    self._isp),
-            ("loft_a", self._loft_a), ("loft_r", self._loft_r),
-            ("coast",  self._coast_var),
-        ]}
+            ("fueled",    self._fueled),    ("dry",    self._dry),
+            ("dia",       self._dia),       ("length", self._length),
+            ("thrust_kn", self._thrust_kn), ("isp",    self._isp),
+            ("loft_a",    self._loft_a),    ("loft_r", self._loft_r),
+            ("coast",     self._coast_var),
+        ]} | {"burn": float(burn_str)}
 
     def populate(self, d):
-        self._fueled  .set(str(d["fueled"]))
-        self._dry     .set(str(d["dry"]))
-        self._dia     .set(str(d["dia"]))
-        self._length  .set(str(d["length"]))
-        self._burn    .set(str(d["burn"]))
-        self._isp     .set(str(d["isp"]))
-        self._loft_a  .set(str(d.get("loft_a", 45.0)))
-        self._loft_r  .set(str(d.get("loft_r", 1.5)))
-        self._coast_var.set(str(d.get("coast", 0)))
+        # Back-calculate thrust_kn from stored burn/isp/prop so the round-trip
+        # is exact: T = Isp × g₀ × prop / burn
+        prop = d["fueled"] - d["dry"]
+        burn = d["burn"]
+        thrust_kn = (d["isp"] * self._G0 * prop / burn / 1000.0
+                     if burn > 0 and prop > 0 else 0.0)
+
+        self._fueled    .set(str(d["fueled"]))
+        self._dry       .set(str(d["dry"]))
+        self._dia       .set(str(d["dia"]))
+        self._length    .set(str(d["length"]))
+        self._thrust_kn .set(f"{thrust_kn:.1f}")
+        self._isp       .set(str(d["isp"]))
+        # _burn_var is updated automatically by the trace
+        self._loft_a    .set(str(d.get("loft_a", 45.0)))
+        self._loft_r    .set(str(d.get("loft_r", 1.5)))
+        self._coast_var .set(str(d.get("coast", 0)))
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +378,7 @@ class MissileDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _collect(self) -> 'MissileParams':
         """Read and validate all fields; return a MissileParams linked list."""
-        from missile_models import MissileParams, _FORDEN_MACH, _FORDEN_CD, _thrust_from_isp
+        from missile_models import MissileParams, _FORDEN_MACH, _FORDEN_CD
 
         name = self._name_var.get().strip()
         if not name:
@@ -375,7 +419,7 @@ class MissileDialog(tk.Toplevel):
                 mass_propellant=prop,
                 mass_final=mfinal,
                 diameter_m=sd["dia"],  length_m=sd["length"],
-                thrust_N=round(_thrust_from_isp(sd["isp"], prop, sd["burn"])),
+                thrust_N=round(sd["thrust_kn"] * 1000.0),
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
                 coast_time_s=sd["coast"] if not is_last else 0.0,
                 loft_angle_deg=sd["loft_a"],
