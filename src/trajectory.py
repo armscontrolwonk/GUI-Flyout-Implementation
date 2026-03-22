@@ -107,15 +107,17 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
 
     # --- Drag ---
     # After final-stage burnout, if an RV ballistic coefficient is supplied,
-    # use β-based drag for the separating warhead (a = q/β).
-    # Otherwise use the active stage's body aerodynamics.
+    # use β-based drag for the separating warhead: F = q * m_rv / β.
+    # rv_mass_kg (single RV mass) is used when specified; otherwise fall back
+    # to payload_kg (old behaviour, treats whole payload as one object).
     if (params.rv_beta_kg_m2 > 0 and params.payload_kg > 0
             and t > total_burn_time(params)):
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
             _, _, rho, _ = atmosphere(alt)
             q = 0.5 * rho * speed ** 2
-            drag_mag = q * params.payload_kg / params.rv_beta_kg_m2
+            rv_mass = params.rv_mass_kg if params.rv_mass_kg > 0 else params.payload_kg
+            drag_mag = q * rv_mass / params.rv_beta_kg_m2
             f_drag = -drag_mag * (vel / speed)
         else:
             f_drag = np.zeros(3)
@@ -133,7 +135,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
         f_thrust = np.zeros(3)
 
     # --- Mass ---
-    m = missile_mass(params, t)
+    m = missile_mass(params, t, alt)
 
     # --- Non-inertial frame corrections ---
     a_coriolis    = coriolis_acceleration(vel)
