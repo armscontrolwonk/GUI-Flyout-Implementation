@@ -110,7 +110,7 @@ class _StageFrame(ttk.LabelFrame):
         self._thrust_kn = _entry_row(self, "Thrust (kN):",    4, d["thrust_kn"], "kN")
         self._isp       = _entry_row(self, "Isp (s):",        5, d["isp"],       "s")
 
-        # Burn time — read-only computed field
+        # Burn time — read-only computed field (row 6)
         ttk.Label(self, text="Burn time (s):").grid(
             row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._burn_var = tk.StringVar()
@@ -124,6 +124,20 @@ class _StageFrame(ttk.LabelFrame):
                                   "° (final elev.)")
         self._loft_r = _entry_row(self, "Loft rate (°/s):", 8, d["loft_r"], "°/s")
 
+        # Coast-time row (row 9) — shown only for non-last stages
+        self._coast_var = tk.StringVar(value=d["coast"])
+        self._coast_lbl = ttk.Label(self, text="Coast after (s):")
+        self._coast_lbl.grid(row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        coast_inner = ttk.Frame(self)
+        coast_inner.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
+            side=tk.LEFT, padx=(2, 0))
+        self._coast_inner = coast_inner
+        # Hidden by default; _update_stage_frames() reveals it for non-last stages
+        self._coast_lbl.grid_remove()
+        self._coast_inner.grid_remove()
+
         # Recompute burn whenever any of the four driving fields change
         for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
             _v.trace_add("write", self._recompute_burn)
@@ -132,30 +146,14 @@ class _StageFrame(ttk.LabelFrame):
     def _recompute_burn(self, *_):
         """Compute burn time = Isp × g₀ × prop / thrust and update the display."""
         try:
-            prop      = float(self._fueled.get()) - float(self._dry.get())
-            thrust_n  = float(self._thrust_kn.get()) * 1000.0
-            isp       = float(self._isp.get())
+            prop     = float(self._fueled.get()) - float(self._dry.get())
+            thrust_n = float(self._thrust_kn.get()) * 1000.0
+            isp      = float(self._isp.get())
             if thrust_n <= 0 or isp <= 0 or prop <= 0:
                 raise ValueError
-            burn = isp * self._G0 * prop / thrust_n
-            self._burn_var.set(f"{burn:.1f}")
+            self._burn_var.set(f"{isp * self._G0 * prop / thrust_n:.1f}")
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
-
-        # Coast-time row — shown only when this stage is not the last stage.
-        # Stored as grid row 8; hidden/shown via set_coast_visible().
-        self._coast_var = tk.StringVar(value=d["coast"])
-        self._coast_lbl = ttk.Label(self, text="Coast after (s):")
-        self._coast_lbl.grid(row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        coast_inner = ttk.Frame(self)
-        coast_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
-            side=tk.LEFT, padx=(2, 0))
-        self._coast_inner = coast_inner
-        # Hidden by default; _update_stage_frames() reveals it for non-last stages
-        self._coast_lbl.grid_remove()
-        self._coast_inner.grid_remove()
 
     def set_coast_visible(self, visible: bool):
         """Show or hide the inter-stage coast-time row."""
@@ -249,7 +247,7 @@ class MissileDialog(tk.Toplevel):
         scroll_outer.pack(fill=tk.BOTH, expand=True)
 
         self._scroll_canvas = tk.Canvas(
-            scroll_outer, borderwidth=0, highlightthickness=0)
+            scroll_outer, borderwidth=0, highlightthickness=0, height=500)
         vsb = ttk.Scrollbar(scroll_outer, orient="vertical",
                             command=self._scroll_canvas.yview)
         self._scroll_canvas.configure(yscrollcommand=vsb.set)
