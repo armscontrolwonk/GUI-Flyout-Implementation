@@ -43,6 +43,7 @@ from coordinates import (
 )
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
+    active_stage, total_burn_time,
 )
 
 
@@ -98,8 +99,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad,
     # --- Gravity ---
     g = gravity_ecef(pos)
 
-    # --- Drag ---
-    f_drag = drag_force_vector(params, vel, alt)
+    # --- Drag (use active stage geometry — diameter shrinks after separation) ---
+    f_drag = drag_force_vector(active_stage(params, t), vel, alt)
 
     # --- Thrust with loft-angle pitch-over guidance ---
     if t <= cutoff_time:
@@ -183,9 +184,7 @@ def integrate_trajectory(params: MissileParams,
     if loft_angle_rate_deg_s is None:
         loft_angle_rate_deg_s = params.loft_angle_rate_deg_s
 
-    total_burn = params.burn_time_s
-    if params.stage2 is not None:
-        total_burn += params.stage2.burn_time_s
+    total_burn = total_burn_time(params)
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
 
@@ -282,10 +281,7 @@ def aim_missile(params: MissileParams,
                                  cutoff_time_s=cutoff)
         return r['range_km'] - target_range_km
 
-    total_burn = params.burn_time_s
-    if params.stage2 is not None:
-        total_burn += params.stage2.burn_time_s
-    lo, hi = 5.0, total_burn
+    lo, hi = 5.0, total_burn_time(params)
     try:
         cutoff = brentq(range_error, lo, hi, xtol=1.0, maxiter=50)
     except ValueError:
@@ -328,9 +324,7 @@ def maximize_range(params: MissileParams,
         'optimal_loft_angle_deg'  : best loft angle (°)
         'optimal_loft_rate_deg_s' : best loft angle rate (°/s)
     """
-    total_burn = params.burn_time_s
-    if params.stage2 is not None:
-        total_burn += params.stage2.burn_time_s
+    total_burn = total_burn_time(params)
 
     # If both guidance params are supplied, just run and return
     if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:

@@ -301,23 +301,45 @@ def missile_from_dict(d: dict) -> MissileParams:
 # Physics helper functions
 # ---------------------------------------------------------------------------
 
+def total_burn_time(params: MissileParams) -> float:
+    """Sum of burn times across all stages."""
+    t, s = 0.0, params
+    while s is not None:
+        t += s.burn_time_s
+        s  = s.stage2
+    return t
+
+
+def active_stage(params: MissileParams, t: float) -> MissileParams:
+    """Return the MissileParams for the stage that is active at time t.
+
+    During powered flight this is the burning stage; after all stages
+    have fired it is the last (uppermost) stage, whose geometry is used
+    for drag during the coast/re-entry phase.
+    """
+    t_rem, s = t, params
+    while s.stage2 is not None:
+        if t_rem < s.burn_time_s:
+            return s
+        t_rem -= s.burn_time_s
+        s      = s.stage2
+    return s   # last stage (or only stage)
+
+
 def missile_mass(params: MissileParams, t: float) -> float:
-    """Current mass (kg) at time t seconds after launch.  Handles 2-stage."""
+    """Current mass (kg) at time t seconds after launch.  Handles N stages."""
     if t <= 0:
         return params.mass_initial
-    if t < params.burn_time_s:
-        mdot = params.mass_propellant / params.burn_time_s
-        return params.mass_initial - mdot * t
-    # Stage 1 burnout
-    if params.stage2 is None:
-        return params.mass_final
-    # Stage separation: jettison stage-1 structure, ignite stage 2
-    p2 = params.stage2
-    t2 = t - params.burn_time_s
-    if t2 >= p2.burn_time_s:
-        return p2.mass_final
-    mdot2 = p2.mass_propellant / p2.burn_time_s
-    return p2.mass_initial - mdot2 * t2
+    t_rem, s = t, params
+    while s is not None:
+        if t_rem < s.burn_time_s:
+            mdot = s.mass_propellant / s.burn_time_s
+            return s.mass_initial - mdot * t_rem
+        t_rem -= s.burn_time_s
+        if s.stage2 is None:
+            return s.mass_final   # coasting after last stage burns out
+        s = s.stage2
+    return params.mass_final  # shouldn't reach here
 
 
 def missile_area(params: MissileParams) -> float:
@@ -359,11 +381,11 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m) -> np.ndarray
 def thrust_force(params: MissileParams, t: float, altitude_m: float,
                  thrust_dir: np.ndarray) -> np.ndarray:
     """
-    Thrust force vector (N).
+    Thrust force vector (N).  Handles N stages.
 
     Parameters
     ----------
-    params     : MissileParams
+    params     : MissileParams (stage-1 node of the linked list)
     t          : time since launch (s)
     altitude_m : current altitude for ambient pressure correction
     thrust_dir : unit vector in direction of thrust (ECEF)
@@ -374,19 +396,13 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
     """
     if t < 0:
         return np.zeros(3)
-    # Choose active stage
-    if t <= params.burn_time_s:
-        active = params
-        t_active = t
-    elif params.stage2 is not None:
-        active = params.stage2
-        t_active = t - params.burn_time_s
-    else:
-        return np.zeros(3)
-    if t_active > active.burn_time_s:
-        return np.zeros(3)
-    # Vacuum thrust corrected for ambient back-pressure (~2% at sea level)
-    _, P_amb, _, _ = atmosphere(altitude_m)
-    correction = 1.0 - 0.02 * (P_amb / 101325.0)
-    thrust_mag = active.thrust_N * correction
-    return thrust_mag * thrust_dir
+    t_rem, s = t, params
+    while s is not None:
+        if t_rem <= s.burn_time_s:
+            # Vacuum thrust corrected for ambient back-pressure (~2% at sea level)
+            _, P_amb, _, _ = atmosphere(altitude_m)
+            correction = 1.0 - 0.02 * (P_amb / 101325.0)
+            return s.thrust_N * correction * thrust_dir
+        t_rem -= s.burn_time_s
+        s      = s.stage2
+    return np.zeros(3)  # all stages burned out

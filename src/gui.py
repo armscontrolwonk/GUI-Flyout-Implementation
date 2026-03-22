@@ -25,7 +25,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from missile_models import (MISSILE_DB, get_missile,
-                           missile_to_dict, missile_from_dict)
+                           missile_to_dict, missile_from_dict,
+                           total_burn_time)
 from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
 
@@ -141,17 +142,26 @@ class MissileDialog(tk.Toplevel):
     def _build(self, existing_name):
         pad = dict(padx=8, pady=4)
 
-        # Name
+        # Name row
         nf = ttk.Frame(self)
         nf.pack(fill=tk.X, **pad)
         ttk.Label(nf, text="Missile name:").pack(side=tk.LEFT)
         self._name_var = tk.StringVar(value=existing_name or "My Missile")
         ttk.Entry(nf, textvariable=self._name_var, width=24).pack(
-            side=tk.LEFT, padx=(6, 0))
+            side=tk.LEFT, padx=(6, 16))
+        ttk.Label(nf, text="Stages:").pack(side=tk.LEFT)
+        self._n_stages_var = tk.StringVar(value="1")
+        stages_cb = ttk.Combobox(nf, textvariable=self._n_stages_var,
+                                 values=["1", "2", "3", "4"],
+                                 state="readonly", width=3)
+        stages_cb.pack(side=tk.LEFT, padx=(4, 0))
+        stages_cb.bind("<<ComboboxSelected>>",
+                       lambda _: self._update_stage_frames())
 
-        # Stage 1
-        self._s1 = _StageFrame(self, "Stage 1")
-        self._s1.pack(fill=tk.X, **pad)
+        # Stage frames (1 always visible; 2-4 toggled)
+        self._stage_frames = [_StageFrame(self, f"Stage {i+1}")
+                               for i in range(4)]
+        self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
         # Payload
         pf = ttk.Frame(self)
@@ -161,17 +171,6 @@ class MissileDialog(tk.Toplevel):
         ttk.Entry(pf, textvariable=self._payload_var, width=10).pack(
             side=tk.LEFT, padx=6)
         ttk.Label(pf, text="kg  (warhead / instrument)").pack(side=tk.LEFT)
-
-        # Two-stage checkbox
-        self._two_stage = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self, text="Two-stage missile",
-                        variable=self._two_stage,
-                        command=self._toggle_stage2).pack(
-            anchor=tk.W, padx=8, pady=(4, 0))
-
-        # Stage 2
-        self._s2 = _StageFrame(self, "Stage 2")
-        # (packed/unpacked dynamically by _toggle_stage2)
 
         # Guidance
         gf = ttk.LabelFrame(self, text="Guidance")
@@ -189,110 +188,128 @@ class MissileDialog(tk.Toplevel):
         ttk.Button(bf, text="Save Missile", command=self._save).pack(
             side=tk.RIGHT)
 
-        # Pre-fill if editing
+        # Pre-fill if editing an existing custom missile
         if existing_name and existing_name not in _PACKAGED_NAMES:
             self._prefill(existing_name)
 
     # ------------------------------------------------------------------
-    def _toggle_stage2(self):
-        if self._two_stage.get():
-            self._s2.pack(fill=tk.X, padx=8, pady=4,
-                          before=self._s2.master.nametowidget(
-                              self._s2.master.children.get(
-                                  list(self._s2.master.children)[-1], '')))
-            # Re-pack s2 before guidance frame (simplest: destroy + rebuild order)
-            # easier: just pack it; it appears after s1 naturally
-            self._s2.pack(fill=tk.X, padx=8, pady=4)
-        else:
-            self._s2.pack_forget()
+    def _update_stage_frames(self):
+        """Show the right number of stage frames based on the selector."""
+        n = int(self._n_stages_var.get())
+        pad = dict(padx=8, pady=4)
+        for i, sf in enumerate(self._stage_frames):
+            if i < n:
+                sf.pack(fill=tk.X, **pad)
+            else:
+                sf.pack_forget()
 
     # ------------------------------------------------------------------
     def _prefill(self, name):
-        """Populate fields from an existing custom missile."""
+        """Populate all fields from an existing custom missile."""
         p = MISSILE_DB[name]()
-        s1d = {
-            "fueled": p.mass_initial - (p.stage2.mass_initial if p.stage2 else 0),
-            "dry":    p.mass_final   - (p.stage2.mass_initial if p.stage2 else 0),
-            "dia":    p.diameter_m,
-            "length": p.length_m,
-            "burn":   p.burn_time_s,
-            "isp":    p.isp_s,
-        }
-        # For single-stage, payload = mass_final - dry_structure; approximate
+
+        # Walk the linked list to collect per-stage data and payload
+        stage_data = []
         payload = 0.0
-        if p.stage2:
-            s1d["fueled"] = p.mass_initial - p.stage2.mass_initial
-            s1d["dry"]    = p.mass_final
-            payload = p.stage2.mass_final - (p.stage2.mass_initial - p.stage2.mass_propellant)
-            self._two_stage.set(True)
-            self._toggle_stage2()
-            p2 = p.stage2
-            self._s2.populate({
-                "fueled": p2.mass_propellant + (p2.mass_initial - p2.mass_propellant),
-                "dry":    p2.mass_initial - p2.mass_propellant,
-                "dia":    p2.diameter_m, "length": p2.length_m,
-                "burn":   p2.burn_time_s, "isp":   p2.isp_s,
+        node = p
+        while node is not None:
+            nxt = node.stage2
+            if nxt is None:
+                # Last (or only) stage carries the payload in its masses
+                fueled = node.mass_initial - payload   # first pass: unknown payload
+                dry    = node.mass_final   - payload
+                # Recover payload from the bottommost stage's mass_final minus
+                # its structural dry mass.  Use mass_propellant as a proxy:
+                # mass_final = dry_structure + payload, prop = fueled - dry_structure
+                # => dry_structure = mass_initial - mass_propellant - payload
+                # We don't know payload directly, so approximate:
+                # payload ≈ mass_final - (mass_initial - mass_propellant - mass_final)
+                # Simpler: just back-compute from the stored values.
+                prop         = node.mass_propellant
+                fueled_body  = prop + (node.mass_final if nxt is None else 0)
+                # If this is the only stage, payload = mass_final - (mass_initial - prop - mass_final)
+                # i.e. payload = 2*mass_final - mass_initial + prop
+                payload_est  = 2 * node.mass_final - node.mass_initial + prop
+                payload      = max(0.0, payload_est)
+                fueled       = node.mass_initial - payload
+                dry          = node.mass_final   - payload
+            else:
+                fueled = node.mass_initial - nxt.mass_initial
+                dry    = node.mass_final
+            stage_data.append({
+                "fueled": fueled, "dry": dry,
+                "dia":    node.diameter_m, "length": node.length_m,
+                "burn":   node.burn_time_s, "isp":   node.isp_s,
             })
-        self._s1.populate(s1d)
-        self._payload_var.set(str(payload))
+            node = nxt
+
+        n = len(stage_data)
+        self._n_stages_var.set(str(n))
+        self._update_stage_frames()
+        for i, sd in enumerate(stage_data):
+            self._stage_frames[i].populate(sd)
+        self._payload_var.set(f"{payload:.0f}")
         self._name_var.set(name)
         self._loft_a.set(str(p.loft_angle_deg))
         self._loft_r.set(str(p.loft_angle_rate_deg_s))
 
     # ------------------------------------------------------------------
     def _collect(self) -> 'MissileParams':
-        """Read and validate all fields; return a MissileParams."""
+        """Read and validate all fields; return a MissileParams linked list."""
         from missile_models import MissileParams, _FORDEN_MACH, _FORDEN_CD, _thrust_from_isp
 
         name = self._name_var.get().strip()
         if not name:
             raise ValueError("Missile name cannot be blank.")
         if name in _PACKAGED_NAMES:
-            raise ValueError(f"'{name}' is a built-in missile name and cannot be overwritten.")
+            raise ValueError(
+                f"'{name}' is a built-in missile name and cannot be overwritten.")
 
+        n       = int(self._n_stages_var.get())
         payload = float(self._payload_var.get())
-        la  = float(self._loft_a.get())
-        lar = float(self._loft_r.get())
+        la      = float(self._loft_a.get())
+        lar     = float(self._loft_r.get())
 
-        s1 = self._s1.get()
-        if s1["fueled"] <= s1["dry"]:
-            raise ValueError("Stage 1: fueled weight must exceed dry weight.")
-        prop1 = s1["fueled"] - s1["dry"]
+        # Read and validate all active stage frames
+        stages = []
+        for i in range(n):
+            sd = self._stage_frames[i].get()
+            if sd["fueled"] <= sd["dry"]:
+                raise ValueError(
+                    f"Stage {i+1}: fueled weight must exceed dry weight.")
+            stages.append(sd)
 
-        stage2 = None
-        if self._two_stage.get():
-            s2 = self._s2.get()
-            if s2["fueled"] <= s2["dry"]:
-                raise ValueError("Stage 2: fueled weight must exceed dry weight.")
-            prop2 = s2["fueled"] - s2["dry"]
-            stage2 = MissileParams(
-                name=f"{name} Stage 2",
-                mass_initial=s2["fueled"] + payload,
-                mass_propellant=prop2,
-                mass_final=s2["dry"] + payload,
-                diameter_m=s2["dia"],  length_m=s2["length"],
-                thrust_N=round(_thrust_from_isp(s2["isp"], prop2, s2["burn"])),
-                burn_time_s=s2["burn"], isp_s=s2["isp"],
+        # Build the linked list from the last stage back to the first.
+        # Last stage carries payload; upper stages are jettisoned at burnout.
+        node = None
+        upper_mass = 0.0   # cumulative mass of stages above the current one
+        for sd in reversed(stages):
+            prop = sd["fueled"] - sd["dry"]
+            if node is None:
+                # Last (topmost) stage
+                m0     = sd["fueled"] + payload
+                mfinal = sd["dry"]    + payload
+                upper_mass = m0
+            else:
+                # Intermediate / bottom stage: upper stack rides on top
+                m0     = sd["fueled"] + upper_mass
+                mfinal = sd["dry"]            # jettisoned structure only
+                upper_mass = m0
+            node = MissileParams(
+                name=f"{name} Stage {stages.index(sd) + 1}",
+                mass_initial=m0,
+                mass_propellant=prop,
+                mass_final=mfinal,
+                diameter_m=sd["dia"],  length_m=sd["length"],
+                thrust_N=round(_thrust_from_isp(sd["isp"], prop, sd["burn"])),
+                burn_time_s=sd["burn"], isp_s=sd["isp"],
                 loft_angle_deg=la, loft_angle_rate_deg_s=lar,
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
+                stage2=node,
             )
-            mass_initial = s1["fueled"] + s2["fueled"] + payload
-        else:
-            mass_initial = s1["fueled"] + payload
 
-        from missile_models import MissileParams
-        return MissileParams(
-            name=name,
-            mass_initial=mass_initial,
-            mass_propellant=prop1,
-            mass_final=s1["dry"] + (0 if self._two_stage.get() else payload),
-            diameter_m=s1["dia"], length_m=s1["length"],
-            thrust_N=round(_thrust_from_isp(s1["isp"], prop1, s1["burn"])),
-            burn_time_s=s1["burn"], isp_s=s1["isp"],
-            loft_angle_deg=la, loft_angle_rate_deg_s=lar,
-            mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
-            stage2=stage2,
-        )
+        node.name = name   # top-level gets the missile's proper name
+        return node
 
     # ------------------------------------------------------------------
     def _save(self):
@@ -435,10 +452,7 @@ class ParametricSweepDialog(tk.Toplevel):
             # Cutoff: derive from selected missile
             try:
                 missile, *_ = self._app._get_inputs()
-                total_burn = missile.burn_time_s
-                if missile.stage2:
-                    total_burn += missile.stage2.burn_time_s
-                lo, hi = 5.0, float(int(total_burn))
+                lo, hi = 5.0, float(int(total_burn_time(missile)))
             except Exception:
                 lo, hi = 5.0, 100.0
         self._lo_var  .set(str(lo))
@@ -910,8 +924,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _on_missile_changed(self, _event=None):
         p = get_missile(self._missile_var.get())
-        total = p.burn_time_s + (p.stage2.burn_time_s if p.stage2 else 0)
-        self._cutoff_var.set(str(int(total)))
+        self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_params_text(p)
@@ -984,17 +997,19 @@ class MissileFlyoutApp(tk.Tk):
             f"{'Isp:':<18}{p.isp_s:.0f} s",
             f"{'T/W ratio:':<18}{p.thrust_N/(p.mass_initial*9.81):.2f}",
         ]
-        if p.stage2:
-            p2 = p.stage2
+        sn, node = 2, p.stage2
+        while node is not None:
             lines += [
                 "─" * 28,
-                "Stage 2:",
-                f"{'  Mass:':<18}{p2.mass_initial:,.0f} kg",
-                f"{'  Propellant:':<18}{p2.mass_propellant:,.0f} kg",
-                f"{'  Thrust (vac):':<18}{p2.thrust_N/1000:,.0f} kN",
-                f"{'  Burn time:':<18}{p2.burn_time_s:.0f} s",
-                f"{'  Isp:':<18}{p2.isp_s:.0f} s",
+                f"Stage {sn}:",
+                f"{'  Mass:':<18}{node.mass_initial:,.0f} kg",
+                f"{'  Propellant:':<18}{node.mass_propellant:,.0f} kg",
+                f"{'  Thrust (vac):':<18}{node.thrust_N/1000:,.0f} kN",
+                f"{'  Burn time:':<18}{node.burn_time_s:.0f} s",
+                f"{'  Isp:':<18}{node.isp_s:.0f} s",
             ]
+            sn  += 1
+            node = node.stage2
 
         txt = "\n".join(lines)
         self._params_text.config(state=tk.NORMAL)
