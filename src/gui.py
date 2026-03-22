@@ -32,6 +32,58 @@ from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
 
 # ---------------------------------------------------------------------------
+# Country border map data (Natural Earth 110m, bundled GeoJSON)
+# ---------------------------------------------------------------------------
+
+_BORDERS_CACHE = None   # loaded once on first draw, then reused
+
+def _load_borders():
+    """Return the Natural Earth 110m country GeoJSON (lazy, cached)."""
+    global _BORDERS_CACHE
+    if _BORDERS_CACHE is None:
+        p = Path(__file__).parent / "data" / "ne_110m_countries.geojson"
+        if p.exists():
+            _BORDERS_CACHE = json.loads(p.read_text())
+    return _BORDERS_CACHE
+
+
+def _draw_borders(ax, center_lon):
+    """Overlay country borders on *ax*, re-centred on *center_lon* degrees."""
+    data = _load_borders()
+    if data is None:
+        return
+
+    def _plot_ring(ring):
+        # Shift every vertex into [−180, +180] relative to center_lon
+        xs = [((pt[0] - center_lon + 180.0) % 360.0) - 180.0 for pt in ring]
+        ys = [pt[1] for pt in ring]
+        # Split the ring wherever it still crosses ±180° in centred space
+        seg_x, seg_y = [[]], [[]]
+        for i in range(len(xs)):
+            if i > 0 and abs(xs[i] - xs[i - 1]) > 180:
+                seg_x.append([])
+                seg_y.append([])
+            seg_x[-1].append(xs[i])
+            seg_y[-1].append(ys[i])
+        for sx, sy in zip(seg_x, seg_y):
+            if len(sx) > 1:
+                ax.plot(sx, sy, color='#777777', linewidth=0.4,
+                        solid_capstyle='round', zorder=1)
+
+    for feature in data.get('features', []):
+        geom  = feature.get('geometry') or {}
+        gtype = geom.get('type', '')
+        coords = geom.get('coordinates', [])
+        if gtype == 'Polygon':
+            for ring in coords:
+                _plot_ring(ring)
+        elif gtype == 'MultiPolygon':
+            for polygon in coords:
+                for ring in polygon:
+                    _plot_ring(ring)
+
+
+# ---------------------------------------------------------------------------
 # Custom missile persistence
 # ---------------------------------------------------------------------------
 
@@ -1554,6 +1606,7 @@ class MissileFlyoutApp(tk.Tk):
 
         impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
 
+        _draw_borders(self._ax_trk, center_lon)
         self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2)
         self._ax_trk.plot(0.0,          lat_arr[0],  'go', markersize=7,
                           label="Launch", zorder=5)
