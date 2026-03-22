@@ -61,6 +61,45 @@ def _enu_frame(lat_rad: float, lon_rad: float):
     return e_east, e_north, e_up
 
 
+def _gravity_turn_thrust_dir(vel_ecef, lat_rad, lon_rad, azimuth_rad,
+                             kick_angle_deg, kick_rate_deg_s, t):
+    """
+    Two-phase gravity-turn guidance (IRBM/ICBM).
+
+    Phase 1 — kick (0 ≤ t < t_kick):
+        Pitch from 90° above horizontal down to kick_angle_deg at kick_rate_deg_s.
+        t_kick = (90 - kick_angle_deg) / kick_rate_deg_s
+
+    Phase 2 — gravity turn (t ≥ t_kick):
+        Thrust locked to the velocity vector direction.  Earth's gravity and
+        curvature naturally pitch the vehicle to the Wheelon-optimal burnout
+        angle: ε* = (180° − φ°) / 4  (Wheelon 1959, Eq. 17).
+
+    kick_angle_deg : elevation above horizontal at end of kick (e.g. 85° = 5°
+                     from vertical).  Should be close to 90° so gravity turn
+                     starts near-vertical.
+    kick_rate_deg_s: rate of initial kick (°/s).
+    """
+    t_kick = (90.0 - kick_angle_deg) / max(kick_rate_deg_s, 0.1)
+
+    if t < t_kick:
+        el_deg = 90.0 - kick_rate_deg_s * t
+    else:
+        speed = np.linalg.norm(vel_ecef)
+        if speed > 1.0:
+            return vel_ecef / speed
+        # Speed not yet established — hold kick angle as fallback
+        el_deg = kick_angle_deg
+
+    el_rad = np.radians(el_deg)
+    e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
+    thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
+              np.cos(el_rad) * np.cos(azimuth_rad) * e_north +
+              np.sin(el_rad) * e_up)
+    norm = np.linalg.norm(thrust)
+    return thrust / norm if norm > 1e-12 else e_up
+
+
 def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
                      loft_angle_deg, loft_angle_rate_deg_s, t):
     """
@@ -129,12 +168,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     else:
         f_drag = drag_force_vector(astage, vel, alt)
 
-    # --- Thrust with continuous loft-angle pitch-over guidance ---
+    # --- Thrust with mode-selected guidance ---
     if t <= cutoff_time:
-        thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
-                                      params.loft_angle_deg,
-                                      params.loft_angle_rate_deg_s,
-                                      t)
+        if params.guidance == "gravity_turn":
+            thrust_dir = _gravity_turn_thrust_dir(
+                vel, lat, lon, azimuth_rad,
+                params.loft_angle_deg,
+                params.loft_angle_rate_deg_s,
+                t)
+        else:  # "loft" (Forden)
+            thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
+                                          params.loft_angle_deg,
+                                          params.loft_angle_rate_deg_s,
+                                          t)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -389,32 +435,51 @@ def maximize_range(params: MissileParams,
         except Exception:
             return -1.0
 
-    # Coarse search: 10° steps in loft_angle, 0.5 °/s steps in rate
     best_range = -1.0
     best_la  = params.loft_angle_deg
     best_lar = params.loft_angle_rate_deg_s
 
-    for la in range(20, 75, 10):
-        for lar_x2 in range(1, 7):   # 0.5, 1.0, 1.5, 2.0, 2.5, 3.0
-            lar = lar_x2 * 0.5
-            rng = _run(float(la), lar)
+    if params.guidance == "gravity_turn":
+        # Sweep kick angle (near-vertical, 75°–89° above horizontal).
+        # Kick rate has little effect once gravity turn is engaged; fix at 5°/s.
+        kick_rate = 5.0
+        for kick_a in range(75, 90, 2):
+            rng = _run(float(kick_a), kick_rate)
             if rng > best_range:
                 best_range = rng
-                best_la  = float(la)
-                best_lar = lar
-
-    # Fine search: ±5° and ±0.25 °/s around the coarse best
-    for dla in (-5.0, -2.5, 0.0, 2.5, 5.0):
-        for dlar in (-0.25, 0.0, 0.25):
-            la  = best_la  + dla
-            lar = best_lar + dlar
-            if la < 5.0 or la > 85.0 or lar < 0.1:
+                best_la  = float(kick_a)
+                best_lar = kick_rate
+        # Fine search ±2° around best kick angle
+        for dka in (-2.0, -1.0, 0.0, 1.0, 2.0):
+            ka = best_la + dka
+            if ka < 70.0 or ka > 89.5:
                 continue
-            rng = _run(la, lar)
+            rng = _run(ka, kick_rate)
             if rng > best_range:
                 best_range = rng
-                best_la  = la
-                best_lar = lar
+                best_la = ka
+    else:
+        # Forden loft: coarse 10° steps in loft_angle, 0.5 °/s steps in rate
+        for la in range(20, 75, 10):
+            for lar_x2 in range(1, 7):   # 0.5 … 3.0 °/s
+                lar = lar_x2 * 0.5
+                rng = _run(float(la), lar)
+                if rng > best_range:
+                    best_range = rng
+                    best_la  = float(la)
+                    best_lar = lar
+        # Fine search: ±5° and ±0.25 °/s around coarse best
+        for dla in (-5.0, -2.5, 0.0, 2.5, 5.0):
+            for dlar in (-0.25, 0.0, 0.25):
+                la  = best_la  + dla
+                lar = best_lar + dlar
+                if la < 5.0 or la > 85.0 or lar < 0.1:
+                    continue
+                rng = _run(la, lar)
+                if rng > best_range:
+                    best_range = rng
+                    best_la  = la
+                    best_lar = lar
 
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
