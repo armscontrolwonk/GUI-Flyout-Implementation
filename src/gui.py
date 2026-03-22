@@ -164,16 +164,20 @@ class MissileDialog(tk.Toplevel):
     def __init__(self, parent, on_save, existing_name=None):
         super().__init__(parent)
         self.title("Edit Missile" if existing_name else "New Missile")
-        self.resizable(False, False)
+        self.resizable(False, True)
         self.grab_set()               # modal
         self._on_save = on_save
         self._existing_name = existing_name
         self._build(existing_name)
-        # Centre over parent
+        # Centre over parent; cap height to 90 % of screen so dialog is scrollable
         self.update_idletasks()
-        px = parent.winfo_rootx() + (parent.winfo_width()  - self.winfo_width())  // 2
-        py = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{px}+{py}")
+        max_h = int(parent.winfo_screenheight() * 0.90)
+        nat_h = self.winfo_reqheight()
+        dlg_h = min(nat_h, max_h)
+        dlg_w = self.winfo_reqwidth()
+        px = parent.winfo_rootx() + (parent.winfo_width()  - dlg_w) // 2
+        py = parent.winfo_rooty() + (parent.winfo_height() - dlg_h) // 2
+        self.geometry(f"{dlg_w}x{dlg_h}+{px}+{py}")
 
     # ------------------------------------------------------------------
     def _build(self, existing_name):
@@ -195,8 +199,54 @@ class MissileDialog(tk.Toplevel):
         stages_cb.bind("<<ComboboxSelected>>",
                        lambda _: self._update_stage_frames())
 
-        # Payload + RV beta (above the stage frames)
-        pf = ttk.Frame(self)
+        # Scrollable body: canvas + scrollbar sandwiched between the name row
+        # and the Save/Cancel buttons so buttons are always visible.
+        scroll_outer = ttk.Frame(self)
+        scroll_outer.pack(fill=tk.BOTH, expand=True)
+
+        self._scroll_canvas = tk.Canvas(
+            scroll_outer, borderwidth=0, highlightthickness=0)
+        vsb = ttk.Scrollbar(scroll_outer, orient="vertical",
+                            command=self._scroll_canvas.yview)
+        self._scroll_canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._scroll_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Inner frame — all middle content lives here
+        body = ttk.Frame(self._scroll_canvas)
+        body_id = self._scroll_canvas.create_window(
+            (0, 0), window=body, anchor="nw")
+
+        def _on_body_configure(_event):
+            self._scroll_canvas.configure(
+                scrollregion=self._scroll_canvas.bbox("all"))
+
+        def _on_canvas_configure(event):
+            self._scroll_canvas.itemconfig(body_id, width=event.width)
+
+        body.bind("<Configure>", _on_body_configure)
+        self._scroll_canvas.bind("<Configure>", _on_canvas_configure)
+
+        # Mousewheel scrolling (Mac/Windows uses <MouseWheel>; Linux Button-4/5)
+        def _on_mousewheel(event):
+            self._scroll_canvas.yview_scroll(
+                int(-1 * (event.delta / 120)), "units")
+
+        def _on_mousewheel_linux_up(_event):
+            self._scroll_canvas.yview_scroll(-1, "units")
+
+        def _on_mousewheel_linux_down(_event):
+            self._scroll_canvas.yview_scroll(1, "units")
+
+        self._scroll_canvas.bind("<MouseWheel>", _on_mousewheel)
+        self._scroll_canvas.bind("<Button-4>",   _on_mousewheel_linux_up)
+        self._scroll_canvas.bind("<Button-5>",   _on_mousewheel_linux_down)
+        body.bind("<MouseWheel>", _on_mousewheel)
+        body.bind("<Button-4>",   _on_mousewheel_linux_up)
+        body.bind("<Button-5>",   _on_mousewheel_linux_down)
+
+        # Payload + RV beta (inside scrollable body)
+        pf = ttk.Frame(body)
         pf.pack(fill=tk.X, padx=8, pady=2)
         ttk.Label(pf, text="Payload (kg):").pack(side=tk.LEFT)
         self._payload_var = tk.StringVar(value="1000")
@@ -211,13 +261,13 @@ class MissileDialog(tk.Toplevel):
         # Stage frames (1 always visible; 2-4 toggled).
         # A dedicated container ensures dynamically-packed stages always appear
         # between the payload row and the buttons (not after the buttons).
-        self._stages_container = ttk.Frame(self)
+        self._stages_container = ttk.Frame(body)
         self._stages_container.pack(fill=tk.X)
         self._stage_frames = [_StageFrame(self._stages_container, f"Stage {i+1}")
                                for i in range(4)]
         self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
-        # Buttons
+        # Buttons — outside the scroll area so always visible
         bf = ttk.Frame(self)
         bf.pack(fill=tk.X, padx=8, pady=(4, 8))
         ttk.Button(bf, text="Cancel", command=self.destroy).pack(
