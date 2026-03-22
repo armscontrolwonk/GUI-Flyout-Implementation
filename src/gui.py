@@ -89,7 +89,8 @@ class _StageFrame(ttk.LabelFrame):
     """Entry widgets for one rocket stage."""
 
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
-                     length="12.0", burn="70", isp="230")
+                     length="12.0", burn="70", isp="230",
+                     loft_a="45.0", loft_r="1.5", coast="0")
 
     def __init__(self, parent, label, defaults=None):
         super().__init__(parent, text=label)
@@ -100,21 +101,53 @@ class _StageFrame(ttk.LabelFrame):
         self._length = _entry_row(self, "Length (m):",     3, d["length"], "m")
         self._burn   = _entry_row(self, "Burn time (s):",  4, d["burn"],   "s")
         self._isp    = _entry_row(self, "Isp (s):",        5, d["isp"],    "s")
+        self._loft_a = _entry_row(self, "Loft angle (°):", 6, d["loft_a"],
+                                  "° (final elev.)")
+        self._loft_r = _entry_row(self, "Loft rate (°/s):",7, d["loft_r"], "°/s")
+
+        # Coast-time row — shown only when this stage is not the last stage.
+        # Stored as grid row 8; hidden/shown via set_coast_visible().
+        self._coast_var = tk.StringVar(value=d["coast"])
+        self._coast_lbl = ttk.Label(self, text="Coast after (s):")
+        self._coast_lbl.grid(row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        coast_inner = ttk.Frame(self)
+        coast_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
+            side=tk.LEFT, padx=(2, 0))
+        self._coast_inner = coast_inner
+        # Hidden by default; _update_stage_frames() reveals it for non-last stages
+        self._coast_lbl.grid_remove()
+        self._coast_inner.grid_remove()
+
+    def set_coast_visible(self, visible: bool):
+        """Show or hide the inter-stage coast-time row."""
+        if visible:
+            self._coast_lbl.grid()
+            self._coast_inner.grid()
+        else:
+            self._coast_lbl.grid_remove()
+            self._coast_inner.grid_remove()
 
     def get(self):
         return {k: float(v.get()) for k, v in [
             ("fueled", self._fueled), ("dry",    self._dry),
             ("dia",    self._dia),    ("length", self._length),
             ("burn",   self._burn),   ("isp",    self._isp),
+            ("loft_a", self._loft_a), ("loft_r", self._loft_r),
+            ("coast",  self._coast_var),
         ]}
 
     def populate(self, d):
-        self._fueled.set(str(d["fueled"]))
-        self._dry   .set(str(d["dry"]))
-        self._dia   .set(str(d["dia"]))
-        self._length.set(str(d["length"]))
-        self._burn  .set(str(d["burn"]))
-        self._isp   .set(str(d["isp"]))
+        self._fueled  .set(str(d["fueled"]))
+        self._dry     .set(str(d["dry"]))
+        self._dia     .set(str(d["dia"]))
+        self._length  .set(str(d["length"]))
+        self._burn    .set(str(d["burn"]))
+        self._isp     .set(str(d["isp"]))
+        self._loft_a  .set(str(d.get("loft_a", 45.0)))
+        self._loft_r  .set(str(d.get("loft_r", 1.5)))
+        self._coast_var.set(str(d.get("coast", 0)))
 
 
 # ---------------------------------------------------------------------------
@@ -172,14 +205,6 @@ class MissileDialog(tk.Toplevel):
             side=tk.LEFT, padx=6)
         ttk.Label(pf, text="kg  (warhead / instrument)").pack(side=tk.LEFT)
 
-        # Guidance
-        gf = ttk.LabelFrame(self, text="Guidance")
-        gf.pack(fill=tk.X, **pad)
-        self._loft_a = _entry_row(gf, "Loft angle (°):",  0, "45.0",
-                                  "° (final elevation above horizontal)")
-        self._loft_r = _entry_row(gf, "Loft rate (°/s):", 1, "1.5",
-                                  "°/s (pitch-over speed)")
-
         # Buttons
         bf = ttk.Frame(self)
         bf.pack(fill=tk.X, padx=8, pady=(4, 8))
@@ -194,12 +219,14 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
-        """Show the right number of stage frames based on the selector."""
+        """Show the right number of stage frames and coast-time rows."""
         n = int(self._n_stages_var.get())
         pad = dict(padx=8, pady=4)
         for i, sf in enumerate(self._stage_frames):
             if i < n:
                 sf.pack(fill=tk.X, **pad)
+                # Coast row visible only for non-last stages
+                sf.set_coast_visible(i < n - 1)
             else:
                 sf.pack_forget()
 
@@ -240,6 +267,9 @@ class MissileDialog(tk.Toplevel):
                 "fueled": fueled, "dry": dry,
                 "dia":    node.diameter_m, "length": node.length_m,
                 "burn":   node.burn_time_s, "isp":   node.isp_s,
+                "loft_a": node.loft_angle_deg,
+                "loft_r": node.loft_angle_rate_deg_s,
+                "coast":  node.coast_time_s,
             })
             node = nxt
 
@@ -250,8 +280,6 @@ class MissileDialog(tk.Toplevel):
             self._stage_frames[i].populate(sd)
         self._payload_var.set(f"{payload:.0f}")
         self._name_var.set(name)
-        self._loft_a.set(str(p.loft_angle_deg))
-        self._loft_r.set(str(p.loft_angle_rate_deg_s))
 
     # ------------------------------------------------------------------
     def _collect(self) -> 'MissileParams':
@@ -267,8 +295,6 @@ class MissileDialog(tk.Toplevel):
 
         n       = int(self._n_stages_var.get())
         payload = float(self._payload_var.get())
-        la      = float(self._loft_a.get())
-        lar     = float(self._loft_r.get())
 
         # Read and validate all active stage frames
         stages = []
@@ -283,27 +309,29 @@ class MissileDialog(tk.Toplevel):
         # Last stage carries payload; upper stages are jettisoned at burnout.
         node = None
         upper_mass = 0.0   # cumulative mass of stages above the current one
-        for sd in reversed(stages):
+        for idx, sd in enumerate(reversed(stages)):
+            stage_num = n - idx           # stage number (1-based), decreasing
+            is_last   = (node is None)    # first iteration = topmost (last) stage
             prop = sd["fueled"] - sd["dry"]
-            if node is None:
-                # Last (topmost) stage
+            if is_last:
                 m0     = sd["fueled"] + payload
                 mfinal = sd["dry"]    + payload
                 upper_mass = m0
             else:
-                # Intermediate / bottom stage: upper stack rides on top
                 m0     = sd["fueled"] + upper_mass
-                mfinal = sd["dry"]            # jettisoned structure only
+                mfinal = sd["dry"]    # jettisoned structure only
                 upper_mass = m0
             node = MissileParams(
-                name=f"{name} Stage {stages.index(sd) + 1}",
+                name=f"{name} Stage {stage_num}",
                 mass_initial=m0,
                 mass_propellant=prop,
                 mass_final=mfinal,
                 diameter_m=sd["dia"],  length_m=sd["length"],
                 thrust_N=round(_thrust_from_isp(sd["isp"], prop, sd["burn"])),
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
-                loft_angle_deg=la, loft_angle_rate_deg_s=lar,
+                coast_time_s=sd["coast"] if not is_last else 0.0,
+                loft_angle_deg=sd["loft_a"],
+                loft_angle_rate_deg_s=sd["loft_r"],
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
             )
@@ -485,9 +513,8 @@ class ParametricSweepDialog(tk.Toplevel):
             messagebox.showerror("Sweep range error", str(e), parent=self)
             return
 
-        total_burn = missile.burn_time_s + (missile.stage2.burn_time_s if missile.stage2 else 0)
         if cutoff is None:
-            cutoff = total_burn
+            cutoff = total_burn_time(missile)
 
         overplot = self._overplot.get()
         if overplot and len(points) > 20:
@@ -866,10 +893,14 @@ class MissileFlyoutApp(tk.Tk):
         self._res_range_nm  = tk.StringVar(value="Range (nmi):   —")
         self._res_range_mi  = tk.StringVar(value="Range (miles): —")
         self._res_apogee    = tk.StringVar(value="Apogee (km):   —")
+        self._res_apogee_ll = tk.StringVar(value="Apogee loc:    —")
         self._res_impact    = tk.StringVar(value="Impact:        —")
+        self._res_tof       = tk.StringVar(value="Flight time:   —")
+        self._res_imp_spd   = tk.StringVar(value="Impact speed:  —")
 
-        for var in (self._res_range_km, self._res_range_nm,
-                    self._res_range_mi, self._res_apogee, self._res_impact):
+        for var in (self._res_range_km, self._res_range_nm, self._res_range_mi,
+                    self._res_apogee, self._res_apogee_ll,
+                    self._res_impact, self._res_tof, self._res_imp_spd):
             ttk.Label(rf, textvariable=var,
                       font=("Courier", 9), anchor=tk.W).pack(
                 fill=tk.X, padx=8, pady=1)
@@ -997,6 +1028,8 @@ class MissileFlyoutApp(tk.Tk):
             f"{'Isp:':<18}{p.isp_s:.0f} s",
             f"{'T/W ratio:':<18}{p.thrust_N/(p.mass_initial*9.81):.2f}",
         ]
+        if p.coast_time_s > 0:
+            lines.append(f"{'Coast after S1:':<18}{p.coast_time_s:.0f} s")
         sn, node = 2, p.stage2
         while node is not None:
             lines += [
@@ -1008,6 +1041,9 @@ class MissileFlyoutApp(tk.Tk):
                 f"{'  Burn time:':<18}{node.burn_time_s:.0f} s",
                 f"{'  Isp:':<18}{node.isp_s:.0f} s",
             ]
+            if node.stage2 is not None and node.coast_time_s > 0:
+                lines.append(
+                    f"{'  Coast after:':<18}{node.coast_time_s:.0f} s")
             sn  += 1
             node = node.stage2
 
@@ -1151,12 +1187,21 @@ class MissileFlyoutApp(tk.Tk):
         rng_mi    = rng_km / 1.60934
         apogee_km = r['apogee_km']
 
-        self._res_range_km.set( f"Range (km):    {rng_km:>8.1f}")
-        self._res_range_nm.set( f"Range (nmi):   {rng_nm:>8.1f}")
-        self._res_range_mi.set( f"Range (miles): {rng_mi:>8.1f}")
-        self._res_apogee.set(   f"Apogee (km):   {apogee_km:>8.1f}")
-        self._res_impact.set(
-            f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E")
+        tof_s       = r['time_of_flight_s']
+        imp_spd_kms = r['impact_speed_ms'] / 1000.0
+        apo_lat     = r['apogee_lat_deg']
+        apo_lon     = r['apogee_lon_deg']
+
+        self._res_range_km .set(f"Range (km):    {rng_km:>8.1f}")
+        self._res_range_nm .set(f"Range (nmi):   {rng_nm:>8.1f}")
+        self._res_range_mi .set(f"Range (miles): {rng_mi:>8.1f}")
+        self._res_apogee   .set(f"Apogee (km):   {apogee_km:>8.1f}")
+        self._res_apogee_ll.set(
+            f"Apogee loc:  {apo_lat:.2f}°N  {apo_lon:.2f}°E")
+        self._res_impact   .set(
+            f"Impact:      {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E")
+        self._res_tof      .set(f"Flight time:   {tof_s:>7.0f} s")
+        self._res_imp_spd  .set(f"Impact speed: {imp_spd_kms:>7.2f} km/s")
 
         units = self._units_var.get()
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
@@ -1165,7 +1210,9 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(
             f"Done.  Range: {rng_km*scale:.1f} {ulbl}  |  "
             f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
-            f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E"
+            f"ToF: {tof_s:.0f} s  |  "
+            f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
+            f"Impact spd: {imp_spd_kms:.2f} km/s"
         )
         self._plot_results(r, scale, ulbl)
 
@@ -1248,10 +1295,12 @@ class MissileFlyoutApp(tk.Tk):
             "  • COESA 1976 standard atmosphere\n"
             "  • WGS-84 J2 gravity (ECEF)\n"
             "  • Coriolis & centrifugal corrections\n"
-            "  • Loft-angle pitch-over guidance (Forden Eq. 8)\n"
-            "  • 2-stage missile support\n\n"
-            "Packaged missiles (Forden Table 1):\n"
-            "  Scud-B, Al Hussein, No-dong, Taepodong-I\n"
+            "  • Per-stage loft-angle guidance (Forden Eq. 8)\n"
+            "  • Up to 4 stages with inter-stage coast\n\n"
+            "Packaged missiles (Forden Table 1 + extension):\n"
+            "  Scud-B, Al Hussein, No-dong,\n"
+            "  Taepodong-I, Taepodong-II (3-stage),\n"
+            "  Shahab-3, Generic ICBM\n"
         )
 
 

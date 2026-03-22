@@ -50,8 +50,12 @@ class MissileParams:
     mach_table: list = field(default_factory=list)
     cd_table:   list = field(default_factory=list)
 
-    # Staging (optional second stage)
+    # Staging (optional next stage)
     stage2: Optional['MissileParams'] = None
+
+    # Coast time (s) between this stage's burnout and the next stage's ignition.
+    # Ignored (irrelevant) for the last / only stage.
+    coast_time_s: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -236,11 +240,74 @@ def _generic_icbm():
     )
 
 
+def _taepodong_ii():
+    # Forden (2007) discussion / Table 1 extension.
+    # 3-stage missile: No-dong first stage, Scud-B second stage,
+    # small solid-fuel third stage.  Payload ≈ 500 kg.
+    #
+    # Stage 3 (solid-fuel upper stage):
+    prop3 = 1400  # fueled 1600 - dry 200
+    stage3 = MissileParams(
+        name="Taepodong-II Stage 3",
+        mass_initial=1600 + 500,    # 2 100 kg (wet + payload)
+        mass_propellant=prop3,       # 1 400 kg
+        mass_final=200 + 500,        # 700 kg (dry + payload)
+        diameter_m=0.60,
+        length_m=4.0,
+        thrust_N=round(_thrust_from_isp(275, prop3, 50)),
+        burn_time_s=50.0,
+        isp_s=275.0,
+        loft_angle_deg=25.0,
+        loft_angle_rate_deg_s=0.5,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+    )
+
+    # Stage 2 (Scud-B derived):
+    prop2 = 4897 - 1198  # = 3 699 kg
+    stage2 = MissileParams(
+        name="Taepodong-II Stage 2",
+        mass_initial=4897 + stage3.mass_initial,   # 6 997 kg
+        mass_propellant=prop2,                      # 3 699 kg
+        mass_final=1198,                            # stage-2 dry only (jettisoned)
+        diameter_m=0.84,
+        length_m=11.25,
+        thrust_N=round(_thrust_from_isp(230, prop2, 75)),
+        burn_time_s=75.0,
+        isp_s=230.0,
+        loft_angle_deg=35.0,
+        loft_angle_rate_deg_s=0.6,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+        stage2=stage3,
+    )
+
+    # Stage 1 (No-dong derived):
+    prop1 = 19900 - 3800  # = 16 100 kg
+    return MissileParams(
+        name="Taepodong-II",
+        mass_initial=19900 + stage2.mass_initial,   # 26 797 kg
+        mass_propellant=prop1,                       # 16 100 kg
+        mass_final=3800,                             # stage-1 dry (jettisoned)
+        diameter_m=0.88,
+        length_m=32.0,
+        thrust_N=round(_thrust_from_isp(240, prop1, 70)),
+        burn_time_s=70.0,
+        isp_s=240.0,
+        loft_angle_deg=40.0,
+        loft_angle_rate_deg_s=0.8,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+        stage2=stage2,
+    )
+
+
 MISSILE_DB = {
     "Scud-B":        _scud_b,
     "Al Hussein":    _al_hussein,
     "No-dong":       _nodong,
     "Taepodong-I":   _taepodong_i,
+    "Taepodong-II":  _taepodong_ii,
     "Shahab-3":      _shahab3,
     "Generic ICBM":  _generic_icbm,
 }
@@ -261,6 +328,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'diameter_m':            p.diameter_m,
         'length_m':              p.length_m,
         'burn_time_s':           p.burn_time_s,
+        'coast_time_s':          p.coast_time_s,
         'isp_s':                 p.isp_s,
         'loft_angle_deg':        p.loft_angle_deg,
         'loft_angle_rate_deg_s': p.loft_angle_rate_deg_s,
@@ -288,6 +356,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         length_m=float(d['length_m']),
         thrust_N=round(_thrust_from_isp(isp, prop, burn)),
         burn_time_s=burn,
+        coast_time_s=float(d.get('coast_time_s', 0.0)),
         isp_s=isp,
         loft_angle_deg=float(d.get('loft_angle_deg', 45.0)),
         loft_angle_rate_deg_s=float(d.get('loft_angle_rate_deg_s', 2.0)),
@@ -302,28 +371,53 @@ def missile_from_dict(d: dict) -> MissileParams:
 # ---------------------------------------------------------------------------
 
 def total_burn_time(params: MissileParams) -> float:
-    """Sum of burn times across all stages."""
+    """Total time from launch to end of last stage's burn (burn + coast phases)."""
     t, s = 0.0, params
     while s is not None:
         t += s.burn_time_s
+        if s.stage2 is not None:
+            t += s.coast_time_s   # inter-stage coast before next ignition
         s  = s.stage2
     return t
 
 
 def active_stage(params: MissileParams, t: float) -> MissileParams:
-    """Return the MissileParams for the stage that is active at time t.
+    """Return the MissileParams for the stage (or vehicle) active at time t.
 
-    During powered flight this is the burning stage; after all stages
-    have fired it is the last (uppermost) stage, whose geometry is used
-    for drag during the coast/re-entry phase.
+    During powered flight this is the burning stage.  During a coast phase
+    it is the next (upper) stage — stage N has been jettisoned and the
+    remaining vehicle has stage N+1's geometry.  After all stages have fired
+    it is the last stage (used for drag during the ballistic coast/re-entry).
     """
     t_rem, s = t, params
     while s.stage2 is not None:
         if t_rem < s.burn_time_s:
             return s
         t_rem -= s.burn_time_s
+        if t_rem < s.coast_time_s:
+            return s.stage2   # coasting: stage s jettisoned, next is the vehicle
+        t_rem -= s.coast_time_s
         s      = s.stage2
     return s   # last stage (or only stage)
+
+
+def active_stage_and_t(params: MissileParams, t: float):
+    """Return (active_stage, t_since_ignition) for time t.
+
+    t_since_ignition is the time elapsed since the returned stage ignited,
+    used to evaluate per-stage pitch-over guidance.  During a coast phase
+    the next stage is returned with t_since_ignition = 0.
+    """
+    t_rem, s = t, params
+    while s.stage2 is not None:
+        if t_rem < s.burn_time_s:
+            return s, t_rem
+        t_rem -= s.burn_time_s
+        if t_rem < s.coast_time_s:
+            return s.stage2, 0.0   # coasting; next stage not yet ignited
+        t_rem -= s.coast_time_s
+        s      = s.stage2
+    return s, t_rem   # last stage
 
 
 def missile_mass(params: MissileParams, t: float) -> float:
@@ -338,6 +432,9 @@ def missile_mass(params: MissileParams, t: float) -> float:
         t_rem -= s.burn_time_s
         if s.stage2 is None:
             return s.mass_final   # coasting after last stage burns out
+        if t_rem < s.coast_time_s:
+            return s.stage2.mass_initial   # stage s jettisoned, next stage is vehicle
+        t_rem -= s.coast_time_s
         s = s.stage2
     return params.mass_final  # shouldn't reach here
 
@@ -404,5 +501,10 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
             correction = 1.0 - 0.02 * (P_amb / 101325.0)
             return s.thrust_N * correction * thrust_dir
         t_rem -= s.burn_time_s
+        if s.stage2 is None:
+            return np.zeros(3)
+        if t_rem <= s.coast_time_s:
+            return np.zeros(3)   # coasting between stages
+        t_rem -= s.coast_time_s
         s      = s.stage2
     return np.zeros(3)  # all stages burned out
