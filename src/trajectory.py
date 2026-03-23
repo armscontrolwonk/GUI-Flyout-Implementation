@@ -297,6 +297,7 @@ def integrate_trajectory(params: MissileParams,
                          launch_lat_deg: float,
                          launch_lon_deg: float,
                          launch_azimuth_deg: float,
+                         guidance: str = None,
                          loft_angle_deg: float = None,
                          loft_angle_rate_deg_s: float = None,
                          cutoff_time_s: float = None,
@@ -336,10 +337,13 @@ def integrate_trajectory(params: MissileParams,
         'apogee_km' : maximum altitude (km)
     """
     import copy
-    # Apply stage-1 overrides non-destructively so the caller's object is
-    # unchanged and stages 2+ keep their own stored guidance values.
-    if loft_angle_deg is not None or loft_angle_rate_deg_s is not None:
+    # Apply session-level overrides non-destructively.  guidance, loft_angle_deg
+    # and loft_angle_rate_deg_s are flight parameters (like launch site) that
+    # the caller may override independently of the stored missile definition.
+    if guidance is not None or loft_angle_deg is not None or loft_angle_rate_deg_s is not None:
         params = copy.copy(params)
+        if guidance is not None:
+            params.guidance = guidance
         if loft_angle_deg is not None:
             params.loft_angle_deg = loft_angle_deg
         if loft_angle_rate_deg_s is not None:
@@ -515,6 +519,7 @@ def aim_missile(params: MissileParams,
                 launch_lon_deg: float,
                 launch_azimuth_deg: float,
                 target_range_km: float,
+                guidance: str = None,
                 loft_angle_deg: float = None,
                 loft_angle_rate_deg_s: float = None) -> float:
     """
@@ -531,6 +536,7 @@ def aim_missile(params: MissileParams,
     def range_error(cutoff):
         r = integrate_trajectory(params, launch_lat_deg, launch_lon_deg,
                                  launch_azimuth_deg,
+                                 guidance=guidance,
                                  loft_angle_deg=la,
                                  loft_angle_rate_deg_s=lar,
                                  cutoff_time_s=cutoff)
@@ -566,6 +572,7 @@ def maximize_range(params: MissileParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,
                    launch_azimuth_deg: float = 0.0,
+                   guidance: str = None,
                    loft_angle_deg: float = None,
                    loft_angle_rate_deg_s: float = None) -> dict:
     """
@@ -582,10 +589,11 @@ def maximize_range(params: MissileParams,
     """
     total_burn = total_burn_time(params)
 
-    # If both guidance params are supplied, just run and return
+    # If both loft params are supplied, just run and return (no grid search)
     if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+            guidance=guidance,
             loft_angle_deg=loft_angle_deg,
             loft_angle_rate_deg_s=loft_angle_rate_deg_s,
             cutoff_time_s=total_burn,
@@ -595,10 +603,13 @@ def maximize_range(params: MissileParams,
         traj['optimal_loft_rate_deg_s'] = loft_angle_rate_deg_s
         return traj
 
+    effective_guidance = guidance if guidance is not None else params.guidance
+
     def _run(la, lar):
         try:
             r = integrate_trajectory(
                 params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+                guidance=guidance,
                 loft_angle_deg=la, loft_angle_rate_deg_s=lar,
                 cutoff_time_s=total_burn)
             return r['range_km']
@@ -609,7 +620,7 @@ def maximize_range(params: MissileParams,
     best_la  = params.loft_angle_deg
     best_lar = params.loft_angle_rate_deg_s
 
-    if params.guidance == "gravity_turn":
+    if effective_guidance == "gravity_turn":
         # Sweep kick angle (near-vertical, 75°–89° above horizontal).
         # Kick rate has little effect once gravity turn is engaged; fix at 5°/s.
         kick_rate = 5.0
@@ -653,6 +664,7 @@ def maximize_range(params: MissileParams,
 
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+        guidance=guidance,
         loft_angle_deg=best_la,
         loft_angle_rate_deg_s=best_lar,
         cutoff_time_s=total_burn,
