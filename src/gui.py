@@ -30,6 +30,7 @@ from missile_models import (MISSILE_DB, get_missile,
                            total_burn_time)
 from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
+from slv_performance import schilling_performance
 
 # ---------------------------------------------------------------------------
 # Country border map data (Natural Earth 110m, bundled GeoJSON)
@@ -1171,13 +1172,16 @@ class MissileFlyoutApp(tk.Tk):
         plots_tab    = ttk.Frame(self._right_nb)
         timeline_tab = ttk.Frame(self._right_nb)
         params_tab   = ttk.Frame(self._right_nb)
+        slv_tab      = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
         self._right_nb.add(params_tab,   text="  Missile Parameters  ")
+        self._right_nb.add(slv_tab,      text="  SLV Performance  ")
 
         self._build_plot_panel(plots_tab)
         self._build_timeline_panel(timeline_tab)
         self._build_params_tab(params_tab)
+        self._build_slv_tab(slv_tab)
 
         # Status bar
         self._status_var = tk.StringVar(value="Ready.")
@@ -1305,6 +1309,167 @@ class MissileFlyoutApp(tk.Tk):
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
 
         # (Missile Parameters moved to right-panel notebook tab)
+
+    # ------------------------------------------------------------------
+    # SLV Performance tab  (Schilling / Townsend algebraic analysis)
+    # ------------------------------------------------------------------
+    def _build_slv_tab(self, parent):
+        # ── Target orbit input ────────────────────────────────────────
+        of = ttk.LabelFrame(parent, text="Target Orbit")
+        of.pack(fill=tk.X, padx=8, pady=(8, 4))
+
+        of_inner = ttk.Frame(of)
+        of_inner.pack(padx=8, pady=6)
+        ttk.Label(of_inner, text="Altitude:").pack(side=tk.LEFT)
+        self._slv_alt_var = tk.StringVar(value="500")
+        ttk.Entry(of_inner, textvariable=self._slv_alt_var,
+                  width=8).pack(side=tk.LEFT, padx=4)
+        ttk.Label(of_inner, text="km  (circular orbit)").pack(side=tk.LEFT)
+
+        ttk.Button(of, text="Analyze SLV Performance",
+                   command=self._run_slv_analysis).pack(pady=(0, 6))
+
+        # ── Results ───────────────────────────────────────────────────
+        rf = ttk.LabelFrame(parent, text="Results  (Schilling / Townsend method)")
+        rf.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
+
+        self._slv_text = tk.Text(
+            rf, state=tk.DISABLED, font=("Courier", 9),
+            wrap=tk.NONE, relief=tk.FLAT, background="#f8f8f8",
+            foreground="#222222", selectbackground="#c0d8f0")
+        vsb = ttk.Scrollbar(rf, orient=tk.VERTICAL,
+                            command=self._slv_text.yview)
+        self._slv_text.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._slv_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Tag for the headline verdict line
+        self._slv_text.tag_configure("yes", foreground="#006600",
+                                     font=("Courier", 9, "bold"))
+        self._slv_text.tag_configure("no",  foreground="#aa0000",
+                                     font=("Courier", 9, "bold"))
+        self._slv_text.tag_configure("hdr", font=("Courier", 9, "bold"))
+
+        self._slv_set_text(
+            "Select a missile, set the launch site and azimuth in the left\n"
+            "panel, enter a target altitude above, then click Analyze.\n\n"
+            "The launch azimuth determines the orbital inclination and the\n"
+            "Earth-rotation benefit (maximum for a due-east launch).\n\n"
+            "Accuracy: ~260 m/s RMS in total mission ΔV; typically < 10 %\n"
+            "error in payload capacity  (Schilling 2009).",
+            verdict=None)
+
+    def _slv_set_text(self, body: str, verdict=None):
+        """Replace the SLV results text widget contents."""
+        self._slv_text.configure(state=tk.NORMAL)
+        self._slv_text.delete("1.0", tk.END)
+        if verdict is not None:
+            tag = "yes" if verdict else "no"
+            mark = "✓  CAN reach orbit" if verdict else "✗  CANNOT reach orbit"
+            self._slv_text.insert(tk.END, mark + "\n", tag)
+            self._slv_text.insert(tk.END, "\n")
+        self._slv_text.insert(tk.END, body)
+        self._slv_text.configure(state=tk.DISABLED)
+
+    def _run_slv_analysis(self):
+        try:
+            alt_km = float(self._slv_alt_var.get())
+        except ValueError:
+            messagebox.showerror("Input error",
+                                 "Target altitude must be a number (km).",
+                                 parent=self)
+            return
+        if alt_km <= 0:
+            messagebox.showerror("Input error",
+                                 "Target altitude must be positive.", parent=self)
+            return
+
+        try:
+            lat = float(self._launch_lat.get())
+            az  = float(self._azimuth_var.get())
+        except ValueError:
+            messagebox.showerror("Input error",
+                                 "Check launch latitude and azimuth.", parent=self)
+            return
+
+        missile = get_missile(self._missile_var.get())
+
+        try:
+            r = schilling_performance(missile, alt_km, lat, az)
+        except Exception as exc:
+            messagebox.showerror("Analysis error", str(exc), parent=self)
+            return
+
+        # ── Format results ────────────────────────────────────────────
+        def fmt_dv(v):
+            return f"{v:+8.0f} m/s" if v is not None else "      N/A"
+
+        n_stages = 0
+        s = missile
+        while s:
+            n_stages += 1
+            s = s.stage2
+
+        # Per-stage ΔV breakdown
+        stage_lines = []
+        s = missile
+        i = 1
+        while s:
+            dv = r['dv_available_ms'] if n_stages == 1 else None
+            # Recompute per-stage for display
+            from slv_performance import stage_delta_v as _sdv
+            dv_s = _sdv(s)
+            stage_lines.append(
+                f"    Stage {i} ({s.isp_s:.0f} s Isp): {dv_s:8.0f} m/s")
+            s = s.stage2
+            i += 1
+
+        margin_sign = "+" if r['dv_margin_ms'] >= 0 else ""
+
+        payload_line = ""
+        if missile.payload_kg > 0:
+            sign = "+" if (r['payload_margin_kg'] or 0) >= 0 else ""
+            payload_line = (
+                f"  Claimed payload:           {missile.payload_kg:8.0f} kg\n"
+                f"  Payload margin:          {sign}{r['payload_margin_kg']:7.0f} kg\n"
+            )
+
+        body = (
+            f"Vehicle:  {missile.name}  ({n_stages}-stage)\n"
+            f"Target:   {alt_km:.0f} km circular orbit\n"
+            f"Launch:   {lat:.2f}° lat,  azimuth {az:.1f}°\n"
+            "\n"
+            "─── Delta-V Budget ─────────────────────────────────────────\n"
+            f"  Available ΔV (rocket eq.):\n"
+            + "\n".join(stage_lines) + "\n"
+            f"  Total available:           {r['dv_available_ms']:8.0f} m/s\n"
+            "\n"
+            f"  Required to reach orbit:\n"
+            f"    Circular orbit speed:    {r['v_circular_ms']:8.0f} m/s\n"
+            f"    Loss penalty (eq. 5):    {r['dv_penalty_ms']:8.0f} m/s\n"
+            f"    Earth rotation benefit: {-r['v_rotation_ms']:8.0f} m/s\n"
+            f"  Total required:            {r['dv_required_ms']:8.0f} m/s\n"
+            "\n"
+            f"  Margin:                  {margin_sign}{r['dv_margin_ms']:7.0f} m/s\n"
+            "\n"
+            "─── Payload Capacity ───────────────────────────────────────\n"
+            f"  Maximum payload:           {r['max_payload_kg']:8.0f} kg\n"
+            + payload_line +
+            "\n"
+            "─── Schilling Timing Parameters ────────────────────────────\n"
+            f"  Actual burn time  (Tₐ):   {r['t_actual_s']:8.1f} s\n"
+            f"  3-stage equiv.    (T₃ₛ):  {r['t_3stage_s']:8.1f} s\n"
+            f"  Blended time    (T_mix):  {r['t_mix_s']:8.1f} s\n"
+            f"  Initial accel.    (A₀):   {r['a0_ms2']:8.2f} m/s²"
+            f"  ({r['a0_ms2'] / 9.80665:.2f} g)\n"
+            "\n"
+            "Method accuracy: ±260 m/s RMS in mission ΔV; < 10 % in payload.\n"
+            "Ref: Schilling (2009), Townsend / Martin-Marietta (1962)."
+        )
+
+        self._slv_set_text(body, verdict=r['can_reach_orbit'])
+        # Switch to this tab so the user sees the result
+        self._right_nb.select(3)
 
     # ------------------------------------------------------------------
     # Plot panel  (4-subplot figure in a single tab + navigation toolbar)
