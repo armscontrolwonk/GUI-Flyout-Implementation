@@ -166,7 +166,16 @@ class _StageFrame(ttk.LabelFrame):
         self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
         self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
         self._isp         = _entry_row(self, "Isp (s):",             5, d["isp"],         "s")
-        self._nozzle_area = _entry_row(self, "Nozzle exit area (m²):", 6, d["nozzle_area"], "m²  (0 = legacy 2% approx)")
+        # Nozzle exit area — entry + Suggest button (row 6)
+        ttk.Label(self, text="Nozzle exit area (m²):").grid(
+            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._nozzle_area = tk.StringVar(value=d["nozzle_area"])
+        _noz_inner = ttk.Frame(self)
+        _noz_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
+        ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Button(_noz_inner, text="Suggest…",
+                   command=self._suggest_nozzle_area).pack(side=tk.LEFT)
 
         # Burn time — read-only computed field (row 7)
         ttk.Label(self, text="Burn time (s):").grid(
@@ -218,6 +227,83 @@ class _StageFrame(ttk.LabelFrame):
                 yield child
             else:
                 yield from _StageFrame._iter_entries(child)
+
+    def _suggest_nozzle_area(self):
+        """Open a small dialog to estimate Ae from Wright's formula:
+           Ae = (Isp_vac − Isp_SL) · g₀ · Mp / (tb · p₀)
+        """
+        try:
+            isp_vac = float(self._isp.get())
+            prop    = float(self._fueled.get()) - float(self._dry.get())
+            burn    = float(self._burn_var.get())
+            if prop <= 0 or burn <= 0 or isp_vac <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            tk.messagebox.showerror(
+                "Cannot suggest",
+                "Please enter valid fueled weight, dry weight, and Isp first.",
+                parent=self)
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Suggest Nozzle Exit Area")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text="Sea-level Isp (s):").grid(
+            row=0, column=0, sticky=tk.W, padx=(10, 4), pady=(10, 2))
+        isp_sl_var = tk.StringVar()
+        ttk.Entry(dlg, textvariable=isp_sl_var, width=10).grid(
+            row=0, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 2))
+
+        hint = ("Typical Isp_vac − Isp_SL by propellant:\n"
+                "  Solid (HTPB/AP):   10–15 s\n"
+                "  UDMH / N₂O₄:      15–20 s\n"
+                "  Kerosene / LOX:    15–25 s\n"
+                "  IRFNA-based:       12–18 s")
+        ttk.Label(dlg, text=hint, justify=tk.LEFT,
+                  foreground="grey").grid(
+            row=1, column=0, columnspan=2, sticky=tk.W,
+            padx=10, pady=(0, 8))
+
+        result_var = tk.StringVar(value="")
+        ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
+            row=2, column=0, columnspan=2, padx=10, pady=(0, 4))
+
+        def _compute(*_):
+            try:
+                isp_sl = float(isp_sl_var.get())
+                if isp_sl <= 0 or isp_sl >= isp_vac:
+                    raise ValueError
+                ae = ((isp_vac - isp_sl) * self._G0 * prop
+                      / (burn * 101325.0))
+                result_var.set(f"Ae ≈ {ae:.4f} m²")
+                return ae
+            except (ValueError, TypeError):
+                result_var.set("Enter a valid Isp_SL less than Isp_vac.")
+                return None
+
+        isp_sl_var.trace_add("write", lambda *_: _compute())
+
+        btn_row = ttk.Frame(dlg)
+        btn_row.grid(row=3, column=0, columnspan=2, pady=(4, 10))
+
+        def _accept():
+            ae = _compute()
+            if ae is not None:
+                self._nozzle_area.set(f"{ae:.4f}")
+                dlg.destroy()
+
+        ttk.Button(btn_row, text="Accept", command=_accept).pack(
+            side=tk.LEFT, padx=6)
+        ttk.Button(btn_row, text="Cancel",
+                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+
+        # Centre over parent
+        dlg.update_idletasks()
+        px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
+        py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
+        dlg.geometry(f"+{px}+{py}")
 
     def set_readonly(self, readonly: bool):
         """Set all editable entry fields to readonly (for Forden reference missiles)."""
