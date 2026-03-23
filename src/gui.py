@@ -153,37 +153,38 @@ class _StageFrame(ttk.LabelFrame):
     # T = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
                      length="12.0", thrust_kn="112.9", isp="230",
-                     coast="0")
+                     nozzle_area="0", coast="0")
 
     _G0 = 9.80665  # m/s²
 
     def __init__(self, parent, label, defaults=None):
         super().__init__(parent, text=label)
         d = {**self._DEFAULTS, **(defaults or {})}
-        self._fueled    = _entry_row(self, "Fueled wt (kg):", 0, d["fueled"],    "kg")
-        self._dry       = _entry_row(self, "Dry wt (kg):",    1, d["dry"],       "kg")
-        self._dia       = _entry_row(self, "Diameter (m):",   2, d["dia"],       "m")
-        self._length    = _entry_row(self, "Length (m):",     3, d["length"],    "m")
-        self._thrust_kn = _entry_row(self, "Thrust (kN):",    4, d["thrust_kn"], "kN")
-        self._isp       = _entry_row(self, "Isp (s):",        5, d["isp"],       "s")
+        self._fueled      = _entry_row(self, "Fueled wt (kg):",      0, d["fueled"],      "kg")
+        self._dry         = _entry_row(self, "Dry wt (kg):",         1, d["dry"],         "kg")
+        self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
+        self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
+        self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
+        self._isp         = _entry_row(self, "Isp (s):",             5, d["isp"],         "s")
+        self._nozzle_area = _entry_row(self, "Nozzle exit area (m²):", 6, d["nozzle_area"], "m²  (0 = legacy 2% approx)")
 
-        # Burn time — read-only computed field (row 6)
+        # Burn time — read-only computed field (row 7)
         ttk.Label(self, text="Burn time (s):").grid(
-            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._burn_var = tk.StringVar()
         _burn_inner = ttk.Frame(self)
-        _burn_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _burn_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._burn_entry = ttk.Entry(_burn_inner, textvariable=self._burn_var,
                                      width=10, state="readonly")
         self._burn_entry.pack(side=tk.LEFT)
         ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Coast-time row (row 7) — shown only for non-last stages
+        # Coast-time row (row 8) — shown only for non-last stages
         self._coast_var = tk.StringVar(value=d["coast"])
         self._coast_lbl = ttk.Label(self, text="Coast after (s):")
-        self._coast_lbl.grid(row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._coast_lbl.grid(row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         coast_inner = ttk.Frame(self)
-        coast_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        coast_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
         ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
             side=tk.LEFT, padx=(2, 0))
@@ -239,10 +240,10 @@ class _StageFrame(ttk.LabelFrame):
         if burn_str == "—":
             raise ValueError("Burn time could not be computed — check thrust, Isp, and weights.")
         return {k: float(v.get()) for k, v in [
-            ("fueled",    self._fueled),    ("dry",    self._dry),
-            ("dia",       self._dia),       ("length", self._length),
-            ("thrust_kn", self._thrust_kn), ("isp",    self._isp),
-            ("coast",     self._coast_var),
+            ("fueled",      self._fueled),      ("dry",         self._dry),
+            ("dia",         self._dia),         ("length",      self._length),
+            ("thrust_kn",   self._thrust_kn),   ("isp",         self._isp),
+            ("nozzle_area", self._nozzle_area), ("coast",       self._coast_var),
         ]} | {"burn": float(burn_str)}
 
     def populate(self, d):
@@ -253,14 +254,15 @@ class _StageFrame(ttk.LabelFrame):
         thrust_kn = (d["isp"] * self._G0 * prop / burn / 1000.0
                      if burn > 0 and prop > 0 else 0.0)
 
-        self._fueled    .set(str(d["fueled"]))
-        self._dry       .set(str(d["dry"]))
-        self._dia       .set(str(d["dia"]))
-        self._length    .set(str(d["length"]))
-        self._thrust_kn .set(f"{thrust_kn:.1f}")
-        self._isp       .set(str(d["isp"]))
+        self._fueled      .set(str(d["fueled"]))
+        self._dry         .set(str(d["dry"]))
+        self._dia         .set(str(d["dia"]))
+        self._length      .set(str(d["length"]))
+        self._thrust_kn   .set(f"{thrust_kn:.1f}")
+        self._isp         .set(str(d["isp"]))
+        self._nozzle_area .set(str(d.get("nozzle_area", 0)))
         # _burn_var is updated automatically by the trace
-        self._coast_var .set(str(d.get("coast", 0)))
+        self._coast_var   .set(str(d.get("coast", 0)))
 
 
 # ---------------------------------------------------------------------------
@@ -529,10 +531,10 @@ class MissileDialog(tk.Toplevel):
                 fueled = node.mass_initial - nxt.mass_initial
                 dry    = node.mass_final
             stage_data.append({
-                "fueled": fueled, "dry": dry,
-                "dia":    node.diameter_m, "length": node.length_m,
-                "burn":   node.burn_time_s, "isp":   node.isp_s,
-                "coast":  node.coast_time_s,
+                "fueled":      fueled,                   "dry":         dry,
+                "dia":         node.diameter_m,          "length":      node.length_m,
+                "burn":        node.burn_time_s,         "isp":         node.isp_s,
+                "nozzle_area": node.nozzle_exit_area_m2, "coast":       node.coast_time_s,
             })
             node = nxt
 
@@ -630,6 +632,7 @@ class MissileDialog(tk.Toplevel):
                 thrust_N=round(sd["thrust_kn"] * 1000.0),
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
                 coast_time_s=sd["coast"] if not is_last else 0.0,
+                nozzle_exit_area_m2=sd["nozzle_area"],
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
             )
@@ -1484,6 +1487,8 @@ class MissileFlyoutApp(tk.Tk):
             _row(lf, r, "Diameter (m):",   f"{node.diameter_m:.2f}"); r += 1
             _row(lf, r, "Thrust (kN):",    f"{node.thrust_N/1000:,.0f}"); r += 1
             _row(lf, r, "Isp (s):",        f"{node.isp_s:.0f}"); r += 1
+            if node.nozzle_exit_area_m2 > 0:
+                _row(lf, r, "Nozzle exit area:", f"{node.nozzle_exit_area_m2:.4f} m²"); r += 1
             _row(lf, r, "Burn time (s):",  f"{node.burn_time_s:.1f}  (computed)"); r += 1
             _row(lf, r, "T/W ratio:",      f"{tw:.2f}"); r += 1
             if not is_last and node.coast_time_s > 0:

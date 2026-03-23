@@ -40,6 +40,11 @@ class MissileParams:
     burn_time_s: float        # powered flight duration (s)
     isp_s: float              # specific impulse (s)
 
+    # Nozzle exit area (m²).  When > 0, thrust at altitude is computed as
+    # T(h) = T_vac − P_amb(h) × Ae  (proper pressure-thrust correction).
+    # When 0, a legacy 2 % sea-level back-pressure approximation is used.
+    nozzle_exit_area_m2: float = 0.0
+
     # Guidance mode
     #   "loft"         — Forden pitch-over (SRBM/MRBM): pitch to loft_angle_deg
     #                    at loft_angle_rate_deg_s then hold.  Floor preserved.
@@ -447,6 +452,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'rv_mass_kg':            p.rv_mass_kg,
         'shroud_mass_kg':        p.shroud_mass_kg,
         'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
+        'nozzle_exit_area_m2':   p.nozzle_exit_area_m2,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -484,6 +490,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         rv_mass_kg=float(d.get('rv_mass_kg', 0.0)),
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
+        nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
     )
 
 
@@ -628,10 +635,14 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
     t_rem, s = t, params
     while s is not None:
         if t_rem <= s.burn_time_s:
-            # Vacuum thrust corrected for ambient back-pressure (~2% at sea level)
             _, P_amb, _, _ = atmosphere(altitude_m)
-            correction = 1.0 - 0.02 * (P_amb / 101325.0)
-            return s.thrust_N * correction * thrust_dir
+            if s.nozzle_exit_area_m2 > 0:
+                # Physics-based correction: T(h) = T_vac − P_amb × Ae
+                thrust_mag = max(0.0, s.thrust_N - P_amb * s.nozzle_exit_area_m2)
+            else:
+                # Legacy approximation: ~2 % back-pressure penalty at sea level
+                thrust_mag = s.thrust_N * (1.0 - 0.02 * (P_amb / 101325.0))
+            return thrust_mag * thrust_dir
         t_rem -= s.burn_time_s
         if s.stage2 is None:
             return np.zeros(3)
