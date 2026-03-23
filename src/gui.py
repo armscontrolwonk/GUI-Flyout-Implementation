@@ -157,8 +157,9 @@ class _StageFrame(ttk.LabelFrame):
 
     _G0 = 9.80665  # m/s²
 
-    def __init__(self, parent, label, defaults=None):
+    def __init__(self, parent, label, stage_num=1, defaults=None):
         super().__init__(parent, text=label)
+        self._stage_num = stage_num
         d = {**self._DEFAULTS, **(defaults or {})}
         self._fueled      = _entry_row(self, "Fueled wt (kg):",      0, d["fueled"],      "kg")
         self._dry         = _entry_row(self, "Dry wt (kg):",         1, d["dry"],         "kg")
@@ -174,8 +175,9 @@ class _StageFrame(ttk.LabelFrame):
         _noz_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
         ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
-        ttk.Button(_noz_inner, text="Suggest…",
-                   command=self._suggest_nozzle_area).pack(side=tk.LEFT)
+        if self._stage_num == 1:
+            ttk.Button(_noz_inner, text="Suggest…",
+                       command=self._suggest_nozzle_area).pack(side=tk.LEFT)
 
         # Burn time — read-only computed field (row 7)
         ttk.Label(self, text="Burn time (s):").grid(
@@ -534,7 +536,8 @@ class MissileDialog(tk.Toplevel):
         # between the payload row and the buttons (not after the buttons).
         self._stages_container = ttk.Frame(body)
         self._stages_container.pack(fill=tk.X)
-        self._stage_frames = [_StageFrame(self._stages_container, f"Stage {i+1}")
+        self._stage_frames = [_StageFrame(self._stages_container, f"Stage {i+1}",
+                                           stage_num=i+1)
                                for i in range(4)]
         self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
