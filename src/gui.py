@@ -1845,7 +1845,9 @@ class MissileFlyoutApp(tk.Tk):
     # Run buttons
     # ------------------------------------------------------------------
     def _get_inputs(self):
-        missile = get_missile(self._missile_var.get())
+        import copy
+        missile = copy.copy(get_missile(self._missile_var.get()))
+        missile.guidance = self._guidance_var.get()
         lat     = float(self._launch_lat.get())
         lon     = float(self._launch_lon.get())
         az      = float(self._azimuth_var.get())
