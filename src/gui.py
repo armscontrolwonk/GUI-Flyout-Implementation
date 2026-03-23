@@ -1318,13 +1318,24 @@ class MissileFlyoutApp(tk.Tk):
         of = ttk.LabelFrame(parent, text="Target Orbit")
         of.pack(fill=tk.X, padx=8, pady=(8, 4))
 
-        of_inner = ttk.Frame(of)
-        of_inner.pack(padx=8, pady=6)
-        ttk.Label(of_inner, text="Altitude:").pack(side=tk.LEFT)
+        of_grid = ttk.Frame(of)
+        of_grid.pack(padx=8, pady=6, anchor=tk.W)
+
+        ttk.Label(of_grid, text="Perigee:").grid(
+            row=0, column=0, sticky=tk.E, padx=(0, 4))
         self._slv_alt_var = tk.StringVar(value="500")
-        ttk.Entry(of_inner, textvariable=self._slv_alt_var,
-                  width=8).pack(side=tk.LEFT, padx=4)
-        ttk.Label(of_inner, text="km  (circular orbit)").pack(side=tk.LEFT)
+        ttk.Entry(of_grid, textvariable=self._slv_alt_var,
+                  width=8).grid(row=0, column=1)
+        ttk.Label(of_grid, text="km").grid(
+            row=0, column=2, sticky=tk.W, padx=(4, 0))
+
+        ttk.Label(of_grid, text="Apogee:").grid(
+            row=1, column=0, sticky=tk.E, padx=(0, 4), pady=(4, 0))
+        self._slv_apo_var = tk.StringVar(value="")
+        ttk.Entry(of_grid, textvariable=self._slv_apo_var,
+                  width=8).grid(row=1, column=1, pady=(4, 0))
+        ttk.Label(of_grid, text="km  (blank = circular)").grid(
+            row=1, column=2, sticky=tk.W, padx=(4, 0), pady=(4, 0))
 
         ttk.Button(of, text="Analyze SLV Performance",
                    command=self._run_slv_analysis).pack(pady=(0, 6))
@@ -1352,7 +1363,11 @@ class MissileFlyoutApp(tk.Tk):
 
         self._slv_set_text(
             "Select a missile, set the launch site and azimuth in the left\n"
-            "panel, enter a target altitude above, then click Analyze.\n\n"
+            "panel, enter a target orbit above, then click Analyze.\n\n"
+            "For a circular orbit enter only the perigee altitude (apogee\n"
+            "blank or equal to perigee).  For a Hohmann transfer or GTO set\n"
+            "apogee higher than perigee; the rocket burns to the perigee\n"
+            "injection speed and coasts to apogee.\n\n"
             "The launch azimuth determines the orbital inclination and the\n"
             "Earth-rotation benefit (maximum for a due-east launch).\n\n"
             "Accuracy: ~260 m/s RMS in total mission ΔV; typically < 10 %\n"
@@ -1372,17 +1387,34 @@ class MissileFlyoutApp(tk.Tk):
         self._slv_text.configure(state=tk.DISABLED)
 
     def _run_slv_analysis(self):
+        # ── Parse inputs ──────────────────────────────────────────────
         try:
-            alt_km = float(self._slv_alt_var.get())
+            perigee_km = float(self._slv_alt_var.get())
         except ValueError:
             messagebox.showerror("Input error",
-                                 "Target altitude must be a number (km).",
+                                 "Perigee altitude must be a number (km).",
                                  parent=self)
             return
-        if alt_km <= 0:
+        if perigee_km <= 0:
             messagebox.showerror("Input error",
-                                 "Target altitude must be positive.", parent=self)
+                                 "Perigee altitude must be positive.", parent=self)
             return
+
+        apo_str = self._slv_apo_var.get().strip()
+        if apo_str == "" or apo_str == str(perigee_km):
+            apogee_km = None           # circular
+        else:
+            try:
+                apogee_km = float(apo_str)
+            except ValueError:
+                messagebox.showerror("Input error",
+                                     "Apogee altitude must be a number or blank.",
+                                     parent=self)
+                return
+            if apogee_km < perigee_km:
+                messagebox.showerror("Input error",
+                                     "Apogee must be ≥ perigee.", parent=self)
+                return
 
         try:
             lat = float(self._launch_lat.get())
@@ -1395,14 +1427,14 @@ class MissileFlyoutApp(tk.Tk):
         missile = get_missile(self._missile_var.get())
 
         try:
-            r = schilling_performance(missile, alt_km, lat, az)
+            r = schilling_performance(missile, perigee_km, lat, az,
+                                      target_apogee_km=apogee_km)
         except Exception as exc:
             messagebox.showerror("Analysis error", str(exc), parent=self)
             return
 
         # ── Format results ────────────────────────────────────────────
-        def fmt_dv(v):
-            return f"{v:+8.0f} m/s" if v is not None else "      N/A"
+        from slv_performance import stage_delta_v as _sdv
 
         n_stages = 0
         s = missile
@@ -1410,42 +1442,47 @@ class MissileFlyoutApp(tk.Tk):
             n_stages += 1
             s = s.stage2
 
-        # Per-stage ΔV breakdown
         stage_lines = []
-        s = missile
-        i = 1
+        s, i = missile, 1
         while s:
-            dv = r['dv_available_ms'] if n_stages == 1 else None
-            # Recompute per-stage for display
-            from slv_performance import stage_delta_v as _sdv
-            dv_s = _sdv(s)
             stage_lines.append(
-                f"    Stage {i} ({s.isp_s:.0f} s Isp): {dv_s:8.0f} m/s")
+                f"    Stage {i} ({s.isp_s:.0f} s Isp): {_sdv(s):8.0f} m/s")
             s = s.stage2
             i += 1
+
+        is_circular = (apogee_km is None or
+                       apogee_km == perigee_km)
+        if is_circular:
+            orbit_desc = f"{perigee_km:.0f} km circular"
+            inj_label  = "Circular orbit speed:"
+        else:
+            orbit_desc = (f"{perigee_km:.0f} × {r['orbit_apogee_km']:.0f} km  "
+                          f"(e = {r['orbit_eccentricity']:.4f})")
+            inj_label  = "Injection speed (perigee):"
 
         margin_sign = "+" if r['dv_margin_ms'] >= 0 else ""
 
         payload_line = ""
         if missile.payload_kg > 0:
-            sign = "+" if (r['payload_margin_kg'] or 0) >= 0 else ""
+            pm   = r['payload_margin_kg'] or 0.0
+            sign = "+" if pm >= 0 else ""
             payload_line = (
                 f"  Claimed payload:           {missile.payload_kg:8.0f} kg\n"
-                f"  Payload margin:          {sign}{r['payload_margin_kg']:7.0f} kg\n"
+                f"  Payload margin:          {sign}{pm:7.0f} kg\n"
             )
 
         body = (
             f"Vehicle:  {missile.name}  ({n_stages}-stage)\n"
-            f"Target:   {alt_km:.0f} km circular orbit\n"
+            f"Target:   {orbit_desc}\n"
             f"Launch:   {lat:.2f}° lat,  azimuth {az:.1f}°\n"
             "\n"
             "─── Delta-V Budget ─────────────────────────────────────────\n"
-            f"  Available ΔV (rocket eq.):\n"
+            "  Available ΔV (rocket eq.):\n"
             + "\n".join(stage_lines) + "\n"
             f"  Total available:           {r['dv_available_ms']:8.0f} m/s\n"
             "\n"
-            f"  Required to reach orbit:\n"
-            f"    Circular orbit speed:    {r['v_circular_ms']:8.0f} m/s\n"
+            "  Required to reach orbit:\n"
+            f"    {inj_label:<28} {r['v_injection_ms']:8.0f} m/s\n"
             f"    Loss penalty (eq. 5):    {r['dv_penalty_ms']:8.0f} m/s\n"
             f"    Earth rotation benefit: {-r['v_rotation_ms']:8.0f} m/s\n"
             f"  Total required:            {r['dv_required_ms']:8.0f} m/s\n"
@@ -1468,7 +1505,6 @@ class MissileFlyoutApp(tk.Tk):
         )
 
         self._slv_set_text(body, verdict=r['can_reach_orbit'])
-        # Switch to this tab so the user sees the result
         self._right_nb.select(3)
 
     # ------------------------------------------------------------------

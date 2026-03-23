@@ -5,8 +5,14 @@ Reference: John Schilling, "Launch Vehicle Performance Estimation", 3 December 2
            https://silverbirdastronautics.com/LVperform.html
 
 The method answers whether a launch vehicle can deliver a stated payload to a
-specified circular parking orbit, using an algebraic delta-V budget with an
-empirical gravity/drag/steering-loss correction derived from ascent time.
+specified orbit — circular or elliptical — using an algebraic delta-V budget
+with an empirical gravity/drag/steering-loss correction derived from ascent time.
+
+For a circular orbit the injection speed equals the circular orbital speed.
+For an elliptical transfer orbit the injection speed is the vis-viva perigee
+speed; the rocket burns to that speed at perigee altitude Hp, and the apogee
+altitude Ha determines the orbit's shape.  The penalty formula always uses the
+perigee altitude because that is where the burn terminates.
 
 Accuracy: ~260 m/s RMS error in total mission delta-V; typically <10 % error
 in payload capacity.  No trajectory integration is required — the calculation
@@ -14,11 +20,13 @@ is purely algebraic and completes in milliseconds.
 
 Schilling equations used
 ------------------------
-(3)  ΔV_req  = V_circ + ΔV_pen − V_rot
+(3)  ΔV_req  = V_inj + ΔV_pen − V_rot
+         V_inj = sqrt(μ (2/r_p − 1/a))     [vis-viva at perigee]
+         a     = (r_p + r_a) / 2
 (4)  T_3s    = 3 [1 − exp(−0.333 ΔV_avail / g Isp)] g Isp / A₀
 (5)  ΔV_pen  = K₃ + K₄ T_mix
          K₃ = 429.9 + 1.602 Hₚ + 1.224×10⁻³ Hₚ²
-         K₄ = 2.328 − 9.687×10⁻⁴ Hₚ      (Hₚ = parking orbit altitude, km)
+         K₄ = 2.328 − 9.687×10⁻⁴ Hₚ      (Hₚ = perigee altitude, km)
 (6)  T_mix   = 0.405 T_actual + 0.595 T_3s
 """
 
@@ -64,9 +72,25 @@ def total_delta_v(params: MissileParams) -> float:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _circular_speed(alt_km: float) -> float:
-    """Circular orbital speed (m/s) at altitude alt_km."""
-    return np.sqrt(_MU / (_R_EARTH + alt_km * 1_000.0))
+def _injection_speed(perigee_km: float, apogee_km: float) -> float:
+    """
+    Perigee injection speed (m/s) for an orbit with the given perigee and
+    apogee altitudes, from the vis-viva equation.
+
+    For a circular orbit set apogee_km == perigee_km; the result is the
+    usual circular orbital speed sqrt(μ/r).
+    """
+    r_p = _R_EARTH + perigee_km * 1_000.0
+    r_a = _R_EARTH + apogee_km  * 1_000.0
+    a   = 0.5 * (r_p + r_a)            # semi-major axis
+    return np.sqrt(_MU * (2.0 / r_p - 1.0 / a))
+
+
+def _orbit_eccentricity(perigee_km: float, apogee_km: float) -> float:
+    """Eccentricity of an orbit with the given perigee and apogee altitudes."""
+    r_p = _R_EARTH + perigee_km * 1_000.0
+    r_a = _R_EARTH + apogee_km  * 1_000.0
+    return (r_a - r_p) / (r_a + r_p)
 
 
 def _earth_rotation_benefit(launch_lat_deg: float, launch_az_deg: float) -> float:
@@ -81,9 +105,14 @@ def _earth_rotation_benefit(launch_lat_deg: float, launch_az_deg: float) -> floa
     return v_east * np.sin(az_rad)
 
 
-def _penalty_dv(alt_km: float, t_mix: float) -> float:
-    """Schilling eq. 5 — gravity + drag + steering loss estimate (m/s)."""
-    Hp = alt_km
+def _penalty_dv(perigee_km: float, t_mix: float) -> float:
+    """
+    Schilling eq. 5 — gravity + drag + steering loss estimate (m/s).
+
+    Always evaluated at the perigee altitude because that is where the
+    rocket's ascent terminates regardless of the target orbit shape.
+    """
+    Hp = perigee_km
     K3 = 429.9 + 1.602 * Hp + 1.224e-3 * Hp ** 2
     K4 = 2.328 - 9.687e-4 * Hp
     return K3 + K4 * t_mix
@@ -140,21 +169,27 @@ def _compute_t_mix(params: MissileParams, dv_avail: float,
 # ---------------------------------------------------------------------------
 
 def schilling_performance(params: MissileParams,
-                           target_alt_km: float,
+                           target_perigee_km: float,
                            launch_lat_deg: float = 0.0,
-                           launch_az_deg: float = 90.0) -> dict:
+                           launch_az_deg: float = 90.0,
+                           target_apogee_km: float | None = None) -> dict:
     """
-    Estimate whether an SLV can deliver its payload to a circular parking
-    orbit using the Schilling/Townsend algebraic method.
+    Estimate whether an SLV can deliver its payload to a specified orbit
+    using the Schilling/Townsend algebraic method.
 
     Parameters
     ----------
-    params         : MissileParams  — full SLV stage stack; params.payload_kg
-                     is treated as the *claimed* payload for margin reporting.
-    target_alt_km  : target circular orbit altitude (km)
-    launch_lat_deg : launch-site geodetic latitude (degrees)
-    launch_az_deg  : launch azimuth clockwise from North (degrees);
-                     90° = due east (maximum rotation benefit)
+    params             : MissileParams — full SLV stage stack;
+                         params.payload_kg is the claimed payload for margin
+                         reporting.
+    target_perigee_km  : perigee altitude of the target orbit (km).
+                         For a circular orbit this is the orbit altitude.
+    launch_lat_deg     : launch-site geodetic latitude (degrees)
+    launch_az_deg      : launch azimuth clockwise from North (degrees);
+                         90° = due east (maximum rotation benefit)
+    target_apogee_km   : apogee altitude (km); None or equal to
+                         target_perigee_km means a circular orbit.
+                         Must be ≥ target_perigee_km.
 
     Returns
     -------
@@ -163,52 +198,66 @@ def schilling_performance(params: MissileParams,
         dv_required_ms    : required ΔV to reach orbit (m/s)
         dv_margin_ms      : surplus (+) or deficit (−) ΔV (m/s)
         can_reach_orbit   : bool
-        v_circular_ms     : circular orbit speed at target altitude (m/s)
+        v_injection_ms    : perigee injection speed for the target orbit (m/s)
         dv_penalty_ms     : estimated gravity + drag + steering loss (m/s)
         v_rotation_ms     : Earth-rotation velocity benefit (m/s)
+        orbit_perigee_km  : perigee altitude used (km)
+        orbit_apogee_km   : apogee altitude used (km; equals perigee for circular)
+        orbit_eccentricity: orbital eccentricity (0 for circular)
         t_actual_s        : total vehicle burn time (s)
         t_3stage_s        : Schilling equivalent 3-stage ascent time (s)
         t_mix_s           : blended ascent time used in penalty formula (s)
         a0_ms2            : initial thrust/weight acceleration (m/s²)
         max_payload_kg    : maximum payload deliverable to this orbit (kg)
-        payload_margin_kg : max_payload − claimed payload (kg); None if no
-                            claimed payload is set
+        payload_margin_kg : max_payload − claimed payload (kg);
+                            None if params.payload_kg == 0
     """
+    # Resolve and validate orbit shape
+    apogee_km = target_apogee_km if target_apogee_km is not None else target_perigee_km
+    if apogee_km < target_perigee_km:
+        raise ValueError(
+            f"Apogee ({apogee_km} km) must be ≥ perigee ({target_perigee_km} km).")
+    perigee_km  = target_perigee_km
+    eccentricity = _orbit_eccentricity(perigee_km, apogee_km)
+
     t_actual = total_burn_time(params)
     a0       = params.thrust_N / params.mass_initial   # m/s²
-    v_circ   = _circular_speed(target_alt_km)
+    v_inj    = _injection_speed(perigee_km, apogee_km)
     v_rot    = _earth_rotation_benefit(launch_lat_deg, launch_az_deg)
 
-    # Nominal delta-V budget — iterate T_mix / ΔV_pen to convergence
+    # Nominal delta-V budget — iterate T_mix / ΔV_pen to convergence.
+    # T_mix depends on dv_avail (unchanged by orbit shape); ΔV_pen depends
+    # on perigee altitude and T_mix.  Four iterations are always sufficient.
     dv_avail = total_delta_v(params)
     t3s, t_mix = _compute_t_mix(params, dv_avail, t_actual, a0)
     for _ in range(4):
-        dv_pen = _penalty_dv(target_alt_km, t_mix)
-        dv_req = v_circ + dv_pen - v_rot
+        dv_pen = _penalty_dv(perigee_km, t_mix)
+        dv_req = v_inj + dv_pen - v_rot
         t3s, t_mix = _compute_t_mix(params, dv_avail, t_actual, a0)
 
-    dv_pen    = _penalty_dv(target_alt_km, t_mix)
-    dv_req    = v_circ + dv_pen - v_rot
+    dv_pen    = _penalty_dv(perigee_km, t_mix)
+    dv_req    = v_inj + dv_pen - v_rot
     dv_margin = dv_avail - dv_req
 
     # Maximum payload — binary search on extra_kg until ΔV_avail == ΔV_req.
+    # v_inj is a function of the target orbit only and is constant throughout.
     # extra_kg is measured from params.payload_kg.
     extra_lo = -params.payload_kg   # zero payload lower bound
     extra_hi =  200_000.0           # 200 t — always infeasible upper bound
 
     # Check whether zero payload can reach orbit at all
-    dv_zero   = _dv_for_extra_payload(params, extra_lo)
-    t3s_z, t_mix_z = _compute_t_mix(params, dv_zero, t_actual, a0)
-    dv_req_z  = v_circ + _penalty_dv(target_alt_km, t_mix_z) - v_rot
+    dv_zero          = _dv_for_extra_payload(params, extra_lo)
+    _, t_mix_z       = _compute_t_mix(params, dv_zero, t_actual, a0)
+    dv_req_z         = v_inj + _penalty_dv(perigee_km, t_mix_z) - v_rot
 
     if dv_zero < dv_req_z:
         max_payload_kg = 0.0
     else:
-        for _ in range(50):   # 2^-50 ≈ 1e-15 relative error — converges in ~40
-            extra_mid = 0.5 * (extra_lo + extra_hi)
-            dv_mid    = _dv_for_extra_payload(params, extra_mid)
-            t3s_m, t_mix_m = _compute_t_mix(params, dv_mid, t_actual, a0)
-            dv_req_m  = v_circ + _penalty_dv(target_alt_km, t_mix_m) - v_rot
+        for _ in range(50):   # 2^-50 ≈ 1e-15 relative error
+            extra_mid        = 0.5 * (extra_lo + extra_hi)
+            dv_mid           = _dv_for_extra_payload(params, extra_mid)
+            _, t_mix_m       = _compute_t_mix(params, dv_mid, t_actual, a0)
+            dv_req_m         = v_inj + _penalty_dv(perigee_km, t_mix_m) - v_rot
             if dv_mid >= dv_req_m:
                 extra_lo = extra_mid
             else:
@@ -219,17 +268,20 @@ def schilling_performance(params: MissileParams,
                       if params.payload_kg > 0 else None)
 
     return {
-        'dv_available_ms':  dv_avail,
-        'dv_required_ms':   dv_req,
-        'dv_margin_ms':     dv_margin,
-        'can_reach_orbit':  dv_margin >= 0.0,
-        'v_circular_ms':    v_circ,
-        'dv_penalty_ms':    dv_pen,
-        'v_rotation_ms':    v_rot,
-        't_actual_s':       t_actual,
-        't_3stage_s':       t3s,
-        't_mix_s':          t_mix,
-        'a0_ms2':           a0,
-        'max_payload_kg':   max_payload_kg,
+        'dv_available_ms':   dv_avail,
+        'dv_required_ms':    dv_req,
+        'dv_margin_ms':      dv_margin,
+        'can_reach_orbit':   dv_margin >= 0.0,
+        'v_injection_ms':    v_inj,
+        'dv_penalty_ms':     dv_pen,
+        'v_rotation_ms':     v_rot,
+        'orbit_perigee_km':  perigee_km,
+        'orbit_apogee_km':   apogee_km,
+        'orbit_eccentricity': eccentricity,
+        't_actual_s':        t_actual,
+        't_3stage_s':        t3s,
+        't_mix_s':           t_mix,
+        'a0_ms2':            a0,
+        'max_payload_kg':    max_payload_kg,
         'payload_margin_kg': payload_margin,
     }
