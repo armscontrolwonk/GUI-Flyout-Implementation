@@ -609,10 +609,12 @@ class MissileDialog(tk.Toplevel):
         shroud_mass  = p.shroud_mass_kg
 
         # Walk the linked list to collect per-stage data.
-        # mass convention: each node's mass_initial is the cumulative wet-stack
-        # mass from that stage onward.  We recover per-stage fueled/dry masses
-        # by differencing adjacent mass_initial values and accounting for
-        # payload (last stage) and shroud (first stage).
+        # mass_initial is cumulative (includes all upper stages); we recover
+        # per-stage fueled mass by differencing adjacent mass_initial values
+        # and stripping payload/shroud from the appropriate stages.
+        # dry is always fueled - mass_propellant: mass_propellant is per-stage
+        # and reliable even in missiles loaded from older JSON files, so this
+        # avoids any dependency on the (potentially corrupt) mass_final field.
         stage_data = []
         node = p
         stage_idx = 0
@@ -623,20 +625,20 @@ class MissileDialog(tk.Toplevel):
             if is_last and is_first:
                 # Single-stage missile
                 fueled = node.mass_initial - payload - shroud_mass
-                dry    = node.mass_final   - payload
             elif is_last:
-                # Last of multiple stages: payload is part of mass_initial here
-                # but shroud lives on the first stage only
+                # Last of multiple stages: no shroud here (lives on stage 1)
                 fueled = node.mass_initial - payload
-                dry    = node.mass_final   - payload
             elif is_first:
-                # First of multiple stages: shroud is included in mass_initial
+                # First of multiple stages: subtract shroud and upper stack
                 fueled = node.mass_initial - shroud_mass - nxt.mass_initial
-                dry    = node.mass_final
             else:
                 # Middle stage
                 fueled = node.mass_initial - nxt.mass_initial
-                dry    = node.mass_final
+            # Per-stage dry mass is always: fueled - own propellant.
+            # Do NOT use node.mass_final here — it may be a cumulative burnout
+            # mass (includes upper stages) if the model was loaded from an
+            # older serialised file.
+            dry = fueled - node.mass_propellant
             stage_data.append({
                 "fueled":      fueled,                   "dry":         dry,
                 "dia":         node.diameter_m,          "length":      node.length_m,
