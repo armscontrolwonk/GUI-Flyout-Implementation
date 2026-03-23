@@ -1129,7 +1129,7 @@ class MissileFlyoutApp(tk.Tk):
         self._del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Units ──────────────────────────────────────────────────────
-        uf = ttk.LabelFrame(parent, text="Display Units")
+        uf = ttk.LabelFrame(parent, text="Display Units for Plots")
         uf.pack(fill=tk.X, padx=6, pady=3)
         self._units_var = tk.StringVar(value="km")
         uf_inner = ttk.Frame(uf)
@@ -1208,26 +1208,6 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Button(btn_frame, text="Sweep…",
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
-
-        # ── Results display ───────────────────────────────────────────
-        rf = ttk.LabelFrame(parent, text="Results")
-        rf.pack(fill=tk.X, padx=6, pady=3)
-
-        self._res_range_km  = tk.StringVar(value="Range (km):    —")
-        self._res_range_nm  = tk.StringVar(value="Range (nmi):   —")
-        self._res_range_mi  = tk.StringVar(value="Range (miles): —")
-        self._res_apogee    = tk.StringVar(value="Apogee (km):   —")
-        self._res_apogee_ll = tk.StringVar(value="Apogee loc:    —")
-        self._res_impact    = tk.StringVar(value="Impact:        —")
-        self._res_tof       = tk.StringVar(value="Flight time:   —")
-        self._res_imp_spd   = tk.StringVar(value="Impact speed:  —")
-
-        for var in (self._res_range_km, self._res_range_nm, self._res_range_mi,
-                    self._res_apogee, self._res_apogee_ll,
-                    self._res_impact, self._res_tof, self._res_imp_spd):
-            ttk.Label(rf, textvariable=var,
-                      font=("Courier", 9), anchor=tk.W).pack(
-                fill=tk.X, padx=8, pady=1)
 
         # ── Missile parameters ────────────────────────────────────────
         pf = ttk.LabelFrame(parent, text="Missile Parameters")
@@ -1600,17 +1580,6 @@ class MissileFlyoutApp(tk.Tk):
         imp_spd_kms = r['impact_speed_ms'] / 1000.0
         apo_lat     = r['apogee_lat_deg']
         apo_lon     = r['apogee_lon_deg']
-
-        self._res_range_km .set(f"Range (km):    {rng_km:>8.1f}")
-        self._res_range_nm .set(f"Range (nmi):   {rng_nm:>8.1f}")
-        self._res_range_mi .set(f"Range (miles): {rng_mi:>8.1f}")
-        self._res_apogee   .set(f"Apogee (km):   {apogee_km:>8.1f}")
-        self._res_apogee_ll.set(
-            f"Apogee loc:  {apo_lat:.2f}°N  {apo_lon:.2f}°E")
-        self._res_impact   .set(
-            f"Impact:      {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E")
-        self._res_tof      .set(f"Flight time:   {tof_s:>7.0f} s")
-        self._res_imp_spd  .set(f"Impact speed: {imp_spd_kms:>7.2f} km/s")
 
         units = self._units_var.get()
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
