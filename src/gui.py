@@ -1078,11 +1078,14 @@ class MissileFlyoutApp(tk.Tk):
 
         plots_tab    = ttk.Frame(self._right_nb)
         timeline_tab = ttk.Frame(self._right_nb)
+        params_tab   = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
+        self._right_nb.add(params_tab,   text="  Missile Parameters  ")
 
         self._build_plot_panel(plots_tab)
         self._build_timeline_panel(timeline_tab)
+        self._build_params_tab(params_tab)
 
         # Status bar
         self._status_var = tk.StringVar(value="Ready.")
@@ -1209,16 +1212,7 @@ class MissileFlyoutApp(tk.Tk):
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
 
-        # ── Missile parameters ────────────────────────────────────────
-        pf = ttk.LabelFrame(parent, text="Missile Parameters")
-        pf.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
-        self._params_text = tk.Text(pf, width=36, height=8,
-                                    font=("Courier", 8), state=tk.DISABLED,
-                                    relief=tk.FLAT, bg=self.cget("bg"))
-        sb = ttk.Scrollbar(pf, command=self._params_text.yview)
-        self._params_text.configure(yscrollcommand=sb.set)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-        self._params_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        # (Missile Parameters moved to right-panel notebook tab)
 
     # ------------------------------------------------------------------
     # Plot panel  (4-subplot figure in a single tab + navigation toolbar)
@@ -1300,6 +1294,18 @@ class MissileFlyoutApp(tk.Tk):
         self._tl_tree.tag_configure("odd",  background="#f5f5f5")
         self._tl_tree.tag_configure("even", background="#ffffff")
         self._tl_tree.tag_configure("key",  background="#ddeeff", font="bold")
+
+    # ------------------------------------------------------------------
+    # Missile Parameters tab
+    # ------------------------------------------------------------------
+    def _build_params_tab(self, parent):
+        self._params_text = tk.Text(parent, font=("Courier", 9),
+                                    state=tk.DISABLED, relief=tk.FLAT,
+                                    bg=self.cget("bg"))
+        sb = ttk.Scrollbar(parent, command=self._params_text.yview)
+        self._params_text.configure(yscrollcommand=sb.set)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._params_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
     # ------------------------------------------------------------------
     # Missile selection
