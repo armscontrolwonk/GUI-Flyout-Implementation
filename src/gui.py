@@ -1070,10 +1070,19 @@ class MissileFlyoutApp(tk.Tk):
         left.pack_propagate(False)
         self._build_control_panel(left)
 
-        # Right plot panel
+        # Right panel — tabbed notebook (Plots | Flight Timeline)
         right = ttk.Frame(top)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self._build_plot_panel(right)
+        self._right_nb = ttk.Notebook(right)
+        self._right_nb.pack(fill=tk.BOTH, expand=True)
+
+        plots_tab    = ttk.Frame(self._right_nb)
+        timeline_tab = ttk.Frame(self._right_nb)
+        self._right_nb.add(plots_tab,    text="  Plots  ")
+        self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
+
+        self._build_plot_panel(plots_tab)
+        self._build_timeline_panel(timeline_tab)
 
         # Status bar
         self._status_var = tk.StringVar(value="Ready.")
@@ -1264,6 +1273,53 @@ class MissileFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
+
+    # ------------------------------------------------------------------
+    # Flight Timeline panel
+    # ------------------------------------------------------------------
+    _TL_COLS = [
+        ("event",    "Event",        180, tk.W),
+        ("t_s",      "Time (s)",      72, tk.E),
+        ("alt_km",   "Alt (km)",      72, tk.E),
+        ("range_km", "Range (km)",    80, tk.E),
+        ("speed",    "Speed (km/s)",  80, tk.E),
+        ("accel",    "Accel (m/s²)",  80, tk.E),
+        ("mass",     "Mass (t)",      72, tk.E),
+    ]
+
+    def _build_timeline_panel(self, parent):
+        # Summary block (mirrors left-panel results, visible without switching back)
+        sf = ttk.LabelFrame(parent, text="Summary")
+        sf.pack(fill=tk.X, padx=6, pady=(6, 2))
+        self._tl_summary_var = tk.StringVar(
+            value="Run a simulation to populate the flight timeline.")
+        ttk.Label(sf, textvariable=self._tl_summary_var,
+                  font=("Courier", 9), justify=tk.LEFT, anchor=tk.W).pack(
+            fill=tk.X, padx=8, pady=4)
+
+        # Timeline table
+        tf = ttk.LabelFrame(parent, text="Flight Event Timeline")
+        tf.pack(fill=tk.BOTH, expand=True, padx=6, pady=(2, 6))
+
+        col_ids = [c[0] for c in self._TL_COLS]
+        self._tl_tree = ttk.Treeview(tf, columns=col_ids, show="headings",
+                                     height=14)
+        for col_id, heading, width, anchor in self._TL_COLS:
+            self._tl_tree.heading(col_id, text=heading)
+            self._tl_tree.column(col_id, width=width, anchor=anchor,
+                                 stretch=(col_id == "event"))
+
+        vsb = ttk.Scrollbar(tf, orient=tk.VERTICAL,
+                            command=self._tl_tree.yview)
+        self._tl_tree.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._tl_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Alternating row colours
+        self._tl_tree.tag_configure("odd",  background="#f5f5f5")
+        self._tl_tree.tag_configure("even", background="#ffffff")
+        self._tl_tree.tag_configure("key",  background="#ddeeff",
+                                    font=("", 9, "bold"))
 
     # ------------------------------------------------------------------
     # Missile selection
@@ -1568,6 +1624,47 @@ class MissileFlyoutApp(tk.Tk):
             f"Impact spd: {imp_spd_kms:.2f} km/s"
         )
         self._plot_results(r, scale, ulbl)
+        self._populate_timeline(r)
+
+    # ------------------------------------------------------------------
+    def _populate_timeline(self, r):
+        """Fill the Flight Timeline tab from the milestones list."""
+        # Clear existing rows
+        self._tl_tree.delete(*self._tl_tree.get_children())
+
+        rng_km    = r['range_km']
+        apogee_km = r['apogee_km']
+        tof_s     = r['time_of_flight_s']
+        rng_nm    = rng_km / 1.852
+        rng_mi    = rng_km / 1.60934
+        imp_spd   = r['impact_speed_ms'] / 1000.0
+
+        self._tl_summary_var.set(
+            f"Range: {rng_km:.1f} km  /  {rng_nm:.1f} nmi  /  {rng_mi:.1f} mi\n"
+            f"Apogee: {apogee_km:.1f} km   "
+            f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E\n"
+            f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E   "
+            f"Flight time: {tof_s:.0f} s   "
+            f"Impact speed: {imp_spd:.2f} km/s"
+        )
+
+        # Key events highlighted differently
+        _key = {"Ignition", "Apogee", "Impact"}
+
+        for idx, m in enumerate(r.get('milestones', [])):
+            tag = "key" if m['event'] in _key else ("odd" if idx % 2 else "even")
+            # Acceleration at Impact is dominated by drag spike — show as blank
+            accel_str = (f"{m['accel_ms2']:+.1f}"
+                         if m['event'] != "Impact" else "—")
+            self._tl_tree.insert("", tk.END, tags=(tag,), values=(
+                m['event'],
+                f"{m['t_s']:.1f}",
+                f"{m['alt_km']:.1f}",
+                f"{m['range_km']:.1f}",
+                f"{m['speed_kms']:.3f}",
+                accel_str,
+                f"{m['mass_t']:.3f}",
+            ))
 
     def _plot_results(self, r, scale, ulbl):
         t   = r['t']
