@@ -1278,13 +1278,14 @@ class MissileFlyoutApp(tk.Tk):
     # Flight Timeline panel
     # ------------------------------------------------------------------
     _TL_COLS = [
-        ("event",    "Event",        180, tk.W),
-        ("t_s",      "Time (s)",      72, tk.E),
-        ("alt_km",   "Alt (km)",      72, tk.E),
-        ("range_km", "Range (km)",    80, tk.E),
-        ("speed",    "Speed (km/s)",  80, tk.E),
-        ("accel",    "Accel (m/s²)",  80, tk.E),
-        ("mass",     "Mass (t)",      72, tk.E),
+        ("event",       "Event",             180, tk.W),
+        ("t_s",         "Time (s)",           72, tk.E),
+        ("alt_km",      "Alt (km)",            72, tk.E),
+        ("range_km",    "Range (km)",          80, tk.E),
+        ("gnd_speed",   "Gnd Spd (km/s)",      90, tk.E),
+        ("inrtl_speed", "Inrtl Spd (km/s)",    95, tk.E),
+        ("accel",       "Accel (m/s²)",         80, tk.E),
+        ("mass",        "Mass (t)",             72, tk.E),
     ]
 
     def _build_timeline_panel(self, parent):
@@ -1662,6 +1663,7 @@ class MissileFlyoutApp(tk.Tk):
                 f"{m['alt_km']:.1f}",
                 f"{m['range_km']:.1f}",
                 f"{m['speed_kms']:.3f}",
+                f"{m['inertial_speed_kms']:.3f}",
                 accel_str,
                 f"{m['mass_t']:.3f}",
             ))

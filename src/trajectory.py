@@ -2,14 +2,42 @@
 3-DOF trajectory integrator matching Forden's missileFull3D.m /
 integrateTrajectory.m.
 
-State vector: [x, y, z, vx, vy, vz]  (ECEF, metres and m/s)
+Reference frame
+---------------
+The state vector [x, y, z, vx, vy, vz] is expressed in ECEF
+(Earth-Centered, Earth-Fixed) — a frame that rotates with Earth at
+OMEGA_EARTH = 7.2921150e-5 rad/s.  Consequently:
 
-Physics included:
+  * Velocities (and the "ground speed" output) are *relative to Earth's
+    surface*, not relative to inertial space.
+  * A missile sitting on the launch pad has ECEF velocity ≈ 0, which is
+    the correct initial condition for this frame — no explicit Earth-
+    rotation term needs to be added to v0.
+  * Earth's rotation is fully accounted for during flight through the
+    Coriolis (-2 ω × v) and centrifugal (-ω × (ω × r)) pseudo-forces
+    that appear in the ECEF equations of motion.
+
+Inertial speed
+--------------
+For applications that require inertial (ECI-frame) speed — re-entry
+heating, radar cross-section, or energy calculations — the inertial
+velocity vector is obtained by adding back the Earth-rotation contribution:
+
+    v_inertial = v_ecef + ω × r
+
+where ω = [0, 0, OMEGA_EARTH] and r is the ECEF position vector.
+At a launch latitude of 33°N this adds ≈ 390 m/s eastward at the pad
+and grows to several hundred m/s of correction at apogee.  Both ground
+speed and inertial speed are included in the output arrays and the Flight
+Timeline milestones.
+
+Physics included
+----------------
   - Gravity (J2 spheroid — more accurate than Forden's point-mass)
   - Aerodynamic drag  (Forden Eq. 3)
   - Thrust (powered phase, loft-angle pitch-over guidance)
-  - Coriolis acceleration
-  - Centrifugal acceleration
+  - Coriolis acceleration  (-2 ω × v)
+  - Centrifugal acceleration  (-ω × (ω × r))
 
 Guidance law — Forden Eq. 8
 ----------------------------
@@ -79,19 +107,25 @@ def _stage_event_times(params: MissileParams):
 
 
 def _interp_milestone(t_event, t_arr, alt_arr, range_arr, speed_arr,
-                      accel_arr, mass_arr):
+                      inertial_speed_arr, accel_arr, mass_arr):
     """
     Interpolate all channel arrays at t_event.  Clamps to the array bounds
     so events that fall after cutoff (engine off) still return valid values.
+
+    speed_arr          — ECEF-frame (ground) speed, m/s
+    inertial_speed_arr — ECI-frame (inertial) speed, m/s;
+                         = ||v_ecef + ω × r||, used for re-entry heating etc.
     """
     t_event = float(np.clip(t_event, t_arr[0], t_arr[-1]))
     return {
-        't_s':       t_event,
-        'alt_km':    float(np.interp(t_event, t_arr, alt_arr  / 1000.0)),
-        'range_km':  float(np.interp(t_event, t_arr, range_arr / 1000.0)),
-        'speed_kms': float(np.interp(t_event, t_arr, speed_arr / 1000.0)),
-        'accel_ms2': float(np.interp(t_event, t_arr, accel_arr)),
-        'mass_t':    float(np.interp(t_event, t_arr, mass_arr  / 1000.0)),
+        't_s':              t_event,
+        'alt_km':           float(np.interp(t_event, t_arr, alt_arr  / 1000.0)),
+        'range_km':         float(np.interp(t_event, t_arr, range_arr / 1000.0)),
+        'speed_kms':        float(np.interp(t_event, t_arr, speed_arr / 1000.0)),
+        'inertial_speed_kms': float(np.interp(t_event, t_arr,
+                                              inertial_speed_arr / 1000.0)),
+        'accel_ms2':        float(np.interp(t_event, t_arr, accel_arr)),
+        'mass_t':           float(np.interp(t_event, t_arr, mass_arr  / 1000.0)),
     }
 
 
@@ -372,7 +406,14 @@ def integrate_trajectory(params: MissileParams,
     masses = np.array([missile_mass(params, t_arr[i], alts[i])
                        for i in range(len(t_arr))])
 
-    # --- Acceleration array (central finite-difference on speed) ----------
+    # --- Inertial (ECI-frame) speed ---------------------------------------
+    # v_inertial = v_ecef + ω × r   (ω = Earth rotation vector)
+    # This is needed for re-entry heating, radar, and energy calculations.
+    omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
+    inertial_vel_arr = vel_arr + np.cross(omega_vec, pos_arr)
+    inertial_speeds  = np.linalg.norm(inertial_vel_arr, axis=1)
+
+    # --- Acceleration array (central finite-difference on ground speed) ---
     accels = np.empty_like(speeds)
     accels[1:-1] = (speeds[2:] - speeds[:-2]) / (t_arr[2:] - t_arr[:-2])
     accels[0]    = accels[1]
@@ -405,11 +446,15 @@ def integrate_trajectory(params: MissileParams,
         frac = (threshold_m - alts[idx]) / (alts[idx + 1] - alts[idx])
         return float(t_arr[idx] + frac * (t_arr[idx + 1] - t_arr[idx]))
 
+    def _milestone(t_ev):
+        return _interp_milestone(t_ev, t_arr, alts, ranges, speeds,
+                                 inertial_speeds, accels, masses)
+
     # Stage ignition / burnout events from the stage list
     for label, t_ev in _stage_event_times(params):
         if t_ev > t_arr[-1]:
             break          # vehicle hit ground before this event
-        row = _interp_milestone(t_ev, t_arr, alts, ranges, speeds, accels, masses)
+        row = _milestone(t_ev)
         row['event'] = label
         milestones.append(row)
 
@@ -418,14 +463,12 @@ def integrate_trajectory(params: MissileParams,
         t_ev = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
                              ascending=True)
         if t_ev is not None:
-            row = _interp_milestone(t_ev, t_arr, alts, ranges,
-                                    speeds, accels, masses)
+            row = _milestone(t_ev)
             row['event'] = "Fairing jettison"
             _insert_chrono(row)
 
     # Apogee
-    apo_row = _interp_milestone(t_arr[apo_idx], t_arr, alts, ranges,
-                                speeds, accels, masses)
+    apo_row = _milestone(t_arr[apo_idx])
     apo_row['event'] = "Apogee"
     _insert_chrono(apo_row)
 
@@ -434,14 +477,12 @@ def integrate_trajectory(params: MissileParams,
     if np.max(alts) > REENTRY_ALT_M:
         t_ev = _alt_crossing(REENTRY_ALT_M, ascending=False)
         if t_ev is not None and t_ev > t_arr[apo_idx]:
-            row = _interp_milestone(t_ev, t_arr, alts, ranges,
-                                    speeds, accels, masses)
+            row = _milestone(t_ev)
             row['event'] = "Re-entry (100 km)"
             _insert_chrono(row)
 
     # Impact
-    imp_row = _interp_milestone(t_arr[-1], t_arr, alts, ranges,
-                                speeds, accels, masses)
+    imp_row = _milestone(t_arr[-1])
     imp_row['event'] = "Impact"
     milestones.append(imp_row)
 
@@ -450,7 +491,8 @@ def integrate_trajectory(params: MissileParams,
         'lat':                lats,
         'lon':                lons,
         'alt':                alts,
-        'speed':              speeds,
+        'speed':              speeds,          # ECEF-frame (ground speed), m/s
+        'inertial_speed':     inertial_speeds, # ECI-frame (inertial speed), m/s
         'accel':              accels,
         'mass':               masses,
         'range':              ranges,
