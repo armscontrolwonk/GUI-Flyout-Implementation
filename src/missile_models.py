@@ -409,8 +409,116 @@ def _zoljanah():
     return p
 
 
+def _zoljanah_slv():
+    # Iranian Zoljanah (Zuljanah) Space Launch Vehicle — 3-stage configuration.
+    #
+    # Mass budget (total launch mass = 51 935 kg):
+    #   Stages 1 & 2: solid propellant
+    #     prop = 20 517 kg, dry = 3 600 kg, fueled = 24 117 kg each
+    #   Stage 3: liquid (NTO/UDMH, Vacuum R-27 verniers)
+    #     prop = 3 050 kg, dry = 387 kg, fueled = 3 437 kg, burn = 300 s
+    #   Satellite payload:  220 kg
+    #   Payload fairing:     44 kg  (jettisoned at stage-3 ignition — carried in
+    #                                stage-2 mass_initial; absent from stage-3 chain)
+    #   Total at launch:   51 935 kg
+    #     = 24 117 (S1) + 24 117+44 (S2+shroud) + 3 437 (S3) + 220 (sat)
+    #
+    # Propulsion:
+    #   Stage 1 (solid): ISP=255.837 s, thrust≈725 kN, burn=71 s, nozzle=0.90 m²
+    #                    post-burnout coast = 12 s
+    #   Stage 2 (solid): ISP=265 s,     thrust≈751 kN, burn=71 s, nozzle=1.77 m²
+    #                    post-burnout coast = 30 s
+    #   Stage 3 (liq):   ISP=293 s,     thrust≈ 29 kN, burn=300 s, nozzle=0.14 m²
+    #                    (2 × 0.3 m verniers; mass flow ≈ 10.2 kg/s)
+    #
+    # Reference orbit: 493 × 490 km, azimuth 140°, lat 35.238°
+    # Guidance angles are first-estimate; tune against observed trajectory data.
+
+    satellite =  220   # kg — payload to orbit
+    shroud    =   44   # kg — fairing, jettisoned at stage-3 ignition
+                       #      (built into stage-2 mass_initial; not in stage-3)
+
+    # ── Stage 3 (liquid, R-27 verniers, NTO/UDMH) ───────────────────────────
+    prop3  = 3_050
+    dry3   =   387
+    isp3   = 293.0
+    burn3  = 300.0   # s  (mass flow = 3050/300 ≈ 10.2 kg/s)
+
+    stage3 = MissileParams(
+        name="Zoljanah (SLV) Stage 3",
+        mass_initial=dry3 + prop3 + satellite,    # 3 657 kg
+        mass_propellant=prop3,                     # 3 050 kg
+        mass_final=dry3 + satellite,               #   607 kg  (dry + sat)
+        diameter_m=1.25,
+        length_m=3.3,
+        thrust_N=round(_thrust_from_isp(isp3, prop3, burn3)),   # ≈ 29 200 N
+        burn_time_s=burn3,
+        isp_s=isp3,
+        nozzle_exit_area_m2=0.14,    # 2 × 0.3 m diameter verniers
+        guidance="gravity_turn",
+        loft_angle_deg=15.0,
+        loft_angle_rate_deg_s=0.5,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+    )
+
+    # ── Stage 2 (solid) ──────────────────────────────────────────────────────
+    # shroud (44 kg) included here; jettisoned implicitly when stage 3 ignites
+    # and stage-2 chain hands off to stage3.mass_initial (which excludes shroud).
+    dry2  = 3_600
+    prop2 = 20_517
+    isp2  = 265.0
+
+    stage2 = MissileParams(
+        name="Zoljanah (SLV) Stage 2",
+        mass_initial=dry2 + prop2 + stage3.mass_initial + shroud,   # 27 818 kg
+        mass_propellant=prop2,                                        # 20 517 kg
+        mass_final=dry2,                                              #  3 600 kg  (jettisoned)
+        diameter_m=1.5,
+        length_m=8.7,    # stage body only (+ 1.0 m interstage = 9.7 m total)
+        thrust_N=round(_thrust_from_isp(isp2, prop2, 71.0)),   # ≈ 751 000 N
+        burn_time_s=71.0,
+        isp_s=isp2,
+        nozzle_exit_area_m2=1.77,
+        guidance="gravity_turn",
+        loft_angle_deg=45.0,
+        loft_angle_rate_deg_s=0.5,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+        stage2=stage3,
+        coast_time_s=30.0,
+    )
+
+    # ── Stage 1 (solid) ──────────────────────────────────────────────────────
+    dry1  = 3_600
+    prop1 = 20_517
+    isp1  = 255.837
+
+    return MissileParams(
+        name="Zoljanah (SLV)",
+        mass_initial=dry1 + prop1 + stage2.mass_initial,   # 51 935 kg
+        mass_propellant=prop1,                               # 20 517 kg
+        mass_final=dry1,                                     #  3 600 kg  (jettisoned)
+        diameter_m=1.5,
+        length_m=10.3,   # stage body only (+ 0.75 m interstage = 11.05 m total)
+        thrust_N=round(_thrust_from_isp(isp1, prop1, 71.0)),   # ≈ 725 000 N
+        burn_time_s=71.0,
+        isp_s=isp1,
+        nozzle_exit_area_m2=0.90,
+        guidance="gravity_turn",
+        loft_angle_deg=85.0,
+        loft_angle_rate_deg_s=0.5,
+        mach_table=_FORDEN_MACH,
+        cd_table=_FORDEN_CD,
+        stage2=stage2,
+        coast_time_s=12.0,
+        payload_kg=float(satellite),
+    )
+
+
 MISSILE_DB = {
     # Non-Forden missiles (user-editable)
+    "Zoljanah (SLV)":         _zoljanah_slv,
     "Zoljanah (IRBM)":        _zoljanah,
     "Shahab-3":               _shahab3,
     "Generic ICBM":           _generic_icbm,
