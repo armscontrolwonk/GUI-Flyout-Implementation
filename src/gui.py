@@ -609,15 +609,32 @@ class MissileDialog(tk.Toplevel):
         shroud_mass  = p.shroud_mass_kg
 
         # Walk the linked list to collect per-stage data.
+        # mass convention: each node's mass_initial is the cumulative wet-stack
+        # mass from that stage onward.  We recover per-stage fueled/dry masses
+        # by differencing adjacent mass_initial values and accounting for
+        # payload (last stage) and shroud (first stage).
         stage_data = []
         node = p
+        stage_idx = 0
         while node is not None:
-            nxt = node.stage2
-            if nxt is None:
-                # Last stage: mass_initial = fueled + payload + shroud
+            nxt      = node.stage2
+            is_first = (stage_idx == 0)
+            is_last  = (nxt is None)
+            if is_last and is_first:
+                # Single-stage missile
                 fueled = node.mass_initial - payload - shroud_mass
+                dry    = node.mass_final   - payload
+            elif is_last:
+                # Last of multiple stages: payload is part of mass_initial here
+                # but shroud lives on the first stage only
+                fueled = node.mass_initial - payload
+                dry    = node.mass_final   - payload
+            elif is_first:
+                # First of multiple stages: shroud is included in mass_initial
+                fueled = node.mass_initial - shroud_mass - nxt.mass_initial
                 dry    = node.mass_final
             else:
+                # Middle stage
                 fueled = node.mass_initial - nxt.mass_initial
                 dry    = node.mass_final
             stage_data.append({
@@ -627,6 +644,7 @@ class MissileDialog(tk.Toplevel):
                 "nozzle_area": node.nozzle_exit_area_m2, "coast":       node.coast_time_s,
             })
             node = nxt
+            stage_idx += 1
 
         n = len(stage_data)
         self._n_stages_var.set(str(n))
@@ -697,22 +715,32 @@ class MissileDialog(tk.Toplevel):
             stages.append(sd)
 
         # Build the linked list from the last stage back to the first.
-        # The top (last) stage carries payload + shroud; shroud is jettisoned
-        # at altitude during flight; payload separates at final burnout.
+        # Shroud lives on the first (bottom) stage; payload is part of the
+        # last (top) stage's mass until final burnout.
         node = None
         upper_mass = 0.0
         for idx, sd in enumerate(reversed(stages)):
             stage_num = n - idx
-            is_last   = (node is None)
+            is_last  = (idx == 0)        # last stage of missile (first in reversed loop)
+            is_first = (idx == n - 1)    # first stage of missile (last in reversed loop)
             prop = sd["fueled"] - sd["dry"]
-            if is_last:
+            if is_last and is_first:
+                # Single-stage missile
                 m0     = sd["fueled"] + payload + shroud_mass
-                mfinal = sd["dry"]      # payload/shroud both gone at burnout
-                upper_mass = m0
+                mfinal = sd["dry"] + payload
+            elif is_last:
+                # Last of multiple stages: payload present, shroud is on stage 1
+                m0     = sd["fueled"] + payload
+                mfinal = sd["dry"] + payload
+            elif is_first:
+                # First of multiple stages: add shroud here
+                m0     = sd["fueled"] + shroud_mass + upper_mass
+                mfinal = sd["dry"]
             else:
+                # Middle stage
                 m0     = sd["fueled"] + upper_mass
                 mfinal = sd["dry"]
-                upper_mass = m0
+            upper_mass = m0
             node = MissileParams(
                 name=f"{name} Stage {stage_num}",
                 mass_initial=m0,
