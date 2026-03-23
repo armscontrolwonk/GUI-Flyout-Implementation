@@ -362,14 +362,14 @@ class MissileDialog(tk.Toplevel):
         body.bind("<Button-5>",   _on_mousewheel_linux_down)
 
         # ── Payload panel — grid layout matching stage entries ───────────────
-        pl = ttk.LabelFrame(body, text="Payload")
+        pl = ttk.LabelFrame(body, text="Front End")
         pl.pack(fill=tk.X, padx=8, pady=4)
 
         # Track payload input widgets so _apply_readonly can disable them.
         self._payload_inputs = []
 
-        # Row 0: Bus mass
-        self._bus_var = _entry_row(pl, "Bus mass (kg):", 0, "0", "kg")
+        # Row 0: PBV mass
+        self._bus_var = _entry_row(pl, "PBV mass (kg):", 0, "0", "kg")
         self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
 
         # Row 1: Number of RVs (spinbox)
@@ -581,7 +581,7 @@ class MissileDialog(tk.Toplevel):
             num_rvs  = max(1, int(self._num_rvs_var.get()))
             rv_mass  = float(self._rv_mass_var.get())
         except ValueError:
-            raise ValueError("Bus and per-RV mass must be numbers.")
+            raise ValueError("PBV and per-RV mass must be numbers.")
         payload = bus_mass + num_rvs * rv_mass
         rv_beta = float(self._rv_beta_var.get())
 
@@ -1295,7 +1295,7 @@ class MissileFlyoutApp(tk.Tk):
         self._tl_summary_var = tk.StringVar(
             value="Run a simulation to populate the flight timeline.")
         ttk.Label(sf, textvariable=self._tl_summary_var,
-                  font=("Courier", 9), justify=tk.LEFT, anchor=tk.W).pack(
+                  justify=tk.LEFT, anchor=tk.W).pack(
             fill=tk.X, padx=8, pady=4)
 
         # Timeline table
@@ -1316,11 +1316,10 @@ class MissileFlyoutApp(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         self._tl_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        # Alternating row colours
+        # Alternating row colours; no explicit font — inherits system default
         self._tl_tree.tag_configure("odd",  background="#f5f5f5")
         self._tl_tree.tag_configure("even", background="#ffffff")
-        self._tl_tree.tag_configure("key",  background="#ddeeff",
-                                    font=("", 9, "bold"))
+        self._tl_tree.tag_configure("key",  background="#ddeeff", font="bold")
 
     # ------------------------------------------------------------------
     # Missile selection
