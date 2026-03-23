@@ -418,10 +418,9 @@ def _zoljanah_slv():
     #   Stage 3: liquid (NTO/UDMH, Vacuum R-27 verniers)
     #     prop = 3 050 kg, dry = 387 kg, fueled = 3 437 kg, burn = 300 s
     #   Satellite payload:  220 kg
-    #   Payload fairing:     44 kg  (jettisoned at stage-3 ignition — carried in
-    #                                stage-2 mass_initial; absent from stage-3 chain)
+    #   Payload fairing:     44 kg  (shroud_mass_kg; jettisoned at 80 km)
     #   Total at launch:   51 935 kg
-    #     = 24 117 (S1) + 24 117+44 (S2+shroud) + 3 437 (S3) + 220 (sat)
+    #     = 24 117+44 (S1+shroud) + 24 117 (S2) + 3 437 (S3) + 220 (sat)
     #
     # Propulsion:
     #   Stage 1 (solid): ISP=255.837 s, thrust≈725 kN, burn=71 s, nozzle=0.90 m²
@@ -435,8 +434,7 @@ def _zoljanah_slv():
     # Guidance angles are first-estimate; tune against observed trajectory data.
 
     satellite =  220   # kg — payload to orbit
-    shroud    =   44   # kg — fairing, jettisoned at stage-3 ignition
-                       #      (built into stage-2 mass_initial; not in stage-3)
+    shroud    =   44   # kg — fairing, jettisoned at 80 km via shroud_mass_kg
 
     # ── Stage 3 (liquid, R-27 verniers, NTO/UDMH) ───────────────────────────
     prop3  = 3_050
@@ -471,7 +469,7 @@ def _zoljanah_slv():
 
     stage2 = MissileParams(
         name="Zoljanah (SLV) Stage 2",
-        mass_initial=dry2 + prop2 + stage3.mass_initial + shroud,   # 27 818 kg
+        mass_initial=dry2 + prop2 + stage3.mass_initial,   # 27 774 kg
         mass_propellant=prop2,                                        # 20 517 kg
         mass_final=dry2,                                              #  3 600 kg  (jettisoned)
         diameter_m=1.5,
@@ -496,7 +494,7 @@ def _zoljanah_slv():
 
     return MissileParams(
         name="Zoljanah (SLV)",
-        mass_initial=dry1 + prop1 + stage2.mass_initial,   # 51 935 kg
+        mass_initial=dry1 + prop1 + stage2.mass_initial + shroud,   # 51 935 kg
         mass_propellant=prop1,                               # 20 517 kg
         mass_final=dry1,                                     #  3 600 kg  (jettisoned)
         diameter_m=1.5,
@@ -513,6 +511,8 @@ def _zoljanah_slv():
         stage2=stage2,
         coast_time_s=12.0,
         payload_kg=float(satellite),
+        shroud_mass_kg=float(shroud),
+        shroud_jettison_alt_km=80.0,
     )
 
 
