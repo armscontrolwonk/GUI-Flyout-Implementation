@@ -1322,7 +1322,8 @@ class MissileFlyoutApp(tk.Tk):
         lr_frame = ttk.Frame(gf)
         lr_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._loft_rate_var = tk.StringVar(value="2.0")
-        ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8).pack(side=tk.LEFT)
+        self._loft_rate_entry = ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8)
+        self._loft_rate_entry.pack(side=tk.LEFT)
         self._loft_rate_unit_lbl = ttk.Label(lr_frame, text="°/s")
         self._loft_rate_unit_lbl.pack(side=tk.LEFT, padx=2)
 
@@ -1700,13 +1701,17 @@ class MissileFlyoutApp(tk.Tk):
     def _update_guidance_labels(self, guidance: str):
         """Relabel the main-panel guidance fields to match the active mode."""
         if guidance == "gravity_turn":
-            self._loft_angle_lbl.config(text="Kick Angle:")
-            self._loft_angle_unit_lbl.config(text="°  (elev. above horiz.)")
-            self._loft_rate_lbl.config(text="Kick Rate:")
+            self._loft_angle_lbl.config(text="Burnout Angle:")
+            self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
+            self._loft_rate_lbl.config(text="Pitch Rate:")
+            self._loft_rate_unit_lbl.config(text="(auto)")
+            self._loft_rate_entry.config(state="disabled")
         else:
             self._loft_angle_lbl.config(text="Loft Angle:")
             self._loft_angle_unit_lbl.config(text="°  (final elev.)")
             self._loft_rate_lbl.config(text="Loft Rate:")
+            self._loft_rate_unit_lbl.config(text="°/s")
+            self._loft_rate_entry.config(state="normal")
 
     # ------------------------------------------------------------------
     # Custom missile management

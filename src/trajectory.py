@@ -143,35 +143,30 @@ def _enu_frame(lat_rad: float, lon_rad: float):
     return e_east, e_north, e_up
 
 
-def _gravity_turn_thrust_dir(vel_ecef, lat_rad, lon_rad, azimuth_rad,
-                             kick_angle_deg, kick_rate_deg_s, t):
+_GRAVITY_TURN_VERTICAL_S = 5.0   # seconds of straight-up flight before pitch program
+
+
+def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
+                             burnout_angle_deg, total_burn_s, t):
     """
-    Two-phase gravity-turn guidance (IRBM/ICBM).
+    Linear pitch program to Wheelon-optimal burnout angle (Levanger/Wright).
 
-    Phase 1 — kick (0 ≤ t < t_kick):
-        Pitch from 90° above horizontal down to kick_angle_deg at kick_rate_deg_s.
-        t_kick = (90 - kick_angle_deg) / kick_rate_deg_s
+    Phase 1 (0 – 5 s): hold vertical (90° elevation).
+    Phase 2 (5 s – total_burn_s): constant pitch rate from 90° down to
+        burnout_angle_deg, reaching that angle exactly at engine cutoff.
 
-    Phase 2 — gravity turn (t ≥ t_kick):
-        Thrust locked to the velocity vector direction.  Earth's gravity and
-        curvature naturally pitch the vehicle to the Wheelon-optimal burnout
-        angle: ε* = (180° − φ°) / 4  (Wheelon 1959, Eq. 17).
-
-    kick_angle_deg : elevation above horizontal at end of kick (e.g. 85° = 5°
-                     from vertical).  Should be close to 90° so gravity turn
-                     starts near-vertical.
-    kick_rate_deg_s: rate of initial kick (°/s).
+    burnout_angle_deg : desired elevation at burnout (°).  Set to the
+        Wheelon-optimal ε* = (π/2 − range/4R) converted to degrees, or
+        whatever value the user supplies.
+    total_burn_s      : total powered-flight duration (seconds), used to
+        set the constant pitch rate.  Passed as cutoff_time from _eom.
     """
-    t_kick = (90.0 - kick_angle_deg) / max(kick_rate_deg_s, 0.1)
-
-    if t < t_kick:
-        el_deg = 90.0 - kick_rate_deg_s * t
+    if t < _GRAVITY_TURN_VERTICAL_S:
+        el_deg = 90.0
     else:
-        speed = np.linalg.norm(vel_ecef)
-        if speed > 1.0:
-            return vel_ecef / speed
-        # Speed not yet established — hold kick angle as fallback
-        el_deg = kick_angle_deg
+        pitch_duration = max(total_burn_s - _GRAVITY_TURN_VERTICAL_S, 1.0)
+        frac = min(1.0, (t - _GRAVITY_TURN_VERTICAL_S) / pitch_duration)
+        el_deg = 90.0 - frac * (90.0 - burnout_angle_deg)
 
     el_rad = np.radians(el_deg)
     e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
@@ -254,9 +249,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     if t <= cutoff_time:
         if params.guidance == "gravity_turn":
             thrust_dir = _gravity_turn_thrust_dir(
-                vel, lat, lon, azimuth_rad,
+                lat, lon, azimuth_rad,
                 params.loft_angle_deg,
-                params.loft_angle_rate_deg_s,
+                cutoff_time,
                 t)
         else:  # "loft" (Forden)
             thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
@@ -612,6 +607,8 @@ def maximize_range(params: MissileParams,
                 guidance=guidance,
                 loft_angle_deg=la, loft_angle_rate_deg_s=lar,
                 cutoff_time_s=total_burn)
+            if r['time_of_flight_s'] >= 3599.0:
+                return -1.0   # orbital / runaway — not a valid ballistic solution
             return r['range_km']
         except Exception:
             return -1.0
@@ -621,24 +618,23 @@ def maximize_range(params: MissileParams,
     best_lar = params.loft_angle_rate_deg_s
 
     if effective_guidance == "gravity_turn":
-        # Sweep kick angle (near-vertical, 75°–89° above horizontal).
-        # Kick rate has little effect once gravity turn is engaged; fix at 5°/s.
-        kick_rate = 5.0
-        for kick_a in range(75, 90, 2):
-            rng = _run(float(kick_a), kick_rate)
+        # Scan burnout angles 5°–70° (Wheelon linear pitch program).
+        # loft_angle_rate_deg_s is unused for gravity_turn; pass 1.0 as placeholder.
+        for burnout_a in range(5, 71, 5):
+            rng = _run(float(burnout_a), 1.0)
             if rng > best_range:
                 best_range = rng
-                best_la  = float(kick_a)
-                best_lar = kick_rate
-        # Fine search ±2° around best kick angle
-        for dka in (-2.0, -1.0, 0.0, 1.0, 2.0):
-            ka = best_la + dka
-            if ka < 70.0 or ka > 89.5:
+                best_la    = float(burnout_a)
+        # Fine search ±4° around best burnout angle
+        for d in (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0):
+            ba = best_la + d
+            if ba < 1.0 or ba > 80.0:
                 continue
-            rng = _run(ka, kick_rate)
+            rng = _run(ba, 1.0)
             if rng > best_range:
                 best_range = rng
-                best_la = ka
+                best_la    = ba
+        best_lar = 1.0   # placeholder — not used by linear pitch program
     else:
         # Forden loft: coarse 10° steps in loft_angle, 0.5 °/s steps in rate
         for la in range(20, 75, 10):
