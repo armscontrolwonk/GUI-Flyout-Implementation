@@ -48,6 +48,61 @@ from missile_models import (
 
 
 # ---------------------------------------------------------------------------
+# Flight-event helpers
+# ---------------------------------------------------------------------------
+
+def _stage_event_times(params: MissileParams):
+    """
+    Walk the stage linked list and return a list of
+    (event_label, mission_elapsed_time_s) pairs for:
+      - ignition of each stage
+      - burnout of each stage
+    Does not include apogee, fairing jettison, or impact (those need
+    the integrated trajectory arrays).
+    """
+    events = []
+    t = 0.0
+    node = params
+    stage = 1
+    while node is not None:
+        if stage == 1:
+            events.append(("Ignition", t))
+        elif node.coast_time_s > 0 or stage > 1:
+            # Only emit a separate ignition event when there was a coast gap
+            # (instant staging shares its time with the previous burnout)
+            if t > 0 and (stage == 1 or
+                          (params if stage == 2 else None) is not None):
+                pass  # handled below
+        t_burnout = t + node.burn_time_s
+        events.append((f"Stage {stage} burnout", t_burnout))
+        if node.stage2 is not None:
+            coast = node.coast_time_s
+            t = t_burnout + coast
+            if coast > 0:
+                events.append((f"Stage {stage + 1} ignition", t))
+        node = node.stage2
+        stage += 1
+    return events
+
+
+def _interp_milestone(t_event, t_arr, alt_arr, range_arr, speed_arr,
+                      accel_arr, mass_arr):
+    """
+    Interpolate all channel arrays at t_event.  Clamps to the array bounds
+    so events that fall after cutoff (engine off) still return valid values.
+    """
+    t_event = float(np.clip(t_event, t_arr[0], t_arr[-1]))
+    return {
+        't_s':       t_event,
+        'alt_km':    float(np.interp(t_event, t_arr, alt_arr  / 1000.0)),
+        'range_km':  float(np.interp(t_event, t_arr, range_arr / 1000.0)),
+        'speed_kms': float(np.interp(t_event, t_arr, speed_arr / 1000.0)),
+        'accel_ms2': float(np.interp(t_event, t_arr, accel_arr)),
+        'mass_t':    float(np.interp(t_event, t_arr, mass_arr  / 1000.0)),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Guidance helpers
 # ---------------------------------------------------------------------------
 
@@ -320,12 +375,77 @@ def integrate_trajectory(params: MissileParams,
 
     apo_idx = int(np.argmax(alts))
 
+    # --- Mass array -------------------------------------------------------
+    masses = np.array([missile_mass(params, t_arr[i], alts[i])
+                       for i in range(len(t_arr))])
+
+    # --- Acceleration array (central finite-difference on speed) ----------
+    accels = np.empty_like(speeds)
+    accels[1:-1] = (speeds[2:] - speeds[:-2]) / (t_arr[2:] - t_arr[:-2])
+    accels[0]    = accels[1]
+    accels[-1]   = accels[-2]
+
+    # --- Flight-event milestones ------------------------------------------
+    milestones = []
+
+    # Stage ignition / burnout events from the stage list
+    for label, t_ev in _stage_event_times(params):
+        if t_ev > t_arr[-1]:
+            break          # vehicle hit ground before this event
+        row = _interp_milestone(t_ev, t_arr, alts, ranges, speeds, accels, masses)
+        row['event'] = label
+        milestones.append(row)
+
+    # Fairing (shroud) jettison — first crossing of the threshold altitude
+    if params.shroud_mass_kg > 0:
+        thr_m = params.shroud_jettison_alt_km * 1000.0
+        cross = np.where(np.diff(np.sign(alts - thr_m)) > 0)[0]
+        if len(cross):
+            idx = cross[0]
+            # Linear interpolation to find exact crossing time
+            frac = (thr_m - alts[idx]) / (alts[idx + 1] - alts[idx])
+            t_fairing = t_arr[idx] + frac * (t_arr[idx + 1] - t_arr[idx])
+            row = _interp_milestone(t_fairing, t_arr, alts, ranges,
+                                    speeds, accels, masses)
+            row['event'] = "Fairing jettison"
+            # Insert in chronological order
+            inserted = False
+            for i, m in enumerate(milestones):
+                if m['t_s'] > t_fairing:
+                    milestones.insert(i, row)
+                    inserted = True
+                    break
+            if not inserted:
+                milestones.append(row)
+
+    # Apogee
+    apo_row = _interp_milestone(t_arr[apo_idx], t_arr, alts, ranges,
+                                speeds, accels, masses)
+    apo_row['event'] = "Apogee"
+    # Insert chronologically
+    inserted = False
+    for i, m in enumerate(milestones):
+        if m['t_s'] > t_arr[apo_idx]:
+            milestones.insert(i, apo_row)
+            inserted = True
+            break
+    if not inserted:
+        milestones.append(apo_row)
+
+    # Impact
+    imp_row = _interp_milestone(t_arr[-1], t_arr, alts, ranges,
+                                speeds, accels, masses)
+    imp_row['event'] = "Impact"
+    milestones.append(imp_row)
+
     return {
         't':                  t_arr,
         'lat':                lats,
         'lon':                lons,
         'alt':                alts,
         'speed':              speeds,
+        'accel':              accels,
+        'mass':               masses,
         'range':              ranges,
         'pos_ecef':           pos_arr,
         'vel_ecef':           vel_arr,
@@ -337,6 +457,7 @@ def integrate_trajectory(params: MissileParams,
         'apogee_lon_deg':     lons[apo_idx],
         'time_of_flight_s':   t_arr[-1],
         'impact_speed_ms':    speeds[-1],
+        'milestones':         milestones,
     }
 
 
