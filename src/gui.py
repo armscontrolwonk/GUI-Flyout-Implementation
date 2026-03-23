@@ -1299,13 +1299,36 @@ class MissileFlyoutApp(tk.Tk):
     # Missile Parameters tab
     # ------------------------------------------------------------------
     def _build_params_tab(self, parent):
-        self._params_text = tk.Text(parent, font=("Courier", 9),
-                                    state=tk.DISABLED, relief=tk.FLAT,
-                                    bg=self.cget("bg"))
-        sb = ttk.Scrollbar(parent, command=self._params_text.yview)
-        self._params_text.configure(yscrollcommand=sb.set)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-        self._params_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        """Scrollable structured display — rebuilt on each missile change."""
+        self._params_canvas = tk.Canvas(
+            parent, borderwidth=0, highlightthickness=0)
+        vsb = ttk.Scrollbar(parent, orient="vertical",
+                            command=self._params_canvas.yview)
+        self._params_canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._params_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self._params_inner = ttk.Frame(self._params_canvas)
+        self._params_win_id = self._params_canvas.create_window(
+            (0, 0), window=self._params_inner, anchor="nw")
+
+        self._params_inner.bind(
+            "<Configure>",
+            lambda _e: self._params_canvas.configure(
+                scrollregion=self._params_canvas.bbox("all")))
+        self._params_canvas.bind(
+            "<Configure>",
+            lambda e: self._params_canvas.itemconfig(
+                self._params_win_id, width=e.width))
+
+        def _mw(event):
+            self._params_canvas.yview_scroll(
+                int(-1 * (event.delta / 120)), "units")
+
+        self._params_canvas.bind("<Enter>",
+            lambda _e: self._params_canvas.bind_all("<MouseWheel>", _mw))
+        self._params_canvas.bind("<Leave>",
+            lambda _e: self._params_canvas.unbind_all("<MouseWheel>"))
 
     # ------------------------------------------------------------------
     # Missile selection
@@ -1321,7 +1344,7 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._update_guidance_labels(p.guidance)
-        self._update_params_text(p)
+        self._update_params_display(p)
         # Allow deleting custom missiles and resetting overridden packaged ones
         is_custom = name not in _PACKAGED_NAMES
         is_overridden = name in _OVERRIDDEN_PACKAGED
@@ -1403,46 +1426,71 @@ class MissileFlyoutApp(tk.Tk):
             self._refresh_missile_list()
             self._status_var.set(f"Missile '{name}' deleted.")
 
-    def _update_params_text(self, p=None):
+    def _update_params_display(self, p=None):
+        """Rebuild the Missile Parameters tab with structured label rows."""
         if p is None:
             p = get_missile(self._missile_var.get())
 
-        lines = [
-            f"{'Name:':<18}{p.name}",
-            f"{'Mass (launch):':<18}{p.mass_initial:,.0f} kg",
-            f"{'Propellant:':<18}{p.mass_propellant:,.0f} kg",
-            f"{'Mass (burnout):':<18}{p.mass_final:,.0f} kg",
-            f"{'Diameter:':<18}{p.diameter_m:.2f} m",
-            f"{'Length:':<18}{p.length_m:.2f} m",
-            f"{'Thrust (vac):':<18}{p.thrust_N/1000:,.0f} kN",
-            f"{'Burn time:':<18}{p.burn_time_s:.0f} s",
-            f"{'Isp:':<18}{p.isp_s:.0f} s",
-            f"{'T/W ratio:':<18}{p.thrust_N/(p.mass_initial*9.81):.2f}",
-        ]
-        if p.coast_time_s > 0:
-            lines.append(f"{'Coast after S1:':<18}{p.coast_time_s:.0f} s")
-        sn, node = 2, p.stage2
+        _G0 = 9.80665
+        pad = dict(padx=8, pady=4)
+
+        # Clear previous content
+        for w in self._params_inner.winfo_children():
+            w.destroy()
+
+        def _row(frame, row, label, value):
+            ttk.Label(frame, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            ttk.Label(frame, text=value).grid(
+                row=row, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+
+        # ── Summary ───────────────────────────────────────────────────
+        sf = ttk.LabelFrame(self._params_inner, text="Summary")
+        sf.pack(fill=tk.X, **pad)
+
+        total_prop = p.mass_propellant
+        node = p.stage2
         while node is not None:
-            lines += [
-                "─" * 28,
-                f"Stage {sn}:",
-                f"{'  Mass:':<18}{node.mass_initial:,.0f} kg",
-                f"{'  Propellant:':<18}{node.mass_propellant:,.0f} kg",
-                f"{'  Thrust (vac):':<18}{node.thrust_N/1000:,.0f} kN",
-                f"{'  Burn time:':<18}{node.burn_time_s:.0f} s",
-                f"{'  Isp:':<18}{node.isp_s:.0f} s",
-            ]
-            if node.stage2 is not None and node.coast_time_s > 0:
-                lines.append(
-                    f"{'  Coast after:':<18}{node.coast_time_s:.0f} s")
-            sn  += 1
+            total_prop += node.mass_propellant
             node = node.stage2
 
-        txt = "\n".join(lines)
-        self._params_text.config(state=tk.NORMAL)
-        self._params_text.delete("1.0", tk.END)
-        self._params_text.insert(tk.END, txt)
-        self._params_text.config(state=tk.DISABLED)
+        r = 0
+        _row(sf, r, "Name:", p.name); r += 1
+        _row(sf, r, "Launch mass:", f"{p.mass_initial:,.0f} kg"); r += 1
+        _row(sf, r, "Total propellant:", f"{total_prop:,.0f} kg"); r += 1
+        if p.payload_kg > 0:
+            _row(sf, r, "Payload:", f"{p.payload_kg:,.0f} kg"); r += 1
+        if p.rv_mass_kg > 0:
+            _row(sf, r, "RV mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
+        liftoff_tw = p.thrust_N / (p.mass_initial * _G0)
+        _row(sf, r, "Liftoff T/W:", f"{liftoff_tw:.2f}"); r += 1
+
+        # ── Per-stage blocks ──────────────────────────────────────────
+        sn = 1
+        node = p
+        while node is not None:
+            is_last = node.stage2 is None
+            lf = ttk.LabelFrame(self._params_inner,
+                                text=f"Stage {sn}" if sn > 1 else "Stage 1")
+            lf.pack(fill=tk.X, **pad)
+
+            prop = node.mass_propellant
+            tw   = node.thrust_N / (node.mass_initial * _G0)
+
+            r = 0
+            _row(lf, r, "Fueled wt (kg):", f"{node.mass_initial:,.0f}"); r += 1
+            _row(lf, r, "Dry wt (kg):",    f"{node.mass_final:,.0f}"); r += 1
+            _row(lf, r, "Propellant (kg):", f"{prop:,.0f}"); r += 1
+            _row(lf, r, "Diameter (m):",   f"{node.diameter_m:.2f}"); r += 1
+            _row(lf, r, "Thrust (kN):",    f"{node.thrust_N/1000:,.0f}"); r += 1
+            _row(lf, r, "Isp (s):",        f"{node.isp_s:.0f}"); r += 1
+            _row(lf, r, "Burn time (s):",  f"{node.burn_time_s:.1f}  (computed)"); r += 1
+            _row(lf, r, "T/W ratio:",      f"{tw:.2f}"); r += 1
+            if not is_last and node.coast_time_s > 0:
+                _row(lf, r, "Coast after (s):", f"{node.coast_time_s:.0f}"); r += 1
+
+            sn  += 1
+            node = node.stage2
 
     # ------------------------------------------------------------------
     # Aim at target
