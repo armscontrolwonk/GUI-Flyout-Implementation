@@ -802,6 +802,7 @@ class ParametricSweepDialog(tk.Toplevel):
         "Azimuth":     dict(key="azimuth",    lo=0.0,  hi=360.0, step=5.0,  unit="°"),
         "Loft Angle":  dict(key="loft_angle", lo=10.0, hi=80.0,  step=5.0,  unit="°"),
         "Cutoff Time": dict(key="cutoff",     lo=None, hi=None,  step=5.0,  unit="s"),
+        "Turn Stop":   dict(key="turn_stop",  lo=None, hi=None,  step=10.0, unit="s"),
     }
 
     def __init__(self, parent_app):
@@ -979,9 +980,10 @@ class ParametricSweepDialog(tk.Toplevel):
         for i, val in enumerate(points):
             if self._stop_evt.is_set():
                 break
-            run_az  = val if param_key == "azimuth"    else az
-            run_la  = val if param_key == "loft_angle" else la
-            run_cut = val if param_key == "cutoff"     else cutoff
+            run_az      = val if param_key == "azimuth"    else az
+            run_la      = val if param_key == "loft_angle" else la
+            run_cut     = val if param_key == "cutoff"     else cutoff
+            run_gt_stop = val if param_key == "turn_stop"  else gt_stop_s
             try:
                 r = integrate_trajectory(
                     missile, lat, lon, run_az,
@@ -990,7 +992,7 @@ class ParametricSweepDialog(tk.Toplevel):
                     loft_angle_rate_deg_s=lar,
                     cutoff_time_s=run_cut,
                     gt_turn_start_s=gt_start_s,
-                    gt_turn_stop_s=gt_stop_s,
+                    gt_turn_stop_s=run_gt_stop,
                 )
                 row  = (val, r["range_km"], r["apogee_km"])
                 traj = (val, r) if store_trajs else None
