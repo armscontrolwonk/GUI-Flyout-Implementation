@@ -162,8 +162,8 @@ class _StageFrame(ttk.LabelFrame):
         super().__init__(parent, text=label)
         self._stage_num = stage_num
         d = {**self._DEFAULTS, **(defaults or {})}
-        self._fueled      = _entry_row(self, "Fueled wt (kg):",      0, d["fueled"],      "kg")
-        self._dry         = _entry_row(self, "Dry wt (kg):",         1, d["dry"],         "kg")
+        self._fueled      = _entry_row(self, "Fueled mass (kg):",    0, d["fueled"],      "kg")
+        self._dry         = _entry_row(self, "Dry mass (kg):",       1, d["dry"],         "kg")
         self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
         self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
         self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
@@ -244,7 +244,7 @@ class _StageFrame(ttk.LabelFrame):
         except (ValueError, TypeError):
             tk.messagebox.showerror(
                 "Cannot suggest",
-                "Please enter valid fueled weight, dry weight, and Isp first.",
+                "Please enter valid fueled mass, dry mass, and Isp first.",
                 parent=self)
             return
 
@@ -327,7 +327,7 @@ class _StageFrame(ttk.LabelFrame):
     def get(self):
         burn_str = self._burn_var.get()
         if burn_str == "—":
-            raise ValueError("Burn time could not be computed — check thrust, Isp, and weights.")
+            raise ValueError("Burn time could not be computed — check thrust, Isp, and masses.")
         return {k: float(v.get()) for k, v in [
             ("fueled",      self._fueled),      ("dry",         self._dry),
             ("dia",         self._dia),         ("length",      self._length),
@@ -713,7 +713,7 @@ class MissileDialog(tk.Toplevel):
             sd = self._stage_frames[i].get()
             if sd["fueled"] <= sd["dry"]:
                 raise ValueError(
-                    f"Stage {i+1}: fueled weight must exceed dry weight.")
+                    f"Stage {i+1}: fueled mass must exceed dry mass.")
             stages.append(sd)
 
         # Build the linked list from the last stage back to the first.
@@ -1823,19 +1823,21 @@ class MissileFlyoutApp(tk.Tk):
             prop = node.mass_propellant
             tw   = node.thrust_N / (node.mass_initial * _G0)
 
+            dry_pct = node.mass_final / node.mass_initial * 100
+
             r = 0
-            _row(lf, r, "Fueled wt (kg):", f"{node.mass_initial:,.0f}"); r += 1
-            _row(lf, r, "Dry wt (kg):",    f"{node.mass_final:,.0f}"); r += 1
-            _row(lf, r, "Propellant (kg):", f"{prop:,.0f}"); r += 1
-            _row(lf, r, "Diameter (m):",   f"{node.diameter_m:.2f}"); r += 1
-            _row(lf, r, "Thrust (kN):",    f"{node.thrust_N/1000:,.0f}"); r += 1
-            _row(lf, r, "Isp (s):",        f"{node.isp_s:.0f}"); r += 1
-            if node.nozzle_exit_area_m2 > 0:
-                _row(lf, r, "Nozzle exit area:", f"{node.nozzle_exit_area_m2:.4f} m²"); r += 1
-            _row(lf, r, "Burn time (s):",  f"{node.burn_time_s:.1f}  (computed)"); r += 1
-            _row(lf, r, "T/W ratio:",      f"{tw:.2f}"); r += 1
-            if not is_last and node.coast_time_s > 0:
-                _row(lf, r, "Coast after (s):", f"{node.coast_time_s:.0f}"); r += 1
+            _row(lf, r, "Diameter (m):",          f"{node.diameter_m:.2f}"); r += 1
+            _row(lf, r, "Fueled mass (kg):",       f"{node.mass_initial:,.0f}"); r += 1
+            _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}"); r += 1
+            _row(lf, r, "Dry mass (kg):",          f"{node.mass_final:,.0f}"); r += 1
+            _row(lf, r, "Dry mass %:",             f"{dry_pct:.1f}%"); r += 1
+            _row(lf, r, "Thrust (kN):",            f"{node.thrust_N/1000:,.0f}"); r += 1
+            _row(lf, r, "ISP (s):",                f"{node.isp_s:.0f}"); r += 1
+            _row(lf, r, "Nozzle exit area (m²):",  f"{node.nozzle_exit_area_m2:.4f}"); r += 1
+            _row(lf, r, "Burntime (s):",           f"{node.burn_time_s:.1f}  (computed)"); r += 1
+            _row(lf, r, "T/W ratio:",              f"{tw:.2f}"); r += 1
+            if not is_last:
+                _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
 
             sn  += 1
             node = node.stage2
