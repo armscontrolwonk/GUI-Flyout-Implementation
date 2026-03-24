@@ -143,29 +143,28 @@ def _enu_frame(lat_rad: float, lon_rad: float):
     return e_east, e_north, e_up
 
 
-_GRAVITY_TURN_VERTICAL_S = 5.0   # seconds of straight-up flight before pitch program
-
-
 def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                             burnout_angle_deg, total_burn_s, t):
+                             burnout_angle_deg, turn_start_s, turn_stop_s, t):
     """
     Linear pitch program to Wheelon-optimal burnout angle (Levanger/Wright).
 
-    Phase 1 (0 – 5 s): hold vertical (90° elevation).
-    Phase 2 (5 s – total_burn_s): constant pitch rate from 90° down to
-        burnout_angle_deg, reaching that angle exactly at engine cutoff.
+    Phase 1 (0 – turn_start_s): hold vertical (90° elevation).
+    Phase 2 (turn_start_s – turn_stop_s): constant pitch rate from 90° down
+        to burnout_angle_deg.
+    Phase 3 (> turn_stop_s): hold burnout_angle_deg.
 
-    burnout_angle_deg : desired elevation at burnout (°).  Set to the
-        Wheelon-optimal ε* = (π/2 − range/4R) converted to degrees, or
-        whatever value the user supplies.
-    total_burn_s      : total powered-flight duration (seconds), used to
-        set the constant pitch rate.  Passed as cutoff_time from _eom.
+    burnout_angle_deg : desired elevation at end of pitch program (°).
+    turn_start_s      : time to begin pitching (s); default 5.0.
+    turn_stop_s       : time to reach burnout_angle_deg and hold (s);
+                        default = total powered-flight duration.
     """
-    if t < _GRAVITY_TURN_VERTICAL_S:
+    if t <= turn_start_s:
         el_deg = 90.0
+    elif t >= turn_stop_s:
+        el_deg = burnout_angle_deg
     else:
-        pitch_duration = max(total_burn_s - _GRAVITY_TURN_VERTICAL_S, 1.0)
-        frac = min(1.0, (t - _GRAVITY_TURN_VERTICAL_S) / pitch_duration)
+        pitch_duration = max(turn_stop_s - turn_start_s, 1.0)
+        frac = (t - turn_start_s) / pitch_duration
         el_deg = 90.0 - frac * (90.0 - burnout_angle_deg)
 
     el_rad = np.radians(el_deg)
@@ -202,7 +201,7 @@ def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 # Equations of motion
 # ---------------------------------------------------------------------------
 
-def _eom(t, state, params, cutoff_time, azimuth_rad):
+def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_stop_s):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
@@ -213,6 +212,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     time t and the top-level params.loft_angle_deg / loft_angle_rate_deg_s.
     The curve runs through all stages and coast phases; thrust_force() returns
     zero during coast so attitude during coast has no effect on the trajectory.
+
+    gt_turn_start_s / gt_turn_stop_s are used only when params.guidance ==
+    "gravity_turn"; they bound the active pitch window.
     """
     pos = state[:3]
     vel = state[3:]
@@ -251,7 +253,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
             thrust_dir = _gravity_turn_thrust_dir(
                 lat, lon, azimuth_rad,
                 params.loft_angle_deg,
-                cutoff_time,
+                gt_turn_start_s,
+                gt_turn_stop_s,
                 t)
         else:  # "loft" (Forden)
             thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
@@ -275,7 +278,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad):
     return np.concatenate([vel, accel])
 
 
-def _hit_ground(t, state, params, cutoff_time, azimuth_rad):
+def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_stop_s):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -297,7 +300,9 @@ def integrate_trajectory(params: MissileParams,
                          loft_angle_rate_deg_s: float = None,
                          cutoff_time_s: float = None,
                          dt_output: float = 1.0,
-                         max_time_s: float = 3600.0):
+                         max_time_s: float = 3600.0,
+                         gt_turn_start_s: float = 5.0,
+                         gt_turn_stop_s: float = None):
     """
     Integrate a missile trajectory from launch to impact.
 
@@ -347,6 +352,8 @@ def integrate_trajectory(params: MissileParams,
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
+    if gt_turn_stop_s is None:
+        gt_turn_stop_s = total_burn
 
     lat0 = np.radians(launch_lat_deg)
     lon0 = np.radians(launch_lon_deg)
@@ -362,7 +369,7 @@ def integrate_trajectory(params: MissileParams,
     t_span = (0.0, max_time_s)
     t_eval = np.arange(0.0, max_time_s, dt_output)
 
-    eom_args = (params, cutoff_time_s, az)
+    eom_args = (params, cutoff_time_s, az, gt_turn_start_s, gt_turn_stop_s)
 
     sol = solve_ivp(
         fun=_eom,
@@ -516,7 +523,9 @@ def aim_missile(params: MissileParams,
                 target_range_km: float,
                 guidance: str = None,
                 loft_angle_deg: float = None,
-                loft_angle_rate_deg_s: float = None) -> float:
+                loft_angle_rate_deg_s: float = None,
+                gt_turn_start_s: float = 5.0,
+                gt_turn_stop_s: float = None) -> float:
     """
     Find the engine cutoff time (seconds) that produces the desired range,
     using the missile's loft-angle guidance parameters.
@@ -534,7 +543,9 @@ def aim_missile(params: MissileParams,
                                  guidance=guidance,
                                  loft_angle_deg=la,
                                  loft_angle_rate_deg_s=lar,
-                                 cutoff_time_s=cutoff)
+                                 cutoff_time_s=cutoff,
+                                 gt_turn_start_s=gt_turn_start_s,
+                                 gt_turn_stop_s=gt_turn_stop_s)
         return r['range_km'] - target_range_km
 
     total_burn = total_burn_time(params)
@@ -569,7 +580,9 @@ def maximize_range(params: MissileParams,
                    launch_azimuth_deg: float = 0.0,
                    guidance: str = None,
                    loft_angle_deg: float = None,
-                   loft_angle_rate_deg_s: float = None) -> dict:
+                   loft_angle_rate_deg_s: float = None,
+                   gt_turn_start_s: float = 5.0,
+                   gt_turn_stop_s: float = None) -> dict:
     """
     Find the maximum range by optimising loft_angle and loft_angle_rate.
 
@@ -577,10 +590,16 @@ def maximize_range(params: MissileParams,
     trajectory is run with those fixed values (no optimisation).  Otherwise
     a two-stage coarse/fine grid search is performed over the two parameters.
 
+    For gravity_turn guidance, gt_turn_stop_s is also optimised when it is
+    None (not user-specified).  A short turn_stop allows the vehicle to reach
+    its burnout angle early and hold it flat, which dramatically increases
+    range for multi-stage vehicles with long total burn times.
+
     Returns the full trajectory dict plus:
         'max_range_km'            : achieved maximum range (km)
-        'optimal_loft_angle_deg'  : best loft angle (°)
-        'optimal_loft_rate_deg_s' : best loft angle rate (°/s)
+        'optimal_loft_angle_deg'  : best loft angle / burnout angle (°)
+        'optimal_loft_rate_deg_s' : best loft rate (°/s; placeholder for GT)
+        'optimal_gt_turn_stop_s'  : best turn-stop time (s; gravity_turn only)
     """
     total_burn = total_burn_time(params)
 
@@ -592,21 +611,30 @@ def maximize_range(params: MissileParams,
             loft_angle_deg=loft_angle_deg,
             loft_angle_rate_deg_s=loft_angle_rate_deg_s,
             cutoff_time_s=total_burn,
+            gt_turn_start_s=gt_turn_start_s,
+            gt_turn_stop_s=gt_turn_stop_s,
         )
         traj['max_range_km']            = traj['range_km']
         traj['optimal_loft_angle_deg']  = loft_angle_deg
         traj['optimal_loft_rate_deg_s'] = loft_angle_rate_deg_s
+        traj['optimal_gt_turn_stop_s']  = (gt_turn_stop_s if gt_turn_stop_s is not None
+                                           else total_burn)
         return traj
 
     effective_guidance = guidance if guidance is not None else params.guidance
 
-    def _run(la, lar):
+    # best_ts tracks the turn-stop being used; starts at user value or total_burn
+    best_ts = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
+
+    def _run(la, lar, ts):
         try:
             r = integrate_trajectory(
                 params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
                 guidance=guidance,
                 loft_angle_deg=la, loft_angle_rate_deg_s=lar,
-                cutoff_time_s=total_burn)
+                cutoff_time_s=total_burn,
+                gt_turn_start_s=gt_turn_start_s,
+                gt_turn_stop_s=ts)
             if r['time_of_flight_s'] >= 3599.0:
                 return -1.0   # orbital / runaway — not a valid ballistic solution
             return r['range_km']
@@ -618,29 +646,59 @@ def maximize_range(params: MissileParams,
     best_lar = params.loft_angle_rate_deg_s
 
     if effective_guidance == "gravity_turn":
-        # Scan burnout angles 5°–70° (Wheelon linear pitch program).
-        # loft_angle_rate_deg_s is unused for gravity_turn; pass 1.0 as placeholder.
+        # Phase 1: coarse burnout-angle scan with current best_ts
         for burnout_a in range(5, 71, 5):
-            rng = _run(float(burnout_a), 1.0)
+            rng = _run(float(burnout_a), 1.0, best_ts)
             if rng > best_range:
                 best_range = rng
                 best_la    = float(burnout_a)
-        # Fine search ±4° around best burnout angle
+
+        # Phase 2: scan turn_stop values when the user hasn't fixed one.
+        # A short turn_stop means the missile pitches over quickly then holds
+        # a flat angle — critical for multi-stage vehicles (e.g. Zoljanah)
+        # whose total burn time is far longer than the pitch-over window.
+        if gt_turn_stop_s is None:
+            ts_min = gt_turn_start_s + 5.0
+            ts_candidates = sorted({
+                ts for ts in [20.0, 40.0, 60.0, 90.0,
+                               min(120.0, total_burn),
+                               min(180.0, total_burn),
+                               total_burn]
+                if ts >= ts_min
+            })
+            for ts in ts_candidates:
+                rng = _run(best_la, 1.0, ts)
+                if rng > best_range:
+                    best_range = rng
+                    best_ts    = ts
+
+        # Phase 3: fine-tune burnout angle (±4°)
         for d in (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0):
             ba = best_la + d
             if ba < 1.0 or ba > 80.0:
                 continue
-            rng = _run(ba, 1.0)
+            rng = _run(ba, 1.0, best_ts)
             if rng > best_range:
                 best_range = rng
                 best_la    = ba
+
+        # Phase 4: fine-tune turn_stop (±20 s) when user hasn't fixed it
+        if gt_turn_stop_s is None:
+            for dt in (-20.0, -10.0, 0.0, 10.0, 20.0):
+                ts = max(gt_turn_start_s + 5.0, min(total_burn, best_ts + dt))
+                rng = _run(best_la, 1.0, ts)
+                if rng > best_range:
+                    best_range = rng
+                    best_ts    = ts
+
         best_lar = 1.0   # placeholder — not used by linear pitch program
+
     else:
         # Forden loft: coarse 10° steps in loft_angle, 0.5 °/s steps in rate
         for la in range(20, 75, 10):
             for lar_x2 in range(1, 7):   # 0.5 … 3.0 °/s
                 lar = lar_x2 * 0.5
-                rng = _run(float(la), lar)
+                rng = _run(float(la), lar, best_ts)
                 if rng > best_range:
                     best_range = rng
                     best_la  = float(la)
@@ -652,7 +710,7 @@ def maximize_range(params: MissileParams,
                 lar = best_lar + dlar
                 if la < 5.0 or la > 85.0 or lar < 0.1:
                     continue
-                rng = _run(la, lar)
+                rng = _run(la, lar, best_ts)
                 if rng > best_range:
                     best_range = rng
                     best_la  = la
@@ -664,8 +722,11 @@ def maximize_range(params: MissileParams,
         loft_angle_deg=best_la,
         loft_angle_rate_deg_s=best_lar,
         cutoff_time_s=total_burn,
+        gt_turn_start_s=gt_turn_start_s,
+        gt_turn_stop_s=best_ts,
     )
     traj['max_range_km']            = traj['range_km']
     traj['optimal_loft_angle_deg']  = best_la
     traj['optimal_loft_rate_deg_s'] = best_lar
+    traj['optimal_gt_turn_stop_s']  = best_ts
     return traj
