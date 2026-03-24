@@ -90,8 +90,11 @@ class MissileParams:
     # Shroud / payload fairing jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
-    shroud_mass_kg:        float = 0.0
+    shroud_mass_kg:         float = 0.0
     shroud_jettison_alt_km: float = 80.0
+    # Physical length of the fairing — used to compute the tumbling-cylinder
+    # ballistic coefficient for the shed fairing debris arc.  0 = not specified.
+    shroud_length_m:        float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -117,12 +120,13 @@ def _scud_b():
         name="Scud-B (R-17)",
         mass_initial=4897 + 1000,   # 5897 kg
         mass_propellant=prop,        # 3699 kg
-        mass_final=1198 + 1000,      # 2198 kg
+        mass_final=1198 + 1000,      # 2198 kg  (dry + warhead; body stays attached)
         diameter_m=0.84,
         length_m=11.25,
         thrust_N=round(_thrust_from_isp(230, prop, 75)),   # ≈ 111 200 N
         burn_time_s=75.0,
         isp_s=230.0,
+        payload_kg=1000.0,
         # Loft angle / rate from Forden Figure 3 (SCUD-B example trajectory)
         loft_angle_deg=47.6563,
         loft_angle_rate_deg_s=1.348,
@@ -138,12 +142,13 @@ def _al_hussein():
         name="Al Hussein",
         mass_initial=6073 + 191,    # 6264 kg
         mass_propellant=prop,        # 4739 kg
-        mass_final=1334 + 191,       # 1525 kg
+        mass_final=1334 + 191,       # 1525 kg  (dry + warhead)
         diameter_m=0.84,
         length_m=12.0,
         thrust_N=round(_thrust_from_isp(230, prop, 90)),   # ≈ 118 900 N
         burn_time_s=90.0,
         isp_s=230.0,
+        payload_kg=191.0,
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
         mach_table=_FORDEN_MACH,
@@ -158,12 +163,13 @@ def _nodong():
         name="No-dong",
         mass_initial=19900 + 1000,  # 20 900 kg
         mass_propellant=prop,        # 16 000 kg
-        mass_final=3900 + 1000,      # 4 900 kg
+        mass_final=3900 + 1000,      # 4 900 kg  (dry + warhead)
         diameter_m=0.88,
         length_m=15.6,
         thrust_N=round(_thrust_from_isp(240, prop, 70)),   # ≈ 537 600 N
         burn_time_s=70.0,
         isp_s=240.0,
+        payload_kg=1000.0,
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.5,
         mach_table=_FORDEN_MACH,
@@ -207,6 +213,7 @@ def _taepodong_i():
         thrust_N=round(_thrust_from_isp(240, prop1, 70)),   # ≈ 540 900 N
         burn_time_s=70.0,
         isp_s=240.0,
+        payload_kg=454.0,
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
         mach_table=_FORDEN_MACH,
@@ -330,6 +337,7 @@ def _taepodong_ii():
         thrust_N=round(_thrust_from_isp(240, prop1, 70)),
         burn_time_s=70.0,
         isp_s=240.0,
+        payload_kg=500.0,
         loft_angle_deg=40.0,
         loft_angle_rate_deg_s=0.8,
         mach_table=_FORDEN_MACH,
@@ -559,9 +567,10 @@ def missile_to_dict(p: MissileParams) -> dict:
         'bus_mass_kg':           p.bus_mass_kg,
         'num_rvs':               p.num_rvs,
         'rv_mass_kg':            p.rv_mass_kg,
-        'shroud_mass_kg':        p.shroud_mass_kg,
+        'shroud_mass_kg':         p.shroud_mass_kg,
         'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
-        'nozzle_exit_area_m2':   p.nozzle_exit_area_m2,
+        'shroud_length_m':        p.shroud_length_m,
+        'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -599,6 +608,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         rv_mass_kg=float(d.get('rv_mass_kg', 0.0)),
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
+        shroud_length_m=float(d.get('shroud_length_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
     )
 
@@ -606,6 +616,29 @@ def missile_from_dict(d: dict) -> MissileParams:
 # ---------------------------------------------------------------------------
 # Physics helper functions
 # ---------------------------------------------------------------------------
+
+def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
+                           cd: float = 1.0) -> float:
+    """
+    Ballistic coefficient β (kg/m²) for a tumbling cylinder.
+
+    The effective reference area is the mean of the end-on and broadside
+    projected areas, which approximates the time-averaged area for a cylinder
+    tumbling in the pitch plane:
+
+        A_eff = (π d² / 4  +  d · L) / 2
+        β     = m / (Cd · A_eff)
+
+    Default Cd = 1.0 is representative of bluff-body turbulent flow.
+    Returns 0 if length or diameter is zero.
+    """
+    A_end  = np.pi * diameter_m ** 2 / 4.0
+    A_side = diameter_m * length_m
+    A_eff  = (A_end + A_side) / 2.0
+    if A_eff <= 0:
+        return 0.0
+    return mass_kg / (cd * A_eff)
+
 
 def total_burn_time(params: MissileParams) -> float:
     """Total time from launch to end of last stage's burn (burn + coast phases)."""
