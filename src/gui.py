@@ -1388,7 +1388,7 @@ class MissileFlyoutApp(tk.Tk):
         rf.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 8))
 
         self._slv_text = tk.Text(
-            rf, state=tk.DISABLED, font=("Courier", 9),
+            rf, state=tk.DISABLED, font=("TkFixedFont", 9),
             wrap=tk.NONE, relief=tk.FLAT, background="#f8f8f8",
             foreground="#222222", selectbackground="#c0d8f0")
         vsb = ttk.Scrollbar(rf, orient=tk.VERTICAL,
@@ -1399,10 +1399,10 @@ class MissileFlyoutApp(tk.Tk):
 
         # Tag for the headline verdict line
         self._slv_text.tag_configure("yes", foreground="#006600",
-                                     font=("Courier", 9, "bold"))
+                                     font=("TkFixedFont", 9, "bold"))
         self._slv_text.tag_configure("no",  foreground="#aa0000",
-                                     font=("Courier", 9, "bold"))
-        self._slv_text.tag_configure("hdr", font=("Courier", 9, "bold"))
+                                     font=("TkFixedFont", 9, "bold"))
+        self._slv_text.tag_configure("hdr", font=("TkFixedFont", 9, "bold"))
 
         self._slv_set_text(
             "Select a missile, set the launch site and azimuth in the left\n"
@@ -1828,7 +1828,7 @@ class MissileFlyoutApp(tk.Tk):
             r = 0
             _row(lf, r, "Diameter (m):",          f"{node.diameter_m:.2f}"); r += 1
             _row(lf, r, "Fueled mass (kg):",       f"{node.mass_initial:,.0f}"); r += 1
-            _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}"); r += 1
+            _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}  (computed)"); r += 1
             _row(lf, r, "Dry mass (kg):",          f"{node.mass_final:,.0f}"); r += 1
             _row(lf, r, "Dry mass %:",             f"{dry_pct:.1f}%"); r += 1
             _row(lf, r, "Thrust (kN):",            f"{node.thrust_N/1000:,.0f}"); r += 1
