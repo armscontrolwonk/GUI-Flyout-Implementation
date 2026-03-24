@@ -27,7 +27,7 @@ import matplotlib.ticker
 
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
-                           total_burn_time)
+                           total_burn_time, tumbling_cylinder_beta)
 from trajectory import integrate_trajectory, maximize_range, aim_missile
 from coordinates import range_between
 from slv_performance import schilling_performance
@@ -508,14 +508,25 @@ class MissileDialog(tk.Toplevel):
 
         # Row 5: Jettison altitude (indented label to signal dependence on shroud)
         ttk.Label(pl, text="  Jettison alt (km):").grid(
-            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_alt_var = tk.StringVar(value="80")
         _sa_inner = ttk.Frame(pl)
-        _sa_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        _sa_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_alt_entry = ttk.Entry(
             _sa_inner, textvariable=self._shroud_alt_var, width=10, state="disabled")
         self._shroud_alt_entry.pack(side=tk.LEFT)
         ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Row 6: Fairing length — used to compute tumbling-cylinder debris β
+        ttk.Label(pl, text="  Fairing length (m):").grid(
+            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+        self._shroud_length_var = tk.StringVar(value="0")
+        _sl_inner = ttk.Frame(pl)
+        _sl_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        self._shroud_length_entry = ttk.Entry(
+            _sl_inner, textvariable=self._shroud_length_var, width=10, state="disabled")
+        self._shroud_length_entry.pack(side=tk.LEFT)
+        ttk.Label(_sl_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
         # Live total-payload label update
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
@@ -568,6 +579,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_check.config(state="disabled")
         self._shroud_mass_entry.config(state="disabled")
         self._shroud_alt_entry.config(state="disabled")
+        self._shroud_length_entry.config(state="disabled")
         self._save_btn.pack_forget()
 
     # ------------------------------------------------------------------
@@ -582,10 +594,11 @@ class MissileDialog(tk.Toplevel):
             self._total_payload_lbl.config(text="kg  = ? total")
 
     def _update_shroud_state(self):
-        """Enable/disable shroud mass and altitude entries."""
+        """Enable/disable shroud mass, altitude, and length entries."""
         state = "normal" if self._shroud_var.get() else "disabled"
         self._shroud_mass_entry.config(state=state)
         self._shroud_alt_entry.config(state=state)
+        self._shroud_length_entry.config(state=state)
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -671,6 +684,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_var.set(has_shroud)
         self._shroud_mass_var.set(f"{shroud_mass:.0f}")
         self._shroud_alt_var.set(f"{p.shroud_jettison_alt_km:.0f}")
+        self._shroud_length_var.set(f"{p.shroud_length_m:.1f}")
         self._update_shroud_state()
 
         self._name_var.set(name)
@@ -698,14 +712,16 @@ class MissileDialog(tk.Toplevel):
         rv_beta = float(self._rv_beta_var.get())
 
         # Shroud
-        shroud_mass   = 0.0
-        shroud_alt_km = 80.0
+        shroud_mass     = 0.0
+        shroud_alt_km   = 80.0
+        shroud_length_m = 0.0
         if self._shroud_var.get():
             try:
-                shroud_mass   = float(self._shroud_mass_var.get())
-                shroud_alt_km = float(self._shroud_alt_var.get())
+                shroud_mass     = float(self._shroud_mass_var.get())
+                shroud_alt_km   = float(self._shroud_alt_var.get())
+                shroud_length_m = float(self._shroud_length_var.get())
             except ValueError:
-                raise ValueError("Shroud mass and jettison altitude must be numbers.")
+                raise ValueError("Shroud mass, jettison altitude, and length must be numbers.")
 
         # Read and validate all active stage frames
         stages = []
@@ -764,8 +780,9 @@ class MissileDialog(tk.Toplevel):
         node.bus_mass_kg       = bus_mass
         node.num_rvs           = num_rvs
         node.rv_mass_kg        = rv_mass
-        node.shroud_mass_kg        = shroud_mass
+        node.shroud_mass_kg         = shroud_mass
         node.shroud_jettison_alt_km = shroud_alt_km
+        node.shroud_length_m        = shroud_length_m
         return node
 
     # ------------------------------------------------------------------
@@ -1655,9 +1672,10 @@ class MissileFlyoutApp(tk.Tk):
         self._tl_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
         # Alternating row colours; no explicit font — inherits system default
-        self._tl_tree.tag_configure("odd",  background="#f5f5f5")
-        self._tl_tree.tag_configure("even", background="#ffffff")
-        self._tl_tree.tag_configure("key",  background="#ddeeff", font="bold")
+        self._tl_tree.tag_configure("odd",    background="#f5f5f5")
+        self._tl_tree.tag_configure("even",   background="#ffffff")
+        self._tl_tree.tag_configure("key",    background="#ddeeff", font="bold")
+        self._tl_tree.tag_configure("debris", background="#fff3cd")
 
     # ------------------------------------------------------------------
     # Missile Parameters tab
@@ -1859,23 +1877,28 @@ class MissileFlyoutApp(tk.Tk):
             prop = node.mass_propellant
             tw   = node.thrust_N / (node.mass_initial * _G0)
 
-            # Recover this stage's own fueled mass by stripping the upper stack.
-            # node.mass_initial always includes upper stages + payload + shroud,
-            # so we subtract them the same way populate() does when loading.
+            # Recover this stage's own fueled mass (payload excluded).
+            # For non-last stages mass_final is the jettisoned dry mass only,
+            # so stage_fueled = mass_final + propellant — no stack arithmetic needed.
+            # For the last stage (and single-stage) we strip payload (and shroud
+            # if single-stage) from mass_initial, which requires payload_kg to be
+            # set correctly on the top-level node.
             is_first = (sn == 1)
             if is_last and is_first:
+                # Single-stage: mass_initial = fueled + payload + shroud
                 stage_fueled = node.mass_initial - p.payload_kg - p.shroud_mass_kg
             elif is_last:
+                # Last of multi: mass_initial = fueled + payload
                 stage_fueled = node.mass_initial - p.payload_kg
-            elif is_first:
-                stage_fueled = node.mass_initial - p.shroud_mass_kg - node.stage2.mass_initial
             else:
-                stage_fueled = node.mass_initial - node.stage2.mass_initial
+                # Non-last: mass_final = jettisoned dry mass only
+                stage_fueled = node.mass_final + prop
             stage_dry = stage_fueled - prop
             dry_pct   = stage_dry / stage_fueled * 100 if stage_fueled > 0 else 0.0
 
             r = 0
             _row(lf, r, "Diameter (m):",          f"{node.diameter_m:.2f}"); r += 1
+            _row(lf, r, "Length (m):",             f"{node.length_m:.2f}"); r += 1
             _row(lf, r, "Fueled mass (kg):",       f"{stage_fueled:,.0f}"); r += 1
             _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}  (computed)"); r += 1
             _row(lf, r, "Dry mass (kg):",          f"{stage_dry:,.0f}"); r += 1
@@ -1887,9 +1910,28 @@ class MissileFlyoutApp(tk.Tk):
             _row(lf, r, "T/W ratio:",              f"{tw:.2f}"); r += 1
             if not is_last:
                 _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
+                # Debris ballistic coefficient for the jettisoned empty stage
+                beta = tumbling_cylinder_beta(node.mass_final,
+                                              node.diameter_m, node.length_m)
+                if beta > 0:
+                    _row(lf, r, "Empty stage β (kg/m²):", f"{beta:,.0f}"); r += 1
 
             sn  += 1
             node = node.stage2
+
+        # ── Fairing ───────────────────────────────────────────────────
+        if p.shroud_mass_kg > 0:
+            ff = ttk.LabelFrame(self._params_inner, text="Fairing / Shroud")
+            ff.pack(fill=tk.X, **pad)
+            r = 0
+            _row(ff, r, "Mass (kg):",          f"{p.shroud_mass_kg:,.0f}"); r += 1
+            _row(ff, r, "Jettison alt (km):",  f"{p.shroud_jettison_alt_km:.0f}"); r += 1
+            if p.shroud_length_m > 0:
+                _row(ff, r, "Length (m):",     f"{p.shroud_length_m:.2f}"); r += 1
+                beta = tumbling_cylinder_beta(p.shroud_mass_kg,
+                                              p.diameter_m, p.shroud_length_m)
+                if beta > 0:
+                    _row(ff, r, "Fairing β (kg/m²):", f"{beta:,.0f}"); r += 1
 
     # ------------------------------------------------------------------
     # Aim at target
@@ -2093,11 +2135,16 @@ class MissileFlyoutApp(tk.Tk):
             f"Impact speed: {imp_spd:.2f} km/s"
         )
 
-        # Key events highlighted differently
+        # Key events highlighted differently; debris impact rows get their own tag
         _key = {"Ignition", "Apogee", "Impact"}
 
         for idx, m in enumerate(r.get('milestones', [])):
-            tag = "key" if m['event'] in _key else ("odd" if idx % 2 else "even")
+            if m.get('is_debris'):
+                tag = "debris"
+            elif m['event'] in _key:
+                tag = "key"
+            else:
+                tag = "odd" if idx % 2 else "even"
             # Acceleration at Impact is dominated by drag spike — show as blank
             accel_str = (f"{m['accel_ms2']:+.1f}"
                          if m['event'] != "Impact" else "—")

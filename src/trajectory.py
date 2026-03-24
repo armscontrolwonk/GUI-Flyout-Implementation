@@ -71,7 +71,7 @@ from coordinates import (
 )
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
-    active_stage, active_stage_and_t, total_burn_time,
+    active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
 )
 
 
@@ -288,6 +288,69 @@ _hit_ground.direction = -1
 
 
 # ---------------------------------------------------------------------------
+# Debris ballistic arc integrator
+# ---------------------------------------------------------------------------
+
+def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
+                     beta_kg_m2: float,
+                     max_time_s: float = 7200.0):
+    """
+    Integrate a tumbling debris piece from separation to ground impact.
+
+    Uses β-based drag  (F_drag / m = q / β),  gravity (J2),  Coriolis, and
+    centrifugal — the same physics as the main integrator but with no thrust
+    and a constant ballistic coefficient in place of stage aerodynamics.
+
+    Parameters
+    ----------
+    pos_ecef   : ECEF position at separation (m), shape (3,)
+    vel_ecef   : ECEF velocity at separation (m/s), shape (3,)
+    beta_kg_m2 : ballistic coefficient β = m / (Cd · A_eff) in kg/m²
+    max_time_s : integration timeout (s)
+
+    Returns
+    -------
+    impact_lat_deg  : geodetic latitude of debris impact (°)
+    impact_lon_deg  : longitude of debris impact (°)
+    flight_time_s   : time from separation to impact (s)
+    impact_speed_ms : ECEF-frame speed at impact (m/s)
+    """
+    def _eom(t, state):
+        pos, vel = state[:3], state[3:]
+        _, _, alt = ecef_to_geodetic(pos)
+        g     = gravity_ecef(pos)
+        speed = np.linalg.norm(vel)
+        if speed > 1e-6:
+            _, _, rho, _ = atmosphere(max(alt, 0.0))
+            q      = 0.5 * rho * speed ** 2
+            a_drag = -(q / beta_kg_m2) * (vel / speed)
+        else:
+            a_drag = np.zeros(3)
+        a_cor = coriolis_acceleration(vel)
+        a_cen = centrifugal_acceleration(pos)
+        return np.concatenate([vel, g + a_drag + a_cor + a_cen])
+
+    def _ground(t, state):
+        _, _, alt = ecef_to_geodetic(state[:3])
+        return alt
+    _ground.terminal  = True
+    _ground.direction = -1
+
+    state0 = np.concatenate([pos_ecef, vel_ecef])
+    sol = solve_ivp(_eom, (0.0, max_time_s), state0,
+                    method='RK45', events=_ground,
+                    rtol=1e-5, atol=10.0, dense_output=False)
+
+    pos_f = sol.y[:3, -1]
+    vel_f = sol.y[3:, -1]
+    lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
+    return (float(np.degrees(lat_f)),
+            float(np.degrees(lon_f)),
+            float(sol.t[-1]),
+            float(np.linalg.norm(vel_f)))
+
+
+# ---------------------------------------------------------------------------
 # Public integration interface
 # ---------------------------------------------------------------------------
 
@@ -472,6 +535,69 @@ def integrate_trajectory(params: MissileParams,
             row = _milestone(t_ev)
             row['event'] = "Fairing jettison"
             _insert_chrono(row)
+
+    # --- Debris impact arcs (tumbling empty stages + fairing) ----------------
+    # Helper: interpolate ECEF state at time t_ev from the dense arrays.
+    def _ecef_state_at(t_ev):
+        t_ev = float(np.clip(t_ev, t_arr[0], t_arr[-1]))
+        pos = np.array([np.interp(t_ev, t_arr, pos_arr[:, i]) for i in range(3)])
+        vel = np.array([np.interp(t_ev, t_arr, vel_arr[:, i]) for i in range(3)])
+        return pos, vel
+
+    # Walk stages: every non-last stage is jettisoned at burnout.
+    _t_node = 0.0
+    _node   = params
+    _sn     = 1
+    while _node is not None:
+        _t_bo = _t_node + _node.burn_time_s
+        if _node.stage2 is not None and _node.mass_final > 0 and _t_bo <= t_arr[-1]:
+            beta = tumbling_cylinder_beta(_node.mass_final,
+                                          _node.diameter_m, _node.length_m)
+            if beta > 0:
+                _pos_s, _vel_s = _ecef_state_at(_t_bo)
+                _d_lat, _d_lon, _dt, _d_spd = integrate_debris(_pos_s, _vel_s, beta)
+                _rng = range_between(lat0, lon0,
+                                     np.radians(_d_lat), np.radians(_d_lon))
+                _insert_chrono({
+                    'event':              (f"Stage {_sn} empty impact"
+                                          f"  (β={beta:.0f} kg/m²)"),
+                    't_s':                _t_bo + _dt,
+                    'alt_km':             0.0,
+                    'range_km':           _rng / 1000.0,
+                    'speed_kms':          _d_spd / 1000.0,
+                    'inertial_speed_kms': _d_spd / 1000.0,
+                    'accel_ms2':          0.0,
+                    'mass_t':             _node.mass_final / 1000.0,
+                    'is_debris':          True,
+                })
+        _t_node = _t_bo + _node.coast_time_s
+        _node   = _node.stage2
+        _sn    += 1
+
+    # Fairing debris arc (only if length is specified so β can be computed).
+    if params.shroud_mass_kg > 0 and params.shroud_length_m > 0:
+        _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
+                                ascending=True)
+        if _t_fair is not None and _t_fair <= t_arr[-1]:
+            beta = tumbling_cylinder_beta(params.shroud_mass_kg,
+                                          params.diameter_m, params.shroud_length_m)
+            if beta > 0:
+                _pos_s, _vel_s = _ecef_state_at(_t_fair)
+                _d_lat, _d_lon, _dt, _d_spd = integrate_debris(_pos_s, _vel_s, beta)
+                _rng = range_between(lat0, lon0,
+                                     np.radians(_d_lat), np.radians(_d_lon))
+                _insert_chrono({
+                    'event':              (f"Fairing impact"
+                                          f"  (β={beta:.0f} kg/m²)"),
+                    't_s':                _t_fair + _dt,
+                    'alt_km':             0.0,
+                    'range_km':           _rng / 1000.0,
+                    'speed_kms':          _d_spd / 1000.0,
+                    'inertial_speed_kms': _d_spd / 1000.0,
+                    'accel_ms2':          0.0,
+                    'mass_t':             params.shroud_mass_kg / 1000.0,
+                    'is_debris':          True,
+                })
 
     # Apogee
     apo_row = _milestone(t_arr[apo_idx])
