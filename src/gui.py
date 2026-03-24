@@ -1859,13 +1859,26 @@ class MissileFlyoutApp(tk.Tk):
             prop = node.mass_propellant
             tw   = node.thrust_N / (node.mass_initial * _G0)
 
-            dry_pct = node.mass_final / node.mass_initial * 100
+            # Recover this stage's own fueled mass by stripping the upper stack.
+            # node.mass_initial always includes upper stages + payload + shroud,
+            # so we subtract them the same way populate() does when loading.
+            is_first = (sn == 1)
+            if is_last and is_first:
+                stage_fueled = node.mass_initial - p.payload_kg - p.shroud_mass_kg
+            elif is_last:
+                stage_fueled = node.mass_initial - p.payload_kg
+            elif is_first:
+                stage_fueled = node.mass_initial - p.shroud_mass_kg - node.stage2.mass_initial
+            else:
+                stage_fueled = node.mass_initial - node.stage2.mass_initial
+            stage_dry = stage_fueled - prop
+            dry_pct   = stage_dry / stage_fueled * 100 if stage_fueled > 0 else 0.0
 
             r = 0
             _row(lf, r, "Diameter (m):",          f"{node.diameter_m:.2f}"); r += 1
-            _row(lf, r, "Fueled mass (kg):",       f"{node.mass_initial:,.0f}"); r += 1
+            _row(lf, r, "Fueled mass (kg):",       f"{stage_fueled:,.0f}"); r += 1
             _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}  (computed)"); r += 1
-            _row(lf, r, "Dry mass (kg):",          f"{node.mass_final:,.0f}"); r += 1
+            _row(lf, r, "Dry mass (kg):",          f"{stage_dry:,.0f}"); r += 1
             _row(lf, r, "Dry mass %:",             f"{dry_pct:.1f}%"); r += 1
             _row(lf, r, "Thrust (kN):",            f"{node.thrust_N/1000:,.0f}"); r += 1
             _row(lf, r, "ISP (s):",                f"{node.isp_s:.0f}"); r += 1
