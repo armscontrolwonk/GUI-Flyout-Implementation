@@ -1025,7 +1025,8 @@ class ParametricSweepDialog(tk.Toplevel):
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=run_gt_stop,
                 )
-                row  = (val, r["range_km"], r["apogee_km"])
+                row  = (val, r["range_km"] if r["range_km"] is not None else float("nan"),
+                        r["apogee_km"])
                 traj = (val, r) if store_trajs else None
             except Exception:
                 row  = (val, float("nan"), float("nan"))
@@ -2107,13 +2108,14 @@ class MissileFlyoutApp(tk.Tk):
         if 'optimal_gt_turn_stop_s' in r:
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
+        orbital   = r.get('orbital', False)
         rng_km    = r['range_km']
-        rng_nm    = rng_km / 1.852
-        rng_mi    = rng_km / 1.60934
+        rng_nm    = rng_km / 1.852   if rng_km    is not None else None
+        rng_mi    = rng_km / 1.60934 if rng_km    is not None else None
         apogee_km = r['apogee_km']
 
         tof_s       = r['time_of_flight_s']
-        imp_spd_kms = r['impact_speed_ms'] / 1000.0
+        imp_spd_kms = r['impact_speed_ms'] / 1000.0 if r['impact_speed_ms'] is not None else None
         apo_lat     = r['apogee_lat_deg']
         apo_lon     = r['apogee_lon_deg']
 
@@ -2121,13 +2123,19 @@ class MissileFlyoutApp(tk.Tk):
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
         scale, ulbl = scale_map[units]
 
-        self._status_var.set(
-            f"Done.  Range: {rng_km*scale:.1f} {ulbl}  |  "
-            f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
-            f"ToF: {tof_s:.0f} s  |  "
-            f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
-            f"Impact spd: {imp_spd_kms:.2f} km/s"
-        )
+        if orbital:
+            self._status_var.set(
+                f"In orbit (no ground impact within integration window).  "
+                f"Apogee: {apogee_km*scale:.1f} {ulbl}"
+            )
+        else:
+            self._status_var.set(
+                f"Done.  Range: {rng_km*scale:.1f} {ulbl}  |  "
+                f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
+                f"ToF: {tof_s:.0f} s  |  "
+                f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
+                f"Impact spd: {imp_spd_kms:.2f} km/s"
+            )
         self._plot_results(r, scale, ulbl)
         self._populate_timeline(r)
 
@@ -2140,18 +2148,27 @@ class MissileFlyoutApp(tk.Tk):
         rng_km    = r['range_km']
         apogee_km = r['apogee_km']
         tof_s     = r['time_of_flight_s']
-        rng_nm    = rng_km / 1.852
-        rng_mi    = rng_km / 1.60934
-        imp_spd   = r['impact_speed_ms'] / 1000.0
+        _orbital  = r.get('orbital', False)
+        if rng_km is not None:
+            rng_nm = rng_km / 1.852
+            rng_mi = rng_km / 1.60934
+        imp_spd   = r['impact_speed_ms'] / 1000.0 if r['impact_speed_ms'] is not None else None
 
-        self._tl_summary_var.set(
-            f"Range: {rng_km:.1f} km  /  {rng_nm:.1f} nmi  /  {rng_mi:.1f} mi\n"
-            f"Apogee: {apogee_km:.1f} km   "
-            f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E\n"
-            f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E   "
-            f"Flight time: {tof_s:.0f} s   "
-            f"Impact speed: {imp_spd:.2f} km/s"
-        )
+        if _orbital:
+            self._tl_summary_var.set(
+                f"In orbit — no ground impact within integration window\n"
+                f"Apogee: {apogee_km:.1f} km   "
+                f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E"
+            )
+        else:
+            self._tl_summary_var.set(
+                f"Range: {rng_km:.1f} km  /  {rng_nm:.1f} nmi  /  {rng_mi:.1f} mi\n"
+                f"Apogee: {apogee_km:.1f} km   "
+                f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E\n"
+                f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E   "
+                f"Flight time: {tof_s:.0f} s   "
+                f"Impact speed: {imp_spd:.2f} km/s"
+            )
 
         # Key events highlighted differently; debris impact rows get their own tag
         _key = {"Ignition", "Apogee", "Impact"}
@@ -2229,14 +2246,14 @@ class MissileFlyoutApp(tk.Tk):
             else:
                 i += 1
 
-        impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
-
         # Plot trajectory + markers first so matplotlib autoscales to them.
         self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2, zorder=2)
-        self._ax_trk.plot(0.0,          lat_arr[0],  'go', markersize=7,
+        self._ax_trk.plot(0.0, lat_arr[0], 'go', markersize=7,
                           label="Launch", zorder=5)
-        self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
-                          label="Impact", zorder=5)
+        if not r.get('orbital', False):
+            impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
+            self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
+                              label="Impact", zorder=5)
 
         # Debris impact locations — red crosses, one per shed stage / fairing.
         _debris_plotted = False
