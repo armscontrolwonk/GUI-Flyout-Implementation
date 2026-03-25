@@ -544,13 +544,28 @@ def integrate_trajectory(params: MissileParams,
         vel = np.array([np.interp(t_ev, t_arr, vel_arr[:, i]) for i in range(3)])
         return pos, vel
 
-    # Walk stages: every non-last stage is jettisoned at burnout.
+    # Walk stages: every jettisoned stage body gets a debris arc.
+    # Non-last stages are always jettisoned.  The last stage body is also
+    # jettisoned when the RV/payload separates cleanly at burnout — detected
+    # by mass_final ≈ dry mass alone (mass_initial − propellant − payload_kg).
+    # When mass_final includes the payload (e.g. Scud warhead stays on),
+    # the body is NOT separate debris and is skipped.
     _t_node = 0.0
     _node   = params
     _sn     = 1
     while _node is not None:
-        _t_bo = _t_node + _node.burn_time_s
-        if _node.stage2 is not None and _node.mass_final > 0 and _t_bo <= t_arr[-1]:
+        _t_bo    = _t_node + _node.burn_time_s
+        _is_last = (_node.stage2 is None)
+        if _is_last:
+            # Last stage: body is jettisoned only when payload separates.
+            # Compare mass_final to the expected dry-only mass.
+            _dry_only = _node.mass_initial - _node.mass_propellant - params.payload_kg
+            _body_jettisoned = (params.payload_kg > 0
+                                and abs(_node.mass_final - _dry_only) < 1.0)
+        else:
+            _body_jettisoned = True   # non-last stages always shed their body
+
+        if _body_jettisoned and _node.mass_final > 0 and _t_bo <= t_arr[-1]:
             beta = tumbling_cylinder_beta(_node.mass_final,
                                           _node.diameter_m, _node.length_m)
             if beta > 0:
