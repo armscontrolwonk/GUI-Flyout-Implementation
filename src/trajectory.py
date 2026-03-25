@@ -569,6 +569,8 @@ def integrate_trajectory(params: MissileParams,
                     'accel_ms2':          0.0,
                     'mass_t':             _node.mass_final / 1000.0,
                     'is_debris':          True,
+                    'impact_lat':         _d_lat,
+                    'impact_lon':         _d_lon,
                 })
         _t_node = _t_bo + _node.coast_time_s
         _node   = _node.stage2
@@ -597,6 +599,8 @@ def integrate_trajectory(params: MissileParams,
                     'accel_ms2':          0.0,
                     'mass_t':             params.shroud_mass_kg / 1000.0,
                     'is_debris':          True,
+                    'impact_lat':         _d_lat,
+                    'impact_lon':         _d_lon,
                 })
 
     # Apogee
