@@ -1910,7 +1910,13 @@ class MissileFlyoutApp(tk.Tk):
             _row(lf, r, "T/W ratio:",              f"{tw:.2f}"); r += 1
             if not is_last:
                 _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
-                # Debris ballistic coefficient for the jettisoned empty stage
+            # Show debris β for every jettisoned stage body.
+            # Non-last stages always shed; last stage sheds when its mass_final
+            # equals the dry shell alone (RV/payload separates at burnout).
+            _dry_only = node.mass_initial - node.mass_propellant - p.payload_kg
+            _body_jettisoned = (not is_last) or (
+                p.payload_kg > 0 and abs(node.mass_final - _dry_only) < 1.0)
+            if _body_jettisoned:
                 beta = tumbling_cylinder_beta(node.mass_final,
                                               node.diameter_m, node.length_m)
                 if beta > 0:
