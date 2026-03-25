@@ -372,7 +372,8 @@ def integrate_trajectory(params: MissileParams,
                          dt_output: float = 1.0,
                          max_time_s: float = 3600.0,
                          gt_turn_start_s: float = 5.0,
-                         gt_turn_stop_s: float = None):
+                         gt_turn_stop_s: float = None,
+                         reentry_query_alt_km: float = None):
     """
     Integrate a missile trajectory from launch to impact.
 
@@ -667,6 +668,17 @@ def integrate_trajectory(params: MissileParams,
             row['event'] = "Re-entry (100 km)"
             _insert_chrono(row)
 
+    # Optional user-specified re-entry query altitude (e.g. 50 km for
+    # aeroballistic / hypersonic-glider handoff conditions).
+    if reentry_query_alt_km is not None:
+        _q_m = reentry_query_alt_km * 1000.0
+        if np.max(alts) > _q_m:
+            t_ev = _alt_crossing(_q_m, ascending=False)
+            if t_ev is not None and t_ev > t_arr[apo_idx]:
+                row = _milestone(t_ev)
+                row['event'] = f"Re-entry ({reentry_query_alt_km:.0f} km)"
+                _insert_chrono(row)
+
     # Impact — only add if the vehicle actually reached the ground.
     if not orbital:
         imp_row = _milestone(t_arr[-1])
@@ -764,7 +776,8 @@ def maximize_range(params: MissileParams,
                    loft_angle_deg: float = None,
                    loft_angle_rate_deg_s: float = None,
                    gt_turn_start_s: float = 5.0,
-                   gt_turn_stop_s: float = None) -> dict:
+                   gt_turn_stop_s: float = None,
+                   reentry_query_alt_km: float = None) -> dict:
     """
     Find the maximum range by optimising loft_angle and loft_angle_rate.
 
@@ -910,6 +923,7 @@ def maximize_range(params: MissileParams,
             cutoff_time_s=total_burn,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
+            reentry_query_alt_km=reentry_query_alt_km,
         )
         traj['max_range_km']            = None   # no valid sub-orbital solution found
         traj['optimal_loft_angle_deg']  = None
@@ -925,6 +939,7 @@ def maximize_range(params: MissileParams,
         cutoff_time_s=total_burn,
         gt_turn_start_s=gt_turn_start_s,
         gt_turn_stop_s=best_ts,
+        reentry_query_alt_km=reentry_query_alt_km,
     )
     traj['max_range_km']            = traj['range_km']
     traj['optimal_loft_angle_deg']  = best_la
