@@ -328,12 +328,29 @@ class _StageFrame(ttk.LabelFrame):
         burn_str = self._burn_var.get()
         if burn_str == "—":
             raise ValueError("Burn time could not be computed — check thrust, Isp, and masses.")
-        return {k: float(v.get()) for k, v in [
+        _LABELS = {
+            "fueled": "Fueled Mass", "dry": "Dry Mass", "dia": "Diameter",
+            "length": "Length", "thrust_kn": "Thrust", "isp": "Isp",
+            "nozzle_area": "Nozzle Exit Area", "coast": "Coast Time",
+        }
+        result = {}
+        for k, v in [
             ("fueled",      self._fueled),      ("dry",         self._dry),
             ("dia",         self._dia),         ("length",      self._length),
             ("thrust_kn",   self._thrust_kn),   ("isp",         self._isp),
             ("nozzle_area", self._nozzle_area), ("coast",       self._coast_var),
-        ]} | {"burn": float(burn_str)}
+        ]:
+            try:
+                result[k] = float(v.get())
+            except ValueError:
+                raise ValueError(
+                    f"{_LABELS.get(k, k)}: expected a number, got {v.get()!r:.40s}"
+                )
+        try:
+            result["burn"] = float(burn_str)
+        except ValueError:
+            raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
+        return result
 
     def populate(self, d):
         # Back-calculate thrust_kn from stored burn/isp/prop so the round-trip
