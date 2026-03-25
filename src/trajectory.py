@@ -341,6 +341,13 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
                     method='RK45', events=_ground,
                     rtol=1e-5, atol=10.0, dense_output=False)
 
+    # If the ground event never fired the stage did not impact within the
+    # timeout — it is in orbit (or on a very long sub-orbital arc).  Return
+    # None so the caller can skip the debris milestone rather than reporting
+    # a spurious in-orbit position as a ground impact.
+    if len(sol.t_events[0]) == 0:
+        return None
+
     pos_f = sol.y[:3, -1]
     vel_f = sol.y[3:, -1]
     lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
@@ -569,23 +576,38 @@ def integrate_trajectory(params: MissileParams,
                                           _node.diameter_m, _node.length_m)
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_bo)
-                _d_lat, _d_lon, _dt, _d_spd = integrate_debris(_pos_s, _vel_s, beta)
-                _rng = range_between(lat0, lon0,
-                                     np.radians(_d_lat), np.radians(_d_lon))
-                _insert_chrono({
-                    'event':              (f"Stage {_sn} empty impact"
-                                          f"  (β={beta:.0f} kg/m²)"),
-                    't_s':                _t_bo + _dt,
-                    'alt_km':             0.0,
-                    'range_km':           _rng / 1000.0,
-                    'speed_kms':          _d_spd / 1000.0,
-                    'inertial_speed_kms': _d_spd / 1000.0,
-                    'accel_ms2':          0.0,
-                    'mass_t':             _node.mass_final / 1000.0,
-                    'is_debris':          True,
-                    'impact_lat':         _d_lat,
-                    'impact_lon':         _d_lon,
-                })
+                _debris = integrate_debris(_pos_s, _vel_s, beta)
+                if _debris is None:
+                    # Stage did not re-enter within the integration window —
+                    # it is in orbit; add an informational row with no impact
+                    # coordinates so no spurious marker appears on the map.
+                    _insert_chrono({
+                        'event':   f"Stage {_sn} empty body — in orbit",
+                        't_s':     _t_bo,
+                        'alt_km':  0.0, 'range_km': 0.0,
+                        'speed_kms': 0.0, 'inertial_speed_kms': 0.0,
+                        'accel_ms2': 0.0,
+                        'mass_t':  _node.mass_final / 1000.0,
+                        'is_debris': True,
+                    })
+                else:
+                    _d_lat, _d_lon, _dt, _d_spd = _debris
+                    _rng = range_between(lat0, lon0,
+                                         np.radians(_d_lat), np.radians(_d_lon))
+                    _insert_chrono({
+                        'event':              (f"Stage {_sn} empty impact"
+                                              f"  (β={beta:.0f} kg/m²)"),
+                        't_s':                _t_bo + _dt,
+                        'alt_km':             0.0,
+                        'range_km':           _rng / 1000.0,
+                        'speed_kms':          _d_spd / 1000.0,
+                        'inertial_speed_kms': _d_spd / 1000.0,
+                        'accel_ms2':          0.0,
+                        'mass_t':             _node.mass_final / 1000.0,
+                        'is_debris':          True,
+                        'impact_lat':         _d_lat,
+                        'impact_lon':         _d_lon,
+                    })
         _t_node = _t_bo + _node.coast_time_s
         _node   = _node.stage2
         _sn    += 1
@@ -599,23 +621,25 @@ def integrate_trajectory(params: MissileParams,
                                           params.diameter_m, params.shroud_length_m)
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_fair)
-                _d_lat, _d_lon, _dt, _d_spd = integrate_debris(_pos_s, _vel_s, beta)
-                _rng = range_between(lat0, lon0,
-                                     np.radians(_d_lat), np.radians(_d_lon))
-                _insert_chrono({
-                    'event':              (f"Fairing impact"
-                                          f"  (β={beta:.0f} kg/m²)"),
-                    't_s':                _t_fair + _dt,
-                    'alt_km':             0.0,
-                    'range_km':           _rng / 1000.0,
-                    'speed_kms':          _d_spd / 1000.0,
-                    'inertial_speed_kms': _d_spd / 1000.0,
-                    'accel_ms2':          0.0,
-                    'mass_t':             params.shroud_mass_kg / 1000.0,
-                    'is_debris':          True,
-                    'impact_lat':         _d_lat,
-                    'impact_lon':         _d_lon,
-                })
+                _debris = integrate_debris(_pos_s, _vel_s, beta)
+                if _debris is not None:
+                    _d_lat, _d_lon, _dt, _d_spd = _debris
+                    _rng = range_between(lat0, lon0,
+                                         np.radians(_d_lat), np.radians(_d_lon))
+                    _insert_chrono({
+                        'event':              (f"Fairing impact"
+                                              f"  (β={beta:.0f} kg/m²)"),
+                        't_s':                _t_fair + _dt,
+                        'alt_km':             0.0,
+                        'range_km':           _rng / 1000.0,
+                        'speed_kms':          _d_spd / 1000.0,
+                        'inertial_speed_kms': _d_spd / 1000.0,
+                        'accel_ms2':          0.0,
+                        'mass_t':             params.shroud_mass_kg / 1000.0,
+                        'is_debris':          True,
+                        'impact_lat':         _d_lat,
+                        'impact_lon':         _d_lon,
+                    })
 
     # Apogee
     apo_row = _milestone(t_arr[apo_idx])
