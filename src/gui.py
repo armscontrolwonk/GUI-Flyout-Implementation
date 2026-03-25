@@ -2102,10 +2102,10 @@ class MissileFlyoutApp(tk.Tk):
         # If this was a Max Range run, update guidance fields now — all GUI
         # mutations happen here in one batch so nothing fires between the field
         # updates and the canvas redraw.
-        if 'optimal_loft_angle_deg' in r:
+        if r.get('optimal_loft_angle_deg') is not None:
             self._loft_angle_var.set(f"{r['optimal_loft_angle_deg']:.4f}")
             self._loft_rate_var .set(f"{r['optimal_loft_rate_deg_s']:.3f}")
-        if 'optimal_gt_turn_stop_s' in r:
+        if r.get('optimal_gt_turn_stop_s') is not None:
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
         orbital   = r.get('orbital', False)
@@ -2123,7 +2123,13 @@ class MissileFlyoutApp(tk.Tk):
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
         scale, ulbl = scale_map[units]
 
-        if orbital:
+        if orbital and r.get('max_range_km') is None:
+            self._status_var.set(
+                "Max Range: no sub-orbital solution found — "
+                "vehicle exceeds orbital velocity at all tested burnout angles.  "
+                f"Apogee: {apogee_km*scale:.1f} {ulbl}"
+            )
+        elif orbital:
             self._status_var.set(
                 f"In orbit (no ground impact within integration window).  "
                 f"Apogee: {apogee_km*scale:.1f} {ulbl}"

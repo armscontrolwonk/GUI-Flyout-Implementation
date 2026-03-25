@@ -810,7 +810,7 @@ def maximize_range(params: MissileParams,
                 cutoff_time_s=total_burn,
                 gt_turn_start_s=gt_turn_start_s,
                 gt_turn_stop_s=ts)
-            if r['time_of_flight_s'] >= 3599.0:
+            if r.get('orbital', False):
                 return -1.0   # orbital / runaway — not a valid ballistic solution
             return r['range_km']
         except Exception:
@@ -890,6 +890,25 @@ def maximize_range(params: MissileParams,
                     best_range = rng
                     best_la  = la
                     best_lar = lar
+
+    if best_range < 0.0:
+        # Every angle in the search produced an orbital (or failed) trajectory.
+        # Run with the current params as-is so the caller gets a result dict
+        # (likely orbital) and can display a sensible "in orbit" message.
+        traj = integrate_trajectory(
+            params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+            guidance=guidance,
+            loft_angle_deg=params.loft_angle_deg,
+            loft_angle_rate_deg_s=params.loft_angle_rate_deg_s,
+            cutoff_time_s=total_burn,
+            gt_turn_start_s=gt_turn_start_s,
+            gt_turn_stop_s=gt_turn_stop_s,
+        )
+        traj['max_range_km']            = None   # no valid sub-orbital solution found
+        traj['optimal_loft_angle_deg']  = None
+        traj['optimal_loft_rate_deg_s'] = None
+        traj['optimal_gt_turn_stop_s']  = None
+        return traj
 
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
