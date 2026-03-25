@@ -531,8 +531,71 @@ def _zoljanah_slv():
     )
 
 
+def _aur():
+    # AUR — two-stage ballistic missile, depressed trajectory.
+    #
+    # Physical parameters from open-source data:
+    #   Body diameter: 34.5 in = 0.8763 m
+    #   Total length:  5.0 (S1) + 2.6 (S2) + 2.6 (payload) = 10.2 m
+    #
+    # Stage 2 (upper stage — ignites after stage-1 separation):
+    #   Propellant: 1 842 kg  Dry: 186 kg  Fueled: 2 028 kg
+    #   Thrust: 80 kN  Isp: 280 s  Burn: 63 s  Nozzle exit area: 0.30 m²
+    #   mass_final = stage-2 dry only (jettisoned at payload separation)
+    stage2 = MissileParams(
+        name="AUR Stage 2",
+        mass_initial=2028 + 450,      # 2 478 kg (stage-2 wet + payload)
+        mass_propellant=1842,
+        mass_final=186,               # stage-2 dry shell, jettisoned at separation
+        diameter_m=0.8763,
+        length_m=2.6,
+        thrust_N=80_000,              # 80 kN as stated
+        burn_time_s=63.0,
+        isp_s=280.0,
+        nozzle_exit_area_m2=0.30,
+        guidance="loft",
+        # Depressed-trajectory — starting values; tune experimentally.
+        loft_angle_deg=25.0,
+        loft_angle_rate_deg_s=3.0,
+        coast_time_s=0.0,
+        # Empty tables → legacy 2 % sea-level back-pressure approximation used.
+        mach_table=[],
+        cd_table=[],
+    )
+
+    # Stage 1 (booster):
+    #   Propellant: 4 509 kg  Dry: 454 kg  Fueled: 4 963 kg
+    #   Thrust: 230 kN  Isp: 280 s  Burn: 54 s  Nozzle exit area: 0.30 m²
+    #   mass_final = stage-1 dry only (jettisoned after burnout, no coast)
+    return MissileParams(
+        name="AUR",
+        mass_initial=4963 + stage2.mass_initial,   # 7 441 kg total at launch
+        mass_propellant=4509,
+        mass_final=454,                            # stage-1 dry, jettisoned
+        diameter_m=0.8763,                         # 34.5 in converted to metres
+        length_m=10.2,                             # 5.0 + 2.6 + 2.6
+        thrust_N=230_000,                          # 230 kN as stated
+        burn_time_s=54.0,
+        isp_s=280.0,
+        nozzle_exit_area_m2=0.30,
+        guidance="loft",
+        # Depressed-trajectory — starting values; tune experimentally.
+        loft_angle_deg=25.0,
+        loft_angle_rate_deg_s=3.0,
+        coast_time_s=0.0,
+        payload_kg=450.0,
+        rv_beta_kg_m2=1500.0,
+        rv_separates=True,
+        stage2=stage2,
+        # Empty tables → legacy 2 % sea-level back-pressure approximation used.
+        mach_table=[],
+        cd_table=[],
+    )
+
+
 MISSILE_DB = {
     # Non-Forden missiles (user-editable)
+    "AUR":                    _aur,
     "Zoljanah (SLV)":         _zoljanah_slv,
     "Zoljanah (IRBM)":        _zoljanah,
     "Shahab-3":               _shahab3,
