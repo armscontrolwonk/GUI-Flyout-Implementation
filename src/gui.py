@@ -1413,6 +1413,21 @@ class MissileFlyoutApp(tk.Tk):
             side=tk.LEFT, padx=4)
         ttk.Label(cf_inner, text="s  (blank = full burn)").pack(side=tk.LEFT)
 
+        # ── Re-entry query altitude ────────────────────────────────────
+        rq = ttk.LabelFrame(parent, text="Re-entry Query")
+        rq.pack(fill=tk.X, padx=6, pady=3)
+        rq_inner = ttk.Frame(rq)
+        rq_inner.pack(padx=6, pady=4)
+        self._query_alt_enable = tk.BooleanVar(value=False)
+        self._query_alt_km_var = tk.StringVar(value="50")
+        ttk.Checkbutton(rq_inner, text="Report state at:",
+                        variable=self._query_alt_enable,
+                        command=self._toggle_query_alt).pack(side=tk.LEFT)
+        self._query_alt_entry = ttk.Entry(
+            rq_inner, textvariable=self._query_alt_km_var, width=6, state="disabled")
+        self._query_alt_entry.pack(side=tk.LEFT, padx=4)
+        ttk.Label(rq_inner, text="km (descent)").pack(side=tk.LEFT)
+
         # ── Run buttons ───────────────────────────────────────────────
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, padx=6, pady=6)
@@ -1769,6 +1784,10 @@ class MissileFlyoutApp(tk.Tk):
             self._del_btn.config(state=tk.DISABLED, text="Delete")
 
     # ------------------------------------------------------------------
+    def _toggle_query_alt(self):
+        state = "normal" if self._query_alt_enable.get() else "disabled"
+        self._query_alt_entry.config(state=state)
+
     def _on_guidance_changed(self):
         """Called when the user clicks a guidance radio button."""
         self._update_guidance_labels(self._guidance_var.get())
@@ -2087,11 +2106,14 @@ class MissileFlyoutApp(tk.Tk):
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
                     gt_start_s, gt_stop_s, maximise):
+        q_str = self._query_alt_km_var.get().strip()
+        q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
             if maximise:
                 result = maximize_range(missile, lat, lon, az, guidance=guidance,
                                         gt_turn_start_s=gt_start_s,
-                                        gt_turn_stop_s=gt_stop_s)
+                                        gt_turn_stop_s=gt_stop_s,
+                                        reentry_query_alt_km=q_alt)
             else:
                 result = integrate_trajectory(
                     missile, lat, lon, az,
@@ -2100,7 +2122,8 @@ class MissileFlyoutApp(tk.Tk):
                     loft_angle_rate_deg_s=lar,
                     cutoff_time_s=cutoff,
                     gt_turn_start_s=gt_start_s,
-                    gt_turn_stop_s=gt_stop_s)
+                    gt_turn_stop_s=gt_stop_s,
+                    reentry_query_alt_km=q_alt)
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
