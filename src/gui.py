@@ -1,5 +1,5 @@
 """
-GUI Missile Flyout V1.1 — Python/tkinter port of Forden's MATLAB GUIDE application.
+Thrusty — Python/tkinter port of Forden's MATLAB GUIDE application.
 
 Layout mirrors the original MATLAB GUIDE application:
   Left panel  : missile type, units, launch site (decimal °), target (decimal °),
@@ -1182,7 +1182,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("GUI Missile Flyout V1.1  —  Python port of Forden (2001)")
+        self.title("Thrusty  —  Python port of Forden (2001)")
         self.geometry("1280x780")
         self.resizable(True, True)
 
@@ -1261,7 +1261,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _build_control_panel(self, parent):
         # ── Title ──────────────────────────────────────────────────────
-        ttk.Label(parent, text="GUI Missile Flyout V1.1",
+        ttk.Label(parent, text="Thrusty",
                   font=("", 11, "bold")).pack(pady=(6, 2))
         ttk.Label(parent, text="Python port of Forden (2001)",
                   font=("", 8, "italic"), foreground="grey").pack()
@@ -2325,10 +2325,10 @@ class MissileFlyoutApp(tk.Tk):
 
     def _show_about(self):
         messagebox.showinfo(
-            "About GUI Missile Flyout V1.1",
-            "GUI Missile Flyout V1.1 — Python port\n\n"
+            "About Thrusty",
+            "Thrusty — Python port of Forden (2001)\n\n"
             "Original MATLAB application by Geoffrey Forden\n"
-            "Published: Sci. & Global Security 15 (2007)\n\n"
+            "Published: Science & Global Security 15 (2007)\n\n"
             "3-DOF trajectory integration:\n"
             "  • COESA 1976 standard atmosphere\n"
             "  • WGS-84 J2 gravity (ECEF)\n"
