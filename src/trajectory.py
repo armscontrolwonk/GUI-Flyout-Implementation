@@ -676,7 +676,7 @@ def integrate_trajectory(params: MissileParams,
             t_ev = _alt_crossing(_q_m, ascending=False)
             if t_ev is not None and t_ev > t_arr[apo_idx]:
                 row = _milestone(t_ev)
-                row['event'] = f"Re-entry ({reentry_query_alt_km:.0f} km)"
+                row['event'] = f"Re-entry query ({reentry_query_alt_km:.0f} km)"
                 _insert_chrono(row)
 
     # Impact — only add if the vehicle actually reached the ground.
