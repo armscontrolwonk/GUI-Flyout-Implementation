@@ -1182,7 +1182,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Thrusty  —  Python port of Forden (2001)")
+        self.title("Thrusty")
         self.geometry("1280x780")
         self.resizable(True, True)
 
@@ -1263,8 +1263,6 @@ class MissileFlyoutApp(tk.Tk):
         # ── Title ──────────────────────────────────────────────────────
         ttk.Label(parent, text="Thrusty",
                   font=("", 11, "bold")).pack(pady=(6, 2))
-        ttk.Label(parent, text="Python port of Forden (2001)",
-                  font=("", 8, "italic"), foreground="grey").pack()
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=6)
 
         # ── Missile type ───────────────────────────────────────────────
@@ -2326,9 +2324,9 @@ class MissileFlyoutApp(tk.Tk):
     def _show_about(self):
         messagebox.showinfo(
             "About Thrusty",
-            "Thrusty — Python port of Forden (2001)\n\n"
-            "Original MATLAB application by Geoffrey Forden\n"
-            "Published: Science & Global Security 15 (2007)\n\n"
+            "Thrusty\n\n"
+            "Based on the MATLAB application by Geoffrey Forden\n"
+            "G. Forden, Science & Global Security 15 (2007)\n\n"
             "3-DOF trajectory integration:\n"
             "  • COESA 1976 standard atmosphere\n"
             "  • WGS-84 J2 gravity (ECEF)\n"
