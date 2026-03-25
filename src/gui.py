@@ -1351,21 +1351,21 @@ class MissileFlyoutApp(tk.Tk):
         lf.pack(fill=tk.X, padx=6, pady=3)
 
         _site_values, self._site_map = _load_launch_sites()
-        ttk.Label(lf, text="Site:").grid(row=0, column=0,
-                                         sticky=tk.W, padx=(8, 2), pady=2)
         self._site_var = tk.StringVar(value="")
         self._site_cb = ttk.Combobox(lf, textvariable=self._site_var,
                                      values=_site_values, state="readonly", width=26)
-        self._site_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._site_cb.pack(padx=6, pady=(4, 2))
         self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
 
-        self._launch_lat = _dd_row(lf, "Latitude:",  row=1, default="0.0")
-        self._launch_lon = _dd_row(lf, "Longitude:", row=2, default="0.0")
+        lf_grid = ttk.Frame(lf)
+        lf_grid.pack(fill=tk.X)
+        self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
+        self._launch_lon = _dd_row(lf_grid, "Longitude:", row=1, default="0.0")
 
-        ttk.Label(lf, text="Azimuth:").grid(row=3, column=0,
-                                             sticky=tk.W, padx=(8, 2), pady=2)
-        az_frame = ttk.Frame(lf)
-        az_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        ttk.Label(lf_grid, text="Azimuth:").grid(row=2, column=0,
+                                                  sticky=tk.W, padx=(8, 2), pady=2)
+        az_frame = ttk.Frame(lf_grid)
+        az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._azimuth_var = tk.StringVar(value="0.0")
         ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
         ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
