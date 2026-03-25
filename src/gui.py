@@ -492,37 +492,45 @@ class MissileDialog(tk.Toplevel):
                                        "(0 = use stage body aero)")
         self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
 
-        # Row 4: Shroud — checkbutton acts as label; entry starts disabled
+        # Row 4: Warhead / RV separates checkbox
+        self._rv_separates_var = tk.BooleanVar(value=False)
+        self._rv_separates_check = ttk.Checkbutton(
+            pl, text="Warhead / RV separates from stage at burnout",
+            variable=self._rv_separates_var)
+        self._rv_separates_check.grid(
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
+
+        # Row 5: Shroud — checkbutton acts as label; entry starts disabled
         self._shroud_var = tk.BooleanVar(value=False)
         self._shroud_check = ttk.Checkbutton(pl, text="Shroud mass (kg):",
                                              variable=self._shroud_var,
                                              command=self._update_shroud_state)
-        self._shroud_check.grid(row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._shroud_check.grid(row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_mass_var = tk.StringVar(value="0")
         _sm_inner = ttk.Frame(pl)
-        _sm_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sm_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_mass_entry = ttk.Entry(
             _sm_inner, textvariable=self._shroud_mass_var, width=10, state="disabled")
         self._shroud_mass_entry.pack(side=tk.LEFT)
         ttk.Label(_sm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 5: Jettison altitude (indented label to signal dependence on shroud)
+        # Row 6: Jettison altitude (indented label to signal dependence on shroud)
         ttk.Label(pl, text="  Jettison alt (km):").grid(
-            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_alt_var = tk.StringVar(value="80")
         _sa_inner = ttk.Frame(pl)
-        _sa_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sa_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_alt_entry = ttk.Entry(
             _sa_inner, textvariable=self._shroud_alt_var, width=10, state="disabled")
         self._shroud_alt_entry.pack(side=tk.LEFT)
         ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 6: Fairing length — used to compute tumbling-cylinder debris β
+        # Row 7: Fairing length — used to compute tumbling-cylinder debris β
         ttk.Label(pl, text="  Fairing length (m):").grid(
-            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
         self._shroud_length_var = tk.StringVar(value="0")
         _sl_inner = ttk.Frame(pl)
-        _sl_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        _sl_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
         self._shroud_length_entry = ttk.Entry(
             _sl_inner, textvariable=self._shroud_length_var, width=10, state="disabled")
         self._shroud_length_entry.pack(side=tk.LEFT)
@@ -580,6 +588,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_mass_entry.config(state="disabled")
         self._shroud_alt_entry.config(state="disabled")
         self._shroud_length_entry.config(state="disabled")
+        self._rv_separates_check.config(state="disabled")
         self._save_btn.pack_forget()
 
     # ------------------------------------------------------------------
@@ -687,6 +696,9 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_var.set(f"{p.shroud_length_m:.1f}")
         self._update_shroud_state()
 
+        # RV / warhead separates flag
+        self._rv_separates_var.set(p.rv_separates)
+
         self._name_var.set(name)
         self._guidance_var.set(p.guidance)
 
@@ -709,7 +721,8 @@ class MissileDialog(tk.Toplevel):
         except ValueError:
             raise ValueError("PBV and per-RV mass must be numbers.")
         payload = bus_mass + num_rvs * rv_mass
-        rv_beta = float(self._rv_beta_var.get())
+        rv_beta      = float(self._rv_beta_var.get())
+        rv_separates = self._rv_separates_var.get()
 
         # Shroud
         shroud_mass     = 0.0
@@ -745,11 +758,11 @@ class MissileDialog(tk.Toplevel):
             if is_last and is_first:
                 # Single-stage missile
                 m0     = sd["fueled"] + payload + shroud_mass
-                mfinal = sd["dry"] + payload
+                mfinal = sd["dry"] if rv_separates else sd["dry"] + payload
             elif is_last:
                 # Last of multiple stages: payload present, shroud is on stage 1
                 m0     = sd["fueled"] + payload
-                mfinal = sd["dry"] + payload
+                mfinal = sd["dry"] if rv_separates else sd["dry"] + payload
             elif is_first:
                 # First of multiple stages: add shroud here
                 m0     = sd["fueled"] + shroud_mass + upper_mass
@@ -780,6 +793,7 @@ class MissileDialog(tk.Toplevel):
         node.bus_mass_kg       = bus_mass
         node.num_rvs           = num_rvs
         node.rv_mass_kg        = rv_mass
+        node.rv_separates           = rv_separates
         node.shroud_mass_kg         = shroud_mass
         node.shroud_jettison_alt_km = shroud_alt_km
         node.shroud_length_m        = shroud_length_m
@@ -1911,11 +1925,9 @@ class MissileFlyoutApp(tk.Tk):
             if not is_last:
                 _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
             # Show debris β for every jettisoned stage body.
-            # Non-last stages always shed; last stage sheds when its mass_final
-            # equals the dry shell alone (RV/payload separates at burnout).
-            _dry_only = node.mass_initial - node.mass_propellant - p.payload_kg
-            _body_jettisoned = (not is_last) or (
-                p.payload_kg > 0 and abs(node.mass_final - _dry_only) < 1.0)
+            # Non-last stages always shed; last stage sheds only when
+            # rv_separates is explicitly set.
+            _body_jettisoned = (not is_last) or p.rv_separates
             if _body_jettisoned:
                 beta = tumbling_cylinder_beta(node.mass_final,
                                               node.diameter_m, node.length_m)

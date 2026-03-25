@@ -557,11 +557,10 @@ def integrate_trajectory(params: MissileParams,
         _t_bo    = _t_node + _node.burn_time_s
         _is_last = (_node.stage2 is None)
         if _is_last:
-            # Last stage: body is jettisoned only when payload separates.
-            # Compare mass_final to the expected dry-only mass.
-            _dry_only = _node.mass_initial - _node.mass_propellant - params.payload_kg
-            _body_jettisoned = (params.payload_kg > 0
-                                and abs(_node.mass_final - _dry_only) < 1.0)
+            # Last stage body is jettisoned only when the RV/payload separates
+            # explicitly (rv_separates flag).  Without it the body stays fused
+            # to the warhead (e.g. Scud-B) and is not separate debris.
+            _body_jettisoned = params.rv_separates
         else:
             _body_jettisoned = True   # non-last stages always shed their body
 

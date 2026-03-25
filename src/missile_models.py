@@ -83,9 +83,15 @@ class MissileParams:
     # bus_mass_kg + num_rvs * rv_mass_kg should equal payload_kg.
     # When rv_mass_kg == 0 the decomposition is not specified; terminal drag
     # falls back to payload_kg as a proxy for RV mass.
-    bus_mass_kg: float = 0.0
-    num_rvs:     int   = 1
-    rv_mass_kg:  float = 0.0   # mass of one RV
+    bus_mass_kg:   float = 0.0
+    num_rvs:       int   = 1
+    rv_mass_kg:    float = 0.0   # mass of one RV
+
+    # When True the RV/payload separates from the last-stage body at burnout.
+    # The empty stage body then follows a tumbling-cylinder debris arc.
+    # When False (default) the stage body stays attached to the warhead
+    # (e.g. Scud-B) and no separate stage debris is computed.
+    rv_separates:  bool  = False
 
     # Shroud / payload fairing jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
@@ -413,6 +419,7 @@ def _zoljanah():
         stage2=stage2,
         payload_kg=float(payload),
         rv_beta_kg_m2=rv_beta,
+        rv_separates=True,   # RV separates from stage-2 body at burnout
     )
     return p
 
@@ -564,6 +571,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
         'rv_beta_kg_m2':         p.rv_beta_kg_m2,
+        'rv_separates':          p.rv_separates,
         'bus_mass_kg':           p.bus_mass_kg,
         'num_rvs':               p.num_rvs,
         'rv_mass_kg':            p.rv_mass_kg,
@@ -603,6 +611,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         stage2=stage2,
         payload_kg=float(d.get('payload_kg', 0.0)),
         rv_beta_kg_m2=float(d.get('rv_beta_kg_m2', 0.0)),
+        rv_separates=bool(d.get('rv_separates', False)),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
         num_rvs=int(d.get('num_rvs', 1)),
         rv_mass_kg=float(d.get('rv_mass_kg', 0.0)),
