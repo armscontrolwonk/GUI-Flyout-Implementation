@@ -617,13 +617,21 @@ def integrate_trajectory(params: MissileParams,
         _node   = _node.stage2
         _sn    += 1
 
-    # Fairing debris arc (only if length is specified so β can be computed).
-    if params.shroud_mass_kg > 0 and params.shroud_length_m > 0:
+    # Fairing debris arc.  If length is given use tumbling-cylinder β; otherwise
+    # fall back to end-on disc area so the impact row is always shown.
+    if params.shroud_mass_kg > 0:
         _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
                                 ascending=True)
         if _t_fair is not None and _t_fair <= t_arr[-1]:
-            beta = tumbling_cylinder_beta(params.shroud_mass_kg,
-                                          params.diameter_m, params.shroud_length_m)
+            if params.shroud_length_m > 0:
+                beta = tumbling_cylinder_beta(params.shroud_mass_kg,
+                                              params.diameter_m, params.shroud_length_m)
+                _beta_note = f"β={beta:.0f} kg/m²"
+            else:
+                # Length unknown — use end-on disc area as a conservative estimate.
+                _A_end = np.pi * params.diameter_m ** 2 / 4.0
+                beta = (params.shroud_mass_kg / _A_end) if _A_end > 0 else 0.0
+                _beta_note = f"β={beta:.0f} kg/m² (disc, no length)"
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_fair)
                 _debris = integrate_debris(_pos_s, _vel_s, beta)
@@ -632,8 +640,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              (f"Fairing impact"
-                                              f"  (β={beta:.0f} kg/m²)"),
+                        'event':              f"Fairing impact  ({_beta_note})",
                         't_s':                _t_fair + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
