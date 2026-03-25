@@ -459,6 +459,11 @@ def integrate_trajectory(params: MissileParams,
     pos_arr  = sol.y[:3].T   # (N, 3)
     vel_arr  = sol.y[3:].T   # (N, 3)
 
+    # Detect whether the warhead actually reached the ground.  When the
+    # _hit_ground event never fires the vehicle is on an orbital or
+    # very-long-range sub-orbital arc that didn't return within max_time_s.
+    orbital = len(sol.t_events[0]) == 0
+
     lats, lons, alts = [], [], []
     for p in pos_arr:
         la, lo, al = ecef_to_geodetic(p)
@@ -655,10 +660,11 @@ def integrate_trajectory(params: MissileParams,
             row['event'] = "Re-entry (100 km)"
             _insert_chrono(row)
 
-    # Impact
-    imp_row = _milestone(t_arr[-1])
-    imp_row['event'] = "Impact"
-    milestones.append(imp_row)
+    # Impact — only add if the vehicle actually reached the ground.
+    if not orbital:
+        imp_row = _milestone(t_arr[-1])
+        imp_row['event'] = "Impact"
+        milestones.append(imp_row)
 
     return {
         't':                  t_arr,
@@ -672,14 +678,15 @@ def integrate_trajectory(params: MissileParams,
         'range':              ranges,
         'pos_ecef':           pos_arr,
         'vel_ecef':           vel_arr,
-        'impact_lat':         lats[-1],
-        'impact_lon':         lons[-1],
-        'range_km':           ranges[-1] / 1000.0,
+        'orbital':            orbital,
+        'impact_lat':         None if orbital else lats[-1],
+        'impact_lon':         None if orbital else lons[-1],
+        'range_km':           None if orbital else ranges[-1] / 1000.0,
         'apogee_km':          np.max(alts) / 1000.0,
         'apogee_lat_deg':     lats[apo_idx],
         'apogee_lon_deg':     lons[apo_idx],
-        'time_of_flight_s':   t_arr[-1],
-        'impact_speed_ms':    speeds[-1],
+        'time_of_flight_s':   None if orbital else t_arr[-1],
+        'impact_speed_ms':    None if orbital else speeds[-1],
         'milestones':         milestones,
     }
 
