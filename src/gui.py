@@ -129,18 +129,42 @@ def _save_custom_missiles():
 
 _SITE_SEPARATOR = "──────────────────────────────"
 
-def _load_launch_sites():
-    """Return (combobox_values, name→site_dict) from launch_sites.json."""
-    path = Path(__file__).parent / "launch_sites.json"
-    if not path.exists():
-        return [], {}
+# Bundled sites (read-only) come from launch_sites.json in the source tree.
+# User-added sites are stored separately so the bundled file stays clean.
+_USER_SITES_PATH = Path.home() / ".gui_missile_flyout" / "user_sites.json"
+_BUNDLED_SITE_NAMES: set = set()   # populated by _load_launch_sites()
+
+
+def _load_user_sites() -> list:
+    """Return list of user-defined site dicts, or [] on error/missing."""
+    if not _USER_SITES_PATH.exists():
+        return []
     try:
-        sites = json.loads(path.read_text())
+        return json.loads(_USER_SITES_PATH.read_text())
     except Exception as exc:
-        print(f"Warning: could not load launch_sites.json: {exc}")
-        return [], {}
+        print(f"Warning: could not load user_sites.json: {exc}")
+        return []
+
+
+def _save_user_sites(sites: list) -> None:
+    _USER_SITES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _USER_SITES_PATH.write_text(json.dumps(sites, indent=2))
+
+
+def _load_launch_sites():
+    """Return (combobox_values, name→site_dict) from bundled + user sites."""
+    global _BUNDLED_SITE_NAMES
+    path = Path(__file__).parent / "launch_sites.json"
+    bundled = []
+    if path.exists():
+        try:
+            bundled = json.loads(path.read_text())
+        except Exception as exc:
+            print(f"Warning: could not load launch_sites.json: {exc}")
+    _BUNDLED_SITE_NAMES = {s["name"] for s in bundled}
+    all_sites = bundled + _load_user_sites()
     by_country = {}
-    for s in sites:
+    for s in all_sites:
         by_country.setdefault(s["country"], []).append(s)
     values, site_map = [], {}
     for country in sorted(by_country):
@@ -1357,6 +1381,17 @@ class MissileFlyoutApp(tk.Tk):
         self._site_cb.pack(padx=6, pady=(4, 2))
         self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
 
+        sb = ttk.Frame(lf)
+        sb.pack(padx=6, pady=(0, 4))
+        ttk.Button(sb, text="New",    width=7,
+                   command=self._new_site).pack(side=tk.LEFT, padx=2)
+        ttk.Button(sb, text="Save…",  width=7,
+                   command=self._save_site).pack(side=tk.LEFT, padx=2)
+        self._site_del_btn = ttk.Button(sb, text="Delete", width=7,
+                                        command=self._delete_site,
+                                        state=tk.DISABLED)
+        self._site_del_btn.pack(side=tk.LEFT, padx=2)
+
         lf_grid = ttk.Frame(lf)
         lf_grid.pack(fill=tk.X)
         self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
@@ -1831,6 +1866,89 @@ class MissileFlyoutApp(tk.Tk):
             return
         self._launch_lat.set(f"{site['lat']:.4f}")
         self._launch_lon.set(f"{site['lon']:.4f}")
+        is_user = name not in _BUNDLED_SITE_NAMES
+        self._site_del_btn.config(state=tk.NORMAL if is_user else tk.DISABLED)
+
+    def _new_site(self):
+        """Clear the site selector and lat/lon fields for fresh entry."""
+        self._site_var.set("")
+        self._launch_lat.set("")
+        self._launch_lon.set("")
+        self._site_del_btn.config(state=tk.DISABLED)
+
+    def _save_site(self):
+        """Save current lat/lon as a named user site."""
+        lat_str = self._launch_lat.get().strip()
+        lon_str = self._launch_lon.get().strip()
+        try:
+            lat = float(lat_str)
+            lon = float(lon_str)
+        except ValueError:
+            messagebox.showerror("Invalid coordinates",
+                                 "Enter valid lat/lon before saving.", parent=self)
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Save Site")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        ttk.Label(dlg, text="Name:").grid(   row=0, column=0, sticky=tk.W, padx=(10,4), pady=(10,2))
+        ttk.Label(dlg, text="Country:").grid(row=1, column=0, sticky=tk.W, padx=(10,4), pady=2)
+        name_var    = tk.StringVar(value=self._site_var.get()
+                                   if self._site_var.get() in self._site_map else "")
+        country_var = tk.StringVar(value=self._site_map.get(
+                                   self._site_var.get(), {}).get("country", ""))
+        ttk.Entry(dlg, textvariable=name_var,    width=28).grid(row=0, column=1, padx=(0,10), pady=(10,2))
+        ttk.Entry(dlg, textvariable=country_var, width=28).grid(row=1, column=1, padx=(0,10), pady=2)
+
+        def _do_save():
+            name    = name_var.get().strip()
+            country = country_var.get().strip()
+            if not name or not country:
+                messagebox.showerror("Missing fields",
+                                     "Name and country are required.", parent=dlg)
+                return
+            user_sites = _load_user_sites()
+            # Update in place if name already exists in user list
+            for s in user_sites:
+                if s["name"] == name:
+                    s.update({"country": country, "lat": lat, "lon": lon})
+                    break
+            else:
+                user_sites.append({"name": name, "country": country,
+                                   "lat": lat, "lon": lon})
+            _save_user_sites(user_sites)
+            self._site_map, cb_values = {}, []
+            new_values, new_map = _load_launch_sites()
+            self._site_map = new_map
+            self._site_cb.config(values=new_values)
+            self._site_var.set(name)
+            is_user = name not in _BUNDLED_SITE_NAMES
+            self._site_del_btn.config(state=tk.NORMAL if is_user else tk.DISABLED)
+            self._status_var.set(f"Site '{name}' saved.")
+            dlg.destroy()
+
+        bf = ttk.Frame(dlg)
+        bf.grid(row=2, column=0, columnspan=2, pady=(6, 10))
+        ttk.Button(bf, text="Save",   command=_do_save).pack(side=tk.LEFT, padx=6)
+        ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+        dlg.bind("<Return>", lambda _e: _do_save())
+
+    def _delete_site(self):
+        name = self._site_var.get()
+        if name in _BUNDLED_SITE_NAMES:
+            return
+        if not messagebox.askyesno("Delete site",
+                                   f"Permanently delete '{name}'?", parent=self):
+            return
+        user_sites = [s for s in _load_user_sites() if s["name"] != name]
+        _save_user_sites(user_sites)
+        new_values, new_map = _load_launch_sites()
+        self._site_map = new_map
+        self._site_cb.config(values=new_values)
+        self._site_var.set("")
+        self._site_del_btn.config(state=tk.DISABLED)
+        self._status_var.set(f"Site '{name}' deleted.")
 
     def _toggle_query_alt(self):
         state = "normal" if self._query_alt_enable.get() else "disabled"
