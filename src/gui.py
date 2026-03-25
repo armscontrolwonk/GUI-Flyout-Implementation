@@ -2220,6 +2220,22 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
                           label="Impact", zorder=5)
 
+        # Debris impact locations — red crosses, one per shed stage / fairing.
+        _debris_plotted = False
+        for m in r.get('milestones', []):
+            if not m.get('is_debris'):
+                continue
+            d_lat = m.get('impact_lat')
+            d_lon = m.get('impact_lon')
+            if d_lat is None or d_lon is None:
+                continue
+            d_lon_c = ((d_lon - center_lon + 180.0) % 360.0) - 180.0
+            self._ax_trk.plot(d_lon_c, d_lat, 'rx', markersize=8,
+                              markeredgewidth=1.8,
+                              label="Debris" if not _debris_plotted else "_nolegend_",
+                              zorder=5)
+            _debris_plotted = True
+
         # Capture the trajectory-fitted limits, draw borders, then restore so
         # the world-spanning border lines cannot expand the view.
         # Add 20% padding on each side beyond matplotlib's default 5% margin.
