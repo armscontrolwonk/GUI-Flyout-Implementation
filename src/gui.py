@@ -127,6 +127,30 @@ def _save_custom_missiles():
     _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
 
 
+_SITE_SEPARATOR = "──────────────────────────────"
+
+def _load_launch_sites():
+    """Return (combobox_values, name→site_dict) from launch_sites.json."""
+    path = Path(__file__).parent / "launch_sites.json"
+    if not path.exists():
+        return [], {}
+    try:
+        sites = json.loads(path.read_text())
+    except Exception as exc:
+        print(f"Warning: could not load launch_sites.json: {exc}")
+        return [], {}
+    by_country = {}
+    for s in sites:
+        by_country.setdefault(s["country"], []).append(s)
+    values, site_map = [], {}
+    for country in sorted(by_country):
+        values.append(f"── {country} ──")
+        for s in sorted(by_country[country], key=lambda x: x["name"]):
+            values.append(s["name"])
+            site_map[s["name"]] = s
+    return values, site_map
+
+
 # ---------------------------------------------------------------------------
 # Reusable labelled entry helper
 # ---------------------------------------------------------------------------
@@ -1220,7 +1244,9 @@ class MissileFlyoutApp(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Save trajectory…", command=self._save_trajectory)
+        file_menu.add_command(label="Save trajectory…",    command=self._save_trajectory)
+        file_menu.add_command(label="Export timeline CSV…",command=self._export_timeline)
+        file_menu.add_command(label="Export missile JSON…",command=self._export_missile)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -1324,13 +1350,22 @@ class MissileFlyoutApp(tk.Tk):
         lf = ttk.LabelFrame(parent, text="Launch Site")
         lf.pack(fill=tk.X, padx=6, pady=3)
 
-        self._launch_lat = _dd_row(lf, "Latitude:",  row=0, default="0.0")
-        self._launch_lon = _dd_row(lf, "Longitude:", row=1, default="0.0")
+        _site_values, self._site_map = _load_launch_sites()
+        ttk.Label(lf, text="Site:").grid(row=0, column=0,
+                                         sticky=tk.W, padx=(8, 2), pady=2)
+        self._site_var = tk.StringVar(value="")
+        self._site_cb = ttk.Combobox(lf, textvariable=self._site_var,
+                                     values=_site_values, state="readonly", width=26)
+        self._site_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
 
-        ttk.Label(lf, text="Azimuth:").grid(row=2, column=0,
+        self._launch_lat = _dd_row(lf, "Latitude:",  row=1, default="0.0")
+        self._launch_lon = _dd_row(lf, "Longitude:", row=2, default="0.0")
+
+        ttk.Label(lf, text="Azimuth:").grid(row=3, column=0,
                                              sticky=tk.W, padx=(8, 2), pady=2)
         az_frame = ttk.Frame(lf)
-        az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        az_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._azimuth_var = tk.StringVar(value="0.0")
         ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
         ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
@@ -1788,6 +1823,15 @@ class MissileFlyoutApp(tk.Tk):
             self._del_btn.config(state=tk.DISABLED, text="Delete")
 
     # ------------------------------------------------------------------
+    def _on_site_selected(self, _event=None):
+        name = self._site_var.get()
+        site = self._site_map.get(name)
+        if site is None:          # country-header row clicked — revert
+            self._site_var.set("")
+            return
+        self._launch_lat.set(f"{site['lat']:.4f}")
+        self._launch_lon.set(f"{site['lon']:.4f}")
+
     def _toggle_query_alt(self):
         state = "normal" if self._query_alt_enable.get() else "disabled"
         self._query_alt_entry.config(state=state)
@@ -2364,6 +2408,59 @@ class MissileFlyoutApp(tk.Tk):
                                  r['alt'], r['speed'], r['range'] / 1000.0])
         np.savetxt(path, data, delimiter=",", header=header, comments="")
         self._status_var.set(f"Saved: {path}")
+
+    def _export_timeline(self):
+        """Export the flight event timeline to CSV."""
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+        milestones = self._result.get("milestones", [])
+        if not milestones:
+            messagebox.showinfo("No data", "No timeline events in last result.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export flight timeline",
+        )
+        if not path:
+            return
+        header = "event,time_s,alt_km,range_km,gnd_speed_kms,inrtl_speed_kms,accel_ms2,mass_t"
+        rows = []
+        for m in milestones:
+            rows.append(",".join([
+                f'"{m.get("event","")}"',
+                f'{m.get("t_s", ""):g}',
+                f'{m.get("alt_km", ""):g}',
+                f'{m.get("range_km", ""):g}',
+                f'{m.get("speed_kms", ""):g}',
+                f'{m.get("inertial_speed_kms", ""):g}',
+                f'{m.get("accel_ms2", ""):g}',
+                f'{m.get("mass_t", ""):g}',
+            ]))
+        Path(path).write_text(header + "\n" + "\n".join(rows))
+        self._status_var.set(f"Timeline exported: {path}")
+
+    def _export_missile(self):
+        """Export the current missile definition to a JSON file."""
+        name = self._missile_var.get()
+        if not name or name not in MISSILE_DB:
+            messagebox.showinfo("No missile", "Select a missile first.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        safe = name.replace(" ", "_").replace("/", "-")
+        path = asksaveasfilename(
+            defaultextension=".json",
+            initialfile=f"{safe}.json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export missile definition",
+        )
+        if not path:
+            return
+        data = missile_to_dict(MISSILE_DB[name]())
+        Path(path).write_text(json.dumps(data, indent=2))
+        self._status_var.set(f"Missile exported: {path}")
 
     def _show_about(self):
         messagebox.showinfo(

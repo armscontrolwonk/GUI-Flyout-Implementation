@@ -1,0 +1,50 @@
+[
+  {"name": "Woomera",                    "country": "Australia",   "lat": -31.1500, "lon":  136.8200},
+
+  {"name": "Alcântara",                  "country": "Brazil",      "lat":  -2.3726, "lon":  -44.3962},
+
+  {"name": "Jiuquan (LC-4)",             "country": "China",       "lat":  40.9608, "lon":  100.2986},
+  {"name": "Taiyuan (LC-9)",             "country": "China",       "lat":  38.8490, "lon":  111.6140},
+  {"name": "Wenchang (LC-1)",            "country": "China",       "lat":  19.6145, "lon":  110.9517},
+  {"name": "Xichang (LC-2)",             "country": "China",       "lat":  28.2463, "lon":  102.0263},
+
+  {"name": "Sohae (Main Pad)",           "country": "DPRK",        "lat":  39.6600, "lon":  124.7050},
+  {"name": "Tonghae (Musudan-ri)",       "country": "DPRK",        "lat":  40.8556, "lon":  129.6644},
+  {"name": "Sunan Airfield",             "country": "DPRK",        "lat":  39.1240, "lon":  125.6680},
+
+  {"name": "Kourou (ELA-3)",             "country": "France",      "lat":   5.2390, "lon":  -52.7690},
+
+  {"name": "Satish Dhawan SC (FLP)",     "country": "India",       "lat":  13.7330, "lon":   80.2350},
+  {"name": "Satish Dhawan SC (SLP)",     "country": "India",       "lat":  13.7190, "lon":   80.2280},
+
+  {"name": "Chabahar Space Base",        "country": "Iran",        "lat":  25.1431, "lon":   61.2606},
+  {"name": "Imam Khomeini Spaceport",    "country": "Iran",        "lat":  35.2347, "lon":   53.9208},
+  {"name": "Shahroud (Site 1)",          "country": "Iran",        "lat":  36.2050, "lon":   55.2980},
+
+  {"name": "Palmachim AB",               "country": "Israel",      "lat":  31.8986, "lon":   34.6892},
+
+  {"name": "Tanegashima (Y-1)",          "country": "Japan",       "lat":  30.4005, "lon":  130.9756},
+  {"name": "Uchinoura SC",               "country": "Japan",       "lat":  31.2519, "lon":  131.0811},
+
+  {"name": "Mahia (LC-1)",               "country": "New Zealand", "lat": -39.2600, "lon":  177.8600},
+
+  {"name": "Andøya",                     "country": "Norway",      "lat":  69.2900, "lon":   16.0200},
+
+  {"name": "Sonmiani",                   "country": "Pakistan",    "lat":  25.0600, "lon":   66.7500},
+
+  {"name": "Baikonur (Site 1)",          "country": "Russia",      "lat":  45.9200, "lon":   63.3420},
+  {"name": "Dombarovsky (Yasny)",        "country": "Russia",      "lat":  51.3600, "lon":   59.8500},
+  {"name": "Kapustin Yar",               "country": "Russia",      "lat":  48.5700, "lon":   46.2500},
+  {"name": "Plesetsk (Site 43)",         "country": "Russia",      "lat":  62.9270, "lon":   40.5770},
+  {"name": "Vostochny",                  "country": "Russia",      "lat":  51.8840, "lon":  128.3340},
+
+  {"name": "Naro SC",                    "country": "South Korea", "lat":  34.4327, "lon":  127.5353},
+
+  {"name": "Esrange",                    "country": "Sweden",      "lat":  67.8900, "lon":   21.1000},
+
+  {"name": "Cape Canaveral (SLC-40)",    "country": "USA",         "lat":  28.5619, "lon":  -80.5772},
+  {"name": "Cape Canaveral (SLC-41)",    "country": "USA",         "lat":  28.5835, "lon":  -80.5830},
+  {"name": "Vandenberg (SLC-4E)",        "country": "USA",         "lat":  34.6320, "lon": -120.6130},
+  {"name": "Wallops Island",             "country": "USA",         "lat":  37.9402, "lon":  -75.4664},
+  {"name": "White Sands",                "country": "USA",         "lat":  32.3799, "lon": -106.4823}
+]
