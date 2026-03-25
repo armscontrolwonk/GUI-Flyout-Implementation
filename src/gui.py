@@ -91,13 +91,8 @@ def _draw_borders(ax, center_lon):
 
 # Sentinel string inserted into the missile combobox between non-Forden and
 # Forden entries.  It is never a valid missile name.
-_FORDEN_SEPARATOR = "── Forden Reference ──"
 
 # Names that ship with the program and cannot be deleted
-_PACKAGED_NAMES    = set(MISSILE_DB.keys())
-_PACKAGED_ORIGINALS = dict(MISSILE_DB)   # original factory lambdas for reset
-_OVERRIDDEN_PACKAGED: set = set()        # packaged missiles the user has edited
-
 # Where user-created missiles are saved
 _CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 
@@ -1336,12 +1331,8 @@ class MissileFlyoutApp(tk.Tk):
         # ── Missile type ───────────────────────────────────────────────
         mf = ttk.LabelFrame(parent, text="Missile Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
-        _non_forden = [n for n in MISSILE_DB if not n.endswith(" (Forden)")]
-        _forden     = [n for n in MISSILE_DB if n.endswith(" (Forden)")]
-        _cb_values  = (_non_forden
-                       + ([_FORDEN_SEPARATOR] if _forden else [])
-                       + _forden)
-        _first_valid = (_non_forden + _forden)[0]
+        _cb_values   = list(MISSILE_DB.keys())
+        _first_valid = _cb_values[0] if _cb_values else ""
         self._last_valid_missile = _first_valid
         self._missile_var = tk.StringVar(value=_first_valid)
         self._missile_cb = ttk.Combobox(mf, textvariable=self._missile_var,
@@ -1352,12 +1343,13 @@ class MissileFlyoutApp(tk.Tk):
 
         mb = ttk.Frame(mf)
         mb.pack(padx=6, pady=(0, 4))
-        ttk.Button(mb, text="New…",    width=7,
+        ttk.Button(mb, text="New",    width=7,
                    command=self._new_missile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(mb, text="Edit…",   width=7,
-                   command=self._edit_missile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(mb, text="Save…",  width=7,
+                   command=self._save_missile).pack(side=tk.LEFT, padx=2)
         self._del_btn = ttk.Button(mb, text="Delete", width=7,
-                                   command=self._delete_missile)
+                                   command=self._delete_missile,
+                                   state=tk.DISABLED)
         self._del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Units ──────────────────────────────────────────────────────
@@ -1836,8 +1828,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _on_missile_changed(self, _event=None):
         name = self._missile_var.get()
-        if name not in MISSILE_DB:          # separator was clicked — revert
-            self._missile_var.set(self._last_valid_missile)
+        if name not in MISSILE_DB:
             return
         self._last_valid_missile = name
         p = get_missile(name)
@@ -1847,15 +1838,7 @@ class MissileFlyoutApp(tk.Tk):
         self._guidance_var.set(p.guidance)
         self._update_guidance_labels(p.guidance)
         self._update_params_display(p)
-        # Allow deleting custom missiles and resetting overridden packaged ones
-        is_custom = name not in _PACKAGED_NAMES
-        is_overridden = name in _OVERRIDDEN_PACKAGED
-        if is_custom:
-            self._del_btn.config(state=tk.NORMAL, text="Delete")
-        elif is_overridden:
-            self._del_btn.config(state=tk.NORMAL, text="Reset")
-        else:
-            self._del_btn.config(state=tk.DISABLED, text="Delete")
+        self._del_btn.config(state=tk.NORMAL)
 
     # ------------------------------------------------------------------
     def _on_site_selected(self, _event=None):
@@ -1987,24 +1970,20 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _refresh_missile_list(self, select_name=None):
         """Rebuild the combobox values from the current MISSILE_DB."""
-        non_forden = [n for n in MISSILE_DB if not n.endswith(" (Forden)")]
-        forden     = [n for n in MISSILE_DB if n.endswith(" (Forden)")]
-        names = (non_forden
-                 + ([_FORDEN_SEPARATOR] if forden else [])
-                 + forden)
+        names = list(MISSILE_DB.keys())
         self._missile_cb.configure(values=names)
         target = select_name or self._missile_var.get()
         if target not in MISSILE_DB:
-            target = (non_forden + forden)[0]
+            target = names[0] if names else ""
         self._missile_var.set(target)
-        self._on_missile_changed()
+        self._del_btn.config(state=tk.NORMAL if target else tk.DISABLED)
+        if target:
+            self._on_missile_changed()
 
     def _on_missile_saved(self, p):
         """Callback invoked by MissileDialog when the user clicks Save."""
         name = p.name
         MISSILE_DB[name] = lambda _p=p: _p
-        if name in _PACKAGED_NAMES:
-            _OVERRIDDEN_PACKAGED.add(name)
         _save_custom_missiles()
         self._refresh_missile_list(select_name=name)
         self._status_var.set(f"Missile '{name}' saved.")
@@ -2012,34 +1991,22 @@ class MissileFlyoutApp(tk.Tk):
     def _new_missile(self):
         MissileDialog(self, on_save=self._on_missile_saved)
 
-    def _edit_missile(self):
+    def _save_missile(self):
         name = self._missile_var.get()
         MissileDialog(self, on_save=self._on_missile_saved, existing_name=name)
 
     def _delete_missile(self):
         name = self._missile_var.get()
-        if name in _OVERRIDDEN_PACKAGED:
-            # Reset overridden built-in missile back to its packaged defaults
-            if not messagebox.askyesno(
-                    "Reset missile",
-                    f"Reset '{name}' to its built-in defaults?",
-                    parent=self):
-                return
-            MISSILE_DB[name] = _PACKAGED_ORIGINALS[name]
-            _OVERRIDDEN_PACKAGED.discard(name)
-            _save_custom_missiles()
-            self._refresh_missile_list(select_name=name)
-            self._status_var.set(f"Missile '{name}' reset to defaults.")
-        elif name not in _PACKAGED_NAMES:
-            if not messagebox.askyesno(
-                    "Delete missile",
-                    f"Permanently delete '{name}'?",
-                    parent=self):
-                return
-            del MISSILE_DB[name]
-            _save_custom_missiles()
-            self._refresh_missile_list()
-            self._status_var.set(f"Missile '{name}' deleted.")
+        if not name or name not in MISSILE_DB:
+            return
+        if not messagebox.askyesno("Delete missile",
+                                   f"Permanently delete '{name}'?",
+                                   parent=self):
+            return
+        del MISSILE_DB[name]
+        _save_custom_missiles()
+        self._refresh_missile_list()
+        self._status_var.set(f"Missile '{name}' deleted.")
 
     def _update_params_display(self, p=None):
         """Rebuild the Missile Parameters tab with structured label rows."""

@@ -594,18 +594,7 @@ def _aur():
 
 
 MISSILE_DB = {
-    # Non-Forden missiles (user-editable)
-    "AUR":                    _aur,
-    "Zoljanah (SLV)":         _zoljanah_slv,
-    "Zoljanah (IRBM)":        _zoljanah,
-    "Shahab-3":               _shahab3,
-    "Generic ICBM":           _generic_icbm,
-    # Forden (2007) Table 1 reference missiles — read-only validation targets
-    "Scud-B (Forden)":        _scud_b,
-    "Al Hussein (Forden)":    _al_hussein,
-    "No-dong (Forden)":       _nodong,
-    "Taepodong-I (Forden)":   _taepodong_i,
-    "Taepodong-II (Forden)":  _taepodong_ii,
+    # Populated at runtime from custom_missiles.json via _load_custom_missiles()
 }
 
 
