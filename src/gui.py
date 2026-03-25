@@ -10,6 +10,7 @@ Layout mirrors the original MATLAB GUIDE application:
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import tkinter.font as tkfont
 import threading
 import numpy as np
 import sys
@@ -1481,6 +1482,9 @@ class MissileFlyoutApp(tk.Tk):
             rf, state=tk.DISABLED, font=("TkFixedFont", 9),
             wrap=tk.NONE, relief=tk.FLAT, background="#f8f8f8",
             foreground="#222222", selectbackground="#c0d8f0")
+        _fam = tkfont.nametofont("TkFixedFont").actual()["family"]
+        _tab = tkfont.Font(family=_fam, size=9).measure("x" * 32)
+        self._slv_text.configure(tabs=(_tab,))
         vsb = ttk.Scrollbar(rf, orient=tk.VERTICAL,
                             command=self._slv_text.yview)
         self._slv_text.configure(yscrollcommand=vsb.set)
@@ -1579,7 +1583,7 @@ class MissileFlyoutApp(tk.Tk):
         s, i = missile, 1
         while s:
             stage_lines.append(
-                f"    Stage {i} ({s.isp_s:.0f} s Isp): {_sdv(s):8.0f} m/s")
+                f"    Stage {i} ({s.isp_s:.0f} s Isp):\t{_sdv(s):8.0f} m/s")
             s = s.stage2
             i += 1
 
@@ -1600,8 +1604,8 @@ class MissileFlyoutApp(tk.Tk):
             pm   = r['payload_margin_kg'] or 0.0
             sign = "+" if pm >= 0 else ""
             payload_line = (
-                f"  Claimed payload:           {missile.payload_kg:8.0f} kg\n"
-                f"  Payload margin:          {sign}{pm:7.0f} kg\n"
+                f"  Claimed payload:\t{missile.payload_kg:8.0f} kg\n"
+                f"  Payload margin:\t{sign}{pm:7.0f} kg\n"
             )
 
         body = (
@@ -1612,25 +1616,25 @@ class MissileFlyoutApp(tk.Tk):
             "─── Delta-V Budget ─────────────────────────────────────────\n"
             "  Available ΔV (rocket eq.):\n"
             + "\n".join(stage_lines) + "\n"
-            f"  Total available:           {r['dv_available_ms']:8.0f} m/s\n"
+            f"  Total available:\t{r['dv_available_ms']:8.0f} m/s\n"
             "\n"
             "  Required to reach orbit:\n"
-            f"    {inj_label:<28} {r['v_injection_ms']:8.0f} m/s\n"
-            f"    Loss penalty (eq. 5):    {r['dv_penalty_ms']:8.0f} m/s\n"
-            f"    Earth rotation benefit: {-r['v_rotation_ms']:8.0f} m/s\n"
-            f"  Total required:            {r['dv_required_ms']:8.0f} m/s\n"
+            f"    {inj_label}\t{r['v_injection_ms']:8.0f} m/s\n"
+            f"    Loss penalty (eq. 5):\t{r['dv_penalty_ms']:8.0f} m/s\n"
+            f"    Earth rotation benefit:\t{-r['v_rotation_ms']:8.0f} m/s\n"
+            f"  Total required:\t{r['dv_required_ms']:8.0f} m/s\n"
             "\n"
-            f"  Margin:                  {margin_sign}{r['dv_margin_ms']:7.0f} m/s\n"
+            f"  Margin:\t{margin_sign}{r['dv_margin_ms']:7.0f} m/s\n"
             "\n"
             "─── Payload Capacity ───────────────────────────────────────\n"
-            f"  Maximum payload:           {r['max_payload_kg']:8.0f} kg\n"
+            f"  Maximum payload:\t{r['max_payload_kg']:8.0f} kg\n"
             + payload_line +
             "\n"
             "─── Schilling Timing Parameters ────────────────────────────\n"
-            f"  Actual burn time  (Tₐ):   {r['t_actual_s']:8.1f} s\n"
-            f"  3-stage equiv.    (T₃ₛ):  {r['t_3stage_s']:8.1f} s\n"
-            f"  Blended time    (T_mix):  {r['t_mix_s']:8.1f} s\n"
-            f"  Initial accel.    (A₀):   {r['a0_ms2']:8.2f} m/s²"
+            f"  Actual burn time  (Tₐ):\t{r['t_actual_s']:8.1f} s\n"
+            f"  3-stage equiv.    (T₃ₛ):\t{r['t_3stage_s']:8.1f} s\n"
+            f"  Blended time    (T_mix):\t{r['t_mix_s']:8.1f} s\n"
+            f"  Initial accel.    (A₀):\t{r['a0_ms2']:8.2f} m/s²"
             f"  ({r['a0_ms2'] / 9.80665:.2f} g)\n"
             "\n"
             "Method accuracy: ±260 m/s RMS in mission ΔV; < 10 % in payload.\n"
