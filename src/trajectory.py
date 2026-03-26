@@ -841,19 +841,8 @@ def maximize_range(params: MissileParams,
     best_lar = params.loft_angle_rate_deg_s
 
     if effective_guidance == "gravity_turn":
-        # Phase 1: coarse burnout-angle scan with current best_ts
-        for burnout_a in range(5, 71, 5):
-            rng = _run(float(burnout_a), 1.0, best_ts)
-            if rng > best_range:
-                best_range = rng
-                best_la    = float(burnout_a)
-
-        # Phase 2: scan turn_stop values when the user hasn't fixed one.
-        # A short turn_stop means the missile pitches over quickly then holds
-        # a flat angle — critical for multi-stage vehicles (e.g. Zoljanah)
-        # whose total burn time is far longer than the pitch-over window.
+        ts_min = gt_turn_start_s + 5.0
         if gt_turn_stop_s is None:
-            ts_min = gt_turn_start_s + 5.0
             ts_candidates = sorted({
                 ts for ts in [20.0, 40.0, 60.0, 90.0,
                                min(120.0, total_burn),
@@ -861,13 +850,23 @@ def maximize_range(params: MissileParams,
                                total_burn]
                 if ts >= ts_min
             })
+        else:
+            ts_candidates = [gt_turn_stop_s]
+
+        # Phase 1: joint 2-D coarse search over (burnout_angle, turn_stop).
+        # Scanning turn_stop jointly with burnout_angle is essential: the
+        # optimal burnout angle depends strongly on how quickly the pitch-over
+        # completes, so a sequential 1-D search (angle first, then turn_stop)
+        # gets stuck at a suboptimal angle and misses the global maximum.
+        for burnout_a in range(5, 71, 5):
             for ts in ts_candidates:
-                rng = _run(best_la, 1.0, ts)
+                rng = _run(float(burnout_a), 1.0, ts)
                 if rng > best_range:
                     best_range = rng
+                    best_la    = float(burnout_a)
                     best_ts    = ts
 
-        # Phase 3: fine-tune burnout angle (±4°)
+        # Phase 2: fine-tune burnout angle (±4°) at best turn_stop
         for d in (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0):
             ba = best_la + d
             if ba < 1.0 or ba > 80.0:
@@ -877,10 +876,10 @@ def maximize_range(params: MissileParams,
                 best_range = rng
                 best_la    = ba
 
-        # Phase 4: fine-tune turn_stop (±20 s) when user hasn't fixed it
+        # Phase 3: fine-tune turn_stop (±20 s) at best burnout angle
         if gt_turn_stop_s is None:
             for dt in (-20.0, -10.0, 0.0, 10.0, 20.0):
-                ts = max(gt_turn_start_s + 5.0, min(total_burn, best_ts + dt))
+                ts = max(ts_min, min(total_burn, best_ts + dt))
                 rng = _run(best_la, 1.0, ts)
                 if rng > best_range:
                     best_range = rng
