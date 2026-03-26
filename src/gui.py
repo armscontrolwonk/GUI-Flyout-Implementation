@@ -1345,8 +1345,8 @@ class MissileFlyoutApp(tk.Tk):
         mb.pack(padx=6, pady=(0, 4))
         ttk.Button(mb, text="New",    width=7,
                    command=self._new_missile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(mb, text="Save…",  width=7,
-                   command=self._save_missile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(mb, text="Edit…",  width=7,
+                   command=self._edit_missile).pack(side=tk.LEFT, padx=2)
         self._del_btn = ttk.Button(mb, text="Delete", width=7,
                                    command=self._delete_missile,
                                    state=tk.DISABLED)
@@ -1377,8 +1377,8 @@ class MissileFlyoutApp(tk.Tk):
         sb.pack(padx=6, pady=(0, 4))
         ttk.Button(sb, text="New",    width=7,
                    command=self._new_site).pack(side=tk.LEFT, padx=2)
-        ttk.Button(sb, text="Save…",  width=7,
-                   command=self._save_site).pack(side=tk.LEFT, padx=2)
+        ttk.Button(sb, text="Edit…",  width=7,
+                   command=self._edit_site).pack(side=tk.LEFT, padx=2)
         self._site_del_btn = ttk.Button(sb, text="Delete", width=7,
                                         command=self._delete_site,
                                         state=tk.DISABLED)
@@ -1859,7 +1859,7 @@ class MissileFlyoutApp(tk.Tk):
         self._launch_lon.set("")
         self._site_del_btn.config(state=tk.DISABLED)
 
-    def _save_site(self):
+    def _edit_site(self):
         """Save current lat/lon as a named user site."""
         lat_str = self._launch_lat.get().strip()
         lon_str = self._launch_lon.get().strip()
@@ -1991,7 +1991,7 @@ class MissileFlyoutApp(tk.Tk):
     def _new_missile(self):
         MissileDialog(self, on_save=self._on_missile_saved)
 
-    def _save_missile(self):
+    def _edit_missile(self):
         name = self._missile_var.get()
         MissileDialog(self, on_save=self._on_missile_saved, existing_name=name)
 
