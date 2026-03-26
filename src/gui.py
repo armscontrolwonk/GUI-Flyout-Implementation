@@ -1244,8 +1244,8 @@ class MissileFlyoutApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Thrusty")
-        self.geometry("1280x780")
-        self.resizable(True, True)
+        self.geometry("1340x820")
+        self.minsize(900, 620)
 
         self._result  = None
         self._running = False
@@ -1287,10 +1287,35 @@ class MissileFlyoutApp(tk.Tk):
         top = ttk.Frame(self)
         top.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        # Left control panel (fixed width, non-expanding)
-        left = ttk.Frame(top, width=310)
-        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
-        left.pack_propagate(False)
+        # Left control panel — fixed width, vertically scrollable
+        LEFT_W = 350
+        left_outer = ttk.Frame(top, width=LEFT_W)
+        left_outer.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
+        left_outer.pack_propagate(False)
+
+        left_canvas = tk.Canvas(left_outer, highlightthickness=0)
+        left_vsb = ttk.Scrollbar(left_outer, orient=tk.VERTICAL,
+                                  command=left_canvas.yview)
+        left_canvas.configure(yscrollcommand=left_vsb.set)
+        left_vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        left_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        left = ttk.Frame(left_canvas)
+        _left_win = left_canvas.create_window((0, 0), window=left, anchor="nw")
+
+        def _left_on_frame(event):
+            left_canvas.configure(scrollregion=left_canvas.bbox("all"))
+        def _left_on_canvas(event):
+            left_canvas.itemconfig(_left_win, width=event.width)
+        left.bind("<Configure>", _left_on_frame)
+        left_canvas.bind("<Configure>", _left_on_canvas)
+
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            left_canvas.bind(seq,
+                lambda e, c=left_canvas: c.yview_scroll(
+                    -1 if e.num == 4 else (1 if e.num == 5
+                    else -1 * (e.delta // 120)), "units"))
+
         self._build_control_panel(left)
 
         # Right panel — tabbed notebook (Plots | Flight Timeline)
