@@ -2112,6 +2112,8 @@ class MissileFlyoutApp(tk.Tk):
             _row(lf, r, "ISP (s):",                f"{node.isp_s:.0f}"); r += 1
             _row(lf, r, "Nozzle exit area (m²):",  f"{node.nozzle_exit_area_m2:.4f}"); r += 1
             _row(lf, r, "Burntime (s):",           f"{node.burn_time_s:.1f}  (computed)"); r += 1
+            mdot = node.thrust_N / (node.isp_s * _G0)
+            _row(lf, r, "Mass flow (kg/s):",        f"{mdot:.1f}"); r += 1
             _row(lf, r, "T/W ratio:",              f"{tw:.2f}"); r += 1
             if not is_last:
                 _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
