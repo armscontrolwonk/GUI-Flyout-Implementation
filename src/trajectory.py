@@ -866,23 +866,21 @@ def maximize_range(params: MissileParams,
                     best_la    = float(burnout_a)
                     best_ts    = ts
 
-        # Phase 2: fine-tune burnout angle (±4°) at best turn_stop
-        for d in (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0):
-            ba = best_la + d
-            if ba < 1.0 or ba > 80.0:
-                continue
-            rng = _run(ba, 1.0, best_ts)
-            if rng > best_range:
-                best_range = rng
-                best_la    = ba
-
-        # Phase 3: fine-tune turn_stop (±20 s) at best burnout angle
-        if gt_turn_stop_s is None:
-            for dt in (-20.0, -10.0, 0.0, 10.0, 20.0):
+        # Joint fine-tune: all (Δburnout, Δts) combinations simultaneously.
+        # Sequential 1-D passes miss cross-terms — the optimal (angle, ts) pair
+        # can only be found by evaluating them jointly.
+        angle_deltas = (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0)
+        ts_deltas    = (-20.0, -10.0, 0.0, 10.0, 20.0) if gt_turn_stop_s is None else (0.0,)
+        for da in angle_deltas:
+            for dt in ts_deltas:
+                ba = best_la + da
                 ts = max(ts_min, min(total_burn, best_ts + dt))
-                rng = _run(best_la, 1.0, ts)
+                if ba < 1.0 or ba > 80.0:
+                    continue
+                rng = _run(ba, 1.0, ts)
                 if rng > best_range:
                     best_range = rng
+                    best_la    = ba
                     best_ts    = ts
 
         best_lar = 1.0   # placeholder — not used by linear pitch program
