@@ -1271,7 +1271,8 @@ class MissileFlyoutApp(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
-        analysis_menu.add_command(label="Parametric Sweep…", command=self._open_sweep)
+        analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
+        analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -1428,9 +1429,6 @@ class MissileFlyoutApp(tk.Tk):
 
         self._target_lat = _dd_row(tf, "Latitude:",  row=0, default="0.0")
         self._target_lon = _dd_row(tf, "Longitude:", row=1, default="0.0")
-
-        ttk.Button(tf, text="Aim at Target", command=self._aim_at_target,
-                   width=18).grid(row=2, column=0, columnspan=2, pady=(4, 6))
 
         # ── Guidance — mode radio + loft angle / pitch-over ───────────
         gf = ttk.LabelFrame(parent, text="Guidance")
