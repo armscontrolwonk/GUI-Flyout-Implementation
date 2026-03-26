@@ -93,13 +93,13 @@ class MissileParams:
     # (e.g. Scud-B) and no separate stage debris is computed.
     rv_separates:  bool  = False
 
-    # Shroud / payload fairing jettisoned during ascent.
+    # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
     shroud_mass_kg:         float = 0.0
     shroud_jettison_alt_km: float = 80.0
-    # Physical length of the fairing — used to compute the tumbling-cylinder
-    # ballistic coefficient for the shed fairing debris arc.  0 = not specified.
+    # Physical length of the shroud — used to compute the tumbling-cylinder
+    # ballistic coefficient for the shed shroud debris arc.  0 = not specified.
     shroud_length_m:        float = 0.0
 
 

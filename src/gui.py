@@ -586,8 +586,8 @@ class MissileDialog(tk.Toplevel):
         self._shroud_alt_entry.pack(side=tk.LEFT)
         ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 7: Fairing length — used to compute tumbling-cylinder debris β
-        ttk.Label(pl, text="  Fairing length (m):").grid(
+        # Row 7: Shroud length — used to compute tumbling-cylinder debris β
+        ttk.Label(pl, text="  Shroud length (m):").grid(
             row=7, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
         self._shroud_length_var = tk.StringVar(value="0")
         _sl_inner = ttk.Frame(pl)
@@ -2130,9 +2130,9 @@ class MissileFlyoutApp(tk.Tk):
             sn  += 1
             node = node.stage2
 
-        # ── Fairing ───────────────────────────────────────────────────
+        # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
-            ff = ttk.LabelFrame(self._params_inner, text="Fairing / Shroud")
+            ff = ttk.LabelFrame(self._params_inner, text="Shroud")
             ff.pack(fill=tk.X, **pad)
             r = 0
             _row(ff, r, "Mass (kg):",          f"{p.shroud_mass_kg:,.0f}"); r += 1
@@ -2142,7 +2142,7 @@ class MissileFlyoutApp(tk.Tk):
                 beta = tumbling_cylinder_beta(p.shroud_mass_kg,
                                               p.diameter_m, p.shroud_length_m)
                 if beta > 0:
-                    _row(ff, r, "Fairing β (kg/m²):", f"{beta:,.0f}"); r += 1
+                    _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
 
     # ------------------------------------------------------------------
     # Aim at target

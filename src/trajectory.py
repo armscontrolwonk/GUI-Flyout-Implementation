@@ -540,16 +540,16 @@ def integrate_trajectory(params: MissileParams,
         row['event'] = label
         milestones.append(row)
 
-    # Fairing (shroud) jettison — first upward crossing of jettison altitude
+    # Shroud jettison — first upward crossing of jettison altitude
     if params.shroud_mass_kg > 0:
         t_ev = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
                              ascending=True)
         if t_ev is not None:
             row = _milestone(t_ev)
-            row['event'] = "Fairing jettison"
+            row['event'] = "Shroud jettison"
             _insert_chrono(row)
 
-    # --- Debris impact arcs (tumbling empty stages + fairing) ----------------
+    # --- Debris impact arcs (tumbling empty stages + shroud) -----------------
     # Helper: interpolate ECEF state at time t_ev from the dense arrays.
     def _ecef_state_at(t_ev):
         t_ev = float(np.clip(t_ev, t_arr[0], t_arr[-1]))
@@ -618,7 +618,7 @@ def integrate_trajectory(params: MissileParams,
         _node   = _node.stage2
         _sn    += 1
 
-    # Fairing debris arc.  If length is given use tumbling-cylinder β; otherwise
+    # Shroud debris arc.  If length is given use tumbling-cylinder β; otherwise
     # fall back to end-on disc area so the impact row is always shown.
     if params.shroud_mass_kg > 0:
         _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
@@ -641,7 +641,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              f"Fairing impact  ({_beta_note})",
+                        'event':              f"Shroud impact  ({_beta_note})",
                         't_s':                _t_fair + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
