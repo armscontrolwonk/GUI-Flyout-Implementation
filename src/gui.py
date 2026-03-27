@@ -2261,7 +2261,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, None, la, lar, gt_start_s, gt_stop_s, True),
+            args=(missile, guidance, lat, lon, az, None, la, lar, gt_start_s, None, True),
             daemon=True,
         ).start()
 
@@ -2304,7 +2304,7 @@ class MissileFlyoutApp(tk.Tk):
         if r.get('optimal_loft_angle_deg') is not None:
             self._loft_angle_var.set(f"{r['optimal_loft_angle_deg']:.4f}")
             self._loft_rate_var .set(f"{r['optimal_loft_rate_deg_s']:.3f}")
-        if r.get('optimal_gt_turn_stop_s') is not None:
+        if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "gravity_turn":
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
         orbital   = r.get('orbital', False)
