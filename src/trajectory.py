@@ -837,6 +837,7 @@ def maximize_range(params: MissileParams,
             if rng is None:
                 print(f"  _run({la:.1f}° ts={ts:.1f}s) → range_km None")
                 return -1.0
+            print(f"  _run({la:.1f}° ts={ts:.1f}s) → {rng:.1f} km")
             return rng
         except Exception as e:
             print(f"  _run({la:.1f}° ts={ts:.1f}s) → EXCEPTION {type(e).__name__}: {e}")
@@ -845,6 +846,9 @@ def maximize_range(params: MissileParams,
     best_range = -1.0
     best_la  = params.loft_angle_deg
     best_lar = params.loft_angle_rate_deg_s
+
+    print(f"[maximize_range] effective_guidance={effective_guidance!r} "
+          f"gt_turn_stop_s={gt_turn_stop_s} total_burn={total_burn:.1f}s")
 
     if effective_guidance == "gravity_turn":
         ts_min = gt_turn_start_s + 5.0
@@ -858,6 +862,8 @@ def maximize_range(params: MissileParams,
             })
         else:
             ts_candidates = [gt_turn_stop_s]
+
+        print(f"[maximize_range] ts_min={ts_min:.1f}s ts_candidates={ts_candidates}")
 
         # Phase 1: joint 2-D coarse search over (burnout_angle, turn_stop).
         # Scanning turn_stop jointly with burnout_angle is essential: the
