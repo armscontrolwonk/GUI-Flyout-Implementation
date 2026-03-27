@@ -837,7 +837,6 @@ def maximize_range(params: MissileParams,
             if rng is None:
                 print(f"  _run({la:.1f}° ts={ts:.1f}s) → range_km None")
                 return -1.0
-            print(f"  _run({la:.1f}° ts={ts:.1f}s) → {rng:.1f} km")
             return rng
         except Exception as e:
             print(f"  _run({la:.1f}° ts={ts:.1f}s) → EXCEPTION {type(e).__name__}: {e}")
