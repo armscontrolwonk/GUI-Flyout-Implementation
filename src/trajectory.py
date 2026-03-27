@@ -849,13 +849,14 @@ def maximize_range(params: MissileParams,
     if effective_guidance == "gravity_turn":
         ts_min = gt_turn_start_s + 5.0
         if gt_turn_stop_s is None:
-            ts_candidates = sorted({
-                ts for ts in [20.0, 40.0, 60.0, 90.0,
-                               min(120.0, total_burn),
-                               min(180.0, total_burn),
-                               total_burn]
-                if ts >= ts_min
-            })
+            # Dense 2-second steps over early stop times (where the range peak
+            # is narrow) then sparse for longer stops (range surface is smooth).
+            _early = [ts_min + 2.0 * i
+                      for i in range(int((min(40.0, total_burn) - ts_min) / 2.0) + 1)]
+            _late  = [45.0, 60.0, 90.0,
+                      min(120.0, total_burn), min(180.0, total_burn), total_burn]
+            ts_candidates = sorted({t for t in _early + _late
+                                    if ts_min <= t <= total_burn})
         else:
             ts_candidates = [gt_turn_stop_s]
 
@@ -864,7 +865,8 @@ def maximize_range(params: MissileParams,
         # optimal burnout angle depends strongly on how quickly the pitch-over
         # completes, so a sequential 1-D search (angle first, then turn_stop)
         # gets stuck at a suboptimal angle and misses the global maximum.
-        for burnout_a in range(5, 71, 5):
+        # 2° angle step catches narrow peaks that a 5° step misses.
+        for burnout_a in range(5, 71, 2):
             for ts in ts_candidates:
                 rng = _run(float(burnout_a), 1.0, ts)
                 if rng > best_range:
@@ -875,8 +877,11 @@ def maximize_range(params: MissileParams,
         # Joint fine-tune: all (Δburnout, Δts) combinations simultaneously.
         # Sequential 1-D passes miss cross-terms — the optimal (angle, ts) pair
         # can only be found by evaluating them jointly.
+        # Fine ts_deltas (±1, ±2, ±3) catch single-second adjustments near the peak.
         angle_deltas = (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0)
-        ts_deltas    = (-20.0, -10.0, 0.0, 10.0, 20.0) if gt_turn_stop_s is None else (0.0,)
+        ts_deltas    = (-10.0, -5.0, -3.0, -2.0, -1.0, 0.0,
+                          1.0,   2.0,  3.0,  5.0, 10.0, 20.0) \
+                       if gt_turn_stop_s is None else (0.0,)
         for da in angle_deltas:
             for dt in ts_deltas:
                 ba = best_la + da

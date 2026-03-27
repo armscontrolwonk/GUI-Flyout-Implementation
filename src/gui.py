@@ -93,6 +93,9 @@ def _draw_borders(ax, center_lon):
 # Forden entries.  It is never a valid missile name.
 
 # Names that ship with the program and cannot be deleted
+_PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
+# Packaged missiles the user has overridden with custom edits
+_OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
 _CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 
