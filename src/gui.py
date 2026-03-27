@@ -9,7 +9,7 @@ Layout mirrors the original MATLAB GUIDE application:
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import tkinter.font as tkfont
 import threading
 import numpy as np
@@ -632,6 +632,9 @@ class MissileDialog(tk.Toplevel):
             side=tk.RIGHT, padx=(4, 0))
         self._save_btn = ttk.Button(bf, text="Save Missile", command=self._save)
         self._save_btn.pack(side=tk.RIGHT)
+        self._save_as_btn = ttk.Button(bf, text="Save as New Missile",
+                                       command=self._save_as_new)
+        self._save_as_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
         # Pre-fill if editing an existing missile
         if existing_name:
@@ -654,6 +657,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_entry.config(state="disabled")
         self._rv_separates_check.config(state="disabled")
         self._save_btn.pack_forget()
+        self._save_as_btn.pack_forget()
 
     # ------------------------------------------------------------------
     def _update_total_payload(self, *_):
@@ -870,6 +874,30 @@ class MissileDialog(tk.Toplevel):
         except ValueError as e:
             messagebox.showerror("Invalid input", str(e), parent=self)
             return
+        self._on_save(p)
+        self.destroy()
+
+    def _save_as_new(self):
+        try:
+            p = self._collect()
+        except ValueError as e:
+            messagebox.showerror("Invalid input", str(e), parent=self)
+            return
+        new_name = simpledialog.askstring(
+            "Save as New Missile",
+            "Enter a name for the new missile:",
+            initialvalue=p.name,
+            parent=self)
+        if not new_name or not new_name.strip():
+            return
+        new_name = new_name.strip()
+        if new_name in MISSILE_DB:
+            if not messagebox.askyesno(
+                    "Overwrite?",
+                    f"A missile named '{new_name}' already exists. Overwrite it?",
+                    parent=self):
+                return
+        p.name = new_name
         self._on_save(p)
         self.destroy()
 
