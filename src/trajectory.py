@@ -831,9 +831,15 @@ def maximize_range(params: MissileParams,
                 gt_turn_start_s=gt_turn_start_s,
                 gt_turn_stop_s=ts)
             if r.get('orbital', False):
+                print(f"  _run({la:.1f}° ts={ts:.1f}s) → ORBITAL")
                 return -1.0   # orbital / runaway — not a valid ballistic solution
-            return r['range_km']
-        except Exception:
+            rng = r['range_km']
+            if rng is None:
+                print(f"  _run({la:.1f}° ts={ts:.1f}s) → range_km None")
+                return -1.0
+            return rng
+        except Exception as e:
+            print(f"  _run({la:.1f}° ts={ts:.1f}s) → EXCEPTION {type(e).__name__}: {e}")
             return -1.0
 
     best_range = -1.0
