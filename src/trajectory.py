@@ -939,6 +939,8 @@ def maximize_range(params: MissileParams,
         traj['optimal_gt_turn_stop_s']  = None
         return traj
 
+    print(f"[maximize_range] final run: la={best_la:.4f}° ts={best_ts:.4f}s "
+          f"cutoff={total_burn:.4f}s gt_start={gt_turn_start_s:.4f}s")
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         guidance=guidance,
@@ -949,6 +951,8 @@ def maximize_range(params: MissileParams,
         gt_turn_stop_s=best_ts,
         reentry_query_alt_km=reentry_query_alt_km,
     )
+    print(f"[maximize_range] final range={traj['range_km']:.2f} km  "
+          f"(best_range found={best_range:.2f} km)")
     traj['max_range_km']            = traj['range_km']
     traj['optimal_loft_angle_deg']  = best_la
     traj['optimal_loft_rate_deg_s'] = best_lar
