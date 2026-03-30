@@ -857,7 +857,7 @@ def maximize_range(params: MissileParams,
                                min(120.0, total_burn),
                                min(180.0, total_burn),
                                total_burn]
-                if ts >= ts_min
+                if ts_min <= ts <= total_burn
             })
         else:
             ts_candidates = [gt_turn_stop_s]
