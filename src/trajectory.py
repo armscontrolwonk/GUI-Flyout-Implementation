@@ -775,6 +775,7 @@ def maximize_range(params: MissileParams,
                    guidance: str = None,
                    loft_angle_deg: float = None,
                    loft_angle_rate_deg_s: float = None,
+                   cutoff_time_s: float = None,
                    gt_turn_start_s: float = 5.0,
                    gt_turn_stop_s: float = None,
                    reentry_query_alt_km: float = None) -> dict:
@@ -797,6 +798,7 @@ def maximize_range(params: MissileParams,
         'optimal_gt_turn_stop_s'  : best turn-stop time (s; gravity_turn only)
     """
     total_burn = total_burn_time(params)
+    effective_cutoff = cutoff_time_s if cutoff_time_s is not None else total_burn
 
     # If both loft params are supplied, just run and return (no grid search)
     if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
@@ -805,7 +807,7 @@ def maximize_range(params: MissileParams,
             guidance=guidance,
             loft_angle_deg=loft_angle_deg,
             loft_angle_rate_deg_s=loft_angle_rate_deg_s,
-            cutoff_time_s=total_burn,
+            cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
         )
@@ -827,7 +829,7 @@ def maximize_range(params: MissileParams,
                 params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
                 guidance=guidance,
                 loft_angle_deg=la, loft_angle_rate_deg_s=lar,
-                cutoff_time_s=total_burn,
+                cutoff_time_s=effective_cutoff,
                 gt_turn_start_s=gt_turn_start_s,
                 gt_turn_stop_s=ts)
             if r.get('orbital', False):
@@ -846,23 +848,20 @@ def maximize_range(params: MissileParams,
     best_la  = params.loft_angle_deg
     best_lar = params.loft_angle_rate_deg_s
 
-    print(f"[maximize_range] effective_guidance={effective_guidance!r} "
-          f"gt_turn_stop_s={gt_turn_stop_s} total_burn={total_burn:.1f}s")
 
     if effective_guidance == "gravity_turn":
         ts_min = gt_turn_start_s + 5.0
         if gt_turn_stop_s is None:
             ts_candidates = sorted({
                 ts for ts in [20.0, 40.0, 60.0, 90.0,
-                               min(120.0, total_burn),
-                               min(180.0, total_burn),
-                               total_burn]
-                if ts_min <= ts <= total_burn
+                               min(120.0, effective_cutoff),
+                               min(180.0, effective_cutoff),
+                               effective_cutoff]
+                if ts_min <= ts <= effective_cutoff
             })
         else:
             ts_candidates = [gt_turn_stop_s]
 
-        print(f"[maximize_range] ts_min={ts_min:.1f}s ts_candidates={ts_candidates}")
 
         # Phase 1: joint 2-D coarse search over (burnout_angle, turn_stop).
         # Scanning turn_stop jointly with burnout_angle is essential: the
@@ -928,7 +927,7 @@ def maximize_range(params: MissileParams,
             guidance=guidance,
             loft_angle_deg=params.loft_angle_deg,
             loft_angle_rate_deg_s=params.loft_angle_rate_deg_s,
-            cutoff_time_s=total_burn,
+            cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
             reentry_query_alt_km=reentry_query_alt_km,
@@ -939,20 +938,16 @@ def maximize_range(params: MissileParams,
         traj['optimal_gt_turn_stop_s']  = None
         return traj
 
-    print(f"[maximize_range] final run: la={best_la:.4f}° ts={best_ts:.4f}s "
-          f"cutoff={total_burn:.4f}s gt_start={gt_turn_start_s:.4f}s")
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         guidance=guidance,
         loft_angle_deg=best_la,
         loft_angle_rate_deg_s=best_lar,
-        cutoff_time_s=total_burn,
+        cutoff_time_s=effective_cutoff,
         gt_turn_start_s=gt_turn_start_s,
         gt_turn_stop_s=best_ts,
         reentry_query_alt_km=reentry_query_alt_km,
     )
-    print(f"[maximize_range] final range={traj['range_km']:.2f} km  "
-          f"(best_range found={best_range:.2f} km)")
     traj['max_range_km']            = traj['range_km']
     traj['optimal_loft_angle_deg']  = best_la
     traj['optimal_loft_rate_deg_s'] = best_lar

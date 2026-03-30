@@ -2281,7 +2281,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            missile, guidance, lat, lon, az, _, la, lar, gt_start_s, gt_stop_s = self._get_inputs()
+            missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2289,7 +2289,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, None, la, lar, gt_start_s, None, True),
+            args=(missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, None, True),
             daemon=True,
         ).start()
 
@@ -2300,12 +2300,11 @@ class MissileFlyoutApp(tk.Tk):
         try:
             if maximise:
                 result = maximize_range(missile, lat, lon, az, guidance=guidance,
+                                        cutoff_time_s=cutoff,
                                         gt_turn_start_s=gt_start_s,
                                         gt_turn_stop_s=gt_stop_s,
                                         reentry_query_alt_km=q_alt)
             else:
-                print(f"[manual run] la={la:.4f}° lar={lar:.4f} cutoff={cutoff} "
-                      f"gt_start={gt_start_s:.4f}s gt_stop={gt_stop_s}")
                 result = integrate_trajectory(
                     missile, lat, lon, az,
                     guidance=guidance,
@@ -2315,7 +2314,6 @@ class MissileFlyoutApp(tk.Tk):
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
                     reentry_query_alt_km=q_alt)
-                print(f"[manual run] range={result.get('range_km'):.2f} km")
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
