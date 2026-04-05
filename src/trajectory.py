@@ -293,7 +293,8 @@ _hit_ground.direction = -1
 
 def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
                      beta_kg_m2: float,
-                     max_time_s: float = 7200.0):
+                     max_time_s: float = 7200.0,
+                     return_trajectory: bool = False):
     """
     Integrate a tumbling debris piece from separation to ground impact.
 
@@ -351,10 +352,27 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
     pos_f = sol.y[:3, -1]
     vel_f = sol.y[3:, -1]
     lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
-    return (float(np.degrees(lat_f)),
-            float(np.degrees(lon_f)),
-            float(sol.t[-1]),
-            float(np.linalg.norm(vel_f)))
+    result = (float(np.degrees(lat_f)),
+              float(np.degrees(lon_f)),
+              float(sol.t[-1]),
+              float(np.linalg.norm(vel_f)))
+
+    if not return_trajectory:
+        return result
+
+    d_lats, d_lons, d_alts = [], [], []
+    for i in range(sol.y.shape[1]):
+        la, lo, al = ecef_to_geodetic(sol.y[:3, i])
+        d_lats.append(float(np.degrees(la)))
+        d_lons.append(float(np.degrees(lo)))
+        d_alts.append(float(al))
+    traj = {
+        't':   sol.t,
+        'lat': np.array(d_lats),
+        'lon': np.array(d_lons),
+        'alt': np.array(d_alts),
+    }
+    return result + (traj,)
 
 
 # ---------------------------------------------------------------------------
@@ -557,6 +575,8 @@ def integrate_trajectory(params: MissileParams,
         vel = np.array([np.interp(t_ev, t_arr, vel_arr[:, i]) for i in range(3)])
         return pos, vel
 
+    _debris_trajectories = []   # list of {label, t, lat, lon, alt} dicts
+
     # Walk stages: every jettisoned stage body gets a debris arc.
     # Non-last stages are always jettisoned.  The last stage body is also
     # jettisoned when the RV/payload separates cleanly at burnout — detected
@@ -582,7 +602,8 @@ def integrate_trajectory(params: MissileParams,
                                           _node.diameter_m, _node.length_m)
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_bo)
-                _debris = integrate_debris(_pos_s, _vel_s, beta)
+                _debris = integrate_debris(_pos_s, _vel_s, beta,
+                                           return_trajectory=True)
                 if _debris is None:
                     # Stage did not re-enter within the integration window —
                     # it is in orbit; add an informational row with no impact
@@ -597,7 +618,7 @@ def integrate_trajectory(params: MissileParams,
                         'is_debris': True,
                     })
                 else:
-                    _d_lat, _d_lon, _dt, _d_spd = _debris
+                    _d_lat, _d_lon, _dt, _d_spd, _d_traj = _debris
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
@@ -613,6 +634,11 @@ def integrate_trajectory(params: MissileParams,
                         'is_debris':          True,
                         'impact_lat':         _d_lat,
                         'impact_lon':         _d_lon,
+                    })
+                    _d_traj['t'] = _d_traj['t'] + _t_bo
+                    _debris_trajectories.append({
+                        'label': f"Stage {_sn} body",
+                        **_d_traj,
                     })
         _t_node = _t_bo + _node.coast_time_s
         _node   = _node.stage2
@@ -635,9 +661,10 @@ def integrate_trajectory(params: MissileParams,
                 _beta_note = f"β={beta:.0f} kg/m² (disc, no length)"
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_fair)
-                _debris = integrate_debris(_pos_s, _vel_s, beta)
+                _debris = integrate_debris(_pos_s, _vel_s, beta,
+                                           return_trajectory=True)
                 if _debris is not None:
-                    _d_lat, _d_lon, _dt, _d_spd = _debris
+                    _d_lat, _d_lon, _dt, _d_spd, _d_traj = _debris
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
@@ -652,6 +679,11 @@ def integrate_trajectory(params: MissileParams,
                         'is_debris':          True,
                         'impact_lat':         _d_lat,
                         'impact_lon':         _d_lon,
+                    })
+                    _d_traj['t'] = _d_traj['t'] + _t_fair
+                    _debris_trajectories.append({
+                        'label': 'Shroud',
+                        **_d_traj,
                     })
 
     # Apogee
@@ -706,7 +738,8 @@ def integrate_trajectory(params: MissileParams,
         'apogee_lon_deg':     lons[apo_idx],
         'time_of_flight_s':   None if orbital else t_arr[-1],
         'impact_speed_ms':    None if orbital else speeds[-1],
-        'milestones':         milestones,
+        'milestones':            milestones,
+        'debris_trajectories':   _debris_trajectories,
     }
 
 

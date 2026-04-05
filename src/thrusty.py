@@ -2580,16 +2580,27 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            title="Save trajectory",
+            title="Export trajectory CSV",
         )
         if not path:
             return
         r = self._result
-        header = "time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"
-        data = np.column_stack([r['t'], r['lat'], r['lon'],
-                                 r['alt'], r['speed'], r['range'] / 1000.0])
-        np.savetxt(path, data, delimiter=",", header=header, comments="")
-        self._status_var.set(f"Saved: {path}")
+        rows = []
+        # Main vehicle trajectory
+        for i, ti in enumerate(r['t']):
+            rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
+                        f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
+        # Debris / stage trajectories
+        for d in r.get('debris_trajectories', []):
+            label = d['label'].replace(',', ' ')
+            for i, ti in enumerate(d['t']):
+                rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
+                            f"{d['alt'][i]:.1f},,")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km\n")
+            fh.write("\n".join(rows))
+            fh.write("\n")
+        self._status_var.set(f"Trajectory CSV exported: {path}")
 
     def _export_kml(self):
         """Export the ground track and 3-D trajectory path as a KML file."""
@@ -2623,6 +2634,48 @@ class MissileFlyoutApp(tk.Tk):
 
         missile_name = self._missile_var.get()
 
+        # Build debris Placemarks
+        debris_placemarks = []
+        for d in r.get('debris_trajectories', []):
+            d_lat = np.asarray(d['lat'])
+            d_lon = np.asarray(d['lon'])
+            d_alt = np.asarray(d['alt'])
+            label = d['label']
+            c3d = " ".join(f"{lo:.6f},{la:.6f},{a:.1f}"
+                           for lo, la, a in zip(d_lon, d_lat, d_alt))
+            cgnd = " ".join(f"{lo:.6f},{la:.6f},0"
+                            for lo, la in zip(d_lon, d_lat))
+            debris_placemarks.append(f"""
+    <Placemark>
+      <name>{label} (3-D)</name>
+      <styleUrl>#debrisTraj</styleUrl>
+      <LineString>
+        <altitudeMode>absolute</altitudeMode>
+        <tessellate>0</tessellate>
+        <coordinates>{c3d}</coordinates>
+      </LineString>
+    </Placemark>
+
+    <Placemark>
+      <name>{label} ground track</name>
+      <styleUrl>#debrisGnd</styleUrl>
+      <LineString>
+        <altitudeMode>clampToGround</altitudeMode>
+        <tessellate>1</tessellate>
+        <coordinates>{cgnd}</coordinates>
+      </LineString>
+    </Placemark>
+
+    <Placemark>
+      <name>{label} impact</name>
+      <Point>
+        <altitudeMode>clampToGround</altitudeMode>
+        <coordinates>{d_lon[-1]:.6f},{d_lat[-1]:.6f},0</coordinates>
+      </Point>
+    </Placemark>""")
+
+        debris_xml = "".join(debris_placemarks)
+
         kml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -2633,6 +2686,12 @@ class MissileFlyoutApp(tk.Tk):
     </Style>
     <Style id="trajGnd">
       <LineStyle><color>880000ff</color><width>1</width></LineStyle>
+    </Style>
+    <Style id="debrisTraj">
+      <LineStyle><color>ff00aaff</color><width>1</width></LineStyle>
+    </Style>
+    <Style id="debrisGnd">
+      <LineStyle><color>8800aaff</color><width>1</width></LineStyle>
     </Style>
 
     <Placemark>
@@ -2670,7 +2729,7 @@ class MissileFlyoutApp(tk.Tk):
         <coordinates>{coords_gnd}</coordinates>
       </LineString>
     </Placemark>
-
+{debris_xml}
   </Document>
 </kml>"""
 
