@@ -198,34 +198,26 @@ class _StageFrame(ttk.LabelFrame):
     """Entry widgets for one rocket stage."""
 
     # Default thrust derived from default prop/isp/burn:
-    # T = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
+    # T_vac = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
-                     length="12.0", thrust_kn="112.9", isp="230",
-                     nozzle_area="0", coast="0")
+                     length="12.0", thrust_vac_kn="112.9", thrust_sl_kn="",
+                     isp="230", coast="0")
 
-    _G0 = 9.80665  # m/s²
+    _G0    = 9.80665   # m/s²
+    _P_SL  = 101325.0  # Pa
 
     def __init__(self, parent, label, stage_num=1, defaults=None):
         super().__init__(parent, text=label)
         self._stage_num = stage_num
         d = {**self._DEFAULTS, **(defaults or {})}
-        self._fueled      = _entry_row(self, "Fueled mass (kg):",    0, d["fueled"],      "kg")
-        self._dry         = _entry_row(self, "Dry mass (kg):",       1, d["dry"],         "kg")
-        self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
-        self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
-        self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
-        self._isp         = _entry_row(self, "Isp (s):",             5, d["isp"],         "s")
-        # Nozzle exit area — entry + Suggest button (row 6)
-        ttk.Label(self, text="Nozzle exit area (m²):").grid(
-            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._nozzle_area = tk.StringVar(value=d["nozzle_area"])
-        _noz_inner = ttk.Frame(self)
-        _noz_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
-        ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
-        if self._stage_num == 1:
-            ttk.Button(_noz_inner, text="Suggest…",
-                       command=self._suggest_nozzle_area).pack(side=tk.LEFT)
+        self._fueled        = _entry_row(self, "Fueled mass (kg):",      0, d["fueled"],         "kg")
+        self._dry           = _entry_row(self, "Dry mass (kg):",         1, d["dry"],            "kg")
+        self._dia           = _entry_row(self, "Diameter (m):",          2, d["dia"],            "m")
+        self._length        = _entry_row(self, "Length (m):",            3, d["length"],         "m")
+        self._thrust_vac_kn = _entry_row(self, "Vacuum thrust (kN):",    4, d["thrust_vac_kn"],  "kN")
+        self._thrust_sl_kn  = _entry_row(self, "Sea-level thrust (kN):", 5, d["thrust_sl_kn"],
+                                         "kN  (blank = no correction)")
+        self._isp           = _entry_row(self, "Isp (s):",               6, d["isp"],            "s")
 
         # Burn time — read-only computed field (row 7)
         ttk.Label(self, text="Burn time (s):").grid(
@@ -238,12 +230,20 @@ class _StageFrame(ttk.LabelFrame):
         self._burn_entry.pack(side=tk.LEFT)
         ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Coast-time row (row 8) — shown only for non-last stages
+        # Nozzle area display — read-only derived field (row 8)
+        ttk.Label(self, text="Nozzle exit area (m²):").grid(
+            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._nozzle_area_var = tk.StringVar(value="—")
+        ttk.Label(self, textvariable=self._nozzle_area_var,
+                  foreground="navy").grid(
+            row=8, column=1, sticky=tk.W, padx=(4, 6), pady=2)
+
+        # Coast-time row (row 9) — shown only for non-last stages
         self._coast_var = tk.StringVar(value=d["coast"])
         self._coast_lbl = ttk.Label(self, text="Coast after (s):")
-        self._coast_lbl.grid(row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._coast_lbl.grid(row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         coast_inner = ttk.Frame(self)
-        coast_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        coast_inner.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
         ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
             side=tk.LEFT, padx=(2, 0))
@@ -252,22 +252,37 @@ class _StageFrame(ttk.LabelFrame):
         self._coast_lbl.grid_remove()
         self._coast_inner.grid_remove()
 
-        # Recompute burn whenever any of the four driving fields change
-        for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
+        # Recompute burn (and derived nozzle area) whenever driving fields change
+        for _v in (self._fueled, self._dry, self._thrust_vac_kn,
+                   self._thrust_sl_kn, self._isp):
             _v.trace_add("write", self._recompute_burn)
         self._recompute_burn()
 
     def _recompute_burn(self, *_):
-        """Compute burn time = Isp × g₀ × prop / thrust and update the display."""
+        """Compute burn time = Isp × g₀ × prop / T_vac and derived nozzle area."""
         try:
-            prop     = float(self._fueled.get()) - float(self._dry.get())
-            thrust_n = float(self._thrust_kn.get()) * 1000.0
-            isp      = float(self._isp.get())
-            if thrust_n <= 0 or isp <= 0 or prop <= 0:
+            prop    = float(self._fueled.get()) - float(self._dry.get())
+            t_vac_n = float(self._thrust_vac_kn.get()) * 1000.0
+            isp     = float(self._isp.get())
+            if t_vac_n <= 0 or isp <= 0 or prop <= 0:
                 raise ValueError
-            self._burn_var.set(f"{isp * self._G0 * prop / thrust_n:.1f}")
+            self._burn_var.set(f"{isp * self._G0 * prop / t_vac_n:.1f}")
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
+        # Derived nozzle exit area from T_vac and T_SL
+        try:
+            t_vac_n = float(self._thrust_vac_kn.get()) * 1000.0
+            sl_str  = self._thrust_sl_kn.get().strip()
+            if sl_str:
+                t_sl_n = float(sl_str) * 1000.0
+                if t_sl_n >= t_vac_n:
+                    raise ValueError
+                ae = (t_vac_n - t_sl_n) / self._P_SL
+                self._nozzle_area_var.set(f"{ae:.4f} m²")
+            else:
+                self._nozzle_area_var.set("—  (no correction)")
+        except (ValueError, ZeroDivisionError):
+            self._nozzle_area_var.set("—")
 
     @staticmethod
     def _iter_entries(widget):
@@ -277,83 +292,6 @@ class _StageFrame(ttk.LabelFrame):
                 yield child
             else:
                 yield from _StageFrame._iter_entries(child)
-
-    def _suggest_nozzle_area(self):
-        """Open a small dialog to estimate Ae from Wright's formula:
-           Ae = (Isp_vac − Isp_SL) · g₀ · Mp / (tb · p₀)
-        """
-        try:
-            isp_vac = float(self._isp.get())
-            prop    = float(self._fueled.get()) - float(self._dry.get())
-            burn    = float(self._burn_var.get())
-            if prop <= 0 or burn <= 0 or isp_vac <= 0:
-                raise ValueError
-        except (ValueError, TypeError):
-            tk.messagebox.showerror(
-                "Cannot suggest",
-                "Please enter valid fueled mass, dry mass, and Isp first.",
-                parent=self)
-            return
-
-        dlg = tk.Toplevel(self)
-        dlg.title("Suggest Nozzle Exit Area")
-        dlg.resizable(False, False)
-        dlg.grab_set()
-
-        ttk.Label(dlg, text="Sea-level Isp (s):").grid(
-            row=0, column=0, sticky=tk.W, padx=(10, 4), pady=(10, 2))
-        isp_sl_var = tk.StringVar()
-        ttk.Entry(dlg, textvariable=isp_sl_var, width=10).grid(
-            row=0, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 2))
-
-        hint = ("Typical Isp_vac − Isp_SL by propellant:\n"
-                "  Solid (HTPB/AP):   10–15 s\n"
-                "  UDMH / N₂O₄:      15–20 s\n"
-                "  Kerosene / LOX:    15–25 s\n"
-                "  IRFNA-based:       12–18 s")
-        ttk.Label(dlg, text=hint, justify=tk.LEFT,
-                  foreground="grey").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W,
-            padx=10, pady=(0, 8))
-
-        result_var = tk.StringVar(value="")
-        ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
-            row=2, column=0, columnspan=2, padx=10, pady=(0, 4))
-
-        def _compute(*_):
-            try:
-                isp_sl = float(isp_sl_var.get())
-                if isp_sl <= 0 or isp_sl >= isp_vac:
-                    raise ValueError
-                ae = ((isp_vac - isp_sl) * self._G0 * prop
-                      / (burn * 101325.0))
-                result_var.set(f"Ae ≈ {ae:.4f} m²")
-                return ae
-            except (ValueError, TypeError):
-                result_var.set("Enter a valid Isp_SL less than Isp_vac.")
-                return None
-
-        isp_sl_var.trace_add("write", lambda *_: _compute())
-
-        btn_row = ttk.Frame(dlg)
-        btn_row.grid(row=3, column=0, columnspan=2, pady=(4, 10))
-
-        def _accept():
-            ae = _compute()
-            if ae is not None:
-                self._nozzle_area.set(f"{ae:.4f}")
-                dlg.destroy()
-
-        ttk.Button(btn_row, text="Accept", command=_accept).pack(
-            side=tk.LEFT, padx=6)
-        ttk.Button(btn_row, text="Cancel",
-                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
-
-        # Centre over parent
-        dlg.update_idletasks()
-        px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
-        py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
-        dlg.geometry(f"+{px}+{py}")
 
     def set_readonly(self, readonly: bool):
         """Set all editable entry fields to readonly (for Forden reference missiles)."""
@@ -377,15 +315,18 @@ class _StageFrame(ttk.LabelFrame):
             raise ValueError("Burn time could not be computed — check thrust, Isp, and masses.")
         _LABELS = {
             "fueled": "Fueled Mass", "dry": "Dry Mass", "dia": "Diameter",
-            "length": "Length", "thrust_kn": "Thrust", "isp": "Isp",
-            "nozzle_area": "Nozzle Exit Area", "coast": "Coast Time",
+            "length": "Length", "thrust_vac_kn": "Vacuum Thrust",
+            "isp": "Isp", "coast": "Coast Time",
         }
         result = {}
         for k, v in [
-            ("fueled",      self._fueled),      ("dry",         self._dry),
-            ("dia",         self._dia),         ("length",      self._length),
-            ("thrust_kn",   self._thrust_kn),   ("isp",         self._isp),
-            ("nozzle_area", self._nozzle_area), ("coast",       self._coast_var),
+            ("fueled",        self._fueled),
+            ("dry",           self._dry),
+            ("dia",           self._dia),
+            ("length",        self._length),
+            ("thrust_vac_kn", self._thrust_vac_kn),
+            ("isp",           self._isp),
+            ("coast",         self._coast_var),
         ]:
             try:
                 result[k] = float(v.get())
@@ -393,6 +334,21 @@ class _StageFrame(ttk.LabelFrame):
                 raise ValueError(
                     f"{_LABELS.get(k, k)}: expected a number, got {v.get()!r:.40s}"
                 )
+        # Sea-level thrust is optional; derive nozzle area if provided
+        sl_str = self._thrust_sl_kn.get().strip()
+        if sl_str:
+            try:
+                t_sl = float(sl_str) * 1000.0
+            except ValueError:
+                raise ValueError(
+                    f"Sea-level Thrust: expected a number, got {sl_str!r:.40s}")
+            t_vac = result["thrust_vac_kn"] * 1000.0
+            if t_sl >= t_vac:
+                raise ValueError(
+                    "Sea-level thrust must be less than vacuum thrust.")
+            result["nozzle_area"] = (t_vac - t_sl) / self._P_SL
+        else:
+            result["nozzle_area"] = 0.0
         try:
             result["burn"] = float(burn_str)
         except ValueError:
@@ -400,22 +356,25 @@ class _StageFrame(ttk.LabelFrame):
         return result
 
     def populate(self, d):
-        # Back-calculate thrust_kn from stored burn/isp/prop so the round-trip
-        # is exact: T = Isp × g₀ × prop / burn
+        # Back-calculate vacuum thrust from stored burn/isp/prop: T_vac = Isp×g₀×ṁ
         prop = d["fueled"] - d["dry"]
         burn = d["burn"]
-        thrust_kn = (d["isp"] * self._G0 * prop / burn / 1000.0
-                     if burn > 0 and prop > 0 else 0.0)
+        t_vac_kn = (d["isp"] * self._G0 * prop / burn / 1000.0
+                    if burn > 0 and prop > 0 else 0.0)
+        # Back-calculate sea-level thrust from stored nozzle area
+        ae = d.get("nozzle_area", 0.0)
+        t_sl_kn = ((t_vac_kn * 1000.0 - ae * self._P_SL) / 1000.0
+                   if ae > 0 else None)
 
-        self._fueled      .set(str(d["fueled"]))
-        self._dry         .set(str(d["dry"]))
-        self._dia         .set(str(d["dia"]))
-        self._length      .set(str(d["length"]))
-        self._thrust_kn   .set(f"{thrust_kn:.1f}")
-        self._isp         .set(str(d["isp"]))
-        self._nozzle_area .set(str(d.get("nozzle_area", 0)))
-        # _burn_var is updated automatically by the trace
-        self._coast_var   .set(str(d.get("coast", 0)))
+        self._fueled        .set(str(d["fueled"]))
+        self._dry           .set(str(d["dry"]))
+        self._dia           .set(str(d["dia"]))
+        self._length        .set(str(d["length"]))
+        self._thrust_vac_kn .set(f"{t_vac_kn:.1f}")
+        self._thrust_sl_kn  .set(f"{t_sl_kn:.1f}" if t_sl_kn is not None else "")
+        self._isp           .set(str(d["isp"]))
+        # _burn_var and _nozzle_area_var updated automatically by the trace
+        self._coast_var     .set(str(d.get("coast", 0)))
 
 
 # ---------------------------------------------------------------------------
@@ -846,7 +805,7 @@ class MissileDialog(tk.Toplevel):
                 mass_propellant=prop,
                 mass_final=mfinal,
                 diameter_m=sd["dia"],  length_m=sd["length"],
-                thrust_N=round(sd["thrust_kn"] * 1000.0),
+                thrust_N=round(sd["thrust_vac_kn"] * 1000.0),
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
                 coast_time_s=sd["coast"] if not is_last else 0.0,
                 nozzle_exit_area_m2=sd["nozzle_area"],
@@ -2139,7 +2098,10 @@ class MissileFlyoutApp(tk.Tk):
             _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}  (computed)"); r += 1
             _row(lf, r, "Dry mass (kg):",          f"{stage_dry:,.0f}"); r += 1
             _row(lf, r, "Dry mass %:",             f"{dry_pct:.1f}%"); r += 1
-            _row(lf, r, "Thrust (kN):",            f"{node.thrust_N/1000:,.0f}"); r += 1
+            _row(lf, r, "Vacuum thrust (kN):",     f"{node.thrust_N/1000:,.1f}"); r += 1
+            if node.nozzle_exit_area_m2 > 0:
+                t_sl = node.thrust_N - node.nozzle_exit_area_m2 * 101325.0
+                _row(lf, r, "Sea-level thrust (kN):", f"{t_sl/1000:,.1f}"); r += 1
             _row(lf, r, "ISP (s):",                f"{node.isp_s:.0f}"); r += 1
             _row(lf, r, "Nozzle exit area (m²):",  f"{node.nozzle_exit_area_m2:.4f}"); r += 1
             _row(lf, r, "Burntime (s):",           f"{node.burn_time_s:.1f}  (computed)"); r += 1
