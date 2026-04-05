@@ -2787,32 +2787,30 @@ class MissileFlyoutApp(tk.Tk):
                 tooltip=d['label'],
             ).add_to(fmap)
 
-        # ── Icon/colour lookup ────────────────────────────────────────
-        def _icon_for(event: str, is_debris: bool):
+        # ── Colour lookup ─────────────────────────────────────────────
+        def _color_for(event: str, is_debris: bool):
             e = event.lower()
             if is_debris:
-                return "times", "beige"          # debris impact (≈ yellow)
+                return "#e6c200"    # yellow — debris impact
             if "ignition" in e:
-                return "dot-circle-o", "green"   # launch / upper-stage ignition
+                return "#2ca02c"    # green  — launch / upper-stage ignition
             if "burnout" in e:
-                return "circle-o", "blue"        # stage burnout
+                return "#1f77b4"    # blue   — stage burnout
             if "shroud jettison" in e:
-                return "circle-o", "orange"      # shroud jettison
+                return "#ff7f0e"    # orange — shroud jettison
             if "apogee" in e:
-                return "arrow-up", "orange"      # apogee
-            if "query" in e:
-                return "flag", "purple"          # re-entry query altitude
-            if "re-entry" in e:
-                return "arrow-down", "purple"    # 100 km re-entry crossing
+                return "#ff7f0e"    # orange — apogee
+            if "query" in e or "re-entry" in e:
+                return "#9467bd"    # purple — re-entry / query
             if "impact" in e:
-                return "bullseye", "red"         # RV impact
-            return "circle", "gray"
+                return "#d62728"    # red    — RV impact
+            return "#7f7f7f"        # gray   — fallback
 
         # ── Milestone markers ─────────────────────────────────────────
         for ms in r.get('milestones', []):
             event     = ms.get('event', '')
             is_debris = ms.get('is_debris', False)
-            icon_name, color = _icon_for(event, is_debris)
+            color     = _color_for(event, is_debris)
 
             # Position: debris impacts carry their own lat/lon;
             # all other events are interpolated from the main track.
@@ -2830,11 +2828,16 @@ class MissileFlyoutApp(tk.Tk):
                 f"Range: {ms['range_km']:.1f} km<br>"
                 f"Speed: {ms['speed_kms']:.2f} km/s"
             )
-            folium.Marker(
+            folium.CircleMarker(
                 [mk_lat, mk_lon],
+                radius=6,
+                color="#ffffff",
+                weight=1,
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.9,
                 popup=folium.Popup(popup_html, max_width=200),
                 tooltip=event,
-                icon=folium.Icon(color=color, icon=icon_name, prefix="fa"),
             ).add_to(fmap)
 
         fmap.save(path)
