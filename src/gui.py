@@ -224,8 +224,8 @@ class _StageFrame(ttk.LabelFrame):
         ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
         ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
         if self._stage_num == 1:
-            ttk.Button(_noz_inner, text="Suggest…",
-                       command=self._suggest_nozzle_area).pack(side=tk.LEFT)
+            ttk.Button(_noz_inner, text="Estimate…",
+                       command=self._estimate_nozzle_area).pack(side=tk.LEFT)
 
         # Burn time — read-only computed field (row 7)
         ttk.Label(self, text="Burn time (s):").grid(
@@ -278,78 +278,134 @@ class _StageFrame(ttk.LabelFrame):
             else:
                 yield from _StageFrame._iter_entries(child)
 
-    def _suggest_nozzle_area(self):
-        """Open a small dialog to estimate Ae from Wright's formula:
+    def _estimate_nozzle_area(self):
+        """Estimate Ae from Wright's formula:
            Ae = (Isp_vac − Isp_SL) · g₀ · Mp / (tb · p₀)
+        with a sweep from 0 to 100% of the stage base area.
         """
+        import math
         try:
-            isp_vac = float(self._isp.get())
-            prop    = float(self._fueled.get()) - float(self._dry.get())
-            burn    = float(self._burn_var.get())
-            if prop <= 0 or burn <= 0 or isp_vac <= 0:
+            prop = float(self._fueled.get()) - float(self._dry.get())
+            burn = float(self._burn_var.get())
+            dia  = float(self._dia.get())
+            if prop <= 0 or burn <= 0 or dia <= 0:
                 raise ValueError
         except (ValueError, TypeError):
             tk.messagebox.showerror(
-                "Cannot suggest",
-                "Please enter valid fueled mass, dry mass, and Isp first.",
+                "Cannot estimate",
+                "Please enter valid fueled mass, dry mass, diameter, and thrust first.",
                 parent=self)
             return
 
+        base_area = math.pi * (dia / 2.0) ** 2
+
         dlg = tk.Toplevel(self)
-        dlg.title("Suggest Nozzle Exit Area")
+        dlg.title("Estimate Nozzle Exit Area")
         dlg.resizable(False, False)
         dlg.grab_set()
 
-        ttk.Label(dlg, text="Sea-level Isp (s):").grid(
-            row=0, column=0, sticky=tk.W, padx=(10, 4), pady=(10, 2))
+        # --- Input fields ---
+        inp = ttk.Frame(dlg)
+        inp.grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(10, 4))
+
+        ttk.Label(inp, text="Isp_vac (s):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 4), pady=2)
+        isp_vac_var = tk.StringVar(value=self._isp.get())
+        ttk.Entry(inp, textvariable=isp_vac_var, width=10).grid(
+            row=0, column=1, sticky=tk.W, pady=2)
+
+        ttk.Label(inp, text="Isp_SL (s):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 4), pady=2)
         isp_sl_var = tk.StringVar()
-        ttk.Entry(dlg, textvariable=isp_sl_var, width=10).grid(
-            row=0, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 2))
+        ttk.Entry(inp, textvariable=isp_sl_var, width=10).grid(
+            row=1, column=1, sticky=tk.W, pady=2)
 
-        hint = ("Typical Isp_vac − Isp_SL by propellant:\n"
-                "  Solid (HTPB/AP):   10–15 s\n"
-                "  UDMH / N₂O₄:      15–20 s\n"
-                "  Kerosene / LOX:    15–25 s\n"
-                "  IRFNA-based:       12–18 s")
-        ttk.Label(dlg, text=hint, justify=tk.LEFT,
-                  foreground="grey").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W,
-            padx=10, pady=(0, 8))
+        hint = ("Typical Isp_vac − Isp_SL:\n"
+                "  Solid (HTPB/AP):  10–15 s\n"
+                "  UDMH / N₂O₄:     15–20 s\n"
+                "  Kerosene / LOX:   15–25 s\n"
+                "  IRFNA-based:      12–18 s")
+        ttk.Label(inp, text=hint, justify=tk.LEFT, foreground="grey").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 
+        # --- Wright estimate result ---
         result_var = tk.StringVar(value="")
         ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
-            row=2, column=0, columnspan=2, padx=10, pady=(0, 4))
+            row=1, column=0, columnspan=2, padx=10, pady=(2, 4))
 
-        def _compute(*_):
+        # --- Sweep table ---
+        ttk.Label(dlg, text=f"Stage base area: {base_area:.4f} m²  —  "
+                             f"sweep 0–100%:", foreground="grey").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 2))
+
+        cols = ("pct", "ae")
+        tree = ttk.Treeview(dlg, columns=cols, show="headings", height=11,
+                            selectmode="browse")
+        tree.heading("pct", text="% of base area")
+        tree.heading("ae",  text="Ae (m²)")
+        tree.column("pct", width=120, anchor="center")
+        tree.column("ae",  width=120, anchor="center")
+        tree.grid(row=3, column=0, columnspan=2, padx=10, pady=(0, 6), sticky=tk.EW)
+
+        _sweep_ids = []
+        for pct in range(0, 101, 10):
+            ae_val = base_area * pct / 100.0
+            iid = tree.insert("", "end",
+                              values=(f"{pct}%", f"{ae_val:.4f}"))
+            _sweep_ids.append((pct, ae_val, iid))
+
+        _current_ae = [None]
+
+        def _update(*_):
             try:
-                isp_sl = float(isp_sl_var.get())
+                isp_vac = float(isp_vac_var.get())
+                isp_sl  = float(isp_sl_var.get())
                 if isp_sl <= 0 or isp_sl >= isp_vac:
                     raise ValueError
-                ae = ((isp_vac - isp_sl) * self._G0 * prop
-                      / (burn * 101325.0))
-                result_var.set(f"Ae ≈ {ae:.4f} m²")
-                return ae
+                ae = (isp_vac - isp_sl) * self._G0 * prop / (burn * 101325.0)
+                pct_of_base = ae / base_area * 100.0
+                result_var.set(
+                    f"Wright estimate: Ae ≈ {ae:.4f} m²  "
+                    f"({pct_of_base:.1f}% of base area)")
+                _current_ae[0] = ae
+                # Highlight nearest sweep row
+                nearest_iid = min(_sweep_ids,
+                                  key=lambda t: abs(t[1] - ae))[2]
+                for _, _, iid in _sweep_ids:
+                    tree.item(iid, tags=())
+                tree.item(nearest_iid, tags=("nearest",))
+                tree.tag_configure("nearest", background="#cce5ff")
             except (ValueError, TypeError):
-                result_var.set("Enter a valid Isp_SL less than Isp_vac.")
-                return None
+                result_var.set("Enter valid Isp_vac and Isp_SL.")
+                _current_ae[0] = None
+                for _, _, iid in _sweep_ids:
+                    tree.item(iid, tags=())
 
-        isp_sl_var.trace_add("write", lambda *_: _compute())
+        isp_vac_var.trace_add("write", _update)
+        isp_sl_var .trace_add("write", _update)
 
-        btn_row = ttk.Frame(dlg)
-        btn_row.grid(row=3, column=0, columnspan=2, pady=(4, 10))
-
-        def _accept():
-            ae = _compute()
+        def _accept_wright():
+            ae = _current_ae[0]
             if ae is not None:
                 self._nozzle_area.set(f"{ae:.4f}")
                 dlg.destroy()
 
-        ttk.Button(btn_row, text="Accept", command=_accept).pack(
-            side=tk.LEFT, padx=6)
+        def _accept_selected():
+            sel = tree.selection()
+            if sel:
+                ae_str = tree.item(sel[0], "values")[1]
+                self._nozzle_area.set(ae_str)
+                dlg.destroy()
+
+        btn_row = ttk.Frame(dlg)
+        btn_row.grid(row=4, column=0, columnspan=2, pady=(0, 10))
+        ttk.Button(btn_row, text="Accept Wright estimate",
+                   command=_accept_wright).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_row, text="Accept selected row",
+                   command=_accept_selected).pack(side=tk.LEFT, padx=6)
         ttk.Button(btn_row, text="Cancel",
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
-        # Centre over parent
         dlg.update_idletasks()
         px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
         py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
