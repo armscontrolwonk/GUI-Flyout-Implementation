@@ -320,13 +320,22 @@ class _StageFrame(ttk.LabelFrame):
         ttk.Entry(inp, textvariable=isp_sl_var, width=10).grid(
             row=1, column=1, sticky=tk.W, pady=2)
 
+        ttk.Label(inp, text="Performance factor:").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 4), pady=2)
+        pf_var = tk.StringVar(value="0.10")
+        ttk.Entry(inp, textvariable=pf_var, width=10).grid(
+            row=2, column=1, sticky=tk.W, pady=2)
+        ttk.Label(inp, text="= (Isp_vac − Isp_SL) / Isp_vac",
+                  foreground="grey").grid(
+            row=2, column=2, sticky=tk.W, padx=(4, 0))
+
         hint = ("Typical Isp_vac − Isp_SL:\n"
                 "  Solid (HTPB/AP):  10–15 s\n"
                 "  UDMH / N₂O₄:     15–20 s\n"
                 "  Kerosene / LOX:   15–25 s\n"
                 "  IRFNA-based:      12–18 s")
         ttk.Label(inp, text=hint, justify=tk.LEFT, foreground="grey").grid(
-            row=2, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+            row=3, column=0, columnspan=3, sticky=tk.W, pady=(4, 0))
 
         # --- Wright estimate result ---
         result_var = tk.StringVar(value="")
@@ -381,8 +390,40 @@ class _StageFrame(ttk.LabelFrame):
                 for _, _, iid in _sweep_ids:
                     tree.item(iid, tags=())
 
+        # Sync Isp_SL ↔ performance factor; avoid infinite loops with a flag
+        _syncing = [False]
+
+        def _sl_changed(*_):
+            if _syncing[0]:
+                return
+            try:
+                isp_vac = float(isp_vac_var.get())
+                isp_sl  = float(isp_sl_var.get())
+                if isp_vac > 0:
+                    _syncing[0] = True
+                    pf_var.set(f"{(isp_vac - isp_sl) / isp_vac:.4f}")
+                    _syncing[0] = False
+            except (ValueError, TypeError):
+                pass
+            _update()
+
+        def _pf_changed(*_):
+            if _syncing[0]:
+                return
+            try:
+                isp_vac = float(isp_vac_var.get())
+                pf      = float(pf_var.get())
+                if isp_vac > 0:
+                    _syncing[0] = True
+                    isp_sl_var.set(f"{isp_vac * (1.0 - pf):.1f}")
+                    _syncing[0] = False
+            except (ValueError, TypeError):
+                pass
+            _update()
+
         isp_vac_var.trace_add("write", _update)
-        isp_sl_var .trace_add("write", _update)
+        isp_sl_var .trace_add("write", _sl_changed)
+        pf_var     .trace_add("write", _pf_changed)
 
         def _accept_wright():
             ae = _current_ae[0]
