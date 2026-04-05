@@ -214,7 +214,7 @@ class _StageFrame(ttk.LabelFrame):
         self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
         self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
         self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
-        self._isp         = _entry_row(self, "Isp (s):",             5, d["isp"],         "s")
+        self._isp         = _entry_row(self, "Isp (vacuum, s):",      5, d["isp"],         "s")
         # Nozzle exit area — entry + Suggest button (row 6)
         ttk.Label(self, text="Nozzle exit area (m²):").grid(
             row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
