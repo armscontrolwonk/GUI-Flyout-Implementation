@@ -1291,9 +1291,11 @@ class MissileFlyoutApp(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Save trajectory…",    command=self._save_trajectory)
-        file_menu.add_command(label="Export timeline CSV…",command=self._export_timeline)
-        file_menu.add_command(label="Export missile JSON…",command=self._export_missile)
+        file_menu.add_command(label="Export trajectory CSV…", command=self._save_trajectory)
+        file_menu.add_command(label="Export trajectory KML…", command=self._export_kml)
+        file_menu.add_command(label="Open Folium map…",       command=self._export_folium)
+        file_menu.add_command(label="Export timeline CSV…",   command=self._export_timeline)
+        file_menu.add_command(label="Export missile JSON…",   command=self._export_missile)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -2588,6 +2590,182 @@ class MissileFlyoutApp(tk.Tk):
                                  r['alt'], r['speed'], r['range'] / 1000.0])
         np.savetxt(path, data, delimiter=",", header=header, comments="")
         self._status_var.set(f"Saved: {path}")
+
+    def _export_kml(self):
+        """Export the ground track and 3-D trajectory path as a KML file."""
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".kml",
+            filetypes=[("KML files", "*.kml"), ("All files", "*.*")],
+            title="Export trajectory KML",
+        )
+        if not path:
+            return
+
+        r   = self._result
+        lat = np.asarray(r['lat'])
+        lon = np.asarray(r['lon'])
+        alt = np.asarray(r['alt'])
+
+        # 3-D trajectory (absolute altitude)
+        coords_3d = " ".join(
+            f"{lo:.6f},{la:.6f},{a:.1f}"
+            for lo, la, a in zip(lon, lat, alt)
+        )
+        # Ground track (clamped to ground)
+        coords_gnd = " ".join(
+            f"{lo:.6f},{la:.6f},0"
+            for lo, la in zip(lon, lat)
+        )
+
+        missile_name = self._missile_var.get()
+
+        kml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>{missile_name} Trajectory</name>
+
+    <Style id="traj3d">
+      <LineStyle><color>ffff0000</color><width>2</width></LineStyle>
+    </Style>
+    <Style id="trajGnd">
+      <LineStyle><color>880000ff</color><width>1</width></LineStyle>
+    </Style>
+
+    <Placemark>
+      <name>Launch</name>
+      <Point>
+        <altitudeMode>clampToGround</altitudeMode>
+        <coordinates>{lon[0]:.6f},{lat[0]:.6f},0</coordinates>
+      </Point>
+    </Placemark>
+
+    <Placemark>
+      <name>Impact</name>
+      <Point>
+        <altitudeMode>clampToGround</altitudeMode>
+        <coordinates>{lon[-1]:.6f},{lat[-1]:.6f},0</coordinates>
+      </Point>
+    </Placemark>
+
+    <Placemark>
+      <name>Trajectory (3-D)</name>
+      <styleUrl>#traj3d</styleUrl>
+      <LineString>
+        <altitudeMode>absolute</altitudeMode>
+        <tessellate>0</tessellate>
+        <coordinates>{coords_3d}</coordinates>
+      </LineString>
+    </Placemark>
+
+    <Placemark>
+      <name>Ground Track</name>
+      <styleUrl>#trajGnd</styleUrl>
+      <LineString>
+        <altitudeMode>clampToGround</altitudeMode>
+        <tessellate>1</tessellate>
+        <coordinates>{coords_gnd}</coordinates>
+      </LineString>
+    </Placemark>
+
+  </Document>
+</kml>"""
+
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(kml)
+        self._status_var.set(f"KML exported: {path}")
+
+    def _export_folium(self):
+        """Generate an interactive Folium HTML map and open it in the browser."""
+        try:
+            import folium
+        except ImportError:
+            messagebox.showerror(
+                "Missing package",
+                "folium is not installed.\n\nRun:  pip install folium",
+            )
+            return
+
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+            title="Save Folium map",
+        )
+        if not path:
+            return
+
+        r   = self._result
+        lat = np.asarray(r['lat'])
+        lon = np.asarray(r['lon'])
+        alt = np.asarray(r['alt'])
+        t   = np.asarray(r['t'])
+        spd = np.asarray(r['speed'])
+
+        mid_lat = float(np.mean(lat))
+        mid_lon = float(np.mean(lon))
+
+        m = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
+                       tiles="CartoDB positron")
+
+        # Ground track line
+        coords = list(zip(lat.tolist(), lon.tolist()))
+        folium.PolyLine(
+            coords,
+            color="red", weight=2.5, opacity=0.85,
+            tooltip="Ground track",
+        ).add_to(m)
+
+        # Apogee marker (max altitude point)
+        apex_idx = int(np.argmax(alt))
+        folium.Marker(
+            [float(lat[apex_idx]), float(lon[apex_idx])],
+            popup=folium.Popup(
+                f"<b>Apogee</b><br>"
+                f"Alt: {alt[apex_idx]/1000:.1f} km<br>"
+                f"t = {t[apex_idx]:.1f} s",
+                max_width=180,
+            ),
+            icon=folium.Icon(color="orange", icon="arrow-up", prefix="fa"),
+        ).add_to(m)
+
+        # Launch marker
+        folium.Marker(
+            [float(lat[0]), float(lon[0])],
+            popup=folium.Popup(
+                f"<b>Launch</b><br>"
+                f"{lat[0]:.3f}°N, {lon[0]:.3f}°E",
+                max_width=180,
+            ),
+            icon=folium.Icon(color="green", icon="play", prefix="fa"),
+        ).add_to(m)
+
+        # Impact marker
+        rng_km = float(r['range'][-1]) / 1000.0
+        folium.Marker(
+            [float(lat[-1]), float(lon[-1])],
+            popup=folium.Popup(
+                f"<b>Impact</b><br>"
+                f"{lat[-1]:.3f}°N, {lon[-1]:.3f}°E<br>"
+                f"Range: {rng_km:.1f} km<br>"
+                f"t = {t[-1]:.1f} s",
+                max_width=180,
+            ),
+            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa"),
+        ).add_to(m)
+
+        m.save(path)
+
+        import webbrowser
+        webbrowser.open(f"file://{path}")
+        self._status_var.set(f"Folium map saved and opened: {path}")
 
     def _export_timeline(self):
         """Export the flight event timeline to CSV."""
