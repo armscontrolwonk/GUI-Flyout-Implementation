@@ -2884,6 +2884,12 @@ class MissileFlyoutApp(tk.Tk):
                 ),
             ).add_to(label_layer)
 
+        def _is_rv_impact(group):
+            return any('impact' in g['event'].lower() and not g.get('is_debris', False)
+                       for g in group)
+
+        merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
+
         for group in merged:
             _add_marker(group)
 
