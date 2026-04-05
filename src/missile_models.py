@@ -843,8 +843,8 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
                 # Physics-based correction: T(h) = T_vac − P_amb × Ae
                 thrust_mag = max(0.0, s.thrust_N - P_amb * s.nozzle_exit_area_m2)
             else:
-                # No nozzle area specified: treat thrust_N as constant (no correction)
-                thrust_mag = s.thrust_N
+                # Legacy approximation: ~2 % back-pressure penalty at sea level
+                thrust_mag = s.thrust_N * (1.0 - 0.02 * (P_amb / 101325.0))
             return thrust_mag * thrust_dir
         t_rem -= s.burn_time_s
         if s.stage2 is None:
