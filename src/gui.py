@@ -279,9 +279,7 @@ class _StageFrame(ttk.LabelFrame):
                 yield from _StageFrame._iter_entries(child)
 
     def _suggest_nozzle_area(self):
-        """Open a small dialog to estimate Ae from Wright's formula:
-           Ae = (Isp_vac − Isp_SL) · g₀ · Mp / (tb · p₀)
-        """
+        """Estimate Ae = (g₀ / p₀) × ṁ × Isp_vac × performance_factor"""
         try:
             isp_vac = float(self._isp.get())
             prop    = float(self._fueled.get()) - float(self._dry.get())
@@ -290,50 +288,49 @@ class _StageFrame(ttk.LabelFrame):
                 raise ValueError
         except (ValueError, TypeError):
             tk.messagebox.showerror(
-                "Cannot suggest",
-                "Please enter valid fueled mass, dry mass, and Isp first.",
+                "Cannot estimate",
+                "Please enter valid fueled mass, dry mass, Isp, and thrust first.",
                 parent=self)
             return
 
+        mdot = prop / burn
+
         dlg = tk.Toplevel(self)
-        dlg.title("Suggest Nozzle Exit Area")
+        dlg.title("Estimate Nozzle Exit Area")
         dlg.resizable(False, False)
         dlg.grab_set()
 
-        ttk.Label(dlg, text="Sea-level Isp (s):").grid(
+        ttk.Label(dlg, text="Isp_vac (s):").grid(
             row=0, column=0, sticky=tk.W, padx=(10, 4), pady=(10, 2))
-        isp_sl_var = tk.StringVar()
-        ttk.Entry(dlg, textvariable=isp_sl_var, width=10).grid(
+        isp_var = tk.StringVar(value=str(isp_vac))
+        ttk.Entry(dlg, textvariable=isp_var, width=10).grid(
             row=0, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 2))
 
-        hint = ("Typical Isp_vac − Isp_SL by propellant:\n"
-                "  Solid (HTPB/AP):   10–15 s\n"
-                "  UDMH / N₂O₄:      15–20 s\n"
-                "  Kerosene / LOX:    15–25 s\n"
-                "  IRFNA-based:       12–18 s")
-        ttk.Label(dlg, text=hint, justify=tk.LEFT,
-                  foreground="grey").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W,
-            padx=10, pady=(0, 8))
+        ttk.Label(dlg, text="Performance factor:").grid(
+            row=1, column=0, sticky=tk.W, padx=(10, 4), pady=2)
+        pf_var = tk.StringVar(value="0.10")
+        ttk.Entry(dlg, textvariable=pf_var, width=10).grid(
+            row=1, column=1, sticky=tk.W, padx=(0, 10), pady=2)
 
         result_var = tk.StringVar(value="")
         ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
-            row=2, column=0, columnspan=2, padx=10, pady=(0, 4))
+            row=2, column=0, columnspan=2, padx=10, pady=(6, 4))
 
         def _compute(*_):
             try:
-                isp_sl = float(isp_sl_var.get())
-                if isp_sl <= 0 or isp_sl >= isp_vac:
+                isp  = float(isp_var.get())
+                pf   = float(pf_var.get())
+                if isp <= 0 or pf <= 0:
                     raise ValueError
-                ae = ((isp_vac - isp_sl) * self._G0 * prop
-                      / (burn * 101325.0))
+                ae = (self._G0 / 101325.0) * mdot * isp * pf
                 result_var.set(f"Ae ≈ {ae:.4f} m²")
                 return ae
             except (ValueError, TypeError):
-                result_var.set("Enter a valid Isp_SL less than Isp_vac.")
+                result_var.set("Enter valid Isp and performance factor.")
                 return None
 
-        isp_sl_var.trace_add("write", lambda *_: _compute())
+        isp_var.trace_add("write", lambda *_: _compute())
+        pf_var .trace_add("write", lambda *_: _compute())
 
         btn_row = ttk.Frame(dlg)
         btn_row.grid(row=3, column=0, columnspan=2, pady=(4, 10))
