@@ -2764,64 +2764,80 @@ class MissileFlyoutApp(tk.Tk):
         r   = self._result
         lat = np.asarray(r['lat'])
         lon = np.asarray(r['lon'])
-        alt = np.asarray(r['alt'])
         t   = np.asarray(r['t'])
-        spd = np.asarray(r['speed'])
 
         mid_lat = float(np.mean(lat))
         mid_lon = float(np.mean(lon))
 
-        m = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
-                       tiles="CartoDB positron")
+        fmap = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
+                          tiles="CartoDB positron")
 
-        # Ground track line
-        coords = list(zip(lat.tolist(), lon.tolist()))
+        # ── Ground track ──────────────────────────────────────────────
         folium.PolyLine(
-            coords,
-            color="red", weight=2.5, opacity=0.85,
+            list(zip(lat.tolist(), lon.tolist())),
+            color="#333333", weight=2.0, opacity=0.7,
             tooltip="Ground track",
-        ).add_to(m)
+        ).add_to(fmap)
 
-        # Apogee marker (max altitude point)
-        apex_idx = int(np.argmax(alt))
-        folium.Marker(
-            [float(lat[apex_idx]), float(lon[apex_idx])],
-            popup=folium.Popup(
-                f"<b>Apogee</b><br>"
-                f"Alt: {alt[apex_idx]/1000:.1f} km<br>"
-                f"t = {t[apex_idx]:.1f} s",
-                max_width=180,
-            ),
-            icon=folium.Icon(color="orange", icon="arrow-up", prefix="fa"),
-        ).add_to(m)
+        # ── Debris ground tracks ──────────────────────────────────────
+        for d in r.get('debris_trajectories', []):
+            folium.PolyLine(
+                list(zip(d['lat'].tolist(), d['lon'].tolist())),
+                color="#cc8800", weight=1.5, opacity=0.6,
+                tooltip=d['label'],
+            ).add_to(fmap)
 
-        # Launch marker
-        folium.Marker(
-            [float(lat[0]), float(lon[0])],
-            popup=folium.Popup(
-                f"<b>Launch</b><br>"
-                f"{lat[0]:.3f}°N, {lon[0]:.3f}°E",
-                max_width=180,
-            ),
-            icon=folium.Icon(color="green", icon="play", prefix="fa"),
-        ).add_to(m)
+        # ── Icon/colour lookup ────────────────────────────────────────
+        def _icon_for(event: str, is_debris: bool):
+            e = event.lower()
+            if is_debris:
+                return "times", "beige"          # debris impact (≈ yellow)
+            if "ignition" in e:
+                return "dot-circle-o", "green"   # launch / upper-stage ignition
+            if "burnout" in e:
+                return "circle-o", "blue"        # stage burnout
+            if "shroud jettison" in e:
+                return "circle-o", "orange"      # shroud jettison
+            if "apogee" in e:
+                return "arrow-up", "orange"      # apogee
+            if "query" in e:
+                return "flag", "purple"          # re-entry query altitude
+            if "re-entry" in e:
+                return "arrow-down", "purple"    # 100 km re-entry crossing
+            if "impact" in e:
+                return "bullseye", "red"         # RV impact
+            return "circle", "gray"
 
-        # Impact marker
-        rng_km = float(r['range'][-1]) / 1000.0
-        folium.Marker(
-            [float(lat[-1]), float(lon[-1])],
-            popup=folium.Popup(
-                f"<b>Impact</b><br>"
-                f"{lat[-1]:.3f}°N, {lon[-1]:.3f}°E<br>"
-                f"Range: {rng_km:.1f} km<br>"
-                f"t = {t[-1]:.1f} s",
-                max_width=180,
-            ),
-            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa"),
-        ).add_to(m)
+        # ── Milestone markers ─────────────────────────────────────────
+        for ms in r.get('milestones', []):
+            event     = ms.get('event', '')
+            is_debris = ms.get('is_debris', False)
+            icon_name, color = _icon_for(event, is_debris)
 
-        m.save(path)
+            # Position: debris impacts carry their own lat/lon;
+            # all other events are interpolated from the main track.
+            if is_debris and 'impact_lat' in ms:
+                mk_lat = ms['impact_lat']
+                mk_lon = ms['impact_lon']
+            else:
+                mk_lat = float(np.interp(ms['t_s'], t, lat))
+                mk_lon = float(np.interp(ms['t_s'], t, lon))
 
+            popup_html = (
+                f"<b>{event}</b><br>"
+                f"t = {ms['t_s']:.1f} s<br>"
+                f"Alt: {ms['alt_km']:.1f} km<br>"
+                f"Range: {ms['range_km']:.1f} km<br>"
+                f"Speed: {ms['speed_kms']:.2f} km/s"
+            )
+            folium.Marker(
+                [mk_lat, mk_lon],
+                popup=folium.Popup(popup_html, max_width=200),
+                tooltip=event,
+                icon=folium.Icon(color=color, icon=icon_name, prefix="fa"),
+            ).add_to(fmap)
+
+        fmap.save(path)
         import webbrowser
         webbrowser.open(f"file://{path}")
         self._status_var.set(f"Folium map saved and opened: {path}")
