@@ -224,7 +224,7 @@ class _StageFrame(ttk.LabelFrame):
         ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
         ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
         if self._stage_num == 1:
-            ttk.Button(_noz_inner, text="Suggest…",
+            ttk.Button(_noz_inner, text="Estimate…",
                        command=self._suggest_nozzle_area).pack(side=tk.LEFT)
 
         # Burn time — read-only computed field (row 7)
