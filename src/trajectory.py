@@ -338,27 +338,44 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
     _ground.direction = -1
 
     state0 = np.concatenate([pos_ecef, vel_ecef])
-    sol = solve_ivp(_eom, (0.0, max_time_s), state0,
-                    method='RK45', events=_ground,
-                    rtol=1e-5, atol=10.0, dense_output=False)
+    # First pass: find the impact time with the event detector.
+    sol_ev = solve_ivp(_eom, (0.0, max_time_s), state0,
+                       method='RK45', events=_ground,
+                       rtol=1e-5, atol=10.0, dense_output=False)
 
     # If the ground event never fired the stage did not impact within the
     # timeout — it is in orbit (or on a very long sub-orbital arc).  Return
     # None so the caller can skip the debris milestone rather than reporting
     # a spurious in-orbit position as a ground impact.
-    if len(sol.t_events[0]) == 0:
+    if len(sol_ev.t_events[0]) == 0:
         return None
+
+    t_impact = float(sol_ev.t_events[0][0])
+
+    if not return_trajectory:
+        # Re-use the last state from the event solution for the impact point.
+        pos_f = sol_ev.y[:3, -1]
+        vel_f = sol_ev.y[3:, -1]
+        lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
+        return (float(np.degrees(lat_f)),
+                float(np.degrees(lon_f)),
+                t_impact,
+                float(np.linalg.norm(vel_f)))
+
+    # Second pass: re-integrate on a regular 10-second grid for smooth output.
+    t_eval = np.arange(0.0, t_impact, 10.0)
+    t_eval = np.append(t_eval, t_impact)
+    sol = solve_ivp(_eom, (0.0, t_impact), state0,
+                    method='RK45', t_eval=t_eval,
+                    rtol=1e-5, atol=10.0, dense_output=False)
 
     pos_f = sol.y[:3, -1]
     vel_f = sol.y[3:, -1]
     lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
     result = (float(np.degrees(lat_f)),
               float(np.degrees(lon_f)),
-              float(sol.t[-1]),
+              t_impact,
               float(np.linalg.norm(vel_f)))
-
-    if not return_trajectory:
-        return result
 
     d_lats, d_lons, d_alts = [], [], []
     for i in range(sol.y.shape[1]):
