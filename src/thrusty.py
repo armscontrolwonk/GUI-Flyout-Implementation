@@ -1451,13 +1451,6 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
         ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
 
-        # ── Target ────────────────────────────────────────────────────
-        tf = ttk.LabelFrame(parent, text="Target")
-        tf.pack(fill=tk.X, padx=6, pady=3)
-
-        self._target_lat = _dd_row(tf, "Latitude:",  row=0, default="0.0")
-        self._target_lon = _dd_row(tf, "Longitude:", row=1, default="0.0")
-
         # ── Guidance — mode radio + loft angle / pitch-over ───────────
         gf = ttk.LabelFrame(parent, text="Guidance")
         gf.pack(fill=tk.X, padx=6, pady=3)
@@ -2177,14 +2170,62 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _aim_at_target(self):
         """
-        Compute great-circle azimuth from launch to target and set the
-        cutoff time to hit the target range (using aim_missile bisection).
+        Prompt for target lat/lon, then compute great-circle azimuth and
+        bisect cutoff time to hit the target range.
         """
+        dlg = tk.Toplevel(self)
+        dlg.title("Aim at Target (liquid)")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        frm = ttk.Frame(dlg, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Target Latitude (°):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 6), pady=4)
+        lat_var = tk.StringVar(value="0.0")
+        ttk.Entry(frm, textvariable=lat_var, width=12).grid(
+            row=0, column=1, sticky=tk.W, pady=4)
+
+        ttk.Label(frm, text="Target Longitude (°):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 6), pady=4)
+        lon_var = tk.StringVar(value="0.0")
+        ttk.Entry(frm, textvariable=lon_var, width=12).grid(
+            row=1, column=1, sticky=tk.W, pady=4)
+
+        result = {}
+
+        def _ok():
+            try:
+                result['lat'] = float(lat_var.get())
+                result['lon'] = float(lon_var.get())
+            except ValueError:
+                messagebox.showerror("Input error",
+                                     "Latitude and longitude must be numbers.",
+                                     parent=dlg)
+                return
+            dlg.destroy()
+
+        def _cancel():
+            dlg.destroy()
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.grid(row=2, column=0, columnspan=2, pady=(8, 0))
+        ttk.Button(btn_frm, text="OK",     width=8, command=_ok    ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frm, text="Cancel", width=8, command=_cancel).pack(side=tk.LEFT, padx=4)
+
+        dlg.bind("<Return>", lambda e: _ok())
+        dlg.bind("<Escape>", lambda e: _cancel())
+        self.wait_window(dlg)
+
+        if 'lat' not in result:
+            return
+
         try:
             lat1_dd = float(self._launch_lat.get())
             lon1_dd = float(self._launch_lon.get())
-            lat2_dd = float(self._target_lat.get())
-            lon2_dd = float(self._target_lon.get())
+            lat2_dd = result['lat']
+            lon2_dd = result['lon']
 
             lat1 = np.radians(lat1_dd)
             lon1 = np.radians(lon1_dd)
