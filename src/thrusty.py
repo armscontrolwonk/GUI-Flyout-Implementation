@@ -2775,7 +2775,7 @@ class MissileFlyoutApp(tk.Tk):
         # ── Ground track ──────────────────────────────────────────────
         folium.PolyLine(
             list(zip(lat.tolist(), lon.tolist())),
-            color="#333333", weight=2.0, opacity=0.7,
+            color="black", weight=2.0, opacity=0.8,
             tooltip="Ground track",
         ).add_to(fmap)
 
@@ -2783,71 +2783,43 @@ class MissileFlyoutApp(tk.Tk):
         for d in r.get('debris_trajectories', []):
             folium.PolyLine(
                 list(zip(d['lat'].tolist(), d['lon'].tolist())),
-                color="#cc8800", weight=1.5, opacity=0.6,
+                color="black", weight=1.5, opacity=0.5,
                 tooltip=d['label'],
             ).add_to(fmap)
 
+        # ── Merge simultaneous milestones (e.g. burnout + next ignition
+        #    at the same timestamp when coast_time_s == 0) ─────────────
+        raw_milestones = r.get('milestones', [])
+        merged = []
+        i = 0
+        while i < len(raw_milestones):
+            ms = raw_milestones[i]
+            # Collect all non-debris milestones within 0.1 s of this one
+            # at the same position (debris impacts have their own coords
+            # and should never be merged).
+            group = [ms]
+            if not ms.get('is_debris', False):
+                j = i + 1
+                while j < len(raw_milestones):
+                    nxt = raw_milestones[j]
+                    if (not nxt.get('is_debris', False) and
+                            abs(nxt['t_s'] - ms['t_s']) < 0.1):
+                        group.append(nxt)
+                        j += 1
+                    else:
+                        break
+            merged.append(group)
+            i += len(group)
+
         # ── Milestone markers ─────────────────────────────────────────
-        def _add_marker(fmap, mk_lat, mk_lon, event, ms):
-            e = event.lower()
-            popup_html = (
-                f"<b>{event}</b><br>"
-                f"t = {ms['t_s']:.1f} s<br>"
-                f"Alt: {ms['alt_km']:.1f} km<br>"
-                f"Range: {ms['range_km']:.1f} km<br>"
-                f"Speed: {ms['speed_kms']:.2f} km/s"
-            )
-            popup = folium.Popup(popup_html, max_width=200)
+        label_layer = folium.FeatureGroup(name="labels", show=True)
 
-            if "ignition" in e and "stage" not in e:
-                # Launch — solid black circle
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=7,
-                    color="black", weight=2,
-                    fill=True, fill_color="black", fill_opacity=1.0,
-                    popup=popup, tooltip=event,
-                ).add_to(fmap)
-
-            elif "impact" in e and not ms.get('is_debris', False):
-                # RV impact — ring within a ring
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=9,
-                    color="black", weight=2,
-                    fill=True, fill_color="white", fill_opacity=1.0,
-                    popup=popup, tooltip=event,
-                ).add_to(fmap)
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=4,
-                    color="black", weight=2,
-                    fill=True, fill_color="black", fill_opacity=1.0,
-                    popup=popup, tooltip=event,
-                ).add_to(fmap)
-
-            else:
-                # All other events — black ring, white fill
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=6,
-                    color="black", weight=2,
-                    fill=True, fill_color="white", fill_opacity=1.0,
-                    popup=popup, tooltip=event,
-                ).add_to(fmap)
-
-            # Label offset to the right of the circle
-            folium.Marker(
-                [mk_lat, mk_lon],
-                icon=folium.DivIcon(
-                    html=(f'<div style="font-size:10px; font-family:sans-serif;'
-                          f' font-weight:bold; white-space:nowrap;'
-                          f' margin-left:12px; margin-top:-7px;">'
-                          f'{event}</div>'),
-                    icon_size=(200, 20),
-                    icon_anchor=(0, 10),
-                ),
-            ).add_to(fmap)
-
-        for ms in r.get('milestones', []):
-            event     = ms.get('event', '')
+        def _add_marker(group):
+            # Representative milestone for position / popup data
+            ms        = group[0]
             is_debris = ms.get('is_debris', False)
+            label     = " / ".join(g['event'] for g in group)
+            e         = label.lower()
 
             if is_debris and 'impact_lat' in ms:
                 mk_lat = ms['impact_lat']
@@ -2856,7 +2828,88 @@ class MissileFlyoutApp(tk.Tk):
                 mk_lat = float(np.interp(ms['t_s'], t, lat))
                 mk_lon = float(np.interp(ms['t_s'], t, lon))
 
-            _add_marker(fmap, mk_lat, mk_lon, event, ms)
+            popup_html = (
+                f"<b>{label}</b><br>"
+                f"t = {ms['t_s']:.1f} s<br>"
+                f"Alt: {ms['alt_km']:.1f} km<br>"
+                f"Range: {ms['range_km']:.1f} km<br>"
+                f"Speed: {ms['speed_kms']:.2f} km/s"
+            )
+            popup = folium.Popup(popup_html, max_width=220)
+
+            if "ignition" in e and "stage" not in e:
+                # Launch — solid black circle
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=7,
+                    color="black", weight=2,
+                    fill=True, fill_color="black", fill_opacity=1.0,
+                    popup=popup, tooltip=label,
+                ).add_to(fmap)
+
+            elif "impact" in e and not is_debris:
+                # RV impact — ring within a ring
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=9,
+                    color="black", weight=2,
+                    fill=True, fill_color="white", fill_opacity=1.0,
+                    popup=popup, tooltip=label,
+                ).add_to(fmap)
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=4,
+                    color="black", weight=2,
+                    fill=True, fill_color="black", fill_opacity=1.0,
+                    popup=popup, tooltip=label,
+                ).add_to(fmap)
+
+            else:
+                # All other events — black ring, white fill
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=6,
+                    color="black", weight=2,
+                    fill=True, fill_color="white", fill_opacity=1.0,
+                    popup=popup, tooltip=label,
+                ).add_to(fmap)
+
+            # Label — placed in the zoom-controlled layer
+            folium.Marker(
+                [mk_lat, mk_lon],
+                icon=folium.DivIcon(
+                    html=(f'<div class="thr-label" style="font-size:10px;'
+                          f' font-family:sans-serif; font-weight:bold;'
+                          f' white-space:nowrap;'
+                          f' margin-left:12px; margin-top:-7px;">'
+                          f'{label}</div>'),
+                    icon_size=(220, 20),
+                    icon_anchor=(0, 10),
+                ),
+            ).add_to(label_layer)
+
+        for group in merged:
+            _add_marker(group)
+
+        label_layer.add_to(fmap)
+
+        # ── Zoom-dependent label visibility ───────────────────────────
+        # Labels are shown only when zoom >= LABEL_ZOOM.  We inject a
+        # small script that listens to the map's zoomend event and
+        # toggles display on all .thr-label divs.
+        map_var   = fmap.get_name()
+        label_zoom = 5
+        zoom_js = f"""
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {{
+            var map = window["{map_var}"];
+            function _thrUpdateLabels() {{
+                var show = map.getZoom() >= {label_zoom};
+                document.querySelectorAll(".thr-label").forEach(function(el) {{
+                    el.style.display = show ? "block" : "none";
+                }});
+            }}
+            map.on("zoomend", _thrUpdateLabels);
+            _thrUpdateLabels();
+        }});
+        </script>"""
+        fmap.get_root().html.add_child(folium.Element(zoom_js))
 
         fmap.save(path)
         import webbrowser
