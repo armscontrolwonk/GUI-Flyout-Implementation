@@ -2896,24 +2896,30 @@ class MissileFlyoutApp(tk.Tk):
         label_layer.add_to(fmap)
 
         # ── Zoom-dependent label visibility ───────────────────────────
-        # Labels are shown only when zoom >= LABEL_ZOOM.  We inject a
-        # small script that listens to the map's zoomend event and
-        # toggles display on all .thr-label divs.
-        map_var   = fmap.get_name()
-        label_zoom = 5
+        # DOMContentLoaded fires before Leaflet initialises the map
+        # object, so we poll until window[map_var] exists, then attach
+        # the zoomend listener.  Labels appear at zoom >= LABEL_ZOOM.
+        map_var    = fmap.get_name()
+        label_zoom = 6
         zoom_js = f"""
         <script>
-        document.addEventListener("DOMContentLoaded", function() {{
-            var map = window["{map_var}"];
-            function _thrUpdateLabels() {{
-                var show = map.getZoom() >= {label_zoom};
+        (function() {{
+            var LABEL_ZOOM = {label_zoom};
+            function _thrUpdateLabels(map) {{
+                var show = map.getZoom() >= LABEL_ZOOM;
                 document.querySelectorAll(".thr-label").forEach(function(el) {{
-                    el.style.display = show ? "block" : "none";
+                    el.style.display = show ? "" : "none";
                 }});
             }}
-            map.on("zoomend", _thrUpdateLabels);
-            _thrUpdateLabels();
-        }});
+            var _thrPoll = setInterval(function() {{
+                var map = window["{map_var}"];
+                if (map && map.getZoom) {{
+                    clearInterval(_thrPoll);
+                    map.on("zoomend", function() {{ _thrUpdateLabels(map); }});
+                    _thrUpdateLabels(map);
+                }}
+            }}, 50);
+        }})();
         </script>"""
         fmap.get_root().html.add_child(folium.Element(zoom_js))
 
