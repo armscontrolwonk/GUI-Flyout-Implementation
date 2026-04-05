@@ -2787,40 +2787,9 @@ class MissileFlyoutApp(tk.Tk):
                 tooltip=d['label'],
             ).add_to(fmap)
 
-        # ── Colour lookup ─────────────────────────────────────────────
-        def _color_for(event: str, is_debris: bool):
-            e = event.lower()
-            if is_debris:
-                return "#e6c200"    # yellow — debris impact
-            if "ignition" in e:
-                return "#2ca02c"    # green  — launch / upper-stage ignition
-            if "burnout" in e:
-                return "#1f77b4"    # blue   — stage burnout
-            if "shroud jettison" in e:
-                return "#ff7f0e"    # orange — shroud jettison
-            if "apogee" in e:
-                return "#ff7f0e"    # orange — apogee
-            if "query" in e or "re-entry" in e:
-                return "#9467bd"    # purple — re-entry / query
-            if "impact" in e:
-                return "#d62728"    # red    — RV impact
-            return "#7f7f7f"        # gray   — fallback
-
         # ── Milestone markers ─────────────────────────────────────────
-        for ms in r.get('milestones', []):
-            event     = ms.get('event', '')
-            is_debris = ms.get('is_debris', False)
-            color     = _color_for(event, is_debris)
-
-            # Position: debris impacts carry their own lat/lon;
-            # all other events are interpolated from the main track.
-            if is_debris and 'impact_lat' in ms:
-                mk_lat = ms['impact_lat']
-                mk_lon = ms['impact_lon']
-            else:
-                mk_lat = float(np.interp(ms['t_s'], t, lat))
-                mk_lon = float(np.interp(ms['t_s'], t, lon))
-
+        def _add_marker(fmap, mk_lat, mk_lon, event, ms):
+            e = event.lower()
             popup_html = (
                 f"<b>{event}</b><br>"
                 f"t = {ms['t_s']:.1f} s<br>"
@@ -2828,17 +2797,66 @@ class MissileFlyoutApp(tk.Tk):
                 f"Range: {ms['range_km']:.1f} km<br>"
                 f"Speed: {ms['speed_kms']:.2f} km/s"
             )
-            folium.CircleMarker(
+            popup = folium.Popup(popup_html, max_width=200)
+
+            if "ignition" in e and "stage" not in e:
+                # Launch — solid black circle
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=7,
+                    color="black", weight=2,
+                    fill=True, fill_color="black", fill_opacity=1.0,
+                    popup=popup, tooltip=event,
+                ).add_to(fmap)
+
+            elif "impact" in e and not ms.get('is_debris', False):
+                # RV impact — ring within a ring
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=9,
+                    color="black", weight=2,
+                    fill=True, fill_color="white", fill_opacity=1.0,
+                    popup=popup, tooltip=event,
+                ).add_to(fmap)
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=4,
+                    color="black", weight=2,
+                    fill=True, fill_color="black", fill_opacity=1.0,
+                    popup=popup, tooltip=event,
+                ).add_to(fmap)
+
+            else:
+                # All other events — black ring, white fill
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=6,
+                    color="black", weight=2,
+                    fill=True, fill_color="white", fill_opacity=1.0,
+                    popup=popup, tooltip=event,
+                ).add_to(fmap)
+
+            # Label offset to the right of the circle
+            folium.Marker(
                 [mk_lat, mk_lon],
-                radius=6,
-                color="#ffffff",
-                weight=1,
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.9,
-                popup=folium.Popup(popup_html, max_width=200),
-                tooltip=event,
+                icon=folium.DivIcon(
+                    html=(f'<div style="font-size:10px; font-family:sans-serif;'
+                          f' font-weight:bold; white-space:nowrap;'
+                          f' margin-left:12px; margin-top:-7px;">'
+                          f'{event}</div>'),
+                    icon_size=(200, 20),
+                    icon_anchor=(0, 10),
+                ),
             ).add_to(fmap)
+
+        for ms in r.get('milestones', []):
+            event     = ms.get('event', '')
+            is_debris = ms.get('is_debris', False)
+
+            if is_debris and 'impact_lat' in ms:
+                mk_lat = ms['impact_lat']
+                mk_lon = ms['impact_lon']
+            else:
+                mk_lat = float(np.interp(ms['t_s'], t, lat))
+                mk_lon = float(np.interp(ms['t_s'], t, lon))
+
+            _add_marker(fmap, mk_lat, mk_lon, event, ms)
 
         fmap.save(path)
         import webbrowser
