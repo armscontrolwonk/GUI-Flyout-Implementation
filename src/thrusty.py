@@ -2847,18 +2847,33 @@ class MissileFlyoutApp(tk.Tk):
                 ).add_to(fmap)
 
             elif "impact" in e and not is_debris:
-                # RV impact — ring within a ring
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=9,
-                    color="black", weight=2,
-                    fill=True, fill_color="white", fill_opacity=1.0,
-                    popup=popup, tooltip=label,
-                ).add_to(fmap)
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=4,
-                    color="black", weight=2,
-                    fill=True, fill_color="black", fill_opacity=1.0,
-                    popup=popup, tooltip=label,
+                # RV impact — ring within a ring, drawn as a single
+                # DivIcon so the two circles are guaranteed concentric.
+                size = 22   # outer diameter px
+                dot  = 8    # inner dot diameter px
+                folium.Marker(
+                    [mk_lat, mk_lon],
+                    popup=popup,
+                    tooltip=label,
+                    icon=folium.DivIcon(
+                        html=(
+                            f'<div style="'
+                            f'width:{size}px;height:{size}px;'
+                            f'border-radius:50%;'
+                            f'border:2px solid black;'
+                            f'background:white;'
+                            f'display:flex;align-items:center;justify-content:center;'
+                            f'">'
+                            f'<div style="'
+                            f'width:{dot}px;height:{dot}px;'
+                            f'border-radius:50%;'
+                            f'background:black;'
+                            f'"></div>'
+                            f'</div>'
+                        ),
+                        icon_size=(size, size),
+                        icon_anchor=(size // 2, size // 2),
+                    ),
                 ).add_to(fmap)
 
             else:
