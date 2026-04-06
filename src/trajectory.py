@@ -639,8 +639,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              (f"Stage {_sn} empty impact"
-                                              f"  (β={beta:.0f} kg/m²)"),
+                        'event':              f"Stage {_sn} empty impact",
                         't_s':                _t_bo + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
@@ -685,7 +684,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              f"Shroud impact  ({_beta_note})",
+                        'event':              "Shroud impact",
                         't_s':                _t_fair + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,

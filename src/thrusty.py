@@ -2899,7 +2899,7 @@ class MissileFlyoutApp(tk.Tk):
                     var d = document.createElement('div');
                     d.style.cssText = 'position:absolute;font-size:10px;' +
                         'font-family:sans-serif;font-weight:bold;' +
-                        'white-space:nowrap;background:rgba(255,255,255,0.9);' +
+                        'white-space:nowrap;background:transparent;' +
                         'padding:1px 4px;display:none;';
                     d.textContent = lb.text;
                     _con.appendChild(d);
