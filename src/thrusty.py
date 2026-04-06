@@ -2907,10 +2907,6 @@ class MissileFlyoutApp(tk.Tk):
                 }});
             }}
 
-            function _rectsOverlap(ax1,ay1,ax2,ay2, bx1,by1,bx2,by2) {{
-                return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
-            }}
-
             function _update(map) {{
                 if (!_con) return;
                 _svg.innerHTML = '';
@@ -2918,55 +2914,57 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Make divs visible so offsetWidth/Height are correct
+                // Make divs visible so offsetHeight is available
                 _divs.forEach(function(d) {{ d.style.display = 'block'; }});
 
-                // Sort by x so we process left-to-right
+                // Sort right-to-left: rightmost circle → bottom of stack,
+                // leftmost → top.  This guarantees that processing order
+                // matches the desired stacking order (chronological top-down)
+                // AND that no two leader lines cross each other.
                 var order = pts.map(function(_, i) {{ return i; }});
                 order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
-                var placed = [];  // {{x1,y1,x2,y2}} of committed labels
-
-                var finalPos = new Array(LABELS.length);
+                // Assign label-top y positions.
+                // Each label's top = min(
+                //   ideal: BASE_Y above its own circle,
+                //   constrained: clear the label already placed below it
+                // )
+                // "Above" = smaller screen-y.
+                var topY = new Array(LABELS.length);
+                var prevTop = null;   // top-y of the label placed in previous iteration
+                var prevLH  = 0;
 
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
-                    var lw = (_divs[idx].offsetWidth  || 120) + PAD * 2;
-                    var lh = (_divs[idx].offsetHeight || 14)  + PAD * 2;
-                    var lx = pt.x + H_GAP;
-                    var offset = BASE_Y;
-
-                    // Push up until no overlap with any placed label
-                    for (var iter = 0; iter < 30; iter++) {{
-                        var ly = pt.y - offset - lh;  // top of label
-                        var clash = placed.some(function(b) {{
-                            return _rectsOverlap(
-                                lx - PAD, ly, lx + lw, ly + lh,
-                                b.x1, b.y1, b.x2, b.y2);
-                        }});
-                        if (!clash) break;
-                        offset += lh + STACK_GAP;
+                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
+                    var idealTop = pt.y - BASE_Y - lh;   // as close to track as possible
+                    if (prevTop === null) {{
+                        topY[idx] = idealTop;
+                    }} else {{
+                        // Must clear the label below: this.bottom + STACK_GAP ≤ prev.top
+                        // ⟹ this.top ≤ prev.top - lh - STACK_GAP
+                        topY[idx] = Math.min(idealTop, prevTop - lh - STACK_GAP);
                     }}
-
-                    var ly = pt.y - offset - lh;
-                    placed.push({{x1: lx - PAD, y1: ly, x2: lx + lw, y2: ly + lh}});
-                    finalPos[idx] = {{lx: lx, ly: ly, lh: lh}};
+                    prevTop = topY[idx];
+                    prevLH  = lh;
                 }});
 
-                // Apply final positions and draw leader lines
+                // Apply positions and draw leader lines
                 _divs.forEach(function(d, i) {{
-                    var p  = finalPos[i];
                     var pt = pts[i];
-                    d.style.left = p.lx + 'px';
-                    d.style.top  = p.ly + 'px';
+                    var lh = (_divs[i].offsetHeight || 14) + PAD * 2;
+                    var lx = pt.x + H_GAP;
+                    var ly = topY[i];
+                    d.style.left = lx + 'px';
+                    d.style.top  = ly + 'px';
 
                     // Leader line: circle centre → bottom-left of label
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
-                    line.setAttribute('x2', p.lx);
-                    line.setAttribute('y2', p.ly + p.lh);
+                    line.setAttribute('x2', lx);
+                    line.setAttribute('y2', ly + lh);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.6');
