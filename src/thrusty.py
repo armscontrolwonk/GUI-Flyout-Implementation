@@ -2814,33 +2814,17 @@ class MissileFlyoutApp(tk.Tk):
 
         merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
 
-        # ── Geometry helpers ──────────────────────────────────────────
-        TICK_KM = 60.0   # half-length of each tick mark in km
-
-        def _bearing_at(t_ev):
-            """Local track bearing (degrees from N) at mission time t_ev."""
-            idx = int(np.searchsorted(t, t_ev))
-            idx = int(np.clip(idx, 1, len(t) - 1))
-            dlat = lat[idx] - lat[idx - 1]
-            dlon = lon[idx] - lon[idx - 1]
-            mid_lat = np.radians((lat[idx] + lat[idx - 1]) / 2.0)
-            return float(np.degrees(np.arctan2(dlon * np.cos(mid_lat), dlat)) % 360)
-
-        def _offset(la, lo, bearing_deg, dist_km):
-            """Destination point given start, bearing, and distance."""
-            R   = 6371.0
-            d   = dist_km / R
-            b   = np.radians(bearing_deg)
-            la_r = np.radians(la)
-            lo_r = np.radians(lo)
-            la2 = np.arcsin(np.sin(la_r) * np.cos(d) +
-                            np.cos(la_r) * np.sin(d) * np.cos(b))
-            lo2 = lo_r + np.arctan2(np.sin(b) * np.sin(d) * np.cos(la_r),
-                                     np.cos(d) - np.sin(la_r) * np.sin(la2))
-            return float(np.degrees(la2)), float(np.degrees(lo2))
-
         # ── Milestone markers ─────────────────────────────────────────
         label_layer = folium.FeatureGroup(name="labels", show=True)
+
+        def _is_major(e, is_debris):
+            if is_debris:
+                return False
+            return ("ignition" in e and "stage" not in e or  # launch
+                    "burnout"  in e or
+                    "apogee"   in e or
+                    "re-entry" in e or
+                    ("impact"  in e and not is_debris))
 
         def _add_marker(group):
             ms        = group[0]
@@ -2862,56 +2846,26 @@ class MissileFlyoutApp(tk.Tk):
                 f"Range: {ms['range_km']:.1f} km<br>"
                 f"Speed: {ms['speed_kms']:.2f} km/s"
             )
-            popup  = folium.Popup(popup_html, max_width=220)
-            is_launch    = "ignition" in e and "stage" not in e
-            is_rv_impact = "impact"   in e and not is_debris
+            popup = folium.Popup(popup_html, max_width=220)
 
-            if is_launch:
-                # Solid black circle
+            if _is_major(e, is_debris):
                 folium.CircleMarker(
                     [mk_lat, mk_lon], radius=7,
                     color="black", weight=2,
+                    fill=True, fill_color="white", fill_opacity=1.0,
+                    popup=popup, tooltip=label,
+                ).add_to(fmap)
+            else:
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=5,
+                    color="black", weight=1,
                     fill=True, fill_color="black", fill_opacity=1.0,
                     popup=popup, tooltip=label,
                 ).add_to(fmap)
-                label_anchor = (mk_lat, mk_lon)
-
-            elif is_rv_impact:
-                # Concentric ring DivIcon
-                size, dot = 22, 8
-                folium.Marker(
-                    [mk_lat, mk_lon], popup=popup, tooltip=label,
-                    icon=folium.DivIcon(
-                        html=(f'<div style="width:{size}px;height:{size}px;'
-                              f'border-radius:50%;border:2px solid black;'
-                              f'background:white;display:flex;'
-                              f'align-items:center;justify-content:center;">'
-                              f'<div style="width:{dot}px;height:{dot}px;'
-                              f'border-radius:50%;background:black;"></div>'
-                              f'</div>'),
-                        icon_size=(size, size),
-                        icon_anchor=(size // 2, size // 2),
-                    ),
-                ).add_to(fmap)
-                label_anchor = (mk_lat, mk_lon)
-
-            else:
-                # Perpendicular tick mark
-                bearing = _bearing_at(ms['t_s'])
-                perp    = (bearing + 90.0) % 360.0
-                p1 = _offset(mk_lat, mk_lon, perp,         TICK_KM)
-                p2 = _offset(mk_lat, mk_lon, perp + 180.0, TICK_KM)
-                folium.PolyLine(
-                    [p1, p2],
-                    color="black", weight=2, opacity=1.0,
-                    tooltip=label, popup=popup,
-                ).add_to(fmap)
-                # Label at the higher-latitude endpoint (the "top" side)
-                label_anchor = p1 if p1[0] >= p2[0] else p2
 
             # Label — hidden until zoom >= threshold
             folium.Marker(
-                list(label_anchor),
+                [mk_lat, mk_lon],
                 icon=folium.DivIcon(
                     html=(f'<div class="thr-label" style="display:none;'
                           f'font-size:10px;font-family:sans-serif;'
