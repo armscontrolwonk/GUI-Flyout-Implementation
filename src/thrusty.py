@@ -2866,11 +2866,11 @@ class MissileFlyoutApp(tk.Tk):
             _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label})
 
         # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
-        # Labels are plain <div>s positioned over the map; an SVG
-        # overlay carries the thin leader lines.  On every zoomend and
-        # moveend the JS re-converts lat/lon to pixel coords, sorts by
-        # x-position, assigns alternating above/below rows, repositions
-        # the divs, and redraws the SVG lines.
+        # All labels are placed ABOVE their point.  Labels are sorted by
+        # x-position and placed greedily: each label starts at BASE_Y px
+        # above its circle and is pushed further up until its bounding
+        # box does not intersect any already-placed label.  A thin SVG
+        # leader line connects the circle to the bottom-left of the label.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
         label_zoom = 6
@@ -2879,31 +2879,29 @@ class MissileFlyoutApp(tk.Tk):
         (function() {{
             var LABELS     = {label_json};
             var LABEL_ZOOM = {label_zoom};
-            var V_OFFSET   = 48;   // px above/below the point
-            var H_GAP      = 8;    // px gap between line end and label left edge
+            var BASE_Y     = 30;   // minimum px above the circle centre
+            var H_GAP      = 6;    // px right of the circle centre
+            var STACK_GAP  = 3;    // px between stacked labels
+            var PAD        = 2;    // extra padding around each label box
 
             var _svg = null, _con = null, _divs = [];
 
             function _init(map) {{
                 var mc = map.getContainer();
-
                 _svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 _svg.style.cssText = 'position:absolute;top:0;left:0;' +
                     'width:100%;height:100%;pointer-events:none;z-index:450;' +
                     'overflow:visible;';
                 mc.appendChild(_svg);
-
                 _con = document.createElement('div');
                 _con.style.cssText = 'position:absolute;top:0;left:0;' +
                     'width:0;height:0;pointer-events:none;z-index:500;';
                 mc.appendChild(_con);
-
                 LABELS.forEach(function(lb) {{
                     var d = document.createElement('div');
                     d.style.cssText = 'position:absolute;font-size:10px;' +
                         'font-family:sans-serif;font-weight:bold;' +
-                        'white-space:nowrap;' +
-                        'background:rgba(255,255,255,0.85);' +
+                        'white-space:nowrap;background:rgba(255,255,255,0.9);' +
                         'padding:1px 4px;display:none;';
                     d.textContent = lb.text;
                     _con.appendChild(d);
@@ -2911,44 +2909,71 @@ class MissileFlyoutApp(tk.Tk):
                 }});
             }}
 
+            function _rectsOverlap(ax1,ay1,ax2,ay2, bx1,by1,bx2,by2) {{
+                return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+            }}
+
             function _update(map) {{
                 if (!_con) return;
                 _svg.innerHTML = '';
-
                 if (map.getZoom() < LABEL_ZOOM) {{
                     _divs.forEach(function(d) {{ d.style.display = 'none'; }});
                     return;
                 }}
 
-                // Pixel coords for each label point
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Sort indices by x to assign alternating above/below rows
+                // Make divs visible so offsetWidth/Height are correct
+                _divs.forEach(function(d) {{ d.style.display = 'block'; }});
+
+                // Sort by x so we process left-to-right
                 var order = pts.map(function(_, i) {{ return i; }});
                 order.sort(function(a, b) {{ return pts[a].x - pts[b].x; }});
-                var side = new Array(LABELS.length);
-                order.forEach(function(idx, rank) {{
-                    side[idx] = (rank % 2 === 0) ? -1 : 1; // -1=above, 1=below
+
+                var placed = [];  // {{x1,y1,x2,y2}} of committed labels
+
+                var finalPos = new Array(LABELS.length);
+
+                order.forEach(function(idx) {{
+                    var pt = pts[idx];
+                    var lw = (_divs[idx].offsetWidth  || 120) + PAD * 2;
+                    var lh = (_divs[idx].offsetHeight || 14)  + PAD * 2;
+                    var lx = pt.x + H_GAP;
+                    var offset = BASE_Y;
+
+                    // Push up until no overlap with any placed label
+                    for (var iter = 0; iter < 30; iter++) {{
+                        var ly = pt.y - offset - lh;  // top of label
+                        var clash = placed.some(function(b) {{
+                            return _rectsOverlap(
+                                lx - PAD, ly, lx + lw, ly + lh,
+                                b.x1, b.y1, b.x2, b.y2);
+                        }});
+                        if (!clash) break;
+                        offset += lh + STACK_GAP;
+                    }}
+
+                    var ly = pt.y - offset - lh;
+                    placed.push({{x1: lx - PAD, y1: ly, x2: lx + lw, y2: ly + lh}});
+                    finalPos[idx] = {{lx: lx, ly: ly, lh: lh}};
                 }});
 
+                // Apply final positions and draw leader lines
                 _divs.forEach(function(d, i) {{
-                    d.style.display = 'block';
+                    var p  = finalPos[i];
                     var pt = pts[i];
-                    var lh = d.offsetHeight || 14;
-                    var lx = pt.x + H_GAP;
-                    var ly = pt.y + side[i] * V_OFFSET - lh / 2;
-                    d.style.left = lx + 'px';
-                    d.style.top  = ly + 'px';
+                    d.style.left = p.lx + 'px';
+                    d.style.top  = p.ly + 'px';
 
-                    // Leader line: point → left-centre of label
+                    // Leader line: circle centre → bottom-left of label
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
-                    line.setAttribute('x2', lx);
-                    line.setAttribute('y2', ly + lh / 2);
+                    line.setAttribute('x2', p.lx);
+                    line.setAttribute('y2', p.ly + p.lh);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.6');
