@@ -2923,7 +2923,7 @@ class MissileFlyoutApp(tk.Tk):
 
                 // Sort by x so we process left-to-right
                 var order = pts.map(function(_, i) {{ return i; }});
-                order.sort(function(a, b) {{ return pts[a].x - pts[b].x; }});
+                order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
                 var placed = [];  // {{x1,y1,x2,y2}} of committed labels
 
