@@ -2873,12 +2873,10 @@ class MissileFlyoutApp(tk.Tk):
         # leader line connects the circle to the bottom-left of the label.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
-        label_zoom = 6
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS     = {label_json};
-            var LABEL_ZOOM = {label_zoom};
             var BASE_Y     = 30;   // minimum px above the circle centre
             var H_GAP      = 6;    // px right of the circle centre
             var STACK_GAP  = 3;    // px between stacked labels
@@ -2916,11 +2914,6 @@ class MissileFlyoutApp(tk.Tk):
             function _update(map) {{
                 if (!_con) return;
                 _svg.innerHTML = '';
-                if (map.getZoom() < LABEL_ZOOM) {{
-                    _divs.forEach(function(d) {{ d.style.display = 'none'; }});
-                    return;
-                }}
-
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
@@ -2986,7 +2979,7 @@ class MissileFlyoutApp(tk.Tk):
                 if (map && map.getZoom) {{
                     clearInterval(_poll);
                     _init(map);
-                    map.on('zoomend moveend', function() {{ _update(map); }});
+                    map.on('moveend zoomend', function() {{ _update(map); }});
                     _update(map);
                 }}
             }}, 50);
