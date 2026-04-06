@@ -2787,8 +2787,7 @@ class MissileFlyoutApp(tk.Tk):
                 tooltip=d['label'],
             ).add_to(fmap)
 
-        # ── Merge simultaneous milestones (e.g. burnout + next ignition
-        #    at the same timestamp when coast_time_s == 0) ─────────────
+        # ── Merge simultaneous milestones (coast_time_s == 0) ────────
         raw_milestones = r.get('milestones', [])
         merged = []
         i = 0
@@ -2809,24 +2808,25 @@ class MissileFlyoutApp(tk.Tk):
             i += len(group)
 
         def _is_rv_impact(group):
-            return any('impact' in g['event'].lower() and not g.get('is_debris', False)
-                       for g in group)
+            return any('impact' in g['event'].lower() and
+                       not g.get('is_debris', False) for g in group)
 
         merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
 
-        # ── Milestone markers ─────────────────────────────────────────
-        label_layer = folium.FeatureGroup(name="labels", show=True)
-
+        # ── Circle markers + label data collection ────────────────────
         def _is_major(e, is_debris):
             if is_debris:
                 return False
-            return ("ignition" in e and "stage" not in e or  # launch
+            return ("ignition" in e and "stage" not in e or
                     "burnout"  in e or
                     "apogee"   in e or
                     "re-entry" in e or
-                    ("impact"  in e and not is_debris))
+                    "impact"   in e)
 
-        def _add_marker(group):
+        import json as _json
+        _label_data = []   # [{lat, lon, text}] passed to JS
+
+        for group in merged:
             ms        = group[0]
             is_debris = ms.get('is_debris', False)
             label     = " / ".join(g['event'] for g in group)
@@ -2863,50 +2863,111 @@ class MissileFlyoutApp(tk.Tk):
                     popup=popup, tooltip=label,
                 ).add_to(fmap)
 
-            # Label — hidden until zoom >= threshold
-            folium.Marker(
-                [mk_lat, mk_lon],
-                icon=folium.DivIcon(
-                    html=(f'<div class="thr-label" style="display:none;'
-                          f'font-size:10px;font-family:sans-serif;'
-                          f'font-weight:bold;white-space:nowrap;'
-                          f'margin-left:10px;margin-top:-6px;">'
-                          f'{label}</div>'),
-                    icon_size=(220, 20),
-                    icon_anchor=(0, 10),
-                ),
-            ).add_to(label_layer)
+            _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label})
 
-        for group in merged:
-            _add_marker(group)
-
-        label_layer.add_to(fmap)
-
-        # ── Zoom-dependent label visibility ───────────────────────────
-        # Poll until the Leaflet map object exists, then attach zoomend.
+        # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
+        # Labels are plain <div>s positioned over the map; an SVG
+        # overlay carries the thin leader lines.  On every zoomend and
+        # moveend the JS re-converts lat/lon to pixel coords, sorts by
+        # x-position, assigns alternating above/below rows, repositions
+        # the divs, and redraws the SVG lines.
         map_var    = fmap.get_name()
+        label_json = _json.dumps(_label_data)
         label_zoom = 6
-        zoom_js = f"""
+        leader_js  = f"""
         <script>
         (function() {{
+            var LABELS     = {label_json};
             var LABEL_ZOOM = {label_zoom};
-            function _thrUpdateLabels(map) {{
-                var show = map.getZoom() >= LABEL_ZOOM;
-                document.querySelectorAll(".thr-label").forEach(function(el) {{
-                    el.style.display = show ? "block" : "none";
+            var V_OFFSET   = 48;   // px above/below the point
+            var H_GAP      = 8;    // px gap between line end and label left edge
+
+            var _svg = null, _con = null, _divs = [];
+
+            function _init(map) {{
+                var mc = map.getContainer();
+
+                _svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                _svg.style.cssText = 'position:absolute;top:0;left:0;' +
+                    'width:100%;height:100%;pointer-events:none;z-index:450;' +
+                    'overflow:visible;';
+                mc.appendChild(_svg);
+
+                _con = document.createElement('div');
+                _con.style.cssText = 'position:absolute;top:0;left:0;' +
+                    'width:0;height:0;pointer-events:none;z-index:500;';
+                mc.appendChild(_con);
+
+                LABELS.forEach(function(lb) {{
+                    var d = document.createElement('div');
+                    d.style.cssText = 'position:absolute;font-size:10px;' +
+                        'font-family:sans-serif;font-weight:bold;' +
+                        'white-space:nowrap;' +
+                        'background:rgba(255,255,255,0.85);' +
+                        'padding:1px 4px;display:none;';
+                    d.textContent = lb.text;
+                    _con.appendChild(d);
+                    _divs.push(d);
                 }});
             }}
-            var _thrPoll = setInterval(function() {{
+
+            function _update(map) {{
+                if (!_con) return;
+                _svg.innerHTML = '';
+
+                if (map.getZoom() < LABEL_ZOOM) {{
+                    _divs.forEach(function(d) {{ d.style.display = 'none'; }});
+                    return;
+                }}
+
+                // Pixel coords for each label point
+                var pts = LABELS.map(function(lb) {{
+                    return map.latLngToContainerPoint([lb.lat, lb.lon]);
+                }});
+
+                // Sort indices by x to assign alternating above/below rows
+                var order = pts.map(function(_, i) {{ return i; }});
+                order.sort(function(a, b) {{ return pts[a].x - pts[b].x; }});
+                var side = new Array(LABELS.length);
+                order.forEach(function(idx, rank) {{
+                    side[idx] = (rank % 2 === 0) ? -1 : 1; // -1=above, 1=below
+                }});
+
+                _divs.forEach(function(d, i) {{
+                    d.style.display = 'block';
+                    var pt = pts[i];
+                    var lh = d.offsetHeight || 14;
+                    var lx = pt.x + H_GAP;
+                    var ly = pt.y + side[i] * V_OFFSET - lh / 2;
+                    d.style.left = lx + 'px';
+                    d.style.top  = ly + 'px';
+
+                    // Leader line: point → left-centre of label
+                    var line = document.createElementNS(
+                        'http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', pt.x);
+                    line.setAttribute('y1', pt.y);
+                    line.setAttribute('x2', lx);
+                    line.setAttribute('y2', ly + lh / 2);
+                    line.setAttribute('stroke', 'black');
+                    line.setAttribute('stroke-width', '0.7');
+                    line.setAttribute('opacity', '0.6');
+                    _svg.appendChild(line);
+                }});
+            }}
+
+            var _poll = setInterval(function() {{
                 var map = window["{map_var}"];
                 if (map && map.getZoom) {{
-                    clearInterval(_thrPoll);
-                    map.on("zoomend", function() {{ _thrUpdateLabels(map); }});
-                    _thrUpdateLabels(map);
+                    clearInterval(_poll);
+                    _init(map);
+                    map.on('zoomend moveend', function() {{ _update(map); }});
+                    _update(map);
                 }}
             }}, 50);
         }})();
         </script>"""
-        fmap.get_root().html.add_child(folium.Element(zoom_js))
+        fmap.get_root().html.add_child(folium.Element(leader_js))
 
         fmap.save(path)
         import webbrowser
