@@ -2794,9 +2794,6 @@ class MissileFlyoutApp(tk.Tk):
         i = 0
         while i < len(raw_milestones):
             ms = raw_milestones[i]
-            # Collect all non-debris milestones within 0.1 s of this one
-            # at the same position (debris impacts have their own coords
-            # and should never be merged).
             group = [ms]
             if not ms.get('is_debris', False):
                 j = i + 1
@@ -2811,11 +2808,41 @@ class MissileFlyoutApp(tk.Tk):
             merged.append(group)
             i += len(group)
 
+        def _is_rv_impact(group):
+            return any('impact' in g['event'].lower() and not g.get('is_debris', False)
+                       for g in group)
+
+        merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
+
+        # ── Geometry helpers ──────────────────────────────────────────
+        TICK_KM = 60.0   # half-length of each tick mark in km
+
+        def _bearing_at(t_ev):
+            """Local track bearing (degrees from N) at mission time t_ev."""
+            idx = int(np.searchsorted(t, t_ev))
+            idx = int(np.clip(idx, 1, len(t) - 1))
+            dlat = lat[idx] - lat[idx - 1]
+            dlon = lon[idx] - lon[idx - 1]
+            mid_lat = np.radians((lat[idx] + lat[idx - 1]) / 2.0)
+            return float(np.degrees(np.arctan2(dlon * np.cos(mid_lat), dlat)) % 360)
+
+        def _offset(la, lo, bearing_deg, dist_km):
+            """Destination point given start, bearing, and distance."""
+            R   = 6371.0
+            d   = dist_km / R
+            b   = np.radians(bearing_deg)
+            la_r = np.radians(la)
+            lo_r = np.radians(lo)
+            la2 = np.arcsin(np.sin(la_r) * np.cos(d) +
+                            np.cos(la_r) * np.sin(d) * np.cos(b))
+            lo2 = lo_r + np.arctan2(np.sin(b) * np.sin(d) * np.cos(la_r),
+                                     np.cos(d) - np.sin(la_r) * np.sin(la2))
+            return float(np.degrees(la2)), float(np.degrees(lo2))
+
         # ── Milestone markers ─────────────────────────────────────────
         label_layer = folium.FeatureGroup(name="labels", show=True)
 
         def _add_marker(group):
-            # Representative milestone for position / popup data
             ms        = group[0]
             is_debris = ms.get('is_debris', False)
             label     = " / ".join(g['event'] for g in group)
@@ -2835,75 +2862,66 @@ class MissileFlyoutApp(tk.Tk):
                 f"Range: {ms['range_km']:.1f} km<br>"
                 f"Speed: {ms['speed_kms']:.2f} km/s"
             )
-            popup = folium.Popup(popup_html, max_width=220)
+            popup  = folium.Popup(popup_html, max_width=220)
+            is_launch    = "ignition" in e and "stage" not in e
+            is_rv_impact = "impact"   in e and not is_debris
 
-            if "ignition" in e and "stage" not in e:
-                # Launch — solid black circle
+            if is_launch:
+                # Solid black circle
                 folium.CircleMarker(
                     [mk_lat, mk_lon], radius=7,
                     color="black", weight=2,
                     fill=True, fill_color="black", fill_opacity=1.0,
                     popup=popup, tooltip=label,
                 ).add_to(fmap)
+                label_anchor = (mk_lat, mk_lon)
 
-            elif "impact" in e and not is_debris:
-                # RV impact — ring within a ring, drawn as a single
-                # DivIcon so the two circles are guaranteed concentric.
-                size = 22   # outer diameter px
-                dot  = 8    # inner dot diameter px
+            elif is_rv_impact:
+                # Concentric ring DivIcon
+                size, dot = 22, 8
                 folium.Marker(
-                    [mk_lat, mk_lon],
-                    popup=popup,
-                    tooltip=label,
+                    [mk_lat, mk_lon], popup=popup, tooltip=label,
                     icon=folium.DivIcon(
-                        html=(
-                            f'<div style="'
-                            f'width:{size}px;height:{size}px;'
-                            f'border-radius:50%;'
-                            f'border:2px solid black;'
-                            f'background:white;'
-                            f'display:flex;align-items:center;justify-content:center;'
-                            f'">'
-                            f'<div style="'
-                            f'width:{dot}px;height:{dot}px;'
-                            f'border-radius:50%;'
-                            f'background:black;'
-                            f'"></div>'
-                            f'</div>'
-                        ),
+                        html=(f'<div style="width:{size}px;height:{size}px;'
+                              f'border-radius:50%;border:2px solid black;'
+                              f'background:white;display:flex;'
+                              f'align-items:center;justify-content:center;">'
+                              f'<div style="width:{dot}px;height:{dot}px;'
+                              f'border-radius:50%;background:black;"></div>'
+                              f'</div>'),
                         icon_size=(size, size),
                         icon_anchor=(size // 2, size // 2),
                     ),
                 ).add_to(fmap)
+                label_anchor = (mk_lat, mk_lon)
 
             else:
-                # All other events — black ring, white fill
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=6,
-                    color="black", weight=2,
-                    fill=True, fill_color="white", fill_opacity=1.0,
-                    popup=popup, tooltip=label,
+                # Perpendicular tick mark
+                bearing = _bearing_at(ms['t_s'])
+                perp    = (bearing + 90.0) % 360.0
+                p1 = _offset(mk_lat, mk_lon, perp,         TICK_KM)
+                p2 = _offset(mk_lat, mk_lon, perp + 180.0, TICK_KM)
+                folium.PolyLine(
+                    [p1, p2],
+                    color="black", weight=2, opacity=1.0,
+                    tooltip=label, popup=popup,
                 ).add_to(fmap)
+                # Label at the higher-latitude endpoint (the "top" side)
+                label_anchor = p1 if p1[0] >= p2[0] else p2
 
-            # Label — placed in the zoom-controlled layer
+            # Label — hidden until zoom >= threshold
             folium.Marker(
-                [mk_lat, mk_lon],
+                list(label_anchor),
                 icon=folium.DivIcon(
-                    html=(f'<div class="thr-label" style="font-size:10px;'
-                          f' font-family:sans-serif; font-weight:bold;'
-                          f' white-space:nowrap;'
-                          f' margin-left:12px; margin-top:-7px;">'
+                    html=(f'<div class="thr-label" style="display:none;'
+                          f'font-size:10px;font-family:sans-serif;'
+                          f'font-weight:bold;white-space:nowrap;'
+                          f'margin-left:10px;margin-top:-6px;">'
                           f'{label}</div>'),
                     icon_size=(220, 20),
                     icon_anchor=(0, 10),
                 ),
             ).add_to(label_layer)
-
-        def _is_rv_impact(group):
-            return any('impact' in g['event'].lower() and not g.get('is_debris', False)
-                       for g in group)
-
-        merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
 
         for group in merged:
             _add_marker(group)
@@ -2911,9 +2929,7 @@ class MissileFlyoutApp(tk.Tk):
         label_layer.add_to(fmap)
 
         # ── Zoom-dependent label visibility ───────────────────────────
-        # DOMContentLoaded fires before Leaflet initialises the map
-        # object, so we poll until window[map_var] exists, then attach
-        # the zoomend listener.  Labels appear at zoom >= LABEL_ZOOM.
+        # Poll until the Leaflet map object exists, then attach zoomend.
         map_var    = fmap.get_name()
         label_zoom = 6
         zoom_js = f"""
@@ -2923,7 +2939,7 @@ class MissileFlyoutApp(tk.Tk):
             function _thrUpdateLabels(map) {{
                 var show = map.getZoom() >= LABEL_ZOOM;
                 document.querySelectorAll(".thr-label").forEach(function(el) {{
-                    el.style.display = show ? "" : "none";
+                    el.style.display = show ? "block" : "none";
                 }});
             }}
             var _thrPoll = setInterval(function() {{
