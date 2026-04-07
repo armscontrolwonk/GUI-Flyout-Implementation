@@ -65,7 +65,10 @@ def atmosphere(altitude_m):
 
     for i in range(len(_LAYERS)):
         h_base, T_base, lapse = _LAYERS[i]
-        mask = h >= h_base
+        # Restrict to this layer's valid altitude band only so that
+        # T never goes negative (which would produce NaN in the power formula).
+        h_ceil = _LAYERS[i + 1][0] if i + 1 < len(_LAYERS) else 86000.0
+        mask = (h >= h_base) & (h <= h_ceil)
         dh = h[mask] - h_base
         T[mask] = T_base + lapse * dh
         P_base = _P_BASE[i]
