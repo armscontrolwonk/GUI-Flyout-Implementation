@@ -63,7 +63,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import minimize_scalar
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gravity import gravity_ecef
 from atmosphere import atmosphere
@@ -849,7 +849,7 @@ def find_range(params: MissileParams,
 
 
 # ---------------------------------------------------------------------------
-# Parallel search worker (module-level so ProcessPoolExecutor can pickle it)
+# Parallel search worker — module-level so it is importable by worker threads
 # ---------------------------------------------------------------------------
 
 def _search_one(args):
@@ -945,16 +945,15 @@ def maximize_range(params: MissileParams,
         """Submit a list of (la, lar, ts) triples; return (la, lar, ts, range_km) list."""
         jobs = [(*c, *_common) for c in candidates]
         results = []
-        if n_workers > 1:
-            with ProcessPoolExecutor(max_workers=n_workers) as ex:
-                futures = {ex.submit(_search_one, j): j for j in jobs}
-                for fut in as_completed(futures):
-                    la, lar, ts = futures[fut][:3]
-                    results.append((la, lar, ts, fut.result()))
-        else:
-            for j in jobs:
-                la, lar, ts = j[:3]
-                results.append((la, lar, ts, _search_one(j)))
+        # ThreadPoolExecutor can be safely called
+        # from daemon threads (e.g. thrusty's _run_thread on macOS), and
+        # scipy's solve_ivp releases the GIL during its Fortran/C inner loops,
+        # giving genuine parallelism without the spawn-from-daemon restriction.
+        with ThreadPoolExecutor(max_workers=n_workers) as ex:
+            futures = {ex.submit(_search_one, j): j for j in jobs}
+            for fut in as_completed(futures):
+                la, lar, ts = futures[fut][:3]
+                results.append((la, lar, ts, fut.result()))
         return results
 
     best_range = -1.0
@@ -986,31 +985,21 @@ def maximize_range(params: MissileParams,
             if rng > best_range:
                 best_range, best_la, best_ts = rng, la, ts
 
-        # ── Phase 2: 1-D scalar minimiser for angle at the best turn_stop ──
-        # minimize_scalar converges in ~10-15 calls vs the old 84-point grid.
-        ts_fine_candidates = sorted({best_ts})
-        if gt_turn_stop_s is None:
-            # Also explore nearby turn-stop values around the coarse winner.
-            for dt in (-10.0, -5.0, -3.0, -2.0, -1.0, 1.0, 2.0, 3.0, 5.0, 10.0):
-                ts_try = max(ts_min, min(total_burn, best_ts + dt))
-                ts_fine_candidates.append(ts_try)
-            ts_fine_candidates = sorted(set(ts_fine_candidates))
+        # ── Phase 2: single minimize_scalar at the coarse-best turn_stop ──
+        # The coarse grid already found the best ts; running minimize_scalar
+        # over every ts candidate (the old approach) adds ~400 serial calls.
+        # One bounded 1-D search at best_ts converges in ~10–15 evaluations.
+        def _neg_range_gt(ba, _ts=best_ts):
+            r = _search_one((float(ba), 1.0, _ts, *_common))
+            return -r if r > 0 else 0.0
 
-        for ts in ts_fine_candidates:
-            ts_fixed = ts
-
-            def _neg_range_angle(ba, _ts=ts_fixed):
-                r = _search_one((float(ba), 1.0, _ts, *_common))
-                return -r if r > 0 else 0.0
-
-            lo = max(1.0,  best_la - 8.0)
-            hi = min(80.0, best_la + 8.0)
-            res = minimize_scalar(_neg_range_angle, bounds=(lo, hi),
-                                  method='bounded',
-                                  options={'xatol': 0.25, 'maxiter': 20})
-            rng = -res.fun
-            if rng > best_range:
-                best_range, best_la, best_ts = rng, float(res.x), ts
+        lo = max(1.0,  best_la - 8.0)
+        hi = min(80.0, best_la + 8.0)
+        res = minimize_scalar(_neg_range_gt, bounds=(lo, hi),
+                              method='bounded',
+                              options={'xatol': 0.25, 'maxiter': 20})
+        if -res.fun > best_range:
+            best_range, best_la = -res.fun, float(res.x)
 
         best_lar = 1.0   # placeholder — not used by gravity-turn pitch program
 
@@ -1023,11 +1012,12 @@ def maximize_range(params: MissileParams,
             if rng > best_range:
                 best_range, best_la, best_lar = rng, la, lar
 
-        # ── Fine 1-D minimiser over angle at the best rate, then vice-versa ──
+        # ── Fine 1-D minimiser: angle first, then rate (two alternating passes) ──
+        # Each pass is a single minimize_scalar (~15 calls) rather than a
+        # dense grid, and they share state so the second pass benefits from
+        # the refined angle found in the first.
         for _pass in range(2):
-            la_fixed, lar_fixed = best_la, best_lar
-
-            def _neg_range_la(la, _lar=lar_fixed):
+            def _neg_range_la(la, _lar=best_lar):
                 r = _search_one((la, _lar, best_ts, *_common))
                 return -r if r > 0 else 0.0
 
