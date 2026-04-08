@@ -61,6 +61,9 @@ Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
 
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.optimize import minimize_scalar
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from gravity import gravity_ecef
 from atmosphere import atmosphere
@@ -408,7 +411,8 @@ def integrate_trajectory(params: MissileParams,
                          max_time_s: float = 3600.0,
                          gt_turn_start_s: float = 5.0,
                          gt_turn_stop_s: float = None,
-                         reentry_query_alt_km: float = None):
+                         reentry_query_alt_km: float = None,
+                         _search_mode: bool = False):
     """
     Integrate a missile trajectory from launch to impact.
 
@@ -472,11 +476,38 @@ def integrate_trajectory(params: MissileParams,
 
     state0 = np.concatenate([pos0, v0])
 
-    t_span = (0.0, max_time_s)
+    t_span    = (0.0, max_time_s)
+    eom_args  = (params, cutoff_time_s, az, gt_turn_start_s, gt_turn_stop_s)
+
+    if _search_mode:
+        # Loose tolerances — we only need range_km, not a smooth trajectory.
+        # Skipping t_eval avoids building and interpolating thousands of output
+        # points, and larger max_step lets the integrator stride faster through
+        # the coasting arc.
+        sol = solve_ivp(
+            fun=_eom,
+            t_span=t_span,
+            y0=state0,
+            method='RK45',
+            t_eval=None,
+            events=_hit_ground,
+            args=eom_args,
+            rtol=1e-5,
+            atol=1e-3,
+            dense_output=False,
+            max_step=30.0,
+        )
+        # Fast-path return: only range_km is needed by the optimizer.
+        orbital = len(sol.t_events[0]) == 0
+        if orbital or sol.y_events[0].shape[0] == 0:
+            return {'orbital': True, 'range_km': None}
+        pos_impact = sol.y_events[0][0, :3]
+        la_f, lo_f, _ = ecef_to_geodetic(pos_impact)
+        rng_km = range_between(lat0, lon0, la_f, lo_f) / 1000.0
+        return {'orbital': False, 'range_km': rng_km}
+
+    # Full-fidelity integration for display/export.
     t_eval = np.arange(0.0, max_time_s, dt_output)
-
-    eom_args = (params, cutoff_time_s, az, gt_turn_start_s, gt_turn_stop_s)
-
     sol = solve_ivp(
         fun=_eom,
         t_span=t_span,
@@ -817,6 +848,40 @@ def find_range(params: MissileParams,
     return result['range_km']
 
 
+# ---------------------------------------------------------------------------
+# Parallel search worker (module-level so ProcessPoolExecutor can pickle it)
+# ---------------------------------------------------------------------------
+
+def _search_one(args):
+    """
+    Evaluate a single (loft_angle, loft_rate, turn_stop) candidate and
+    return range_km, or -1.0 on failure / orbital.
+
+    All arguments are passed as a single tuple so the function can be
+    submitted to concurrent.futures without lambda.
+    """
+    (la, lar, ts,
+     params, lat, lon, az,
+     guidance, cutoff, gt_start, max_time_s) = args
+    try:
+        r = integrate_trajectory(
+            params, lat, lon, az,
+            guidance=guidance,
+            loft_angle_deg=la,
+            loft_angle_rate_deg_s=lar,
+            cutoff_time_s=cutoff,
+            gt_turn_start_s=gt_start,
+            gt_turn_stop_s=ts,
+            max_time_s=max_time_s,
+            _search_mode=True,
+        )
+        if r.get('orbital', False):
+            return -1.0
+        return float(r.get('range_km') or -1.0)
+    except Exception:
+        return -1.0
+
+
 def maximize_range(params: MissileParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,
@@ -848,8 +913,9 @@ def maximize_range(params: MissileParams,
     """
     total_burn = total_burn_time(params)
     effective_cutoff = cutoff_time_s if cutoff_time_s is not None else total_burn
+    effective_guidance = guidance if guidance is not None else params.guidance
 
-    # If both loft params are supplied, just run and return (no grid search)
+    # If both loft params are supplied, just run and return (no grid search).
     if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
@@ -867,42 +933,40 @@ def maximize_range(params: MissileParams,
                                            else total_burn)
         return traj
 
-    effective_guidance = guidance if guidance is not None else params.guidance
+    # Number of parallel workers — use all physical cores; cap at 8 so we
+    # don't thrash on hyperthreaded machines with many logical CPUs.
+    n_workers = min(8, os.cpu_count() or 1)
 
-    # best_ts tracks the turn-stop being used; starts at user value or total_burn
-    best_ts = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
+    # Common kwargs passed unchanged to every _search_one call.
+    _common = (params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+               effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0)
 
-    def _run(la, lar, ts):
-        try:
-            r = integrate_trajectory(
-                params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-                guidance=guidance,
-                loft_angle_deg=la, loft_angle_rate_deg_s=lar,
-                cutoff_time_s=effective_cutoff,
-                gt_turn_start_s=gt_turn_start_s,
-                gt_turn_stop_s=ts)
-            if r.get('orbital', False):
-                print(f"  _run({la:.1f}° ts={ts:.1f}s) → ORBITAL")
-                return -1.0   # orbital / runaway — not a valid ballistic solution
-            rng = r['range_km']
-            if rng is None:
-                print(f"  _run({la:.1f}° ts={ts:.1f}s) → range_km None")
-                return -1.0
-            return rng
-        except Exception as e:
-            print(f"  _run({la:.1f}° ts={ts:.1f}s) → EXCEPTION {type(e).__name__}: {e}")
-            return -1.0
+    def _run_parallel(candidates):
+        """Submit a list of (la, lar, ts) triples; return (la, lar, ts, range_km) list."""
+        jobs = [(*c, *_common) for c in candidates]
+        results = []
+        if n_workers > 1:
+            with ProcessPoolExecutor(max_workers=n_workers) as ex:
+                futures = {ex.submit(_search_one, j): j for j in jobs}
+                for fut in as_completed(futures):
+                    la, lar, ts = futures[fut][:3]
+                    results.append((la, lar, ts, fut.result()))
+        else:
+            for j in jobs:
+                la, lar, ts = j[:3]
+                results.append((la, lar, ts, _search_one(j)))
+        return results
 
     best_range = -1.0
-    best_la  = params.loft_angle_deg
-    best_lar = params.loft_angle_rate_deg_s
-
+    best_la    = params.loft_angle_deg
+    best_lar   = params.loft_angle_rate_deg_s
+    best_ts    = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
 
     if effective_guidance == "gravity_turn":
         ts_min = gt_turn_start_s + 5.0
         if gt_turn_stop_s is None:
-            # Dense 2-s steps over the early window (narrow range peak lives here),
-            # then sparse for long turn stops (surface is smooth there).
+            # Dense 2-s steps over the early window where the range peak is
+            # narrow; coarser sampling for longer turn-stop values.
             _early = [ts_min + 2.0 * i
                       for i in range(int((min(40.0, effective_cutoff) - ts_min) / 2.0) + 1)]
             _late  = [45.0, 60.0, 90.0,
@@ -914,68 +978,82 @@ def maximize_range(params: MissileParams,
         else:
             ts_candidates = [gt_turn_stop_s]
 
+        # ── Phase 1: parallel coarse 2-D grid over (burnout_angle, turn_stop) ──
+        coarse_grid = [(float(ba), 1.0, ts)
+                       for ba in range(5, 71, 2)
+                       for ts in ts_candidates]
+        for la, lar, ts, rng in _run_parallel(coarse_grid):
+            if rng > best_range:
+                best_range, best_la, best_ts = rng, la, ts
 
-        # Phase 1: joint 2-D coarse search over (burnout_angle, turn_stop).
-        # Scanning turn_stop jointly with burnout_angle is essential: the
-        # optimal burnout angle depends strongly on how quickly the pitch-over
-        # completes, so a sequential 1-D search (angle first, then turn_stop)
-        # gets stuck at a suboptimal angle and misses the global maximum.
-        for burnout_a in range(5, 71, 2):
-            for ts in ts_candidates:
-                rng = _run(float(burnout_a), 1.0, ts)
-                if rng > best_range:
-                    best_range = rng
-                    best_la    = float(burnout_a)
-                    best_ts    = ts
+        # ── Phase 2: 1-D scalar minimiser for angle at the best turn_stop ──
+        # minimize_scalar converges in ~10-15 calls vs the old 84-point grid.
+        ts_fine_candidates = sorted({best_ts})
+        if gt_turn_stop_s is None:
+            # Also explore nearby turn-stop values around the coarse winner.
+            for dt in (-10.0, -5.0, -3.0, -2.0, -1.0, 1.0, 2.0, 3.0, 5.0, 10.0):
+                ts_try = max(ts_min, min(total_burn, best_ts + dt))
+                ts_fine_candidates.append(ts_try)
+            ts_fine_candidates = sorted(set(ts_fine_candidates))
 
-        # Joint fine-tune: all (Δburnout, Δts) combinations simultaneously.
-        # Sequential 1-D passes miss cross-terms — the optimal (angle, ts) pair
-        # can only be found by evaluating them jointly.
-        angle_deltas = (-4.0, -2.0, -1.0, 0.0, 1.0, 2.0, 4.0)
-        ts_deltas    = (-10.0, -5.0, -3.0, -2.0, -1.0, 0.0,
-                         1.0,   2.0,  3.0,  5.0, 10.0, 20.0) \
-                       if gt_turn_stop_s is None else (0.0,)
-        for da in angle_deltas:
-            for dt in ts_deltas:
-                ba = best_la + da
-                ts = max(ts_min, min(total_burn, best_ts + dt))
-                if ba < 1.0 or ba > 80.0:
-                    continue
-                rng = _run(ba, 1.0, ts)
-                if rng > best_range:
-                    best_range = rng
-                    best_la    = ba
-                    best_ts    = ts
+        for ts in ts_fine_candidates:
+            ts_fixed = ts
 
-        best_lar = 1.0   # placeholder — not used by linear pitch program
+            def _neg_range_angle(ba, _ts=ts_fixed):
+                r = _search_one((float(ba), 1.0, _ts, *_common))
+                return -r if r > 0 else 0.0
+
+            lo = max(1.0,  best_la - 8.0)
+            hi = min(80.0, best_la + 8.0)
+            res = minimize_scalar(_neg_range_angle, bounds=(lo, hi),
+                                  method='bounded',
+                                  options={'xatol': 0.25, 'maxiter': 20})
+            rng = -res.fun
+            if rng > best_range:
+                best_range, best_la, best_ts = rng, float(res.x), ts
+
+        best_lar = 1.0   # placeholder — not used by gravity-turn pitch program
 
     else:
-        # Forden loft: coarse 10° steps in loft_angle, 0.5 °/s steps in rate
-        for la in range(20, 75, 10):
-            for lar_x2 in range(1, 7):   # 0.5 … 3.0 °/s
-                lar = lar_x2 * 0.5
-                rng = _run(float(la), lar, best_ts)
-                if rng > best_range:
-                    best_range = rng
-                    best_la  = float(la)
-                    best_lar = lar
-        # Fine search: ±5° and ±0.25 °/s around coarse best
-        for dla in (-5.0, -2.5, 0.0, 2.5, 5.0):
-            for dlar in (-0.25, 0.0, 0.25):
-                la  = best_la  + dla
-                lar = best_lar + dlar
-                if la < 5.0 or la > 85.0 or lar < 0.1:
-                    continue
-                rng = _run(la, lar, best_ts)
-                if rng > best_range:
-                    best_range = rng
-                    best_la  = la
-                    best_lar = lar
+        # ── Forden loft: parallel coarse grid over (loft_angle, loft_rate) ──
+        coarse_grid = [(float(la), lar_x2 * 0.5, best_ts)
+                       for la in range(20, 75, 10)
+                       for lar_x2 in range(1, 7)]
+        for la, lar, ts, rng in _run_parallel(coarse_grid):
+            if rng > best_range:
+                best_range, best_la, best_lar = rng, la, lar
+
+        # ── Fine 1-D minimiser over angle at the best rate, then vice-versa ──
+        for _pass in range(2):
+            la_fixed, lar_fixed = best_la, best_lar
+
+            def _neg_range_la(la, _lar=lar_fixed):
+                r = _search_one((la, _lar, best_ts, *_common))
+                return -r if r > 0 else 0.0
+
+            res = minimize_scalar(_neg_range_la,
+                                  bounds=(max(5.0, best_la - 10.0),
+                                          min(85.0, best_la + 10.0)),
+                                  method='bounded',
+                                  options={'xatol': 0.25, 'maxiter': 20})
+            if -res.fun > best_range:
+                best_range, best_la = -res.fun, float(res.x)
+
+            def _neg_range_lar(lar, _la=best_la):
+                r = _search_one((_la, max(0.1, lar), best_ts, *_common))
+                return -r if r > 0 else 0.0
+
+            res = minimize_scalar(_neg_range_lar,
+                                  bounds=(max(0.1, best_lar - 1.0),
+                                          min(5.0, best_lar + 1.0)),
+                                  method='bounded',
+                                  options={'xatol': 0.05, 'maxiter': 15})
+            if -res.fun > best_range:
+                best_range, best_lar = -res.fun, float(res.x)
 
     if best_range < 0.0:
-        # Every angle in the search produced an orbital (or failed) trajectory.
-        # Run with the current params as-is so the caller gets a result dict
-        # (likely orbital) and can display a sensible "in orbit" message.
+        # Every candidate was orbital or failed; return as-is so the caller
+        # can display a sensible "in orbit" message.
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance=guidance,
@@ -986,12 +1064,13 @@ def maximize_range(params: MissileParams,
             gt_turn_stop_s=gt_turn_stop_s,
             reentry_query_alt_km=reentry_query_alt_km,
         )
-        traj['max_range_km']            = None   # no valid sub-orbital solution found
+        traj['max_range_km']            = None
         traj['optimal_loft_angle_deg']  = None
         traj['optimal_loft_rate_deg_s'] = None
         traj['optimal_gt_turn_stop_s']  = None
         return traj
 
+    # Final full-fidelity integration at the optimal parameters.
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         guidance=guidance,
