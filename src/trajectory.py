@@ -863,6 +863,7 @@ def _search_one(args):
     (la, lar, ts,
      params, lat, lon, az,
      guidance, cutoff, gt_start, max_time_s) = args
+    ts_str = f"ts={ts:.1f}s" if ts is not None else "ts=full"
     try:
         r = integrate_trajectory(
             params, lat, lon, az,
@@ -876,9 +877,12 @@ def _search_one(args):
             _search_mode=True,
         )
         if r.get('orbital', False):
+            print(f"  [{la:.1f}° lar={lar:.2f} {ts_str}] → ORBITAL")
             return -1.0
-        return float(r.get('range_km') or -1.0)
-    except Exception:
+        rng = float(r.get('range_km') or -1.0)
+        return rng
+    except Exception as e:
+        print(f"  [{la:.1f}° lar={lar:.2f} {ts_str}] → ERROR {type(e).__name__}: {e}")
         return -1.0
 
 
@@ -941,19 +945,28 @@ def maximize_range(params: MissileParams,
     _common = (params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
                effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0)
 
-    def _run_parallel(candidates):
+    def _run_parallel(candidates, label="coarse"):
         """Submit a list of (la, lar, ts) triples; return (la, lar, ts, range_km) list."""
         jobs = [(*c, *_common) for c in candidates]
         results = []
-        # ThreadPoolExecutor can be safely called
-        # from daemon threads (e.g. thrusty's _run_thread on macOS), and
-        # scipy's solve_ivp releases the GIL during its Fortran/C inner loops,
-        # giving genuine parallelism without the spawn-from-daemon restriction.
+        n_total = len(jobs)
+        running_best = -1.0
+        print(f"  [{label}] {n_total} candidates, {n_workers} workers")
+        # ThreadPoolExecutor can be safely called from daemon threads
+        # (e.g. thrusty's _run_thread on macOS), and scipy's solve_ivp
+        # releases the GIL during its inner loops, giving genuine parallelism.
         with ThreadPoolExecutor(max_workers=n_workers) as ex:
             futures = {ex.submit(_search_one, j): j for j in jobs}
-            for fut in as_completed(futures):
+            for n_done, fut in enumerate(as_completed(futures), 1):
                 la, lar, ts = futures[fut][:3]
-                results.append((la, lar, ts, fut.result()))
+                rng = fut.result()
+                results.append((la, lar, ts, rng))
+                if rng > running_best:
+                    running_best = rng
+                    ts_str = f"ts={ts:.1f}s" if ts is not None else "ts=full"
+                    print(f"  [{label}] {n_done}/{n_total}  "
+                          f"new best {rng:.1f} km @ {la:.1f}° lar={lar:.2f} {ts_str}")
+        print(f"  [{label}] done — best {running_best:.1f} km")
         return results
 
     best_range = -1.0
