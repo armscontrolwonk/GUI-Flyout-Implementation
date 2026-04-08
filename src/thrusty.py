@@ -2985,6 +2985,19 @@ class MissileFlyoutApp(tk.Tk):
         </script>"""
         fmap.get_root().html.add_child(folium.Element(leader_js))
 
+        # ── Logo overlay (lower-left, ~1/8–1/7 of viewport height) ──────
+        import base64 as _b64, os as _os
+        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty.png")
+        if _os.path.exists(_logo_path):
+            with open(_logo_path, "rb") as _lf:
+                _logo_b64 = _b64.b64encode(_lf.read()).decode()
+            _logo_html = (
+                '<img src="data:image/png;base64,' + _logo_b64 + '" '
+                'style="position:fixed;bottom:12px;left:12px;'
+                'height:13vh;width:auto;z-index:1000;pointer-events:none;" />'
+            )
+            fmap.get_root().html.add_child(folium.Element(_logo_html))
+
         fmap.save(path)
         import webbrowser
         webbrowser.open(f"file://{path}")
