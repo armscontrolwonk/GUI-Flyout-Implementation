@@ -2994,7 +2994,7 @@ class MissileFlyoutApp(tk.Tk):
             _logo_html = (
                 '<img src="data:image/png;base64,' + _logo_b64 + '" '
                 'style="position:fixed;bottom:12px;left:12px;'
-                'height:26vh;width:auto;z-index:1000;pointer-events:none;" />'
+                'height:52vh;width:auto;z-index:1000;pointer-events:none;" />'
             )
             fmap.get_root().html.add_child(folium.Element(_logo_html))
 
