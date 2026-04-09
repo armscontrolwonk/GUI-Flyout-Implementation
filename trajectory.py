@@ -764,6 +764,18 @@ def integrate_trajectory(params: MissileParams,
         imp_row['event'] = f"Impact ({imp_row['mass_t']*1000:.0f} kg)"
         milestones.append(imp_row)
 
+    # Annotate every event label with its mission-clock time.
+    # Events that already carry a parenthetical (Apogee, Impact, Re-entry …)
+    # get the time inserted as the first item: "Apogee (691 s, 955 km)".
+    # Plain labels get it appended: "Ignition (0 s)".
+    for m in milestones:
+        t_s = m['t_s']
+        ev  = m['event']
+        if '(' in ev:
+            m['event'] = ev.replace('(', f'({t_s:.0f} s, ', 1)
+        else:
+            m['event'] = f'{ev} ({t_s:.0f} s)'
+
     return {
         't':                  t_arr,
         'lat':                lats,
