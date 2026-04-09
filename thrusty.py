@@ -1275,8 +1275,9 @@ class MissileFlyoutApp(tk.Tk):
         self.geometry("1340x820")
         self.minsize(900, 620)
 
-        self._result  = None
-        self._running = False
+        self._result         = None
+        self._running        = False
+        self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
 
         _load_custom_missiles()      # restore any user-saved missiles
 
@@ -1296,6 +1297,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Open Folium map…",       command=self._export_folium)
         file_menu.add_command(label="Export timeline CSV…",   command=self._export_timeline)
         file_menu.add_command(label="Export missile JSON…",   command=self._export_missile)
+        file_menu.add_separator()
+        file_menu.add_command(label="Load NOTAM overlay…",    command=self._load_notam_overlay)
+        file_menu.add_command(label="Clear NOTAM overlay",    command=self._clear_notam_overlay)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -2737,6 +2741,83 @@ class MissileFlyoutApp(tk.Tk):
             fh.write(kml)
         self._status_var.set(f"KML exported: {path}")
 
+    # ------------------------------------------------------------------
+    # NOTAM overlay load / clear
+    # ------------------------------------------------------------------
+
+    def _load_notam_overlay(self):
+        """Parse a KML or KMZ file and store polygon rings for Folium rendering."""
+        from tkinter.filedialog import askopenfilename
+        import xml.etree.ElementTree as ET
+        import zipfile, io
+
+        path = askopenfilename(
+            title="Load NOTAM overlay",
+            filetypes=[("KML / KMZ files", "*.kml *.kmz"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        # KMZ is a ZIP containing a .kml file.
+        if path.lower().endswith(".kmz"):
+            with zipfile.ZipFile(path) as zf:
+                kml_names = [n for n in zf.namelist() if n.lower().endswith(".kml")]
+                if not kml_names:
+                    messagebox.showerror("NOTAM overlay",
+                                         "No .kml file found inside the .kmz archive.")
+                    return
+                kml_text = zf.read(kml_names[0])
+        else:
+            with open(path, "rb") as fh:
+                kml_text = fh.read()
+
+        # KML uses a namespace; strip it so tag names are plain.
+        kml_text = kml_text.replace(b'xmlns="http://www.opengis.net/kml/2.2"', b"")
+        kml_text = kml_text.replace(b'xmlns="http://earth.google.com/kml/2.1"', b"")
+        kml_text = kml_text.replace(b'xmlns="http://earth.google.com/kml/2.0"', b"")
+
+        try:
+            root = ET.fromstring(kml_text)
+        except ET.ParseError as exc:
+            messagebox.showerror("NOTAM overlay", f"KML parse error:\n{exc}")
+            return
+
+        polygons = []
+        for poly_el in root.iter("Polygon"):
+            outer = poly_el.find(".//outerBoundaryIs/LinearRing/coordinates")
+            if outer is None or not outer.text:
+                continue
+            coords = []
+            for token in outer.text.split():
+                parts = token.split(",")
+                if len(parts) >= 2:
+                    try:
+                        lon, lat = float(parts[0]), float(parts[1])
+                        coords.append([lon, lat])
+                    except ValueError:
+                        pass
+            if len(coords) >= 3:
+                # GeoJSON polygon rings must be closed
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                polygons.append(coords)
+
+        if not polygons:
+            messagebox.showwarning("NOTAM overlay",
+                                    "No polygon features found in the file.")
+            return
+
+        self._notam_overlay = polygons
+        n = len(polygons)
+        self._status_var.set(
+            f"NOTAM overlay loaded: {n} polygon{'s' if n != 1 else ''} "
+            f"from {Path(path).name}"
+        )
+
+    def _clear_notam_overlay(self):
+        self._notam_overlay = None
+        self._status_var.set("NOTAM overlay cleared.")
+
     def _export_folium(self):
         """Generate an interactive Folium HTML map and open it in the browser."""
         try:
@@ -2771,6 +2852,30 @@ class MissileFlyoutApp(tk.Tk):
 
         fmap = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
                           tiles="CartoDB positron")
+
+        # ── NOTAM overlay (loaded via File → Load NOTAM overlay…) ─────
+        if self._notam_overlay:
+            _notam_geojson = {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Polygon", "coordinates": [ring]},
+                        "properties": {},
+                    }
+                    for ring in self._notam_overlay
+                ],
+            }
+            folium.GeoJson(
+                _notam_geojson,
+                style_function=lambda _: {
+                    "color":       "#c0392b",
+                    "weight":      1.5,
+                    "opacity":     0.8,
+                    "fillColor":   "#f5f5f5",
+                    "fillOpacity": 0.30,
+                },
+            ).add_to(fmap)
 
         # ── Ground track ──────────────────────────────────────────────
         folium.PolyLine(
