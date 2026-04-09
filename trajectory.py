@@ -670,7 +670,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              f"Stage {_sn} empty impact",
+                        'event':              f"Stage {_sn} empty impact ({_node.mass_final:.0f} kg)",
                         't_s':                _t_bo + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
@@ -715,7 +715,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              "Shroud impact",
+                        'event':              f"Shroud impact ({params.shroud_mass_kg:.0f} kg)",
                         't_s':                _t_fair + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
@@ -735,7 +735,7 @@ def integrate_trajectory(params: MissileParams,
 
     # Apogee
     apo_row = _milestone(t_arr[apo_idx])
-    apo_row['event'] = "Apogee"
+    apo_row['event'] = f"Apogee ({apo_row['alt_km']:.0f} km)"
     _insert_chrono(apo_row)
 
     # Re-entry interface — first downward crossing of 100 km (after apogee)
@@ -761,7 +761,7 @@ def integrate_trajectory(params: MissileParams,
     # Impact — only add if the vehicle actually reached the ground.
     if not orbital:
         imp_row = _milestone(t_arr[-1])
-        imp_row['event'] = "Impact"
+        imp_row['event'] = f"Impact ({imp_row['mass_t']*1000:.0f} kg)"
         milestones.append(imp_row)
 
     return {
