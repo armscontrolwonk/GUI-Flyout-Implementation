@@ -2445,18 +2445,18 @@ class MissileFlyoutApp(tk.Tk):
             )
 
         # Key events highlighted differently; debris impact rows get their own tag
-        _key = {"Ignition", "Apogee", "Impact"}
+        _key_prefixes = ("Ignition", "Apogee", "Impact")
 
         for idx, m in enumerate(r.get('milestones', [])):
             if m.get('is_debris'):
                 tag = "debris"
-            elif m['event'] in _key:
+            elif m['event'].startswith(_key_prefixes):
                 tag = "key"
             else:
                 tag = "odd" if idx % 2 else "even"
             # Acceleration at Impact is dominated by drag spike — show as blank
             accel_str = (f"{m['accel_ms2']:+.1f}"
-                         if m['event'] != "Impact" else "—")
+                         if not m['event'].startswith("Impact") else "—")
             self._tl_tree.insert("", tk.END, tags=(tag,), values=(
                 m['event'],
                 f"{m['t_s']:.1f}",
