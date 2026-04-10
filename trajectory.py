@@ -375,13 +375,21 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # For orbital_insertion mode with a liquid-engine final stage, check
     # whether the current specific orbital energy has reached the target value;
     # if so, shut down the engine regardless of cutoff_time.
+    #
+    # Two guards prevent a spurious cutoff that would produce an orbit with
+    # perigee underground:
+    #   (a) only fire during the FINAL-stage burn (not stage 1/2 — astage is
+    #       the currently burning stage; _final_stage is the last in the chain)
+    #   (b) vehicle must already be above 80 % of the target orbit altitude, so
+    #       the resulting orbit's perigee stays well above the atmosphere
     engine_on = (t <= cutoff_time)
     if engine_on and params.guidance == "orbital_insertion" and target_orbit_alt_m > 0:
-        # Only apply energy cutoff on the final stage and only for liquid motors.
         _final_stage = params
         while _final_stage.stage2 is not None:
             _final_stage = _final_stage.stage2
-        if not _final_stage.solid_motor:
+        if (astage is _final_stage
+                and not _final_stage.solid_motor
+                and alt >= 0.8 * target_orbit_alt_m):
             omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
             vel_eci   = vel + np.cross(omega_vec, pos)
             r = np.linalg.norm(pos)
