@@ -252,6 +252,14 @@ class _StageFrame(ttk.LabelFrame):
         self._coast_lbl.grid_remove()
         self._coast_inner.grid_remove()
 
+        # Solid motor checkbox (row 9)
+        self._solid_motor_var = tk.BooleanVar(value=False)
+        self._solid_motor_check = ttk.Checkbutton(
+            self, text="Solid rocket motor (cannot be shut off)",
+            variable=self._solid_motor_var)
+        self._solid_motor_check.grid(
+            row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(2, 4))
+
         # Recompute burn whenever any of the four driving fields change
         for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
             _v.trace_add("write", self._recompute_burn)
@@ -355,6 +363,8 @@ class _StageFrame(ttk.LabelFrame):
     def set_readonly(self, readonly: bool):
         """Set all editable entry fields to readonly (for Forden reference missiles)."""
         state = "readonly" if readonly else "normal"
+        cb_state = "disabled" if readonly else "normal"
+        self._solid_motor_check.config(state=cb_state)
         for entry in self._iter_entries(self):
             if entry is not self._burn_entry:   # burn time is always readonly
                 entry.config(state=state)
@@ -394,6 +404,7 @@ class _StageFrame(ttk.LabelFrame):
             result["burn"] = float(burn_str)
         except ValueError:
             raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
+        result["solid_motor"] = bool(self._solid_motor_var.get())
         return result
 
     def populate(self, d):
@@ -413,6 +424,7 @@ class _StageFrame(ttk.LabelFrame):
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
         # _burn_var is updated automatically by the trace
         self._coast_var   .set(str(d.get("coast", 0)))
+        self._solid_motor_var.set(bool(d.get("solid_motor", False)))
 
 
 # ---------------------------------------------------------------------------
@@ -610,6 +622,9 @@ class MissileDialog(tk.Toplevel):
             anchor=tk.W, padx=8, pady=(4, 0))
         ttk.Radiobutton(gf, text="Gravity Turn (IRBM / ICBM)",
                         variable=self._guidance_var, value="gravity_turn").pack(
+            anchor=tk.W, padx=8, pady=(0, 2))
+        ttk.Radiobutton(gf, text="Orbital Insertion",
+                        variable=self._guidance_var, value="orbital_insertion").pack(
             anchor=tk.W, padx=8, pady=(0, 4))
 
         # Stage frames (1 always visible; 2-4 toggled).
@@ -731,6 +746,7 @@ class MissileDialog(tk.Toplevel):
                 "dia":         node.diameter_m,          "length":      node.length_m,
                 "burn":        node.burn_time_s,         "isp":         node.isp_s,
                 "nozzle_area": node.nozzle_exit_area_m2, "coast":       node.coast_time_s,
+                "solid_motor": getattr(node, 'solid_motor', False),
             })
             node = nxt
             stage_idx += 1
@@ -849,6 +865,7 @@ class MissileDialog(tk.Toplevel):
                 nozzle_exit_area_m2=sd["nozzle_area"],
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
+                solid_motor=bool(sd.get("solid_motor", False)),
             )
 
         node.name              = name
@@ -1053,7 +1070,8 @@ class ParametricSweepDialog(tk.Toplevel):
     def _run(self):
         self._stop_evt.clear()
         try:
-            missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s = self._app._get_inputs()
+            (missile, guidance, lat, lon, az, cutoff, la, lar,
+             gt_start_s, gt_stop_s, _) = self._app._get_inputs()
         except Exception as e:
             messagebox.showerror("Input error", str(e), parent=self)
             return
@@ -1471,6 +1489,9 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Radiobutton(gmode_frame, text="Gravity Turn",
                         variable=self._guidance_var, value="gravity_turn",
                         command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
+        ttk.Radiobutton(gmode_frame, text="Orbital Insertion",
+                        variable=self._guidance_var, value="orbital_insertion",
+                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
 
         self._loft_angle_lbl = ttk.Label(gf, text="Loft Angle:")
         self._loft_angle_lbl.grid(row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -1509,11 +1530,22 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(gt_te_frame, textvariable=self._gt_turn_stop_var, width=8).pack(side=tk.LEFT)
         ttk.Label(gt_te_frame, text="s  (blank = full burn)").pack(side=tk.LEFT, padx=2)
 
-        # Hide turn-start/stop rows by default (loft mode is active at startup)
+        self._orbit_alt_lbl = ttk.Label(gf, text="Target orbit alt:")
+        self._orbit_alt_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        orb_frame = ttk.Frame(gf)
+        orb_frame.grid(row=5, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._orbit_alt_frame = orb_frame
+        self._orbit_alt_var = tk.StringVar(value="400")
+        ttk.Entry(orb_frame, textvariable=self._orbit_alt_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(orb_frame, text="km").pack(side=tk.LEFT, padx=2)
+
+        # Hide turn-start/stop and orbit-alt rows by default (loft mode active at startup)
         self._gt_turn_start_lbl.grid_remove()
         self._gt_turn_start_frame.grid_remove()
         self._gt_turn_stop_lbl.grid_remove()
         self._gt_turn_stop_frame.grid_remove()
+        self._orbit_alt_lbl.grid_remove()
+        self._orbit_alt_frame.grid_remove()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -1994,7 +2026,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _update_guidance_labels(self, guidance: str):
         """Relabel the main-panel guidance fields to match the active mode."""
-        if guidance == "gravity_turn":
+        if guidance in ("gravity_turn", "orbital_insertion"):
             self._loft_angle_lbl.config(text="Burnout Angle:")
             self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
             self._loft_rate_lbl.config(text="Pitch Rate:")
@@ -2014,6 +2046,12 @@ class MissileFlyoutApp(tk.Tk):
             self._gt_turn_start_frame.grid_remove()
             self._gt_turn_stop_lbl.grid_remove()
             self._gt_turn_stop_frame.grid_remove()
+        if guidance == "orbital_insertion":
+            self._orbit_alt_lbl.grid()
+            self._orbit_alt_frame.grid()
+        else:
+            self._orbit_alt_lbl.grid_remove()
+            self._orbit_alt_frame.grid_remove()
 
     # ------------------------------------------------------------------
     # Custom missile management
@@ -2300,7 +2338,11 @@ class MissileFlyoutApp(tk.Tk):
         gt_stop_str  = self._gt_turn_stop_var.get().strip()
         gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
         gt_stop_s    = float(gt_stop_str)  if gt_stop_str  else None
-        return missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s
+        orb_alt_str  = self._orbit_alt_var.get().strip()
+        target_orbit_km = float(orb_alt_str) if (guidance == "orbital_insertion"
+                                                   and orb_alt_str) else None
+        return (missile, guidance, lat, lon, az, cutoff, la, lar,
+                gt_start_s, gt_stop_s, target_orbit_km)
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
@@ -2309,7 +2351,8 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s = self._get_inputs()
+            (missile, guidance, lat, lon, az, cutoff, la, lar,
+             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2317,7 +2360,8 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Running simulation…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s, False),
+            args=(missile, guidance, lat, lon, az, cutoff, la, lar,
+                  gt_start_s, gt_stop_s, target_orbit_km, False),
             daemon=True,
         ).start()
 
@@ -2325,7 +2369,8 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, gt_stop_s = self._get_inputs()
+            (missile, guidance, lat, lon, az, cutoff, la, lar,
+             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2333,12 +2378,13 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la, lar, gt_start_s, None, True),
+            args=(missile, guidance, lat, lon, az, cutoff, la, lar,
+                  gt_start_s, None, target_orbit_km, True),
             daemon=True,
         ).start()
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
-                    gt_start_s, gt_stop_s, maximise):
+                    gt_start_s, gt_stop_s, target_orbit_km, maximise):
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
@@ -2357,7 +2403,8 @@ class MissileFlyoutApp(tk.Tk):
                     cutoff_time_s=cutoff,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
-                    reentry_query_alt_km=q_alt)
+                    reentry_query_alt_km=q_alt,
+                    target_orbit_alt_km=target_orbit_km)
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
@@ -2395,6 +2442,14 @@ class MissileFlyoutApp(tk.Tk):
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
         scale, ulbl = scale_map[units]
 
+        oe = r.get('orbital_elements')
+        _oe_str = ""
+        if oe:
+            _oe_str = (f"  |  {oe['perigee_km']:.0f}×{oe['apogee_km']:.0f} km"
+                       f"  i={oe['inclination_deg']:.1f}°"
+                       f"  e={oe['eccentricity']:.4f}"
+                       f"  T={oe['period_min']:.1f} min")
+
         if orbital and r.get('max_range_km') is None:
             self._status_var.set(
                 "Max Range: no sub-orbital solution found — "
@@ -2405,6 +2460,7 @@ class MissileFlyoutApp(tk.Tk):
             self._status_var.set(
                 f"In orbit (no ground impact within integration window).  "
                 f"Apogee: {apogee_km*scale:.1f} {ulbl}"
+                + _oe_str
             )
         else:
             self._status_var.set(
@@ -2433,10 +2489,18 @@ class MissileFlyoutApp(tk.Tk):
         imp_spd   = r['impact_speed_ms'] / 1000.0 if r['impact_speed_ms'] is not None else None
 
         if _orbital:
+            oe = r.get('orbital_elements')
+            _oe_line = ""
+            if oe:
+                _oe_line = (f"\nOrbit: {oe['perigee_km']:.0f}×{oe['apogee_km']:.0f} km"
+                            f"   i={oe['inclination_deg']:.1f}°"
+                            f"   e={oe['eccentricity']:.4f}"
+                            f"   T={oe['period_min']:.1f} min")
             self._tl_summary_var.set(
                 f"In orbit — no ground impact within integration window\n"
                 f"Apogee: {apogee_km:.1f} km   "
                 f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E"
+                + _oe_line
             )
         else:
             self._tl_summary_var.set(
@@ -2449,7 +2513,7 @@ class MissileFlyoutApp(tk.Tk):
             )
 
         # Key events highlighted differently; debris impact rows get their own tag
-        _key_prefixes = ("Ignition", "Apogee", "Impact")
+        _key_prefixes = ("Ignition", "Apogee", "Impact", "Orbital insertion")
 
         for idx, m in enumerate(r.get('milestones', [])):
             if m.get('is_debris'):

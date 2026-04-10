@@ -93,6 +93,11 @@ class MissileParams:
     # (e.g. Scud-B) and no separate stage debris is computed.
     rv_separates:  bool  = False
 
+    # When True this stage uses a solid rocket motor that cannot be shut off.
+    # Orbital insertion guidance runs the engine to natural burnout and reports
+    # the resulting orbit rather than commanding a cutoff at the target energy.
+    solid_motor:   bool  = False
+
     # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
@@ -631,6 +636,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
         'shroud_length_m':        p.shroud_length_m,
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
+        'solid_motor':            p.solid_motor,
     }
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
@@ -671,6 +677,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
+        solid_motor=bool(d.get('solid_motor', False)),
     )
 
 
