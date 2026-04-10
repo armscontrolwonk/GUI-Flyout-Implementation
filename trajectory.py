@@ -65,7 +65,7 @@ from scipy.optimize import minimize_scalar
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from gravity import gravity_ecef
+from gravity import gravity_ecef, GM, RE
 from atmosphere import atmosphere
 from coordinates import (
     geodetic_to_ecef, ecef_to_geodetic,
@@ -76,6 +76,121 @@ from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
 )
+
+
+# ---------------------------------------------------------------------------
+# High-altitude atmosphere for orbital lifetime (NRLMSISE-00 tabulation,
+# F10.7=150 solar flux, Ap=4 low activity — conservative decay estimate).
+# Density in kg/m³ vs altitude in km.
+# ---------------------------------------------------------------------------
+_HIGH_ATM_KM  = np.array([200, 250, 300, 350, 400, 450, 500,
+                           600, 700, 800, 900, 1000])
+_HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
+                           1.18e-12, 5.21e-13, 1.14e-13, 3.07e-14, 1.14e-14,
+                           5.24e-15, 2.95e-15])
+
+
+def _atm_density_high(alt_km: float) -> float:
+    """
+    Exponential interpolation of the tabulated high-altitude density.
+    Returns kg/m³.  Clamped to table limits.
+    """
+    alt_km = float(np.clip(alt_km, _HIGH_ATM_KM[0], _HIGH_ATM_KM[-1]))
+    log_rho = float(np.interp(alt_km, _HIGH_ATM_KM, np.log(_HIGH_ATM_RHO)))
+    return float(np.exp(log_rho))
+
+
+def orbital_elements_from_state(pos_ecef: np.ndarray,
+                                vel_ecef: np.ndarray) -> dict:
+    """
+    Compute classical orbital elements from an ECEF state vector.
+
+    The ECI velocity is recovered via v_eci = v_ecef + ω × r.
+    Because ECEF and ECI share the z-axis (Earth's rotation axis) the
+    inclination calculation does not need Greenwich Sidereal Time.
+
+    Returns a dict with keys:
+        semi_major_km   : semi-major axis (km)
+        eccentricity    : dimensionless
+        inclination_deg : inclination to equatorial plane (°)
+        perigee_km      : altitude of perigee above WGS-84 equatorial radius (km)
+        apogee_km       : altitude of apogee (km)
+        period_min      : orbital period (minutes)
+        energy_mj_kg    : specific orbital energy (MJ/kg, negative = bound)
+    """
+    omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
+    vel_eci   = vel_ecef + np.cross(omega_vec, pos_ecef)
+
+    r  = np.linalg.norm(pos_ecef)
+    v  = np.linalg.norm(vel_eci)
+    eps = 0.5 * v**2 - GM / r              # specific orbital energy (J/kg)
+    a   = -GM / (2.0 * eps)                # semi-major axis (m); eps<0 → bound
+
+    h_vec = np.cross(pos_ecef, vel_eci)    # specific angular momentum
+    h     = np.linalg.norm(h_vec)
+
+    # Eccentricity
+    e = float(np.sqrt(max(0.0, 1.0 - h**2 / (GM * a))))
+
+    # Inclination  (h_z / |h| is frame-independent: z is shared by ECEF/ECI)
+    inc_deg = float(np.degrees(np.arccos(np.clip(h_vec[2] / h, -1.0, 1.0))))
+
+    # Perigee / apogee altitudes above mean equatorial radius
+    r_perigee = a * (1.0 - e) - RE        # m above equatorial surface
+    r_apogee  = a * (1.0 + e) - RE
+
+    # Orbital period
+    period_s = 2.0 * np.pi * np.sqrt(a**3 / GM)
+
+    return {
+        'semi_major_km':   a / 1000.0,
+        'eccentricity':    e,
+        'inclination_deg': inc_deg,
+        'perigee_km':      r_perigee / 1000.0,
+        'apogee_km':       r_apogee  / 1000.0,
+        'period_min':      period_s  / 60.0,
+        'energy_mj_kg':    eps / 1e6,
+    }
+
+
+def orbital_lifetime_estimate(perigee_km: float, apogee_km: float,
+                              beta_kg_m2: float) -> float:
+    """
+    Estimate orbital decay lifetime using the King-Hele formula.
+
+    Integrates dT ≈ β / (ρ(h) · √(GM · (RE+h))) dh from h=apogee down to
+    h=80 km (effective re-entry altitude), treating each 1-km shell as
+    independently circular (valid for low-eccentricity orbits; gives the
+    right order-of-magnitude for higher eccentricities).
+
+    Parameters
+    ----------
+    perigee_km  : perigee altitude (km above equatorial radius)
+    apogee_km   : apogee altitude (km)
+    beta_kg_m2  : ballistic coefficient β = m/(Cd·A) in kg/m²
+
+    Returns
+    -------
+    lifetime_years : estimated orbital lifetime in years
+                     (returns np.inf if perigee is above 1000 km)
+    """
+    REENTRY_KM = 80.0
+    if perigee_km > 1000.0:
+        return float('inf')
+    h_lo = max(perigee_km, REENTRY_KM)
+    h_hi = min(apogee_km, _HIGH_ATM_KM[-1])
+    if h_lo >= h_hi:
+        return 0.0   # already below re-entry altitude
+
+    hs   = np.arange(h_lo, h_hi + 1.0, 1.0)  # 1-km steps
+    rhot = np.array([_atm_density_high(h) for h in hs])
+    v_circ = np.sqrt(GM / (RE + hs * 1000.0)) # circular orbit speed at each h
+    # dt/dh = β / (ρ · v_circ)  — time to decay through 1 m of altitude
+    # integrate over the full range (h in km, convert to m for denominator)
+    dh_m  = 1000.0   # 1 km in metres
+    dt_s  = np.sum(beta_kg_m2 / (rhot * v_circ)) * dh_m
+    SECONDS_PER_YEAR = 365.25 * 86400.0
+    return dt_s / SECONDS_PER_YEAR
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +319,8 @@ def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 # Equations of motion
 # ---------------------------------------------------------------------------
 
-def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_stop_s):
+def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
+         gt_turn_stop_s, target_orbit_alt_m=0.0):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
@@ -218,6 +334,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_st
 
     gt_turn_start_s / gt_turn_stop_s are used only when params.guidance ==
     "gravity_turn"; they bound the active pitch window.
+
+    target_orbit_alt_m : when params.guidance == "orbital_insertion" and the
+        active stage is NOT a solid motor, engine cutoff is commanded once the
+        specific orbital energy reaches the target circular-orbit energy.
+        Ignored for solid-motor stages (burn to natural burnout).
     """
     pos = state[:3]
     vel = state[3:]
@@ -251,8 +372,26 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_st
         f_drag = drag_force_vector(astage, vel, alt)
 
     # --- Thrust with mode-selected guidance ---
-    if t <= cutoff_time:
-        if params.guidance == "gravity_turn":
+    # For orbital_insertion mode with a liquid-engine final stage, check
+    # whether the current specific orbital energy has reached the target value;
+    # if so, shut down the engine regardless of cutoff_time.
+    engine_on = (t <= cutoff_time)
+    if engine_on and params.guidance == "orbital_insertion" and target_orbit_alt_m > 0:
+        # Only apply energy cutoff on the final stage and only for liquid motors.
+        _final_stage = params
+        while _final_stage.stage2 is not None:
+            _final_stage = _final_stage.stage2
+        if not _final_stage.solid_motor:
+            omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
+            vel_eci   = vel + np.cross(omega_vec, pos)
+            r = np.linalg.norm(pos)
+            eps_now    = 0.5 * np.dot(vel_eci, vel_eci) - GM / r
+            eps_target = -GM / (2.0 * (RE + target_orbit_alt_m))
+            if eps_now >= eps_target:
+                engine_on = False
+
+    if engine_on:
+        if params.guidance in ("gravity_turn", "orbital_insertion"):
             thrust_dir = _gravity_turn_thrust_dir(
                 lat, lon, azimuth_rad,
                 params.loft_angle_deg,
@@ -281,7 +420,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_st
     return np.concatenate([vel, accel])
 
 
-def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s, gt_turn_stop_s):
+def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
+                gt_turn_stop_s, target_orbit_alt_m=0.0):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -412,6 +552,7 @@ def integrate_trajectory(params: MissileParams,
                          gt_turn_start_s: float = 5.0,
                          gt_turn_stop_s: float = None,
                          reentry_query_alt_km: float = None,
+                         target_orbit_alt_km: float = None,
                          _search_mode: bool = False):
     """
     Integrate a missile trajectory from launch to impact.
@@ -477,7 +618,10 @@ def integrate_trajectory(params: MissileParams,
     state0 = np.concatenate([pos0, v0])
 
     t_span    = (0.0, max_time_s)
-    eom_args  = (params, cutoff_time_s, az, gt_turn_start_s, gt_turn_stop_s)
+    _target_orbit_alt_m = (target_orbit_alt_km * 1000.0
+                           if target_orbit_alt_km is not None else 0.0)
+    eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
+                 gt_turn_stop_s, _target_orbit_alt_m)
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.
@@ -758,6 +902,49 @@ def integrate_trajectory(params: MissileParams,
                 row['event'] = f"Re-entry query ({reentry_query_alt_km:.0f} km)"
                 _insert_chrono(row)
 
+    # Orbital elements — computed when the vehicle stays in orbit (no impact)
+    # or when orbital_insertion mode is active (elements reported at end of burn
+    # for every stage that may have been inserted into orbit).
+    _orb_elements = None
+    if orbital:
+        # Compute orbital elements from the final state vector.
+        _orb_elements = orbital_elements_from_state(pos_arr[-1], vel_arr[-1])
+
+        # Walk the stage list; for any stage whose burnout time is within the
+        # arc AND whose debris does NOT re-enter, report orbital elements.
+        _t_node2 = 0.0
+        _node2   = params
+        _sn2     = 1
+        while _node2 is not None:
+            _t_bo2 = _t_node2 + _node2.burn_time_s
+            _is_last2 = (_node2.stage2 is None)
+            if _is_last2 and _t_bo2 <= t_arr[-1]:
+                # Final stage / payload — report orbital elements milestone.
+                _pos_bo, _vel_bo = _ecef_state_at(_t_bo2)
+                _oe = orbital_elements_from_state(_pos_bo, _vel_bo)
+                _beta_orb = (tumbling_cylinder_beta(_node2.mass_final,
+                                                    _node2.diameter_m,
+                                                    _node2.length_m)
+                             if _node2.mass_final > 0 else 0.0)
+                _life = (orbital_lifetime_estimate(_oe['perigee_km'],
+                                                   _oe['apogee_km'],
+                                                   _beta_orb)
+                         if _beta_orb > 0 else None)
+                _life_str = (f", {_life:.1f} yr decay" if _life is not None
+                             and not np.isinf(_life) else
+                             (", lifetime >100 yr" if _life is not None else ""))
+                _row = _milestone(_t_bo2)
+                _row['event'] = (f"Orbital insertion"
+                                 f" ({_oe['perigee_km']:.0f}×"
+                                 f"{_oe['apogee_km']:.0f} km"
+                                 f", i={_oe['inclination_deg']:.1f}°"
+                                 f"{_life_str})")
+                _row['orbital_elements'] = _oe
+                _insert_chrono(_row)
+            _t_node2 = _t_bo2 + _node2.coast_time_s
+            _node2   = _node2.stage2
+            _sn2    += 1
+
     # Impact — only add if the vehicle actually reached the ground.
     if not orbital:
         imp_row = _milestone(t_arr[-1])
@@ -799,6 +986,7 @@ def integrate_trajectory(params: MissileParams,
         'impact_speed_ms':    None if orbital else speeds[-1],
         'milestones':            milestones,
         'debris_trajectories':   _debris_trajectories,
+        'orbital_elements':      _orb_elements,
     }
 
 
