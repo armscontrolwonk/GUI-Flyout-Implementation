@@ -1479,6 +1479,8 @@ class MissileFlyoutApp(tk.Tk):
         # ── Guidance — mode radio + loft angle / pitch-over ───────────
         gf = ttk.LabelFrame(parent, text="Guidance")
         gf.pack(fill=tk.X, padx=6, pady=3)
+        self._guidance_frame = gf          # saved for dynamic grid management
+        gf.columnconfigure(1, weight=1)    # column 1 fills available width
 
         self._guidance_var = tk.StringVar(value="loft")
         gmode_frame = ttk.Frame(gf)
@@ -1552,13 +1554,13 @@ class MissileFlyoutApp(tk.Tk):
 
         # Hide turn-start/stop, orbit-alt, and plan-orbit rows by default
         # (loft mode is active at startup)
-        self._gt_turn_start_lbl.grid_remove()
-        self._gt_turn_start_frame.grid_remove()
-        self._gt_turn_stop_lbl.grid_remove()
-        self._gt_turn_stop_frame.grid_remove()
-        self._orbit_alt_lbl.grid_remove()
-        self._orbit_alt_frame.grid_remove()
-        self._plan_orbit_btn_row.grid_remove()
+        self._gt_turn_start_lbl.grid_forget()
+        self._gt_turn_start_frame.grid_forget()
+        self._gt_turn_stop_lbl.grid_forget()
+        self._gt_turn_stop_frame.grid_forget()
+        self._orbit_alt_lbl.grid_forget()
+        self._orbit_alt_frame.grid_forget()
+        self._plan_orbit_btn_row.grid_forget()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -2045,28 +2047,36 @@ class MissileFlyoutApp(tk.Tk):
             self._loft_rate_lbl.config(text="Pitch Rate:")
             self._loft_rate_unit_lbl.config(text="(auto)")
             self._loft_rate_entry.config(state="disabled")
-            self._gt_turn_start_lbl.grid()
-            self._gt_turn_start_frame.grid()
-            self._gt_turn_stop_lbl.grid()
-            self._gt_turn_stop_frame.grid()
+            self._gt_turn_start_lbl.grid(
+                row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._gt_turn_start_frame.grid(
+                row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+            self._gt_turn_stop_lbl.grid(
+                row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._gt_turn_stop_frame.grid(
+                row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         else:
             self._loft_angle_lbl.config(text="Loft Angle:")
             self._loft_angle_unit_lbl.config(text="°  (final elev.)")
             self._loft_rate_lbl.config(text="Loft Rate:")
             self._loft_rate_unit_lbl.config(text="°/s")
             self._loft_rate_entry.config(state="normal")
-            self._gt_turn_start_lbl.grid_remove()
-            self._gt_turn_start_frame.grid_remove()
-            self._gt_turn_stop_lbl.grid_remove()
-            self._gt_turn_stop_frame.grid_remove()
+            self._gt_turn_start_lbl.grid_forget()
+            self._gt_turn_start_frame.grid_forget()
+            self._gt_turn_stop_lbl.grid_forget()
+            self._gt_turn_stop_frame.grid_forget()
         if guidance == "orbital_insertion":
-            self._orbit_alt_lbl.grid()
-            self._orbit_alt_frame.grid()
-            self._plan_orbit_btn_row.grid()
+            self._orbit_alt_lbl.grid(
+                row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._orbit_alt_frame.grid(
+                row=5, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+            self._plan_orbit_btn_row.grid(
+                row=6, column=0, columnspan=2,
+                sticky=tk.EW, padx=8, pady=(4, 6))
         else:
-            self._orbit_alt_lbl.grid_remove()
-            self._orbit_alt_frame.grid_remove()
-            self._plan_orbit_btn_row.grid_remove()
+            self._orbit_alt_lbl.grid_forget()
+            self._orbit_alt_frame.grid_forget()
+            self._plan_orbit_btn_row.grid_forget()
 
     # ------------------------------------------------------------------
     # Custom missile management
