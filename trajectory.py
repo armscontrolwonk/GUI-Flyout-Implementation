@@ -692,6 +692,15 @@ def integrate_trajectory(params: MissileParams,
     # very-long-range sub-orbital arc that didn't return within max_time_s.
     orbital = len(sol.t_events[0]) == 0
 
+    # Verify the orbital flag by computing the perigee of the trajectory's
+    # osculating orbit at the final state.  A long sub-orbital arc (apogee
+    # thousands of km, flight time > max_time_s) has perigee underground and
+    # must be treated as sub-orbital even if _hit_ground never fired.
+    if orbital:
+        _oe_verify = orbital_elements_from_state(pos_arr[-1], vel_arr[-1])
+        if _oe_verify['perigee_km'] < 80.0:
+            orbital = False   # long sub-orbital arc, not a stable orbit
+
     lats, lons, alts = [], [], []
     for p in pos_arr:
         la, lo, al = ecef_to_geodetic(p)

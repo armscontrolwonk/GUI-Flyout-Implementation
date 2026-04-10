@@ -2395,6 +2395,11 @@ class MissileFlyoutApp(tk.Tk):
                                         gt_turn_stop_s=gt_stop_s,
                                         reentry_query_alt_km=q_alt)
             else:
+                # Orbital insertion trajectories can have very long flight
+                # times: a highly elliptical transfer orbit peaks at thousands
+                # of km and takes 90+ minutes to come back down.  Use 3 hours
+                # so the integrator always reaches the ground.
+                _max_t = 10800.0 if guidance == "orbital_insertion" else 3600.0
                 result = integrate_trajectory(
                     missile, lat, lon, az,
                     guidance=guidance,
@@ -2404,7 +2409,8 @@ class MissileFlyoutApp(tk.Tk):
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
                     reentry_query_alt_km=q_alt,
-                    target_orbit_alt_km=target_orbit_km)
+                    target_orbit_alt_km=target_orbit_km,
+                    max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
