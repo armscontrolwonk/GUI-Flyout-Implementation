@@ -1540,13 +1540,25 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(orb_frame, textvariable=self._orbit_alt_var, width=8).pack(side=tk.LEFT)
         ttk.Label(orb_frame, text="km").pack(side=tk.LEFT, padx=2)
 
-        # Hide turn-start/stop and orbit-alt rows by default (loft mode active at startup)
+        # Row 6: Plan Orbit button — spans both columns, inside the Guidance frame
+        # so it can use grid_remove()/grid() reliably like the other hidden rows.
+        self._plan_orbit_btn_row = ttk.Frame(gf)
+        self._plan_orbit_btn_row.grid(row=6, column=0, columnspan=2,
+                                      sticky=tk.EW, padx=8, pady=(4, 6))
+        self._plan_orbit_btn = ttk.Button(self._plan_orbit_btn_row,
+                                          text="Plan Orbit",
+                                          command=self._plan_orbit)
+        self._plan_orbit_btn.pack(fill=tk.X, ipady=4)
+
+        # Hide turn-start/stop, orbit-alt, and plan-orbit rows by default
+        # (loft mode is active at startup)
         self._gt_turn_start_lbl.grid_remove()
         self._gt_turn_start_frame.grid_remove()
         self._gt_turn_stop_lbl.grid_remove()
         self._gt_turn_stop_frame.grid_remove()
         self._orbit_alt_lbl.grid_remove()
         self._orbit_alt_frame.grid_remove()
+        self._plan_orbit_btn_row.grid_remove()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -1586,15 +1598,6 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Button(btn_frame, text="Sweep…",
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
-
-        # Plan Orbit button — only shown in Orbital Insertion mode
-        btn_frame2 = ttk.Frame(parent)
-        btn_frame2.pack(fill=tk.X, padx=6, pady=(0, 4))
-        self._plan_orbit_btn = ttk.Button(btn_frame2, text="Plan Orbit",
-                                          command=self._plan_orbit)
-        self._plan_orbit_btn.pack(fill=tk.X, ipady=4)
-        self._plan_orbit_btn_frame = btn_frame2
-        btn_frame2.pack_forget()   # hidden until orbital_insertion is selected
 
         # (Missile Parameters moved to right-panel notebook tab)
 
@@ -2059,11 +2062,11 @@ class MissileFlyoutApp(tk.Tk):
         if guidance == "orbital_insertion":
             self._orbit_alt_lbl.grid()
             self._orbit_alt_frame.grid()
-            self._plan_orbit_btn_frame.pack(fill=tk.X, padx=6, pady=(0, 4))
+            self._plan_orbit_btn_row.grid()
         else:
             self._orbit_alt_lbl.grid_remove()
             self._orbit_alt_frame.grid_remove()
-            self._plan_orbit_btn_frame.pack_forget()
+            self._plan_orbit_btn_row.grid_remove()
 
     # ------------------------------------------------------------------
     # Custom missile management
