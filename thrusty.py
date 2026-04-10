@@ -1542,15 +1542,12 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(orb_frame, textvariable=self._orbit_alt_var, width=8).pack(side=tk.LEFT)
         ttk.Label(orb_frame, text="km").pack(side=tk.LEFT, padx=2)
 
-        # Row 6: Plan Orbit button — spans both columns, inside the Guidance frame
-        # so it can use grid_remove()/grid() reliably like the other hidden rows.
-        self._plan_orbit_btn_row = ttk.Frame(gf)
-        self._plan_orbit_btn_row.grid(row=6, column=0, columnspan=2,
-                                      sticky=tk.EW, padx=8, pady=(4, 6))
-        self._plan_orbit_btn = ttk.Button(self._plan_orbit_btn_row,
-                                          text="Plan Orbit",
+        # Row 6: Plan Orbit button — placed directly in gf (no wrapper Frame)
+        # so grid_forget/grid reliably shows and hides it.
+        self._plan_orbit_btn = ttk.Button(gf, text="Plan Orbit",
                                           command=self._plan_orbit)
-        self._plan_orbit_btn.pack(fill=tk.X, ipady=4)
+        self._plan_orbit_btn.grid(row=6, column=0, columnspan=2,
+                                  sticky=tk.EW, padx=8, pady=(4, 6), ipadx=2, ipady=4)
 
         # Hide turn-start/stop, orbit-alt, and plan-orbit rows by default
         # (loft mode is active at startup)
@@ -1560,7 +1557,7 @@ class MissileFlyoutApp(tk.Tk):
         self._gt_turn_stop_frame.grid_forget()
         self._orbit_alt_lbl.grid_forget()
         self._orbit_alt_frame.grid_forget()
-        self._plan_orbit_btn_row.grid_forget()
+        self._plan_orbit_btn.grid_forget()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -2070,13 +2067,13 @@ class MissileFlyoutApp(tk.Tk):
                 row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._orbit_alt_frame.grid(
                 row=5, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._plan_orbit_btn_row.grid(
+            self._plan_orbit_btn.grid(
                 row=6, column=0, columnspan=2,
-                sticky=tk.EW, padx=8, pady=(4, 6))
+                sticky=tk.EW, padx=8, pady=(4, 6), ipadx=2, ipady=4)
         else:
             self._orbit_alt_lbl.grid_forget()
             self._orbit_alt_frame.grid_forget()
-            self._plan_orbit_btn_row.grid_forget()
+            self._plan_orbit_btn.grid_forget()
 
     # ------------------------------------------------------------------
     # Custom missile management
