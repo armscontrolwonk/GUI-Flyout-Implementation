@@ -387,16 +387,25 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         _final_stage = params
         while _final_stage.stage2 is not None:
             _final_stage = _final_stage.stage2
-        if (astage is _final_stage
-                and not _final_stage.solid_motor
-                and alt >= 0.8 * target_orbit_alt_m):
+        if astage is _final_stage and not _final_stage.solid_motor:
             omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
             vel_eci   = vel + np.cross(omega_vec, pos)
-            r = np.linalg.norm(pos)
-            eps_now    = 0.5 * np.dot(vel_eci, vel_eci) - GM / r
+            r         = np.linalg.norm(pos)
+            eps_now   = 0.5 * np.dot(vel_eci, vel_eci) - GM / r
             eps_target = -GM / (2.0 * (RE + target_orbit_alt_m))
             if eps_now >= eps_target:
-                engine_on = False
+                # Verify the resulting orbit has a survivable perigee (> 80 km).
+                # A steeply-ascending cutoff can produce an orbit whose perigee
+                # is underground even though the energy is correct; the altitude
+                # guard in the previous version was too strict (blocked insertion
+                # burns at 150–200 km for 500 km target orbits).
+                h_vec = np.cross(pos, vel_eci)
+                h2    = np.dot(h_vec, h_vec)
+                a     = -GM / (2.0 * eps_now)
+                e     = np.sqrt(max(0.0, 1.0 - h2 / (GM * a)))
+                r_perigee = a * (1.0 - e)
+                if r_perigee > RE + 80_000:   # perigee above 80 km
+                    engine_on = False
 
     if engine_on:
         if params.guidance in ("gravity_turn", "orbital_insertion"):
