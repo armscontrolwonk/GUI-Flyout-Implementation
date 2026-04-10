@@ -29,7 +29,8 @@ import matplotlib.ticker
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta)
-from trajectory import integrate_trajectory, maximize_range, aim_missile
+from trajectory import (integrate_trajectory, maximize_range, aim_missile,
+                        plan_orbital_insertion)
 from coordinates import range_between
 from slv_performance import schilling_performance
 
@@ -1586,6 +1587,15 @@ class MissileFlyoutApp(tk.Tk):
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
 
+        # Plan Orbit button — only shown in Orbital Insertion mode
+        btn_frame2 = ttk.Frame(parent)
+        btn_frame2.pack(fill=tk.X, padx=6, pady=(0, 4))
+        self._plan_orbit_btn = ttk.Button(btn_frame2, text="Plan Orbit",
+                                          command=self._plan_orbit)
+        self._plan_orbit_btn.pack(fill=tk.X, ipady=4)
+        self._plan_orbit_btn_frame = btn_frame2
+        btn_frame2.pack_forget()   # hidden until orbital_insertion is selected
+
         # (Missile Parameters moved to right-panel notebook tab)
 
     # ------------------------------------------------------------------
@@ -2049,9 +2059,11 @@ class MissileFlyoutApp(tk.Tk):
         if guidance == "orbital_insertion":
             self._orbit_alt_lbl.grid()
             self._orbit_alt_frame.grid()
+            self._plan_orbit_btn_frame.pack(fill=tk.X, padx=6, pady=(0, 4))
         else:
             self._orbit_alt_lbl.grid_remove()
             self._orbit_alt_frame.grid_remove()
+            self._plan_orbit_btn_frame.pack_forget()
 
     # ------------------------------------------------------------------
     # Custom missile management
@@ -2382,6 +2394,70 @@ class MissileFlyoutApp(tk.Tk):
                   gt_start_s, None, target_orbit_km, True),
             daemon=True,
         ).start()
+
+    def _plan_orbit(self):
+        """Handler for the Plan Orbit button."""
+        if self._running:
+            return
+        try:
+            (missile, guidance, lat, lon, az, cutoff, la, lar,
+             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
+        except ValueError as e:
+            messagebox.showerror("Input error", str(e))
+            return
+        if target_orbit_km is None:
+            messagebox.showerror("Input error",
+                                 "Enter a target orbit altitude (km) first.")
+            return
+        self._running = True
+        self._status_var.set(
+            f"Planning orbital trajectory to {target_orbit_km:.0f} km…")
+        threading.Thread(
+            target=self._plan_orbit_thread,
+            args=(missile, lat, lon, az, target_orbit_km, gt_start_s),
+            daemon=True,
+        ).start()
+
+    def _plan_orbit_thread(self, missile, lat, lon, az,
+                           target_orbit_km, gt_start_s):
+        """Worker: runs plan_orbital_insertion then fires the full simulation."""
+        try:
+            plan = plan_orbital_insertion(
+                missile, lat, lon, az, target_orbit_km,
+                gt_turn_start_s=gt_start_s)
+        except Exception as e:
+            self._running = False
+            self.after(0, lambda: messagebox.showerror(
+                "Planner error", str(e)))
+            return
+
+        if not plan['success']:
+            self._running = False
+            self.after(0, lambda: messagebox.showerror(
+                "No solution", plan['message']))
+            return
+
+        boost_angle = plan['boost_angle_deg']
+        turn_stop   = plan['turn_stop_s']
+
+        # Update GUI fields on the main thread, then run the simulation.
+        def _apply_and_run():
+            self._loft_angle_var.set(f"{boost_angle:.1f}")
+            self._gt_turn_stop_var.set(f"{turn_stop:.1f}")
+            self._status_var.set(
+                f"Plan found: boost {boost_angle:.0f}°  →  "
+                f"{plan['perigee_km']:.0f}×{plan['apogee_km']:.0f} km  "
+                f"— running simulation…")
+            # _run_thread checks self._running; it's still True from _plan_orbit
+            threading.Thread(
+                target=self._run_thread,
+                args=(missile, "orbital_insertion", lat, lon, az,
+                      None, boost_angle, 0.0,
+                      gt_start_s, turn_stop, target_orbit_km, False),
+                daemon=True,
+            ).start()
+
+        self.after(0, _apply_and_run)
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
                     gt_start_s, gt_stop_s, target_orbit_km, maximise):

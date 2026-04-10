@@ -294,8 +294,44 @@ def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
     return thrust / norm if norm > 1e-12 else e_up
 
 
-def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                     loft_angle_deg, loft_angle_rate_deg_s, t):
+def _orbital_insertion_thrust_dir(lat_rad, lon_rad, azimuth_rad,
+                                   boost_angle_deg, turn_start_s, turn_stop_s,
+                                   t_final_ignition, t):
+    """
+    Two-phase pitch program for orbital insertion.
+
+    Phase 1 — all stages before the final (t < t_final_ignition):
+        Pitch from 90° (vertical) to boost_angle_deg over the window
+        [turn_start_s, turn_stop_s], then hold boost_angle_deg.
+        turn_stop_s is normally set to just before final-stage ignition so
+        the boost stages complete their pitch-over before handoff.
+
+    Phase 2 — final stage (t >= t_final_ignition):
+        Hold 0° (horizontal).  The final stage burns near apogee of the boost
+        arc, adding horizontal velocity until the energy-based cutoff fires.
+    """
+    if t >= t_final_ignition:
+        el_deg = 0.0          # horizontal burn for final stage
+    elif t <= turn_start_s:
+        el_deg = 90.0
+    elif t >= turn_stop_s:
+        el_deg = boost_angle_deg
+    else:
+        frac   = (t - turn_start_s) / max(turn_stop_s - turn_start_s, 1.0)
+        el_deg = 90.0 - frac * (90.0 - boost_angle_deg)
+
+    el_rad = np.radians(el_deg)
+    e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
+    thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
+              np.cos(el_rad) * np.cos(azimuth_rad) * e_north +
+              np.sin(el_rad) * e_up)
+    norm = np.linalg.norm(thrust)
+    return thrust / norm if norm > 1e-12 else e_up
+
+
+
+def _loft_angle_thrust_dir(lat_rad, lon_rad, azimuth_rad,
+                            loft_angle_deg, loft_angle_rate_deg_s, t):
     """
     Unit thrust vector (ECEF) under Forden's loft-angle guidance (Eq. 8).
 
@@ -320,7 +356,7 @@ def _loft_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 # ---------------------------------------------------------------------------
 
 def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
-         gt_turn_stop_s, target_orbit_alt_m=0.0):
+         gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
@@ -335,10 +371,13 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     gt_turn_start_s / gt_turn_stop_s are used only when params.guidance ==
     "gravity_turn"; they bound the active pitch window.
 
-    target_orbit_alt_m : when params.guidance == "orbital_insertion" and the
+    target_orbit_alt_m  : when params.guidance == "orbital_insertion" and the
         active stage is NOT a solid motor, engine cutoff is commanded once the
         specific orbital energy reaches the target circular-orbit energy.
         Ignored for solid-motor stages (burn to natural burnout).
+    t_final_ignition    : mission-elapsed time at which the final stage
+        ignites; used by the two-phase orbital insertion pitch program to
+        switch from the boost pitch to the horizontal final-stage burn.
     """
     pos = state[:3]
     vel = state[3:]
@@ -408,7 +447,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     engine_on = False
 
     if engine_on:
-        if params.guidance in ("gravity_turn", "orbital_insertion"):
+        if params.guidance == "orbital_insertion":
+            thrust_dir = _orbital_insertion_thrust_dir(
+                lat, lon, azimuth_rad,
+                params.loft_angle_deg,   # boost angle for pre-final stages
+                gt_turn_start_s,
+                gt_turn_stop_s,
+                t_final_ignition,
+                t)
+        elif params.guidance == "gravity_turn":
             thrust_dir = _gravity_turn_thrust_dir(
                 lat, lon, azimuth_rad,
                 params.loft_angle_deg,
@@ -438,7 +485,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 
 
 def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
-                gt_turn_stop_s, target_orbit_alt_m=0.0):
+                gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -620,8 +667,23 @@ def integrate_trajectory(params: MissileParams,
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
+
+    # Compute the mission-elapsed time at which the final stage ignites.
+    # This is the sum of all earlier stage burn times and coast times.
+    # Used only by the orbital_insertion two-phase pitch program.
+    _t_final_ignition = 0.0
+    _node = params
+    while _node.stage2 is not None:
+        _t_final_ignition += _node.burn_time_s + _node.coast_time_s
+        _node = _node.stage2
+
     if gt_turn_stop_s is None:
-        gt_turn_stop_s = total_burn
+        if params.guidance == "orbital_insertion" and _t_final_ignition > 0:
+            # End the boost pitch just before the final stage ignites so the
+            # pre-final stages complete their pitch-over before handoff.
+            gt_turn_stop_s = max(_t_final_ignition - 1.0, gt_turn_start_s + 1.0)
+        else:
+            gt_turn_stop_s = total_burn
 
     lat0 = np.radians(launch_lat_deg)
     lon0 = np.radians(launch_lon_deg)
@@ -638,7 +700,7 @@ def integrate_trajectory(params: MissileParams,
     _target_orbit_alt_m = (target_orbit_alt_km * 1000.0
                            if target_orbit_alt_km is not None else 0.0)
     eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
-                 gt_turn_stop_s, _target_orbit_alt_m)
+                 gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition)
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.
@@ -658,14 +720,25 @@ def integrate_trajectory(params: MissileParams,
             dense_output=False,
             max_step=30.0,
         )
-        # Fast-path return: only range_km is needed by the optimizer.
+        # Fast-path return.
         orbital = len(sol.t_events[0]) == 0
-        if orbital or sol.y_events[0].shape[0] == 0:
-            return {'orbital': True, 'range_km': None}
+        if orbital:
+            # Perigee check — weed out long sub-orbital arcs.
+            _oe_s = orbital_elements_from_state(sol.y[:3, -1], sol.y[3:, -1])
+            if _oe_s['perigee_km'] < 80.0:
+                orbital = False
+        if orbital:
+            return {'orbital': True, 'range_km': None,
+                    'perigee_km': _oe_s['perigee_km'],
+                    'apogee_km':  _oe_s['apogee_km']}
+        if sol.y_events[0].shape[0] == 0:
+            return {'orbital': False, 'range_km': None,
+                    'perigee_km': None, 'apogee_km': None}
         pos_impact = sol.y_events[0][0, :3]
         la_f, lo_f, _ = ecef_to_geodetic(pos_impact)
         rng_km = range_between(lat0, lon0, la_f, lo_f) / 1000.0
-        return {'orbital': False, 'range_km': rng_km}
+        return {'orbital': False, 'range_km': rng_km,
+                'perigee_km': None, 'apogee_km': None}
 
     # Full-fidelity integration for display/export.
     t_eval = np.arange(0.0, max_time_s, dt_output)
@@ -1072,6 +1145,118 @@ def find_range(params: MissileParams,
         cutoff_time_s=cutoff_time_s,
     )
     return result['range_km']
+
+
+# ---------------------------------------------------------------------------
+# Orbital insertion planner
+# ---------------------------------------------------------------------------
+
+def plan_orbital_insertion(params: MissileParams,
+                           launch_lat_deg: float,
+                           launch_lon_deg: float,
+                           launch_azimuth_deg: float,
+                           target_orbit_alt_km: float,
+                           gt_turn_start_s: float = 5.0) -> dict:
+    """
+    Automatically find the two-phase pitch program for orbital insertion.
+
+    Searches for the boost_angle_deg (applied to all pre-final stages) that,
+    combined with a horizontal final-stage burn and energy-based cutoff,
+    achieves a stable orbit with perigee as close as possible to
+    target_orbit_alt_km.
+
+    The final stage always burns at 0° (horizontal), regardless of the boost
+    angle.  The turn_stop is automatically set to just before final-stage
+    ignition.  This works for 2-, 3-, or 4-stage vehicles; the final stage is
+    identified dynamically by walking the stage chain.
+
+    Parameters
+    ----------
+    params               : MissileParams (top-level stage)
+    launch_lat/lon_deg   : geodetic launch coordinates
+    launch_azimuth_deg   : launch azimuth clockwise from North
+    target_orbit_alt_km  : desired circular orbit altitude (km)
+    gt_turn_start_s      : time to start pitching (s); default 5 s
+
+    Returns
+    -------
+    dict with keys:
+        success          : bool
+        boost_angle_deg  : found boost angle for pre-final stages (°)
+        turn_stop_s      : pitch end time (s)
+        perigee_km       : achieved perigee altitude (km)
+        apogee_km        : achieved apogee altitude (km)
+        message          : human-readable result summary
+    """
+    # Compute final-stage ignition time and auto turn-stop.
+    _t_fi = 0.0
+    _node = params
+    while _node.stage2 is not None:
+        _t_fi += _node.burn_time_s + _node.coast_time_s
+        _node = _node.stage2
+    turn_stop_s = max(_t_fi - 1.0, gt_turn_start_s + 1.0)
+
+    def _eval(boost_angle):
+        """Return perigee_km for this boost angle, or None if not orbital."""
+        r = integrate_trajectory(
+            params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
+            guidance="orbital_insertion",
+            loft_angle_deg=float(boost_angle),
+            gt_turn_start_s=gt_turn_start_s,
+            gt_turn_stop_s=turn_stop_s,
+            target_orbit_alt_km=target_orbit_alt_km,
+            max_time_s=10800.0,
+            _search_mode=True)
+        return r.get('perigee_km'), r.get('apogee_km')
+
+    # Coarse grid: 5° to 80° in 5° steps (run in parallel).
+    coarse_angles = list(range(5, 81, 5))
+    coarse_results = {}
+    with ThreadPoolExecutor(max_workers=min(len(coarse_angles), 8)) as ex:
+        futs = {ex.submit(_eval, a): a for a in coarse_angles}
+        for fut in as_completed(futs):
+            coarse_results[futs[fut]] = fut.result()
+
+    orbital_coarse = [(a, p, ap) for a, (p, ap) in coarse_results.items()
+                      if p is not None]
+    if not orbital_coarse:
+        return {
+            'success': False,
+            'message': ('No orbital solution found across boost angles 5°–80°.  '
+                        'Check that the missile has sufficient delta-V for the '
+                        f'target orbit ({target_orbit_alt_km:.0f} km).'),
+        }
+
+    # Best coarse angle: perigee closest to target altitude.
+    best_a, best_p, best_ap = min(orbital_coarse,
+                                  key=lambda x: abs(x[1] - target_orbit_alt_km))
+
+    # Fine grid: ±5° around best coarse angle in 1° steps.
+    fine_lo = max(1, best_a - 5)
+    fine_hi = min(85, best_a + 6)
+    fine_angles = [a for a in range(fine_lo, fine_hi)
+                   if a not in coarse_results]
+    fine_results = dict(coarse_results)
+    if fine_angles:
+        with ThreadPoolExecutor(max_workers=min(len(fine_angles), 8)) as ex:
+            futs = {ex.submit(_eval, a): a for a in fine_angles}
+            for fut in as_completed(futs):
+                fine_results[futs[fut]] = fut.result()
+
+    orbital_fine = [(a, p, ap) for a, (p, ap) in fine_results.items()
+                    if p is not None]
+    best_a, best_p, best_ap = min(orbital_fine,
+                                  key=lambda x: abs(x[1] - target_orbit_alt_km))
+
+    return {
+        'success':         True,
+        'boost_angle_deg': best_a,
+        'turn_stop_s':     turn_stop_s,
+        'perigee_km':      best_p,
+        'apogee_km':       best_ap,
+        'message': (f'Boost angle {best_a}°  →  '
+                    f'{best_p:.0f} × {best_ap:.0f} km orbit'),
+    }
 
 
 # ---------------------------------------------------------------------------
