@@ -463,10 +463,10 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 gt_turn_stop_s,
                 t)
         else:  # "loft" (Forden)
-            thrust_dir = _loft_thrust_dir(lat, lon, azimuth_rad,
-                                          params.loft_angle_deg,
-                                          params.loft_angle_rate_deg_s,
-                                          t)
+            thrust_dir = _loft_angle_thrust_dir(lat, lon, azimuth_rad,
+                                                params.loft_angle_deg,
+                                                params.loft_angle_rate_deg_s,
+                                                t)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -1196,8 +1196,17 @@ def plan_orbital_insertion(params: MissileParams,
         _node = _node.stage2
     turn_stop_s = max(_t_fi - 1.0, gt_turn_start_s + 1.0)
 
+    # Evaluate orbits at natural burnout rather than running the full 3-hour
+    # simulation.  A low-perigee insertion orbit (e.g. 80 km) decays rapidly
+    # due to atmospheric drag: the vehicle re-enters within a few orbits, which
+    # causes _hit_ground to fire and orbital=False even though insertion was
+    # achieved.  By capping max_time at natural burnout we check orbital elements
+    # at the moment of engine cutoff, before drag has time to degrade the orbit.
+    _natural_burnout = total_burn_time(params)
+    _eval_max_time = _natural_burnout
+
     def _eval(boost_angle):
-        """Return perigee_km for this boost angle, or None if not orbital."""
+        """Return (perigee_km, apogee_km) for this boost angle, or (None, None)."""
         r = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance="orbital_insertion",
@@ -1205,7 +1214,7 @@ def plan_orbital_insertion(params: MissileParams,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=turn_stop_s,
             target_orbit_alt_km=target_orbit_alt_km,
-            max_time_s=10800.0,
+            max_time_s=_eval_max_time,
             _search_mode=True)
         return r.get('perigee_km'), r.get('apogee_km')
 
