@@ -11,6 +11,7 @@ Layout mirrors the original MATLAB GUIDE application:
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import tkinter.font as tkfont
+import copy
 import threading
 import numpy as np
 import sys
@@ -1549,8 +1550,21 @@ class MissileFlyoutApp(tk.Tk):
         self._plan_orbit_btn.grid(row=6, column=0, columnspan=2,
                                   sticky=tk.EW, padx=8, pady=(4, 6), ipadx=2, ipady=4)
 
-        # Hide turn-start/stop, orbit-alt, and plan-orbit rows by default
-        # (loft mode is active at startup)
+        # Row 7: Advanced pitch program toggle (gravity_turn / orbital_insertion only)
+        self._adv_pitch_var = tk.BooleanVar(value=False)
+        self._adv_pitch_chk = ttk.Checkbutton(
+            gf, text="Advanced pitch program (per-stage)",
+            variable=self._adv_pitch_var,
+            command=self._on_adv_pitch_toggled)
+        self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
+                                  sticky=tk.W, padx=8, pady=(0, 2))
+
+        # Row 8: Per-stage inline rows — rebuilt whenever missile changes
+        self._adv_pitch_frame = ttk.Frame(gf)
+        self._stage_rows = []   # list of dicts with StringVars per stage
+
+        # Hide turn-start/stop, orbit-alt, plan-orbit, and adv-pitch rows by
+        # default (loft mode is active at startup)
         self._gt_turn_start_lbl.grid_forget()
         self._gt_turn_start_frame.grid_forget()
         self._gt_turn_stop_lbl.grid_forget()
@@ -1558,6 +1572,7 @@ class MissileFlyoutApp(tk.Tk):
         self._orbit_alt_lbl.grid_forget()
         self._orbit_alt_frame.grid_forget()
         self._plan_orbit_btn.grid_forget()
+        self._adv_pitch_chk.grid_forget()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -1933,6 +1948,92 @@ class MissileFlyoutApp(tk.Tk):
         self._update_guidance_labels(p.guidance)
         self._update_params_display(p)
         self._del_btn.config(state=tk.NORMAL)
+        if self._adv_pitch_var.get():
+            self._rebuild_stage_rows()
+
+    # ------------------------------------------------------------------
+    # Advanced per-stage pitch program
+    # ------------------------------------------------------------------
+    def _on_adv_pitch_toggled(self):
+        """Show or hide the per-stage pitch rows."""
+        if self._adv_pitch_var.get():
+            self._rebuild_stage_rows()
+            self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
+                                        sticky=tk.EW, padx=0, pady=(0, 4))
+        else:
+            self._adv_pitch_frame.grid_forget()
+
+    def _rebuild_stage_rows(self):
+        """Rebuild inline per-stage pitch rows from the current missile."""
+        for w in self._adv_pitch_frame.winfo_children():
+            w.destroy()
+        self._stage_rows = []
+
+        p = get_missile(self._missile_var.get())
+        if p is None:
+            return
+
+        # Walk stage chain, record absolute ignition / burnout times
+        stages, node, t_ign = [], p, 0.0
+        while node is not None:
+            t_burn = t_ign + node.burn_time_s
+            stages.append({'node': node, 't_ign': t_ign, 't_burn': t_burn})
+            t_ign = t_burn + node.coast_time_s
+            node = node.stage2
+
+        # Defaults from simple-mode fields
+        try:
+            g_angle = float(self._loft_angle_var.get())
+        except ValueError:
+            g_angle = 45.0
+        try:
+            g_start = float(self._gt_turn_start_var.get())
+        except ValueError:
+            g_start = 5.0
+
+        # Column header
+        af = self._adv_pitch_frame
+        af.columnconfigure(0, minsize=55)
+        for col, hdr in enumerate(
+                ["Stage", "Turn start (s)", "Turn stop (s)", "Angle (°)", "Burn window"],
+                start=0):
+            ttk.Label(af, text=hdr, foreground="#555555").grid(
+                row=0, column=col, padx=(8 if col == 0 else 4, 4),
+                pady=(4, 1), sticky=tk.W)
+
+        for i, s in enumerate(stages):
+            node = s['node']
+            t_i, t_b = s['t_ign'], s['t_burn']
+
+            # Seed per-stage values: use stored overrides if present,
+            # otherwise derive sensible defaults from simple-mode params.
+            def_start = node.stage_turn_start_s if node.stage_turn_start_s is not None \
+                        else (g_start if i == 0 else t_i)
+            def_stop  = node.stage_turn_stop_s  if node.stage_turn_stop_s  is not None \
+                        else max(t_i, t_b - 5.0)
+            def_angle = node.stage_burnout_angle_deg \
+                        if node.stage_burnout_angle_deg is not None else g_angle
+
+            sv_start = tk.StringVar(value=f"{def_start:.1f}")
+            sv_stop  = tk.StringVar(value=f"{def_stop:.1f}")
+            sv_angle = tk.StringVar(value=f"{def_angle:.1f}")
+
+            row = i + 1
+            ttk.Label(af, text=f"Stage {i+1}:").grid(
+                row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
+            ttk.Entry(af, textvariable=sv_start, width=7).grid(
+                row=row, column=1, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_stop,  width=7).grid(
+                row=row, column=2, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_angle, width=7).grid(
+                row=row, column=3, padx=4, pady=1)
+            ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
+                      foreground="#888888").grid(
+                row=row, column=4, sticky=tk.W, padx=(4, 8), pady=1)
+
+            self._stage_rows.append(
+                {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
+                 'node': node})
 
     # ------------------------------------------------------------------
     def _on_site_selected(self, _event=None):
@@ -2074,6 +2175,17 @@ class MissileFlyoutApp(tk.Tk):
             self._orbit_alt_lbl.grid_forget()
             self._orbit_alt_frame.grid_forget()
             self._plan_orbit_btn.grid_forget()
+
+        # Advanced pitch checkbox — only meaningful for turn-based modes
+        if guidance in ("gravity_turn", "orbital_insertion"):
+            self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
+                                      sticky=tk.W, padx=8, pady=(0, 2))
+            if self._adv_pitch_var.get():
+                self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
+                                            sticky=tk.EW, padx=0, pady=(0, 4))
+        else:
+            self._adv_pitch_chk.grid_forget()
+            self._adv_pitch_frame.grid_forget()
 
     # ------------------------------------------------------------------
     # Custom missile management
@@ -2363,6 +2475,25 @@ class MissileFlyoutApp(tk.Tk):
         orb_alt_str  = self._orbit_alt_var.get().strip()
         target_orbit_km = float(orb_alt_str) if (guidance == "orbital_insertion"
                                                    and orb_alt_str) else None
+
+        # Advanced per-stage pitch: deep-copy the missile and stamp each
+        # stage object with the values from the inline rows.
+        if (self._adv_pitch_var.get()
+                and guidance in ("gravity_turn", "orbital_insertion")
+                and self._stage_rows):
+            missile = copy.deepcopy(missile)
+            node = missile
+            for row in self._stage_rows:
+                if node is None:
+                    break
+                try:
+                    node.stage_turn_start_s      = float(row['start'].get())
+                    node.stage_turn_stop_s        = float(row['stop'].get())
+                    node.stage_burnout_angle_deg  = float(row['angle'].get())
+                except ValueError:
+                    pass  # leave existing/None values if field is blank
+                node = node.stage2
+
         return (missile, guidance, lat, lon, az, cutoff, la, lar,
                 gt_start_s, gt_stop_s, target_orbit_km)
 
@@ -2458,6 +2589,30 @@ class MissileFlyoutApp(tk.Tk):
                 f"Plan found: boost {boost_angle:.0f}°  →  "
                 f"{plan['perigee_km']:.0f}×{plan['apogee_km']:.0f} km  "
                 f"— running simulation…")
+
+            # If advanced pitch mode is active, populate per-stage rows with
+            # the planner result: pre-final stages get boost_angle, the final
+            # stage gets whatever angle the user currently has (so they can
+            # set it to 0° for horizontal burn or tune it freely).
+            if self._adv_pitch_var.get() and self._stage_rows:
+                p = get_missile(self._missile_var.get())
+                # Walk stage chain to find ignition times
+                times, node, t_ign = [], p, 0.0
+                while node is not None:
+                    times.append(t_ign)
+                    t_ign = t_ign + node.burn_time_s + node.coast_time_s
+                    node = node.stage2
+                n_stages = len(self._stage_rows)
+                for i, row in enumerate(self._stage_rows):
+                    is_last = (i == n_stages - 1)
+                    t_i = times[i] if i < len(times) else 0.0
+                    row['start'].set(f"{gt_start_s:.1f}")
+                    row['stop'].set(f"{turn_stop:.1f}" if not is_last
+                                    else row['stop'].get())
+                    row['angle'].set(
+                        f"{boost_angle:.1f}" if not is_last
+                        else row['angle'].get())
+
             # _run_thread checks self._running; it's still True from _plan_orbit
             threading.Thread(
                 target=self._run_thread,

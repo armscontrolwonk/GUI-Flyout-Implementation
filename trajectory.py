@@ -455,21 +455,40 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     engine_on = False
 
     if engine_on:
-        if params.guidance == "orbital_insertion":
-            thrust_dir = _orbital_insertion_thrust_dir(
-                lat, lon, azimuth_rad,
-                params.loft_angle_deg,   # boost angle for pre-final stages
-                gt_turn_start_s,
-                gt_turn_stop_s,
-                t_final_ignition,
-                t)
-        elif params.guidance == "gravity_turn":
-            thrust_dir = _gravity_turn_thrust_dir(
-                lat, lon, azimuth_rad,
-                params.loft_angle_deg,
-                gt_turn_start_s,
-                gt_turn_stop_s,
-                t)
+        if params.guidance in ("gravity_turn", "orbital_insertion"):
+            # Per-stage advanced pitch: if the active stage carries its own
+            # turn_start / turn_stop / burnout_angle overrides, use those;
+            # otherwise fall back to the global gravity-turn params.
+            # For orbital_insertion without per-stage overrides, the legacy
+            # two-phase function still applies (final stage forced horizontal).
+            _stage_override = (astage is not None and
+                               astage.stage_burnout_angle_deg is not None)
+            if _stage_override:
+                _eff_angle = astage.stage_burnout_angle_deg
+                _eff_start = (astage.stage_turn_start_s
+                              if astage.stage_turn_start_s is not None
+                              else gt_turn_start_s)
+                _eff_stop  = (astage.stage_turn_stop_s
+                              if astage.stage_turn_stop_s is not None
+                              else gt_turn_stop_s)
+                thrust_dir = _gravity_turn_thrust_dir(
+                    lat, lon, azimuth_rad,
+                    _eff_angle, _eff_start, _eff_stop, t)
+            elif params.guidance == "orbital_insertion":
+                thrust_dir = _orbital_insertion_thrust_dir(
+                    lat, lon, azimuth_rad,
+                    params.loft_angle_deg,
+                    gt_turn_start_s,
+                    gt_turn_stop_s,
+                    t_final_ignition,
+                    t)
+            else:
+                thrust_dir = _gravity_turn_thrust_dir(
+                    lat, lon, azimuth_rad,
+                    params.loft_angle_deg,
+                    gt_turn_start_s,
+                    gt_turn_stop_s,
+                    t)
         else:  # "loft" (Forden)
             thrust_dir = _loft_angle_thrust_dir(lat, lon, azimuth_rad,
                                                 params.loft_angle_deg,

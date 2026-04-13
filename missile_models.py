@@ -98,6 +98,16 @@ class MissileParams:
     # the resulting orbit rather than commanding a cutoff at the target energy.
     solid_motor:   bool  = False
 
+    # ── Per-stage advanced pitch program (optional) ──────────────────────────
+    # When set on a stage, these override the top-level turn_start / turn_stop /
+    # burnout_angle for that stage's burn interval.  None = use global values.
+    # Stored on each stage object in the chain independently so stages can have
+    # different pitch schedules (e.g. Stage 1 aggressive pitch-over, Stage 3
+    # horizontal burn for orbital insertion).
+    stage_turn_start_s:      Optional[float] = None
+    stage_turn_stop_s:       Optional[float] = None
+    stage_burnout_angle_deg: Optional[float] = None
+
     # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
@@ -638,6 +648,13 @@ def missile_to_dict(p: MissileParams) -> dict:
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
         'solid_motor':            p.solid_motor,
     }
+    # Per-stage pitch overrides — only written when set (keeps dicts compact)
+    if p.stage_turn_start_s is not None:
+        d['stage_turn_start_s'] = p.stage_turn_start_s
+    if p.stage_turn_stop_s is not None:
+        d['stage_turn_stop_s'] = p.stage_turn_stop_s
+    if p.stage_burnout_angle_deg is not None:
+        d['stage_burnout_angle_deg'] = p.stage_burnout_angle_deg
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
     return d
@@ -678,6 +695,12 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
+        stage_turn_start_s=(float(d['stage_turn_start_s'])
+                            if d.get('stage_turn_start_s') is not None else None),
+        stage_turn_stop_s=(float(d['stage_turn_stop_s'])
+                           if d.get('stage_turn_stop_s') is not None else None),
+        stage_burnout_angle_deg=(float(d['stage_burnout_angle_deg'])
+                                 if d.get('stage_burnout_angle_deg') is not None else None),
     )
 
 
