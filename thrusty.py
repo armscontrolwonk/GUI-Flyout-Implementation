@@ -1990,6 +1990,13 @@ class MissileFlyoutApp(tk.Tk):
             g_start = float(self._gt_turn_start_var.get())
         except ValueError:
             g_start = 5.0
+        try:
+            g_stop = float(self._gt_turn_stop_var.get())
+        except (ValueError, AttributeError):
+            g_stop = None
+
+        _gui_guidance = self._guidance_var.get()
+        n_stg = len(stages)
 
         # Column header
         af = self._adv_pitch_frame
@@ -2004,15 +2011,36 @@ class MissileFlyoutApp(tk.Tk):
         for i, s in enumerate(stages):
             node = s['node']
             t_i, t_b = s['t_ign'], s['t_burn']
+            is_last = (i == n_stg - 1)
 
             # Seed per-stage values: use stored overrides if present,
             # otherwise derive sensible defaults from simple-mode params.
-            def_start = node.stage_turn_start_s if node.stage_turn_start_s is not None \
-                        else (g_start if i == 0 else t_i)
-            def_stop  = node.stage_turn_stop_s  if node.stage_turn_stop_s  is not None \
-                        else max(t_i, t_b - 5.0)
-            def_angle = node.stage_burnout_angle_deg \
-                        if node.stage_burnout_angle_deg is not None else g_angle
+            if node.stage_turn_start_s is not None:
+                def_start = node.stage_turn_start_s
+            elif _gui_guidance == "orbital_insertion":
+                # All stages share a single global turn-start so the
+                # continuous two-phase pitch is reproduced exactly.
+                def_start = g_start
+            else:
+                def_start = g_start if i == 0 else t_i
+
+            if node.stage_turn_stop_s is not None:
+                def_stop = node.stage_turn_stop_s
+            elif is_last and _gui_guidance == "orbital_insertion":
+                # Final stage burns horizontally — stop pitch just before ignition.
+                def_stop = max(0.0, t_i - 1.0)
+            elif _gui_guidance == "orbital_insertion" and g_stop is not None:
+                # Pre-final orbital stages use Plan Orbit's global turn_stop.
+                def_stop = g_stop
+            else:
+                def_stop = max(t_i, t_b - 5.0)
+
+            if node.stage_burnout_angle_deg is not None:
+                def_angle = node.stage_burnout_angle_deg
+            elif is_last and _gui_guidance == "orbital_insertion":
+                def_angle = 0.0   # final stage burns horizontally
+            else:
+                def_angle = g_angle
 
             sv_start = tk.StringVar(value=f"{def_start:.1f}")
             sv_stop  = tk.StringVar(value=f"{def_stop:.1f}")
@@ -2590,35 +2618,57 @@ class MissileFlyoutApp(tk.Tk):
                 f"{plan['perigee_km']:.0f}×{plan['apogee_km']:.0f} km  "
                 f"— running simulation…")
 
-            # If advanced pitch mode is active, populate per-stage rows with
-            # the planner result: pre-final stages get boost_angle, the final
-            # stage gets whatever angle the user currently has (so they can
-            # set it to 0° for horizontal burn or tune it freely).
+            # If advanced pitch mode is active, populate per-stage rows to
+            # exactly replicate the two-phase orbital insertion program that
+            # Plan Orbit found:
+            #   • Pre-final stages: pitch from 90° to boost_angle over
+            #     [gt_start_s, turn_stop], then hold boost_angle.
+            #   • Final stage: horizontal (0°) from ignition onwards.
             if self._adv_pitch_var.get() and self._stage_rows:
                 p = get_missile(self._missile_var.get())
-                # Walk stage chain to find ignition times
+                # Walk stage chain to find ignition/burnout times
                 times, node, t_ign = [], p, 0.0
                 while node is not None:
-                    times.append(t_ign)
-                    t_ign = t_ign + node.burn_time_s + node.coast_time_s
+                    t_burn = t_ign + node.burn_time_s
+                    times.append({'t_ign': t_ign, 't_burn': t_burn})
+                    t_ign = t_burn + node.coast_time_s
                     node = node.stage2
                 n_stages = len(self._stage_rows)
                 for i, row in enumerate(self._stage_rows):
                     is_last = (i == n_stages - 1)
-                    t_i = times[i] if i < len(times) else 0.0
-                    row['start'].set(f"{gt_start_s:.1f}")
-                    row['stop'].set(f"{turn_stop:.1f}" if not is_last
-                                    else row['stop'].get())
-                    row['angle'].set(
-                        f"{boost_angle:.1f}" if not is_last
-                        else row['angle'].get())
+                    t_i = times[i]['t_ign'] if i < len(times) else 0.0
+                    if is_last:
+                        # Final stage burns horizontally — stop pitch just before
+                        # ignition so the stage is already at 0° when it lights.
+                        row['start'].set(f"{max(0.0, t_i - 5.0):.1f}")
+                        row['stop'].set(f"{max(0.0, t_i - 1.0):.1f}")
+                        row['angle'].set("0.0")
+                    else:
+                        # Pre-final stages: use the same global pitch program
+                        # Plan Orbit found (start → turn_stop → boost_angle).
+                        row['start'].set(f"{gt_start_s:.1f}")
+                        row['stop'].set(f"{turn_stop:.1f}")
+                        row['angle'].set(f"{boost_angle:.1f}")
+
+            # Use _get_inputs() so per-stage overrides (when advanced is active)
+            # are applied to the missile before running the simulation.
+            try:
+                (m_run, guidance_run, lat_run, lon_run, az_run,
+                 cutoff_run, la_run, lar_run,
+                 gts_run, gtstp_run, orb_run) = self._get_inputs()
+            except ValueError:
+                # Fallback: use the original plan parameters without per-stage overrides.
+                m_run, guidance_run = missile, "orbital_insertion"
+                lat_run, lon_run, az_run = lat, lon, az
+                cutoff_run, la_run, lar_run = None, boost_angle, 0.0
+                gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
 
             # _run_thread checks self._running; it's still True from _plan_orbit
             threading.Thread(
                 target=self._run_thread,
-                args=(missile, "orbital_insertion", lat, lon, az,
-                      None, boost_angle, 0.0,
-                      gt_start_s, turn_stop, target_orbit_km, False),
+                args=(m_run, guidance_run, lat_run, lon_run, az_run,
+                      cutoff_run, la_run, lar_run,
+                      gts_run, gtstp_run, orb_run, False),
                 daemon=True,
             ).start()
 
