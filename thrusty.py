@@ -3482,13 +3482,26 @@ class MissileFlyoutApp(tk.Tk):
                 // and leader lines don't cross.
                 order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
-                var topY = {{}};
+                // Circles within CLUSTER_R px of each other are treated as
+                // one stack; circles farther apart start a fresh stack so a
+                // distant cluster can't drive labels off the screen.
+                var CLUSTER_R = 60;
+
+                var topY    = {{}};
                 var prevTop = null;
+                var prevPt  = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
                     var idealTop = pt.y - BASE_Y - lh;
+
+                    // Reset stacking when this circle is far from the previous.
+                    if (prevPt) {{
+                        var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
+                    }}
+
                     var candidate = (prevTop === null)
                         ? idealTop
                         : Math.min(idealTop, prevTop - lh - STACK_GAP);
@@ -3496,9 +3509,11 @@ class MissileFlyoutApp(tk.Tk):
                     // flip it below the circle instead.
                     if (candidate < EDGE) {{
                         candidate = pt.y + BASE_Y;
+                        prevTop = null;   // reset so next circle stacks independently
                     }}
                     topY[idx] = candidate;
                     prevTop = candidate;
+                    prevPt  = pt;
                 }});
 
                 order.forEach(function(idx) {{
