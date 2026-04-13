@@ -3208,8 +3208,16 @@ class MissileFlyoutApp(tk.Tk):
         lon = np.asarray(r['lon'])
         t   = np.asarray(r['t'])
 
+        # Unwrap longitude so the polyline never jumps across the antimeridian.
+        # Values may exceed ±180°; Leaflet renders them on the correct world copy.
+        _diffs = np.diff(lon)
+        _diffs = (_diffs + 180.0) % 360.0 - 180.0
+        lon_uw = np.empty_like(lon, dtype=float)
+        lon_uw[0] = lon[0]
+        lon_uw[1:] = lon[0] + np.cumsum(_diffs)
+
         mid_lat = float(np.mean(lat))
-        mid_lon = float(np.mean(lon))
+        mid_lon = float(np.mean(lon_uw))
 
         fmap = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
                           tiles="CartoDB positron")
@@ -3240,15 +3248,22 @@ class MissileFlyoutApp(tk.Tk):
 
         # ── Ground track ──────────────────────────────────────────────
         folium.PolyLine(
-            list(zip(lat.tolist(), lon.tolist())),
+            list(zip(lat.tolist(), lon_uw.tolist())),
             color="black", weight=2.0, opacity=0.8,
             tooltip="Ground track",
         ).add_to(fmap)
 
         # ── Debris ground tracks ──────────────────────────────────────
         for d in r.get('debris_trajectories', []):
+            _d_lon = np.asarray(d['lon'], dtype=float)
+            _d_diffs = np.diff(_d_lon)
+            _d_diffs = (_d_diffs + 180.0) % 360.0 - 180.0
+            _d_lon_uw = np.empty_like(_d_lon)
+            _d_lon_uw[0] = _d_lon[0]
+            if len(_d_diffs):
+                _d_lon_uw[1:] = _d_lon[0] + np.cumsum(_d_diffs)
             folium.PolyLine(
-                list(zip(d['lat'].tolist(), d['lon'].tolist())),
+                list(zip(d['lat'].tolist(), _d_lon_uw.tolist())),
                 color="black", weight=1.5, opacity=0.5,
                 tooltip=d['label'],
             ).add_to(fmap)
@@ -3303,7 +3318,9 @@ class MissileFlyoutApp(tk.Tk):
                 mk_lon = ms['impact_lon']
             else:
                 mk_lat = float(np.interp(ms['t_s'], t, lat))
-                mk_lon = float(np.interp(ms['t_s'], t, lon))
+                # Interpolate on unwrapped longitude so the marker co-locates
+                # with the polyline (which also uses unwrapped coordinates).
+                mk_lon = float(np.interp(ms['t_s'], t, lon_uw))
 
             popup_html = (
                 f"<b>{label}</b><br>"
@@ -3331,12 +3348,9 @@ class MissileFlyoutApp(tk.Tk):
 
             _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label})
 
-        # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
-        # All labels are placed ABOVE their point.  Labels are sorted by
-        # x-position and placed greedily: each label starts at BASE_Y px
-        # above its circle and is pushed further up until its bounding
-        # box does not intersect any already-placed label.  A thin SVG
-        # leader line connects the circle to the bottom-left of the label.
+        # ── Floating labels (pure JS, updates on zoom + pan) ──────────
+        # Labels are placed to the right of and above their circle, stacked
+        # so they don't overlap.  No leader / connector lines are drawn.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
         leader_js  = f"""
@@ -3348,15 +3362,10 @@ class MissileFlyoutApp(tk.Tk):
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
-            var _svg = null, _con = null, _divs = [];
+            var _con = null, _divs = [];
 
             function _init(map) {{
                 var mc = map.getContainer();
-                _svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                _svg.style.cssText = 'position:absolute;top:0;left:0;' +
-                    'width:100%;height:100%;pointer-events:none;z-index:450;' +
-                    'overflow:visible;';
-                mc.appendChild(_svg);
                 _con = document.createElement('div');
                 _con.style.cssText = 'position:absolute;top:0;left:0;' +
                     'width:0;height:0;pointer-events:none;z-index:500;';
@@ -3375,66 +3384,32 @@ class MissileFlyoutApp(tk.Tk):
 
             function _update(map) {{
                 if (!_con) return;
-                _svg.innerHTML = '';
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Make divs visible so offsetHeight is available
                 _divs.forEach(function(d) {{ d.style.display = 'block'; }});
 
-                // Sort right-to-left: rightmost circle → bottom of stack,
-                // leftmost → top.  This guarantees that processing order
-                // matches the desired stacking order (chronological top-down)
-                // AND that no two leader lines cross each other.
+                // Sort right-to-left so stacking order is chronological top-down.
                 var order = pts.map(function(_, i) {{ return i; }});
                 order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
-                // Assign label-top y positions.
-                // Each label's top = min(
-                //   ideal: BASE_Y above its own circle,
-                //   constrained: clear the label already placed below it
-                // )
-                // "Above" = smaller screen-y.
                 var topY = new Array(LABELS.length);
-                var prevTop = null;   // top-y of the label placed in previous iteration
-                var prevLH  = 0;
-
+                var prevTop = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    var idealTop = pt.y - BASE_Y - lh;   // as close to track as possible
-                    if (prevTop === null) {{
-                        topY[idx] = idealTop;
-                    }} else {{
-                        // Must clear the label below: this.bottom + STACK_GAP ≤ prev.top
-                        // ⟹ this.top ≤ prev.top - lh - STACK_GAP
-                        topY[idx] = Math.min(idealTop, prevTop - lh - STACK_GAP);
-                    }}
+                    var idealTop = pt.y - BASE_Y - lh;
+                    topY[idx] = (prevTop === null)
+                        ? idealTop
+                        : Math.min(idealTop, prevTop - lh - STACK_GAP);
                     prevTop = topY[idx];
-                    prevLH  = lh;
                 }});
 
-                // Apply positions and draw leader lines
                 _divs.forEach(function(d, i) {{
                     var pt = pts[i];
-                    var lh = (_divs[i].offsetHeight || 14) + PAD * 2;
-                    var lx = pt.x + H_GAP;
-                    var ly = topY[i];
-                    d.style.left = lx + 'px';
-                    d.style.top  = ly + 'px';
-
-                    // Leader line: circle centre → bottom-left of label
-                    var line = document.createElementNS(
-                        'http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('x1', pt.x);
-                    line.setAttribute('y1', pt.y);
-                    line.setAttribute('x2', lx);
-                    line.setAttribute('y2', ly + lh);
-                    line.setAttribute('stroke', 'black');
-                    line.setAttribute('stroke-width', '0.7');
-                    line.setAttribute('opacity', '0.6');
-                    _svg.appendChild(line);
+                    d.style.left = (pt.x + H_GAP) + 'px';
+                    d.style.top  = topY[i] + 'px';
                 }});
             }}
 
@@ -3443,6 +3418,16 @@ class MissileFlyoutApp(tk.Tk):
                 if (map && map.getZoom) {{
                     clearInterval(_poll);
                     _init(map);
+                    // Snap back to primary world copy when panning past ±180°.
+                    map.options.worldCopyJump = true;
+                    map.on('moveend', function() {{
+                        var c = this.getCenter(), lng = c.lng;
+                        if (lng < -180 || lng > 180) {{
+                            this.setView(
+                                [c.lat, ((lng % 360) + 540) % 360 - 180],
+                                this.getZoom(), {{animate: false}});
+                        }}
+                    }}, map);
                     map.on('moveend zoomend', function() {{ _update(map); }});
                     _update(map);
                 }}
