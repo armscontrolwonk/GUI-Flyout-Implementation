@@ -392,12 +392,20 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     astage, _ = active_stage_and_t(params, t)
 
     # --- Drag ---
-    # After final-stage burnout, if an RV ballistic coefficient is supplied,
-    # use β-based drag for the separating warhead: F = q * m_rv / β.
-    # rv_mass_kg (single RV mass) is used when specified; otherwise fall back
-    # to payload_kg (old behaviour, treats whole payload as one object).
-    if (params.rv_beta_kg_m2 > 0 and params.payload_kg > 0
+    # The standard atmosphere model (US Std Atm 1976) is only tabulated to
+    # ~86 km; above that it returns the clamped 86 km density (~5.6e-6 kg/m³),
+    # which is 4–5 orders of magnitude too high at orbital altitudes.  Real
+    # aerodynamic drag above 120 km is genuinely negligible for all trajectory
+    # types modelled here (sub-orbital apogee, Stage-3 burn, orbital insertion),
+    # so we zero it rather than apply a physically wrong value.
+    if alt > 120_000:
+        f_drag = np.zeros(3)
+    elif (params.rv_beta_kg_m2 > 0 and params.payload_kg > 0
             and t > total_burn_time(params)):
+        # After final-stage burnout, if an RV ballistic coefficient is supplied,
+        # use β-based drag for the separating warhead: F = q * m_rv / β.
+        # rv_mass_kg (single RV mass) is used when specified; otherwise fall back
+        # to payload_kg (old behaviour, treats whole payload as one object).
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
             _, _, rho, _ = atmosphere(alt)
