@@ -2810,7 +2810,7 @@ class MissileFlyoutApp(tk.Tk):
             )
 
         # Key events highlighted differently; debris impact rows get their own tag
-        _key_prefixes = ("Ignition", "Apogee", "Impact", "Orbital insertion")
+        _key_prefixes = ("Ignition", "Apogee", "Perigee", "Impact", "Orbital insertion")
 
         for idx, m in enumerate(r.get('milestones', [])):
             if m.get('is_debris'):
@@ -2834,48 +2834,80 @@ class MissileFlyoutApp(tk.Tk):
             ))
 
     def _plot_results(self, r, scale, ulbl):
-        t   = r['t']
-        alt = r['alt'] / 1000.0 * scale
-        spd = r['speed'] / 1000.0            # always km/s for speed axis
-        rng = r['range'] / 1000.0 * scale
-        lat = r['lat']
-        lon = r['lon']
+        t   = np.asarray(r['t'])
+        alt = np.asarray(r['alt']) / 1000.0 * scale
+        spd = np.asarray(r['speed']) / 1000.0   # always km/s
+        rng = np.asarray(r['range']) / 1000.0 * scale
+        lat_arr = np.asarray(r['lat'])
+        lon_arr = np.asarray(r['lon'])
+        orbital = r.get('orbital', False)
 
         for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk):
             ax.cla()
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
 
-        # Altitude vs time
-        self._ax_alt.plot(t, alt, color='royalblue', linewidth=1.5)
+        # ── Find key event times for orbital trajectories ────────────
+        _ins_t = _apo_t = _peri_t = None
+        if orbital:
+            for ms in r.get('milestones', []):
+                ev = ms.get('event', '').lower()
+                if 'orbital insertion' in ev and _ins_t is None:
+                    _ins_t = ms['t_s']
+                elif ev.startswith('apogee') and _apo_t is None:
+                    _apo_t = ms['t_s']
+                elif ev.startswith('perigee') and _peri_t is None:
+                    _peri_t = ms['t_s']
+            # Circular-orbit fallback: no perigee found → show one full period
+            if _peri_t is None and _ins_t is not None:
+                oe = r.get('orbital_elements')
+                if oe:
+                    _peri_t = _ins_t + oe['period_min'] * 60.0
+
+        # Array indices for truncation
+        _ins_idx  = (int(np.searchsorted(t, _ins_t))
+                     if _ins_t is not None else len(t) - 1)
+        _peri_idx = (int(np.searchsorted(t, _peri_t))
+                     if _peri_t is not None else len(t) - 1)
+        # Clamp to valid range
+        _ins_idx  = min(_ins_idx,  len(t) - 1)
+        _peri_idx = min(_peri_idx, len(t) - 1)
+
+        # ── Altitude vs Time (truncate at insertion for orbital) ──────
+        _sl = slice(0, _ins_idx + 1) if orbital else slice(None)
+        self._ax_alt.plot(t[_sl], alt[_sl], color='royalblue', linewidth=1.5)
         self._ax_alt.set_xlabel("Time (s)", fontsize=8)
         self._ax_alt.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_alt.set_title("Altitude vs Time", fontsize=9)
-        self._ax_alt.fill_between(t, 0, alt, alpha=0.12, color='royalblue')
+        self._ax_alt.fill_between(t[_sl], 0, alt[_sl],
+                                  alpha=0.12, color='royalblue')
 
-        # Speed vs time
+        # ── Speed vs Time ─────────────────────────────────────────────
         self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5)
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
 
-        # Altitude vs range (trajectory profile)
-        self._ax_traj.plot(rng, alt, color='seagreen', linewidth=1.5)
+        # ── Altitude vs Range (truncate at insertion for orbital) ─────
+        self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
         self._ax_traj.set_xlabel(f"Downrange ({ulbl})", fontsize=8)
         self._ax_traj.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_traj.set_title("Altitude vs Range", fontsize=9)
-        self._ax_traj.fill_between(rng, 0, alt, alpha=0.12, color='seagreen')
+        self._ax_traj.fill_between(rng[_sl], 0, alt[_sl],
+                                   alpha=0.12, color='seagreen')
 
-        # Ground track — re-centre on the launch longitude so the trajectory
-        # never crosses the plot's ±180° boundary (antimeridian artefact fix).
-        lon_arr    = np.asarray(lon)
-        lat_arr    = np.asarray(lat)
-        center_lon = float(lon_arr[0])          # launch meridian as the new 0°
-        lon_c      = ((lon_arr - center_lon + 180.0) % 360.0) - 180.0
+        # ── Ground Track (truncate at perigee / one orbit for orbital) ─
+        center_lon = float(lon_arr[0])          # launch meridian as origin
 
-        # NaN-break any residual jumps > 180° (trajectories spanning > 1 hemisphere)
+        # Truncate ground-track arrays
+        _trk_sl = slice(0, _peri_idx + 1) if orbital else slice(None)
+        lon_trk = lon_arr[_trk_sl]
+        lat_trk = lat_arr[_trk_sl]
+        lon_c   = ((lon_trk - center_lon + 180.0) % 360.0) - 180.0
+
+        # NaN-break any residual jumps > 180° (multi-hemisphere trajectories)
         lon_c = list(lon_c)
-        lat_c = list(lat_arr)
+        lat_c = list(lat_trk)
         i = 1
         while i < len(lon_c):
             if abs(lon_c[i] - lon_c[i - 1]) > 180:
@@ -2885,14 +2917,29 @@ class MissileFlyoutApp(tk.Tk):
             else:
                 i += 1
 
-        # Plot trajectory + markers first so matplotlib autoscales to them.
         self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2, zorder=2)
         self._ax_trk.plot(0.0, lat_arr[0], 'go', markersize=7,
                           label="Launch", zorder=5)
-        if not r.get('orbital', False):
+
+        if not orbital:
             impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
             self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
                               label="Impact", zorder=5)
+
+        # Orbital event markers (insertion ◆, apogee ▲, perigee ▼)
+        if orbital:
+            for _t_ev, mkr, col, lbl in [
+                (_ins_t,  'D', '#003580', 'Insertion'),
+                (_apo_t,  '^', '#6600bb', 'Apogee'),
+                (_peri_t, 'v', '#006655', 'Perigee'),
+            ]:
+                if _t_ev is None or _t_ev > t[-1]:
+                    continue
+                _ev_lat = float(np.interp(_t_ev, t, lat_arr))
+                _ev_lon = float(np.interp(_t_ev, t, lon_arr))
+                _ev_lon_c = ((_ev_lon - center_lon + 180.0) % 360.0) - 180.0
+                self._ax_trk.plot(_ev_lon_c, _ev_lat, mkr, color=col,
+                                  markersize=7, label=lbl, zorder=6)
 
         # Debris impact locations — red crosses, one per shed stage / fairing.
         _debris_plotted = False
