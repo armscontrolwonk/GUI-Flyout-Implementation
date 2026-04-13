@@ -1079,8 +1079,7 @@ def integrate_trajectory(params: MissileParams,
                 _row['event'] = (f"Orbital insertion"
                                  f" ({_oe['perigee_km']:.0f}×"
                                  f"{_oe['apogee_km']:.0f} km"
-                                 f", i={_oe['inclination_deg']:.1f}°"
-                                 f"{_life_str})")
+                                 f", {_oe['inclination_deg']:.1f}°)")
                 _row['orbital_elements'] = _oe
                 _insert_chrono(_row)
             _t_node2 = _t_bo2 + _node2.coast_time_s
