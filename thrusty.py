@@ -3457,44 +3457,66 @@ class MissileFlyoutApp(tk.Tk):
             function _update(map) {{
                 if (!_con) return;
                 _svg.innerHTML = '';
+
+                var mc   = map.getContainer();
+                var mapW = mc.offsetWidth  || 800;
+                var mapH = mc.offsetHeight || 600;
+                var EDGE = 40;   // px margin — markers this close to the edge
+                                 // are still labelled even if partly off-screen
+
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                _divs.forEach(function(d) {{ d.style.display = 'block'; }});
+                // Hide all labels first; only visible-marker labels are shown.
+                _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
-                // Sort right-to-left so stacking order is chronological top-down
-                // and no two leader lines cross each other.
-                var order = pts.map(function(_, i) {{ return i; }});
+                // Only stack labels for markers inside the current viewport.
+                // Off-screen markers drove labels off the top when zoomed in.
+                var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
+                    var p = pts[i];
+                    return p.x >= -EDGE && p.x <= mapW + EDGE &&
+                           p.y >= -EDGE && p.y <= mapH + EDGE;
+                }});
+                // Sort right-to-left so stacking is chronological top-down
+                // and leader lines don't cross.
                 order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
-                var topY = new Array(LABELS.length);
+                var topY = {{}};
                 var prevTop = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
+                    _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
                     var idealTop = pt.y - BASE_Y - lh;
-                    topY[idx] = (prevTop === null)
+                    var candidate = (prevTop === null)
                         ? idealTop
                         : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                    prevTop = topY[idx];
+                    // Clamp: if stacking pushes label above the top edge,
+                    // flip it below the circle instead.
+                    if (candidate < EDGE) {{
+                        candidate = pt.y + BASE_Y;
+                    }}
+                    topY[idx] = candidate;
+                    prevTop = candidate;
                 }});
 
-                _divs.forEach(function(d, i) {{
-                    var pt  = pts[i];
-                    var lh  = (_divs[i].offsetHeight || 14) + PAD * 2;
+                order.forEach(function(idx) {{
+                    var pt  = pts[idx];
+                    var lh  = (_divs[idx].offsetHeight || 14) + PAD * 2;
                     var lx  = pt.x + H_GAP;
-                    var ly  = topY[i];
-                    d.style.left = lx + 'px';
-                    d.style.top  = ly + 'px';
+                    var ly  = topY[idx];
+                    _divs[idx].style.left = lx + 'px';
+                    _divs[idx].style.top  = ly + 'px';
 
-                    // Leader line: circle centre → bottom-left of label box
+                    // Leader line: circle centre → nearest corner of label box
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
                     line.setAttribute('x2', lx);
-                    line.setAttribute('y2', ly + lh);
+                    // Above circle: connect to bottom-left; below: top-left
+                    line.setAttribute('y2', ly < pt.y ? ly + lh : ly);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
