@@ -1008,6 +1008,22 @@ def integrate_trajectory(params: MissileParams,
     apo_row['event'] = f"Apogee ({apo_row['alt_km']:.0f} km)"
     _insert_chrono(apo_row)
 
+    # Perigee — first altitude minimum after powered flight ends (orbital only).
+    # Scan for the first sign change from negative to positive in d(alt)/dt
+    # after total burn time: that crossing marks the first perigee passage.
+    if orbital:
+        _ins_idx = int(np.searchsorted(t_arr, total_burn))
+        if _ins_idx + 2 < len(alts):
+            _d_alt = np.diff(alts[_ins_idx:])
+            for _j in range(len(_d_alt) - 1):
+                if _d_alt[_j] <= 0 and _d_alt[_j + 1] > 0:
+                    _pi = _ins_idx + _j + 1
+                    if alts[_pi] > 80_000:   # > 80 km → genuine orbital perigee
+                        _pr = _milestone(t_arr[_pi])
+                        _pr['event'] = f"Perigee ({_pr['alt_km']:.0f} km)"
+                        _insert_chrono(_pr)
+                    break
+
     # Re-entry interface — first downward crossing of 100 km (after apogee)
     REENTRY_ALT_M = 100_000.0
     if np.max(alts) > REENTRY_ALT_M:

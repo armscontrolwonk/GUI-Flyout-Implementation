@@ -3247,11 +3247,30 @@ class MissileFlyoutApp(tk.Tk):
             ).add_to(fmap)
 
         # ── Ground track ──────────────────────────────────────────────
-        folium.PolyLine(
-            list(zip(lat.tolist(), lon_uw.tolist())),
-            color="black", weight=2.0, opacity=0.8,
-            tooltip="Ground track",
-        ).add_to(fmap)
+        # For orbital insertions split the track: boost phase in black,
+        # orbital phase in dark grey, sharing one point at the junction.
+        _ins_t = next(
+            (ms['t_s'] for ms in r.get('milestones', [])
+             if 'orbital insertion' in ms.get('event', '').lower()),
+            None)
+        if _ins_t is not None:
+            _sp = int(np.searchsorted(t, _ins_t))
+            folium.PolyLine(
+                list(zip(lat[:_sp + 1].tolist(), lon_uw[:_sp + 1].tolist())),
+                color="black", weight=2.0, opacity=0.8,
+                tooltip="Boost phase",
+            ).add_to(fmap)
+            folium.PolyLine(
+                list(zip(lat[_sp:].tolist(), lon_uw[_sp:].tolist())),
+                color="#555555", weight=1.5, opacity=0.7,
+                tooltip="Orbital phase",
+            ).add_to(fmap)
+        else:
+            folium.PolyLine(
+                list(zip(lat.tolist(), lon_uw.tolist())),
+                color="black", weight=2.0, opacity=0.8,
+                tooltip="Ground track",
+            ).add_to(fmap)
 
         # ── Debris ground tracks ──────────────────────────────────────
         for d in r.get('debris_trajectories', []):
@@ -3348,9 +3367,10 @@ class MissileFlyoutApp(tk.Tk):
 
             _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label})
 
-        # ── Floating labels (pure JS, updates on zoom + pan) ──────────
+        # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
         # Labels are placed to the right of and above their circle, stacked
-        # so they don't overlap.  No leader / connector lines are drawn.
+        # so they don't overlap.  A thin SVG line connects each label to
+        # the bottom-left corner of its bounding box to the circle centre.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
         leader_js  = f"""
@@ -3362,10 +3382,15 @@ class MissileFlyoutApp(tk.Tk):
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
-            var _con = null, _divs = [];
+            var _svg = null, _con = null, _divs = [];
 
             function _init(map) {{
                 var mc = map.getContainer();
+                _svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                _svg.style.cssText = 'position:absolute;top:0;left:0;' +
+                    'width:100%;height:100%;pointer-events:none;z-index:450;' +
+                    'overflow:visible;';
+                mc.appendChild(_svg);
                 _con = document.createElement('div');
                 _con.style.cssText = 'position:absolute;top:0;left:0;' +
                     'width:0;height:0;pointer-events:none;z-index:500;';
@@ -3384,13 +3409,15 @@ class MissileFlyoutApp(tk.Tk):
 
             function _update(map) {{
                 if (!_con) return;
+                _svg.innerHTML = '';
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
                 _divs.forEach(function(d) {{ d.style.display = 'block'; }});
 
-                // Sort right-to-left so stacking order is chronological top-down.
+                // Sort right-to-left so stacking order is chronological top-down
+                // and no two leader lines cross each other.
                 var order = pts.map(function(_, i) {{ return i; }});
                 order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
@@ -3407,9 +3434,24 @@ class MissileFlyoutApp(tk.Tk):
                 }});
 
                 _divs.forEach(function(d, i) {{
-                    var pt = pts[i];
-                    d.style.left = (pt.x + H_GAP) + 'px';
-                    d.style.top  = topY[i] + 'px';
+                    var pt  = pts[i];
+                    var lh  = (_divs[i].offsetHeight || 14) + PAD * 2;
+                    var lx  = pt.x + H_GAP;
+                    var ly  = topY[i];
+                    d.style.left = lx + 'px';
+                    d.style.top  = ly + 'px';
+
+                    // Leader line: circle centre → bottom-left of label box
+                    var line = document.createElementNS(
+                        'http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', pt.x);
+                    line.setAttribute('y1', pt.y);
+                    line.setAttribute('x2', lx);
+                    line.setAttribute('y2', ly + lh);
+                    line.setAttribute('stroke', 'black');
+                    line.setAttribute('stroke-width', '0.7');
+                    line.setAttribute('opacity', '0.5');
+                    _svg.appendChild(line);
                 }});
             }}
 
