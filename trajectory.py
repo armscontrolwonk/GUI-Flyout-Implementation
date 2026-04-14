@@ -1252,7 +1252,7 @@ def integrate_trajectory(params: MissileParams,
             _pitch_val = max(params.loft_angle_deg,
                              90.0 - params.loft_angle_rate_deg_s * _t_gp)
         _last_pitch = _pitch_val
-        _pitch_cmd.append(_pitch_val if _burning else float('nan'))
+        _pitch_cmd.append(_pitch_val)           # always real — no gap during coast
 
     return {
         't':                  t_arr,
