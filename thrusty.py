@@ -3424,8 +3424,8 @@ class MissileFlyoutApp(tk.Tk):
         <script>
         (function() {{
             var LABELS     = {label_json};
-            var BASE_Y     = 30;   // minimum px above the circle centre
-            var H_GAP      = 6;    // px right of the circle centre
+            var BASE_Y     = 30;   // fallback below-offset when flipped under circle
+            var H_GAP      = 10;   // px right of the circle centre
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
@@ -3446,7 +3446,8 @@ class MissileFlyoutApp(tk.Tk):
                     var d = document.createElement('div');
                     d.style.cssText = 'position:absolute;font-size:10px;' +
                         'font-family:sans-serif;font-weight:bold;' +
-                        'white-space:nowrap;background:transparent;' +
+                        'white-space:nowrap;' +
+                        'background:rgba(255,255,255,0.82);border-radius:2px;' +
                         'padding:1px 4px;display:none;';
                     d.textContent = lb.text;
                     _con.appendChild(d);
@@ -3494,7 +3495,8 @@ class MissileFlyoutApp(tk.Tk):
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    var idealTop = pt.y - BASE_Y - lh;
+                    // Ideal: label vertically centred on circle (horizontal right)
+                    var idealTop = pt.y - lh / 2;
 
                     // Reset stacking when this circle is far from the previous.
                     if (prevPt) {{
@@ -3508,7 +3510,7 @@ class MissileFlyoutApp(tk.Tk):
                     // Clamp: if stacking pushes label above the top edge,
                     // flip it below the circle instead.
                     if (candidate < EDGE) {{
-                        candidate = pt.y + BASE_Y;
+                        candidate = pt.y + lh / 2 + 3;
                         prevTop = null;   // reset so next circle stacks independently
                     }}
                     topY[idx] = candidate;
@@ -3530,8 +3532,8 @@ class MissileFlyoutApp(tk.Tk):
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
                     line.setAttribute('x2', lx);
-                    // Above circle: connect to bottom-left; below: top-left
-                    line.setAttribute('y2', ly < pt.y ? ly + lh : ly);
+                    // Connect to vertical midpoint of label's left edge
+                    line.setAttribute('y2', ly + lh / 2);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
