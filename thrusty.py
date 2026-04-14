@@ -3166,8 +3166,6 @@ class MissileFlyoutApp(tk.Tk):
                     continue
                 if 'burnout' in _ev or 'ignition' in _ev:
                     ax_g.axvline(_t, color='#aaaaaa', lw=0.8, ls=':')
-                elif 'yaw start' in _ev or 'yaw end' in _ev:
-                    ax_g.axvline(_t, color='magenta', lw=1.0, ls='--')
         ax_g.set_xlabel('Time (s)', fontsize=7)
         ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
         ax_g.tick_params(labelsize=7, colors='royalblue')
