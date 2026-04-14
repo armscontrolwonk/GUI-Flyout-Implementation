@@ -1870,9 +1870,10 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_spd  = self._fig.add_subplot(gs[0, 1])  # speed vs time
         self._ax_traj = self._fig.add_subplot(gs[1, 0])  # alt vs range
         self._ax_trk  = self._fig.add_subplot(gs[1, 1])  # ground track
-        self._ax_guid = self._fig.add_subplot(gs[2, 0])  # guidance program
-        self._ax_six  = self._fig.add_subplot(gs[2, 1])  # reserved (blank)
-        self._ax_six.set_visible(False)                  # hide until used
+        self._ax_guid      = self._fig.add_subplot(gs[2, 0])  # guidance program
+        self._ax_guid_twin = self._ax_guid.twinx()            # azimuth axis (created once)
+        self._ax_six       = self._fig.add_subplot(gs[2, 1])  # reserved (blank)
+        self._ax_six.set_visible(False)                       # hide until used
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -1897,6 +1898,8 @@ class MissileFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
+        self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
+        self._ax_guid_twin.tick_params(labelsize=7, colors='darkorange')
 
     # ------------------------------------------------------------------
     # Flight Timeline panel
@@ -2996,7 +2999,7 @@ class MissileFlyoutApp(tk.Tk):
         orbital = r.get('orbital', False)
 
         for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk,
-                   self._ax_guid):
+                   self._ax_guid, self._ax_guid_twin):
             ax.cla()
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
@@ -3132,22 +3135,23 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_trk.legend(fontsize=7)
 
         # ── Guidance Program ──────────────────────────────────────────
-        ax_g = self._ax_guid
+        ax_g  = self._ax_guid
+        ax_g2 = self._ax_guid_twin   # reuse pre-created twin (avoids stacking)
         t_plot = np.asarray(r.get('t', []))
         pc     = np.asarray(r.get('pitch_cmd_deg', []))
         ac     = np.asarray(r.get('az_cmd_deg', []))
 
         if len(t_plot) > 0 and len(pc) == len(t_plot):
             ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
-            ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
-            ax_g.tick_params(labelsize=7, colors='royalblue')
             if len(ac) == len(t_plot):
-                ax_g2 = ax_g.twinx()
                 ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
                            ls='--', label='Azimuth (°)')
+                # 5° tick steps on the azimuth axis
+                ax_g2.yaxis.set_major_locator(
+                    matplotlib.ticker.MultipleLocator(5))
                 ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
                 ax_g2.tick_params(labelsize=7, colors='darkorange')
-                # Combine legends
+                # Combined legend on the primary axis
                 _l1, _lb1 = ax_g.get_legend_handles_labels()
                 _l2, _lb2 = ax_g2.get_legend_handles_labels()
                 ax_g.legend(_l1 + _l2, _lb1 + _lb2,
@@ -3163,6 +3167,8 @@ class MissileFlyoutApp(tk.Tk):
                 elif 'yaw start' in _ev or 'yaw end' in _ev:
                     ax_g.axvline(_t, color='magenta', lw=1.0, ls='--')
         ax_g.set_xlabel('Time (s)', fontsize=7)
+        ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
+        ax_g.tick_params(labelsize=7, colors='royalblue')
         ax_g.set_title('Guidance Program', fontsize=8)
         ax_g.grid(True, alpha=0.35)
 
