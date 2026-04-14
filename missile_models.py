@@ -108,6 +108,13 @@ class MissileParams:
     stage_turn_stop_s:       Optional[float] = None
     stage_burnout_angle_deg: Optional[float] = None
 
+    # Per-stage yaw (dogleg) overrides.  Same priority as pitch overrides:
+    # if stage_yaw_final_az_deg is not None the stage performs a linear
+    # azimuth schedule from current az to final_az over [yaw_start, yaw_stop].
+    stage_yaw_start_s:     Optional[float] = None
+    stage_yaw_stop_s:      Optional[float] = None
+    stage_yaw_final_az_deg: Optional[float] = None
+
     # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
@@ -655,6 +662,12 @@ def missile_to_dict(p: MissileParams) -> dict:
         d['stage_turn_stop_s'] = p.stage_turn_stop_s
     if p.stage_burnout_angle_deg is not None:
         d['stage_burnout_angle_deg'] = p.stage_burnout_angle_deg
+    if p.stage_yaw_start_s is not None:
+        d['stage_yaw_start_s'] = p.stage_yaw_start_s
+    if p.stage_yaw_stop_s is not None:
+        d['stage_yaw_stop_s'] = p.stage_yaw_stop_s
+    if p.stage_yaw_final_az_deg is not None:
+        d['stage_yaw_final_az_deg'] = p.stage_yaw_final_az_deg
     if p.stage2 is not None:
         d['stage2'] = missile_to_dict(p.stage2)
     return d
@@ -701,6 +714,12 @@ def missile_from_dict(d: dict) -> MissileParams:
                            if d.get('stage_turn_stop_s') is not None else None),
         stage_burnout_angle_deg=(float(d['stage_burnout_angle_deg'])
                                  if d.get('stage_burnout_angle_deg') is not None else None),
+        stage_yaw_start_s=(float(d['stage_yaw_start_s'])
+                           if d.get('stage_yaw_start_s') is not None else None),
+        stage_yaw_stop_s=(float(d['stage_yaw_stop_s'])
+                          if d.get('stage_yaw_stop_s') is not None else None),
+        stage_yaw_final_az_deg=(float(d['stage_yaw_final_az_deg'])
+                                if d.get('stage_yaw_final_az_deg') is not None else None),
     )
 
 

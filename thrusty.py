@@ -1564,7 +1564,32 @@ class MissileFlyoutApp(tk.Tk):
         self._adv_pitch_frame = ttk.Frame(gf)
         self._stage_rows = []   # list of dicts with StringVars per stage
 
-        # Hide turn-start/stop, orbit-alt, plan-orbit, and adv-pitch rows by
+        # Row 9: Yaw / dogleg program toggle (gravity_turn / orbital_insertion only)
+        self._adv_yaw_var = tk.BooleanVar(value=False)
+        self._adv_yaw_chk = ttk.Checkbutton(
+            gf, text="Yaw / dogleg program",
+            variable=self._adv_yaw_var,
+            command=self._on_adv_yaw_toggled)
+
+        # Row 10: Global yaw fields — shown when checkbox enabled
+        yf = ttk.Frame(gf)
+        self._adv_yaw_frame = yf
+        self._yaw_start_var    = tk.StringVar(value="")
+        self._yaw_stop_var     = tk.StringVar(value="")
+        self._yaw_final_az_var = tk.StringVar(value="")
+        yf.columnconfigure(1, weight=1)
+        for _yr, _lbl, _sv, _unit in [
+                (0, "Yaw start:",  self._yaw_start_var,    "s"),
+                (1, "Yaw end:",    self._yaw_stop_var,     "s"),
+                (2, "Final az:",   self._yaw_final_az_var, "°")]:
+            ttk.Label(yf, text=_lbl).grid(
+                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+            ttk.Entry(yf, textvariable=_sv, width=8).grid(
+                row=_yr, column=1, sticky=tk.W, padx=2, pady=1)
+            ttk.Label(yf, text=_unit).grid(
+                row=_yr, column=2, sticky=tk.W, padx=(2, 8), pady=1)
+
+        # Hide turn-start/stop, orbit-alt, plan-orbit, adv-pitch, and yaw rows by
         # default (loft mode is active at startup)
         self._gt_turn_start_lbl.grid_forget()
         self._gt_turn_start_frame.grid_forget()
@@ -1574,6 +1599,7 @@ class MissileFlyoutApp(tk.Tk):
         self._orbit_alt_frame.grid_forget()
         self._plan_orbit_btn.grid_forget()
         self._adv_pitch_chk.grid_forget()
+        self._adv_yaw_chk.grid_forget()
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -1833,15 +1859,18 @@ class MissileFlyoutApp(tk.Tk):
         self._right_nb.select(3)
 
     # ------------------------------------------------------------------
-    # Plot panel  (4-subplot figure in a single tab + navigation toolbar)
+    # Plot panel  (5-subplot figure in a single tab + navigation toolbar)
     # ------------------------------------------------------------------
     def _build_plot_panel(self, parent):
-        self._fig = Figure(figsize=(8, 6), dpi=96)
-        self._ax_alt  = self._fig.add_subplot(221)   # top-left:  alt vs time
-        self._ax_spd  = self._fig.add_subplot(222)   # top-right: speed vs time
-        self._ax_traj = self._fig.add_subplot(223)   # bot-left:  alt vs range
-        self._ax_trk  = self._fig.add_subplot(224)   # bot-right: ground track
-        self._fig.tight_layout(pad=2.8)
+        self._fig = Figure(figsize=(8, 8.5), dpi=96)
+        gs = self._fig.add_gridspec(3, 2, hspace=0.52, wspace=0.38,
+                                    left=0.10, right=0.95,
+                                    top=0.95, bottom=0.06)
+        self._ax_alt  = self._fig.add_subplot(gs[0, 0])  # alt vs time
+        self._ax_spd  = self._fig.add_subplot(gs[0, 1])  # speed vs time
+        self._ax_traj = self._fig.add_subplot(gs[1, 0])  # alt vs range
+        self._ax_trk  = self._fig.add_subplot(gs[1, 1])  # ground track
+        self._ax_guid = self._fig.add_subplot(gs[2, :])  # guidance program (full width)
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -1859,6 +1888,7 @@ class MissileFlyoutApp(tk.Tk):
             (self._ax_spd,  "Speed vs Time",           "Time (s)",         "Speed (km/s)"),
             (self._ax_traj, "Altitude vs Range",       "Downrange (km)",   "Altitude (km)"),
             (self._ax_trk,  "Ground Track",            "Longitude (°E)",   "Latitude (°N)"),
+            (self._ax_guid, "Guidance Program",        "Time (s)",         "Elevation (°)"),
         ]:
             ax.set_title(title, fontsize=9)
             ax.set_xlabel(xl, fontsize=8)
@@ -1997,6 +2027,14 @@ class MissileFlyoutApp(tk.Tk):
         else:
             self._adv_pitch_frame.grid_forget()
 
+    def _on_adv_yaw_toggled(self):
+        """Show or hide the global yaw fields."""
+        if self._adv_yaw_var.get():
+            self._adv_yaw_frame.grid(row=10, column=0, columnspan=2,
+                                      sticky=tk.EW, padx=0, pady=(0, 4))
+        else:
+            self._adv_yaw_frame.grid_forget()
+
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current missile."""
         for w in self._adv_pitch_frame.winfo_children():
@@ -2035,12 +2073,25 @@ class MissileFlyoutApp(tk.Tk):
         # Column header
         af = self._adv_pitch_frame
         af.columnconfigure(0, minsize=55)
-        for col, hdr in enumerate(
-                ["Stage", "Turn start (s)", "Turn stop (s)", "Angle (°)", "Burn window"],
-                start=0):
+        _headers = [
+            (0, "Stage"),
+            (1, "Turn start (s)"),
+            (2, "Turn stop (s)"),
+            (3, "Angle (°)"),
+            (4, ""),                  # separator column
+            (5, "Yaw start (s)"),
+            (6, "Yaw end (s)"),
+            (7, "Final az (°)"),
+            (8, "Burn window"),
+        ]
+        for col, hdr in _headers:
             ttk.Label(af, text=hdr, foreground="#555555").grid(
                 row=0, column=col, padx=(8 if col == 0 else 4, 4),
                 pady=(4, 1), sticky=tk.W)
+        # Thin visual separator between pitch and yaw columns
+        ttk.Separator(af, orient=tk.VERTICAL).grid(
+            row=0, column=4, rowspan=len(stages) + 1,
+            sticky=tk.NS, padx=4, pady=2)
 
         for i, s in enumerate(stages):
             node = s['node']
@@ -2080,6 +2131,17 @@ class MissileFlyoutApp(tk.Tk):
             sv_stop  = tk.StringVar(value=f"{def_stop:.1f}")
             sv_angle = tk.StringVar(value=f"{def_angle:.1f}")
 
+            # Yaw fields — empty by default; populate from node if set
+            sv_yaw_start  = tk.StringVar(
+                value=f"{node.stage_yaw_start_s:.1f}"
+                      if node.stage_yaw_start_s  is not None else "")
+            sv_yaw_stop   = tk.StringVar(
+                value=f"{node.stage_yaw_stop_s:.1f}"
+                      if node.stage_yaw_stop_s   is not None else "")
+            sv_yaw_final  = tk.StringVar(
+                value=f"{node.stage_yaw_final_az_deg:.1f}"
+                      if node.stage_yaw_final_az_deg is not None else "")
+
             row = i + 1
             ttk.Label(af, text=f"Stage {i+1}:").grid(
                 row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
@@ -2089,13 +2151,20 @@ class MissileFlyoutApp(tk.Tk):
                 row=row, column=2, padx=4, pady=1)
             ttk.Entry(af, textvariable=sv_angle, width=7).grid(
                 row=row, column=3, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_start, width=7).grid(
+                row=row, column=5, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_stop,  width=7).grid(
+                row=row, column=6, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_final, width=7).grid(
+                row=row, column=7, padx=4, pady=1)
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
-                row=row, column=4, sticky=tk.W, padx=(4, 8), pady=1)
+                row=row, column=8, sticky=tk.W, padx=(4, 8), pady=1)
 
             self._stage_rows.append(
                 {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
-                 'node': node})
+                 'yaw_start': sv_yaw_start, 'yaw_stop': sv_yaw_stop,
+                 'yaw_final_az': sv_yaw_final, 'node': node})
 
     # ------------------------------------------------------------------
     def _on_site_selected(self, _event=None):
@@ -2245,9 +2314,18 @@ class MissileFlyoutApp(tk.Tk):
             if self._adv_pitch_var.get():
                 self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
                                             sticky=tk.EW, padx=0, pady=(0, 4))
+            # Yaw checkbox — also only for turn-based modes
+            self._adv_yaw_chk.grid(row=9, column=0, columnspan=2,
+                                    sticky=tk.W, padx=8, pady=(0, 2))
+            if self._adv_yaw_var.get():
+                self._adv_yaw_frame.grid(row=10, column=0, columnspan=2,
+                                          sticky=tk.EW, padx=0, pady=(0, 4))
         else:
             self._adv_pitch_chk.grid_forget()
             self._adv_pitch_frame.grid_forget()
+            self._adv_yaw_chk.grid_forget()
+            self._adv_yaw_frame.grid_forget()
+            self._adv_yaw_var.set(False)
 
     # ------------------------------------------------------------------
     # Custom missile management
@@ -2554,10 +2632,36 @@ class MissileFlyoutApp(tk.Tk):
                     node.stage_burnout_angle_deg  = float(row['angle'].get())
                 except ValueError:
                     pass  # leave existing/None values if field is blank
+                # Per-stage yaw overrides (blank = no yaw on this stage)
+                _ys = row.get('yaw_start', tk.StringVar()).get().strip()
+                _ye = row.get('yaw_stop',  tk.StringVar()).get().strip()
+                _ya = row.get('yaw_final_az', tk.StringVar()).get().strip()
+                if _ys: node.stage_yaw_start_s      = float(_ys)
+                if _ye: node.stage_yaw_stop_s        = float(_ye)
+                if _ya: node.stage_yaw_final_az_deg  = float(_ya)
                 node = node.stage2
 
+        # Global yaw program (checkbox + three fields)
+        def _fon(sv):
+            try:
+                s = sv.get().strip()
+                return float(s) if s else None
+            except Exception:
+                return None
+        _yaw_chk = getattr(self, '_adv_yaw_var', None)
+        yaw_enabled = (bool(_yaw_chk and _yaw_chk.get())
+                       and guidance in ("gravity_turn", "orbital_insertion"))
+        if yaw_enabled:
+            yaw_start_s  = _fon(self._yaw_start_var)
+            yaw_stop_s   = _fon(self._yaw_stop_var)
+            yaw_final_az = _fon(self._yaw_final_az_var)
+            yaw_enabled  = (yaw_final_az is not None)
+        else:
+            yaw_start_s = yaw_stop_s = yaw_final_az = None
+
         return (missile, guidance, lat, lon, az, cutoff, la, lar,
-                gt_start_s, gt_stop_s, target_orbit_km)
+                gt_start_s, gt_stop_s, target_orbit_km,
+                yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az)
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
@@ -2567,7 +2671,8 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
+             gt_start_s, gt_stop_s, target_orbit_km,
+             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2576,7 +2681,8 @@ class MissileFlyoutApp(tk.Tk):
         threading.Thread(
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
-                  gt_start_s, gt_stop_s, target_orbit_km, False),
+                  gt_start_s, gt_stop_s, target_orbit_km,
+                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, False),
             daemon=True,
         ).start()
 
@@ -2585,7 +2691,8 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
+             gt_start_s, gt_stop_s, target_orbit_km,
+             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2594,7 +2701,8 @@ class MissileFlyoutApp(tk.Tk):
         threading.Thread(
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
-                  gt_start_s, None, target_orbit_km, True),
+                  gt_start_s, None, target_orbit_km,
+                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, True),
             daemon=True,
         ).start()
 
@@ -2604,7 +2712,8 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, target_orbit_km) = self._get_inputs()
+             gt_start_s, gt_stop_s, target_orbit_km,
+             _yaw_en, _yaw_st, _yaw_sp, _yaw_fa) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -2689,27 +2798,31 @@ class MissileFlyoutApp(tk.Tk):
             try:
                 (m_run, guidance_run, lat_run, lon_run, az_run,
                  cutoff_run, la_run, lar_run,
-                 gts_run, gtstp_run, orb_run) = self._get_inputs()
+                 gts_run, gtstp_run, orb_run,
+                 yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run) = self._get_inputs()
             except ValueError:
                 # Fallback: use the original plan parameters without per-stage overrides.
                 m_run, guidance_run = missile, "orbital_insertion"
                 lat_run, lon_run, az_run = lat, lon, az
                 cutoff_run, la_run, lar_run = None, boost_angle, 0.0
                 gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
+                yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run = False, None, None, None
 
             # _run_thread checks self._running; it's still True from _plan_orbit
             threading.Thread(
                 target=self._run_thread,
                 args=(m_run, guidance_run, lat_run, lon_run, az_run,
                       cutoff_run, la_run, lar_run,
-                      gts_run, gtstp_run, orb_run, False),
+                      gts_run, gtstp_run, orb_run,
+                      yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run, False),
                 daemon=True,
             ).start()
 
         self.after(0, _apply_and_run)
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
-                    gt_start_s, gt_stop_s, target_orbit_km, maximise):
+                    gt_start_s, gt_stop_s, target_orbit_km,
+                    yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, maximise):
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
@@ -2735,6 +2848,10 @@ class MissileFlyoutApp(tk.Tk):
                     gt_turn_stop_s=gt_stop_s,
                     reentry_query_alt_km=q_alt,
                     target_orbit_alt_km=target_orbit_km,
+                    yaw_enabled=yaw_enabled,
+                    yaw_start_s=yaw_start_s,
+                    yaw_stop_s=yaw_stop_s,
+                    yaw_final_az_deg=yaw_final_az,
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
@@ -2876,7 +2993,8 @@ class MissileFlyoutApp(tk.Tk):
         lon_arr = np.asarray(r['lon'])
         orbital = r.get('orbital', False)
 
-        for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk):
+        for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk,
+                   self._ax_guid):
             ax.cla()
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
@@ -3011,7 +3129,41 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_trk.set_title("Ground Track", fontsize=9)
         self._ax_trk.legend(fontsize=7)
 
-        self._fig.tight_layout(pad=2.8)
+        # ── Guidance Program ──────────────────────────────────────────
+        ax_g = self._ax_guid
+        t_plot = np.asarray(r.get('t', []))
+        pc     = np.asarray(r.get('pitch_cmd_deg', []))
+        ac     = np.asarray(r.get('az_cmd_deg', []))
+
+        if len(t_plot) > 0 and len(pc) == len(t_plot):
+            ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
+            ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
+            ax_g.tick_params(labelsize=7, colors='royalblue')
+            if len(ac) == len(t_plot):
+                ax_g2 = ax_g.twinx()
+                ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
+                           ls='--', label='Azimuth (°)')
+                ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
+                ax_g2.tick_params(labelsize=7, colors='darkorange')
+                # Combine legends
+                _l1, _lb1 = ax_g.get_legend_handles_labels()
+                _l2, _lb2 = ax_g2.get_legend_handles_labels()
+                ax_g.legend(_l1 + _l2, _lb1 + _lb2,
+                             fontsize=7, loc='upper right')
+            # Stage separation and yaw event lines
+            for ms in r.get('milestones', []):
+                _ev = ms.get('event', '').lower()
+                _t  = ms.get('t_s', None)
+                if _t is None:
+                    continue
+                if 'burnout' in _ev or 'ignition' in _ev:
+                    ax_g.axvline(_t, color='#aaaaaa', lw=0.8, ls=':')
+                elif 'yaw start' in _ev or 'yaw end' in _ev:
+                    ax_g.axvline(_t, color='magenta', lw=1.0, ls='--')
+        ax_g.set_xlabel('Time (s)', fontsize=7)
+        ax_g.set_title('Guidance Program', fontsize=8)
+        ax_g.grid(True, alpha=0.35)
+
         self._canvas.draw_idle()
         self._canvas.flush_events()
 
