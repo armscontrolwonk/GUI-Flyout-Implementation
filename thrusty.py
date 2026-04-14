@@ -1910,7 +1910,7 @@ class MissileFlyoutApp(tk.Tk):
             _img = _img.resize((_w, _h), Image.LANCZOS)
             self._tl_logo_photo = _ITk.PhotoImage(_img)
             tk.Label(self._tl_tree, image=self._tl_logo_photo,
-                     borderwidth=0, highlightthickness=0
+                     borderwidth=0, highlightthickness=0, bg="white"
                      ).place(relx=0.0, rely=1.0, anchor="sw", x=6, y=-4)
         except Exception:
             pass   # logo absent or Pillow unavailable — silent skip
