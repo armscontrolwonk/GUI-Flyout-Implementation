@@ -1170,18 +1170,34 @@ def integrate_trajectory(params: MissileParams,
             m['event'] = f'{ev} ({t_s:.0f} s)'
 
     # Guidance-program output arrays (for the Guidance Program plot).
-    # Commanded elevation (pitch) and azimuth at each output time step.
+    # Values are NaN outside of powered-burn windows so the plot only draws
+    # lines during active thrust phases (coast and ballistic shown as gaps).
+    _burn_windows = []
+    _s_bw, _t_bw = params, 0.0
+    while _s_bw is not None:
+        _burn_windows.append((_t_bw, _t_bw + _s_bw.burn_time_s))
+        _t_bw  += _s_bw.burn_time_s + _s_bw.coast_time_s
+        _s_bw   = _s_bw.stage2
+
+    def _in_burn_window(t):
+        for _tb0, _tb1 in _burn_windows:
+            if _tb0 <= t <= _tb1:
+                return True
+        return False
+
     _pitch_cmd  = []
     _az_cmd     = []
-    _last_pitch = 90.0          # carry forward through coast phases
+    _last_pitch = 90.0          # carry forward for _last_pitch tracking only
     for _t_gp in t_arr:
         # Active stage at this time.
         # active_stage_and_t returns (next_stage, 0.0) during an inter-stage
         # coast — the next stage hasn't ignited yet.
         _gp_stage, _t_since = active_stage_and_t(params, _t_gp)
-        # Commanded azimuth via yaw program
-        _az_cmd.append(np.degrees(_yaw_program(
-            _t_gp, az, _gp_stage, _yaw_start, _yaw_stop, _yaw_final)))
+        _burning = _in_burn_window(_t_gp)
+        # Commanded azimuth: NaN outside burn windows
+        _az_val = np.degrees(_yaw_program(
+            _t_gp, az, _gp_stage, _yaw_start, _yaw_stop, _yaw_final))
+        _az_cmd.append(_az_val if _burning else float('nan'))
         # Commanded pitch (elevation angle)
         if params.guidance in ("gravity_turn", "orbital_insertion"):
             _gp_angle = (_gp_stage.stage_burnout_angle_deg
@@ -1196,28 +1212,25 @@ def integrate_trajectory(params: MissileParams,
                       if _gp_stage is not None
                       and _gp_stage.stage_turn_stop_s is not None
                       else gt_turn_stop_s)
-            # Inter-stage coast: active_stage_and_t already advanced to the
-            # next stage but its ignition is still in the future (_t_since==0
-            # and the returned stage is not the first stage).  Hold the last
-            # commanded pitch rather than snapping back to 90°.
             _in_coast = (_t_since == 0.0
                          and _gp_stage is not params
                          and _gp_ts is not None
                          and _t_gp < _gp_ts)
             if _in_coast:
-                _pitch_cmd.append(_last_pitch)
+                _pitch_val = _last_pitch
             elif _gp_ts is None or _t_gp <= _gp_ts:
-                _pitch_cmd.append(90.0)
+                _pitch_val = 90.0
             elif _gp_tp is None or _t_gp >= _gp_tp:
-                _pitch_cmd.append(_gp_angle)
+                _pitch_val = _gp_angle
             else:
                 _frac = (_t_gp - _gp_ts) / max(_gp_tp - _gp_ts, 1.0)
-                _pitch_cmd.append(90.0 - _frac * (90.0 - _gp_angle))
+                _pitch_val = 90.0 - _frac * (90.0 - _gp_angle)
         else:
             # Loft mode: el(t) = max(loft_angle, 90 - rate*t)
-            _pitch_cmd.append(max(params.loft_angle_deg,
-                                  90.0 - params.loft_angle_rate_deg_s * _t_gp))
-        _last_pitch = _pitch_cmd[-1]
+            _pitch_val = max(params.loft_angle_deg,
+                             90.0 - params.loft_angle_rate_deg_s * _t_gp)
+        _last_pitch = _pitch_val
+        _pitch_cmd.append(_pitch_val if _burning else float('nan'))
 
     return {
         't':                  t_arr,
