@@ -1663,6 +1663,22 @@ class MissileFlyoutApp(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         self._slv_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
+        # Logo — overlaid on the results panel, bottom-left
+        import os as _os
+        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty3.png")
+        try:
+            from PIL import Image, ImageTk as _ITk
+            _img = Image.open(_logo_path)
+            _h = 195
+            _w = int(_img.width * _h / _img.height)
+            _img = _img.resize((_w, _h), Image.LANCZOS)
+            self._slv_logo_photo = _ITk.PhotoImage(_img)
+            tk.Label(self._slv_text, image=self._slv_logo_photo,
+                     borderwidth=0, highlightthickness=0, bg="#f8f8f8"
+                     ).place(relx=0.0, rely=1.0, anchor="sw", x=6, y=-4)
+        except Exception:
+            pass
+
         # Tag for the headline verdict line
         self._slv_text.tag_configure("yes", foreground="#006600",
                                      font=("TkFixedFont", 9, "bold"))
@@ -1905,7 +1921,7 @@ class MissileFlyoutApp(tk.Tk):
         try:
             from PIL import Image, ImageTk as _ITk
             _img = Image.open(_logo_path)
-            _h = 130
+            _h = 195
             _w = int(_img.width * _h / _img.height)
             _img = _img.resize((_w, _h), Image.LANCZOS)
             self._tl_logo_photo = _ITk.PhotoImage(_img)
