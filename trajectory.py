@@ -352,11 +352,49 @@ def _loft_angle_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 
 
 # ---------------------------------------------------------------------------
+# Yaw (dogleg) program
+# ---------------------------------------------------------------------------
+
+def _yaw_program(t, launch_az_rad, active_stage,
+                 global_yaw_start_s, global_yaw_stop_s, global_yaw_final_az_deg):
+    """
+    Linear azimuth schedule for dogleg maneuvers (mission-elapsed time).
+
+    Priority: per-stage fields on active_stage override the global params.
+    Returns commanded azimuth in radians at time t.
+
+    Architecture note: the caller can derive sideslip angle as
+    (commanded_az - velocity_az) for future aerodynamic drag coupling
+    during in-atmosphere maneuvers without changing this interface.
+    """
+    if (active_stage is not None
+            and active_stage.stage_yaw_final_az_deg is not None):
+        yaw_start = active_stage.stage_yaw_start_s
+        yaw_stop  = active_stage.stage_yaw_stop_s
+        yaw_final = active_stage.stage_yaw_final_az_deg
+    else:
+        yaw_start = global_yaw_start_s
+        yaw_stop  = global_yaw_stop_s
+        yaw_final = global_yaw_final_az_deg
+
+    if yaw_final is None or yaw_start is None or yaw_stop is None:
+        return launch_az_rad
+    yaw_final_rad = np.radians(yaw_final)
+    if t <= yaw_start:
+        return launch_az_rad
+    if t >= yaw_stop:
+        return yaw_final_rad
+    frac = (t - yaw_start) / max(yaw_stop - yaw_start, 1.0)
+    return launch_az_rad + frac * (yaw_final_rad - launch_az_rad)
+
+
+# ---------------------------------------------------------------------------
 # Equations of motion
 # ---------------------------------------------------------------------------
 
 def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
-         gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0):
+         gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
+         yaw_start_s=None, yaw_stop_s=None, yaw_final_az_deg=None):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
@@ -454,6 +492,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 if r_perigee > RE + 80_000:   # perigee above 80 km
                     engine_on = False
 
+    # Compute time-varying azimuth (dogleg yaw program).
+    # This runs regardless of engine state so the guidance attitude is
+    # always defined; future callers can derive sideslip from the result.
+    azimuth_rad = _yaw_program(t, azimuth_rad, astage,
+                               yaw_start_s, yaw_stop_s, yaw_final_az_deg)
+
     if engine_on:
         if params.guidance in ("gravity_turn", "orbital_insertion"):
             # Per-stage advanced pitch: if the active stage carries its own
@@ -512,7 +556,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 
 
 def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
-                gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0):
+                gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
+                yaw_start_s=None, yaw_stop_s=None, yaw_final_az_deg=None):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -644,6 +689,10 @@ def integrate_trajectory(params: MissileParams,
                          gt_turn_stop_s: float = None,
                          reentry_query_alt_km: float = None,
                          target_orbit_alt_km: float = None,
+                         yaw_enabled: bool = False,
+                         yaw_start_s: float = None,
+                         yaw_stop_s: float = None,
+                         yaw_final_az_deg: float = None,
                          _search_mode: bool = False):
     """
     Integrate a missile trajectory from launch to impact.
@@ -726,8 +775,12 @@ def integrate_trajectory(params: MissileParams,
     t_span    = (0.0, max_time_s)
     _target_orbit_alt_m = (target_orbit_alt_km * 1000.0
                            if target_orbit_alt_km is not None else 0.0)
+    _yaw_start = yaw_start_s     if yaw_enabled else None
+    _yaw_stop  = yaw_stop_s      if yaw_enabled else None
+    _yaw_final = yaw_final_az_deg if yaw_enabled else None
     eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
-                 gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition)
+                 gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition,
+                 _yaw_start, _yaw_stop, _yaw_final)
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.
@@ -1024,6 +1077,18 @@ def integrate_trajectory(params: MissileParams,
                         _insert_chrono(_pr)
                     break
 
+    # Yaw (dogleg) maneuver milestones
+    if yaw_enabled and _yaw_start is not None and _yaw_stop is not None:
+        if _yaw_start <= t_arr[-1]:
+            _ym = _milestone(_yaw_start)
+            _ym['event'] = (f"Yaw start "
+                            f"({np.degrees(az):.1f}°\u2192{_yaw_final:.1f}°)")
+            _insert_chrono(_ym)
+        if _yaw_stop <= t_arr[-1]:
+            _ym = _milestone(_yaw_stop)
+            _ym['event'] = f"Yaw end ({_yaw_final:.1f}°)"
+            _insert_chrono(_ym)
+
     # Re-entry interface — first downward crossing of 100 km (after apogee)
     REENTRY_ALT_M = 100_000.0
     if np.max(alts) > REENTRY_ALT_M:
@@ -1104,6 +1169,42 @@ def integrate_trajectory(params: MissileParams,
         else:
             m['event'] = f'{ev} ({t_s:.0f} s)'
 
+    # Guidance-program output arrays (for the Guidance Program plot).
+    # Commanded elevation (pitch) and azimuth at each output time step.
+    _pitch_cmd = []
+    _az_cmd    = []
+    for _t_gp in t_arr:
+        # Active stage at this time
+        _gp_stage, _ = active_stage_and_t(params, _t_gp)
+        # Commanded azimuth via yaw program
+        _az_cmd.append(np.degrees(_yaw_program(
+            _t_gp, az, _gp_stage, _yaw_start, _yaw_stop, _yaw_final)))
+        # Commanded pitch (elevation angle)
+        if params.guidance in ("gravity_turn", "orbital_insertion"):
+            _gp_angle = (_gp_stage.stage_burnout_angle_deg
+                         if _gp_stage is not None
+                         and _gp_stage.stage_burnout_angle_deg is not None
+                         else params.loft_angle_deg)
+            _gp_ts = (_gp_stage.stage_turn_start_s
+                      if _gp_stage is not None
+                      and _gp_stage.stage_turn_start_s is not None
+                      else gt_turn_start_s)
+            _gp_tp = (_gp_stage.stage_turn_stop_s
+                      if _gp_stage is not None
+                      and _gp_stage.stage_turn_stop_s is not None
+                      else gt_turn_stop_s)
+            if _gp_ts is None or _t_gp <= _gp_ts:
+                _pitch_cmd.append(90.0)
+            elif _gp_tp is None or _t_gp >= _gp_tp:
+                _pitch_cmd.append(_gp_angle)
+            else:
+                _frac = (_t_gp - _gp_ts) / max(_gp_tp - _gp_ts, 1.0)
+                _pitch_cmd.append(90.0 - _frac * (90.0 - _gp_angle))
+        else:
+            # Loft mode: el(t) = max(loft_angle, 90 - rate*t)
+            _pitch_cmd.append(max(params.loft_angle_deg,
+                                  90.0 - params.loft_angle_rate_deg_s * _t_gp))
+
     return {
         't':                  t_arr,
         'lat':                lats,
@@ -1128,6 +1229,8 @@ def integrate_trajectory(params: MissileParams,
         'milestones':            milestones,
         'debris_trajectories':   _debris_trajectories,
         'orbital_elements':      _orb_elements,
+        'pitch_cmd_deg':         _pitch_cmd,
+        'az_cmd_deg':            _az_cmd,
     }
 
 
