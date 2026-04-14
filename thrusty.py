@@ -1675,7 +1675,7 @@ class MissileFlyoutApp(tk.Tk):
             self._slv_logo_photo = _ITk.PhotoImage(_img)
             tk.Label(self._slv_text, image=self._slv_logo_photo,
                      borderwidth=0, highlightthickness=0, bg="#f8f8f8"
-                     ).place(relx=0.0, rely=1.0, anchor="sw", x=6, y=-4)
+                     ).place(relx=1.0, rely=1.0, anchor="se", x=-6, y=-4)
         except Exception:
             pass
 
