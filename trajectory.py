@@ -1204,6 +1204,8 @@ def integrate_trajectory(params: MissileParams,
                 return True
         return False
 
+    _final_burn_end = _burn_windows[-1][1] if _burn_windows else 0.0
+
     _pitch_cmd  = []
     _az_cmd     = []
     _last_pitch = 90.0          # carry forward for _last_pitch tracking only
@@ -1252,7 +1254,8 @@ def integrate_trajectory(params: MissileParams,
             _pitch_val = max(params.loft_angle_deg,
                              90.0 - params.loft_angle_rate_deg_s * _t_gp)
         _last_pitch = _pitch_val
-        _pitch_cmd.append(_pitch_val)           # always real — no gap during coast
+        # Show pitch during burns and inter-stage coasts; blank after final burnout
+        _pitch_cmd.append(_pitch_val if _t_gp <= _final_burn_end else float('nan'))
 
     return {
         't':                  t_arr,
