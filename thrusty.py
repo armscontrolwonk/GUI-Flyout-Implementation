@@ -3264,8 +3264,10 @@ class MissileFlyoutApp(tk.Tk):
         lon_uw[0] = lon[0]
         lon_uw[1:] = lon[0] + np.cumsum(_diffs)
 
-        mid_lat = float(np.mean(lat))
-        mid_lon = float(np.mean(lon_uw))
+        mid_lat  = float(np.mean(lat))
+        mid_lon  = float(np.mean(lon_uw))
+        lon_uw_min = float(lon_uw.min())
+        lon_uw_max = float(lon_uw.max())
 
         fmap = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
                           tiles="CartoDB positron")
@@ -3547,11 +3549,14 @@ class MissileFlyoutApp(tk.Tk):
                 if (map && map.getZoom) {{
                     clearInterval(_poll);
                     _init(map);
-                    // Snap back to primary world copy when panning past ±180°.
-                    map.options.worldCopyJump = true;
+                    // Snap back only when the centre drifts well outside the
+                    // trajectory extent (±90° margin).  This lets the user pan
+                    // freely across the full track without a sudden jump.
+                    var SNAP_MIN = {lon_uw_min:.3f} - 90;
+                    var SNAP_MAX = {lon_uw_max:.3f} + 90;
                     map.on('moveend', function() {{
                         var c = this.getCenter(), lng = c.lng;
-                        if (lng < -180 || lng > 180) {{
+                        if (lng < SNAP_MIN || lng > SNAP_MAX) {{
                             this.setView(
                                 [c.lat, ((lng % 360) + 540) % 360 - 180],
                                 this.getZoom(), {{animate: false}});
