@@ -3426,6 +3426,7 @@ class MissileFlyoutApp(tk.Tk):
             var LABELS     = {label_json};
             var BASE_Y     = 30;   // fallback below-offset when flipped under circle
             var H_GAP      = 10;   // px right of the circle centre
+            var V_ABOVE    = 3;    // px above the dot (keeps label clear of trajectory)
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
@@ -3447,7 +3448,6 @@ class MissileFlyoutApp(tk.Tk):
                     d.style.cssText = 'position:absolute;font-size:10px;' +
                         'font-family:sans-serif;font-weight:bold;' +
                         'white-space:nowrap;' +
-                        'background:rgba(255,255,255,0.82);border-radius:2px;' +
                         'padding:1px 4px;display:none;';
                     d.textContent = lb.text;
                     _con.appendChild(d);
@@ -3495,8 +3495,8 @@ class MissileFlyoutApp(tk.Tk):
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    // Ideal: label vertically centred on circle (horizontal right)
-                    var idealTop = pt.y - lh / 2;
+                    // Ideal: label just above the dot so it clears the trajectory line
+                    var idealTop = pt.y - lh - V_ABOVE;
 
                     // Reset stacking when this circle is far from the previous.
                     if (prevPt) {{
@@ -3510,7 +3510,7 @@ class MissileFlyoutApp(tk.Tk):
                     // Clamp: if stacking pushes label above the top edge,
                     // flip it below the circle instead.
                     if (candidate < EDGE) {{
-                        candidate = pt.y + lh / 2 + 3;
+                        candidate = pt.y + V_ABOVE;
                         prevTop = null;   // reset so next circle stacks independently
                     }}
                     topY[idx] = candidate;
