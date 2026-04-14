@@ -261,14 +261,31 @@ def _enu_frame(lat_rad: float, lon_rad: float):
     return e_east, e_north, e_up
 
 
+def _prev_burnout_angle(root_params, current_stage) -> float:
+    """Return the burnout angle (°) of the stage immediately preceding
+    current_stage in the chain, or 90.0 if current_stage is the first stage.
+
+    Used so that each stage's pitch ramp begins where the previous stage's
+    ramp ended rather than always resetting to vertical (90°).
+    """
+    if current_stage is root_params:
+        return 90.0
+    s = root_params
+    while s.stage2 is not None and s.stage2 is not current_stage:
+        s = s.stage2
+    return float(s.stage_burnout_angle_deg) if s.stage_burnout_angle_deg is not None else 90.0
+
+
 def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                             burnout_angle_deg, turn_start_s, turn_stop_s, t):
+                             burnout_angle_deg, turn_start_s, turn_stop_s, t,
+                             start_angle_deg=90.0):
     """
     Linear pitch program to Wheelon-optimal burnout angle (Levanger/Wright).
 
-    Phase 1 (0 – turn_start_s): hold vertical (90° elevation).
-    Phase 2 (turn_start_s – turn_stop_s): constant pitch rate from 90° down
-        to burnout_angle_deg.
+    Phase 1 (0 – turn_start_s): hold start_angle_deg (90° for stage 1,
+        previous stage's burnout angle for later stages).
+    Phase 2 (turn_start_s – turn_stop_s): constant pitch rate from
+        start_angle_deg down to burnout_angle_deg.
     Phase 3 (> turn_stop_s): hold burnout_angle_deg.
 
     burnout_angle_deg : desired elevation at end of pitch program (°).
@@ -277,13 +294,13 @@ def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
                         default = total powered-flight duration.
     """
     if t <= turn_start_s:
-        el_deg = 90.0
+        el_deg = start_angle_deg
     elif t >= turn_stop_s:
         el_deg = burnout_angle_deg
     else:
         pitch_duration = max(turn_stop_s - turn_start_s, 1.0)
         frac = (t - turn_start_s) / pitch_duration
-        el_deg = 90.0 - frac * (90.0 - burnout_angle_deg)
+        el_deg = start_angle_deg - frac * (start_angle_deg - burnout_angle_deg)
 
     el_rad = np.radians(el_deg)
     e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
@@ -515,9 +532,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 _eff_stop  = (astage.stage_turn_stop_s
                               if astage.stage_turn_stop_s is not None
                               else gt_turn_stop_s)
+                _entry_ang = _prev_burnout_angle(params, astage)
                 thrust_dir = _gravity_turn_thrust_dir(
                     lat, lon, azimuth_rad,
-                    _eff_angle, _eff_start, _eff_stop, t)
+                    _eff_angle, _eff_start, _eff_stop, t,
+                    start_angle_deg=_entry_ang)
             elif params.guidance == "orbital_insertion":
                 thrust_dir = _orbital_insertion_thrust_dir(
                     lat, lon, azimuth_rad,
@@ -1216,15 +1235,18 @@ def integrate_trajectory(params: MissileParams,
                          and _gp_stage is not params
                          and _gp_ts is not None
                          and _t_gp < _gp_ts)
+            # Ramp starts from the previous stage's burnout angle (not 90°)
+            # for stages beyond the first, matching the EOM guidance law.
+            _entry_ang = _prev_burnout_angle(params, _gp_stage)
             if _in_coast:
                 _pitch_val = _last_pitch
             elif _gp_ts is None or _t_gp <= _gp_ts:
-                _pitch_val = 90.0
+                _pitch_val = _entry_ang
             elif _gp_tp is None or _t_gp >= _gp_tp:
                 _pitch_val = _gp_angle
             else:
                 _frac = (_t_gp - _gp_ts) / max(_gp_tp - _gp_ts, 1.0)
-                _pitch_val = 90.0 - _frac * (90.0 - _gp_angle)
+                _pitch_val = _entry_ang - _frac * (_entry_ang - _gp_angle)
         else:
             # Loft mode: el(t) = max(loft_angle, 90 - rate*t)
             _pitch_val = max(params.loft_angle_deg,
