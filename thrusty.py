@@ -1878,22 +1878,6 @@ class MissileFlyoutApp(tk.Tk):
         tf = ttk.LabelFrame(parent, text="Flight Event Timeline")
         tf.pack(fill=tk.BOTH, expand=True, padx=6, pady=(2, 6))
 
-        # Logo — packed at the bottom of the LabelFrame before the treeview,
-        # so it sits inside the white box below the last data row.
-        import os as _os
-        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty3.png")
-        try:
-            from PIL import Image, ImageTk as _ITk
-            _img = Image.open(_logo_path)
-            _h = 130
-            _w = int(_img.width * _h / _img.height)
-            _img = _img.resize((_w, _h), Image.LANCZOS)
-            self._tl_logo_photo = _ITk.PhotoImage(_img)
-            tk.Label(tf, image=self._tl_logo_photo,
-                     borderwidth=0).pack(side=tk.BOTTOM, anchor=tk.W, padx=6, pady=(0, 4))
-        except Exception:
-            pass   # logo absent or Pillow unavailable — silent skip
-
         col_ids = [c[0] for c in self._TL_COLS]
         self._tl_tree = ttk.Treeview(tf, columns=col_ids, show="headings",
                                      height=14)
@@ -1913,6 +1897,23 @@ class MissileFlyoutApp(tk.Tk):
         self._tl_tree.tag_configure("even",   background="#ffffff")
         self._tl_tree.tag_configure("key",    background="#ddeeff", font="bold")
         self._tl_tree.tag_configure("debris", background="#fff3cd")
+
+        # Logo — overlaid on the treeview using place() so it sits inside
+        # the white area, bottom-left, regardless of platform theme.
+        import os as _os
+        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty3.png")
+        try:
+            from PIL import Image, ImageTk as _ITk
+            _img = Image.open(_logo_path)
+            _h = 130
+            _w = int(_img.width * _h / _img.height)
+            _img = _img.resize((_w, _h), Image.LANCZOS)
+            self._tl_logo_photo = _ITk.PhotoImage(_img)
+            tk.Label(self._tl_tree, image=self._tl_logo_photo,
+                     borderwidth=0, highlightthickness=0
+                     ).place(relx=0.0, rely=1.0, anchor="sw", x=6, y=-4)
+        except Exception:
+            pass   # logo absent or Pillow unavailable — silent skip
 
     # ------------------------------------------------------------------
     # Missile Parameters tab
