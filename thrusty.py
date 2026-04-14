@@ -3149,6 +3149,8 @@ class MissileFlyoutApp(tk.Tk):
                 # 5° tick steps on the azimuth axis
                 ax_g2.yaxis.set_major_locator(
                     matplotlib.ticker.MultipleLocator(5))
+                ax_g2.yaxis.set_label_position('right')
+                ax_g2.yaxis.set_ticks_position('right')
                 ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
                 ax_g2.tick_params(labelsize=7, colors='darkorange')
                 # Combined legend on the primary axis
