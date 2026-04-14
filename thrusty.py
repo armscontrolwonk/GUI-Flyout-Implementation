@@ -1859,7 +1859,7 @@ class MissileFlyoutApp(tk.Tk):
         self._right_nb.select(3)
 
     # ------------------------------------------------------------------
-    # Plot panel  (5-subplot figure in a single tab + navigation toolbar)
+    # Plot panel  (6-subplot grid; slot [2,1] reserved for future use)
     # ------------------------------------------------------------------
     def _build_plot_panel(self, parent):
         self._fig = Figure(figsize=(8, 8.5), dpi=96)
@@ -1870,7 +1870,9 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_spd  = self._fig.add_subplot(gs[0, 1])  # speed vs time
         self._ax_traj = self._fig.add_subplot(gs[1, 0])  # alt vs range
         self._ax_trk  = self._fig.add_subplot(gs[1, 1])  # ground track
-        self._ax_guid = self._fig.add_subplot(gs[2, :])  # guidance program (full width)
+        self._ax_guid = self._fig.add_subplot(gs[2, 0])  # guidance program
+        self._ax_six  = self._fig.add_subplot(gs[2, 1])  # reserved (blank)
+        self._ax_six.set_visible(False)                  # hide until used
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
