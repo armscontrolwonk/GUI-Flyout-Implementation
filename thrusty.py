@@ -1876,7 +1876,23 @@ class MissileFlyoutApp(tk.Tk):
 
         # Timeline table
         tf = ttk.LabelFrame(parent, text="Flight Event Timeline")
-        tf.pack(fill=tk.X, padx=6, pady=(2, 2))
+        tf.pack(fill=tk.BOTH, expand=True, padx=6, pady=(2, 6))
+
+        # Logo — packed at the bottom of the LabelFrame before the treeview,
+        # so it sits inside the white box below the last data row.
+        import os as _os
+        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty3.png")
+        try:
+            from PIL import Image, ImageTk as _ITk
+            _img = Image.open(_logo_path)
+            _h = 130
+            _w = int(_img.width * _h / _img.height)
+            _img = _img.resize((_w, _h), Image.LANCZOS)
+            self._tl_logo_photo = _ITk.PhotoImage(_img)
+            tk.Label(tf, image=self._tl_logo_photo,
+                     borderwidth=0).pack(side=tk.BOTTOM, anchor=tk.W, padx=6, pady=(0, 4))
+        except Exception:
+            pass   # logo absent or Pillow unavailable — silent skip
 
         col_ids = [c[0] for c in self._TL_COLS]
         self._tl_tree = ttk.Treeview(tf, columns=col_ids, show="headings",
@@ -1897,33 +1913,6 @@ class MissileFlyoutApp(tk.Tk):
         self._tl_tree.tag_configure("even",   background="#ffffff")
         self._tl_tree.tag_configure("key",    background="#ddeeff", font="bold")
         self._tl_tree.tag_configure("debris", background="#fff3cd")
-
-        # Logo — bottom-left of the empty area below the table
-        import os as _os
-        _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty3.png")
-        logo_outer = ttk.Frame(parent)
-        logo_outer.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
-        try:
-            from PIL import Image, ImageTk as _ITk
-            _img = Image.open(_logo_path)
-            _h = 130
-            _w = int(_img.width * _h / _img.height)
-            _img = _img.resize((_w, _h), Image.LANCZOS)
-            self._tl_logo_photo = _ITk.PhotoImage(_img)
-            logo_row = ttk.Frame(logo_outer)
-            logo_row.pack(side=tk.BOTTOM, anchor=tk.W)
-            tk.Label(logo_row, image=self._tl_logo_photo,
-                     borderwidth=0).pack(side=tk.LEFT, anchor=tk.S)
-            tk.Label(logo_row,
-                     text="Thrusty",
-                     font=("Times", 26, "bold italic"),
-                     borderwidth=0).pack(side=tk.LEFT, anchor=tk.S, padx=(6, 0))
-            tk.Label(logo_row,
-                     text="  A rocket performance calculator",
-                     font=("", 12),
-                     borderwidth=0).pack(side=tk.LEFT, anchor=tk.S)
-        except Exception:
-            pass   # logo absent or Pillow unavailable — silent skip
 
     # ------------------------------------------------------------------
     # Missile Parameters tab
