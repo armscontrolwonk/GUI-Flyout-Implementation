@@ -1510,6 +1510,7 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_rate_lbl.grid(row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         lr_frame = ttk.Frame(gf)
         lr_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._loft_rate_frame = lr_frame
         self._loft_rate_var = tk.StringVar(value="2.0")
         self._loft_rate_entry = ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8)
         self._loft_rate_entry.pack(side=tk.LEFT)
@@ -2170,9 +2171,8 @@ class MissileFlyoutApp(tk.Tk):
         if guidance in ("gravity_turn", "orbital_insertion"):
             self._loft_angle_lbl.config(text="Burnout Angle:")
             self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
-            self._loft_rate_lbl.config(text="Pitch Rate:")
-            self._loft_rate_unit_lbl.config(text="(auto)")
-            self._loft_rate_entry.config(state="disabled")
+            self._loft_rate_lbl.grid_forget()
+            self._loft_rate_frame.grid_forget()
             self._gt_turn_start_lbl.grid(
                 row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._gt_turn_start_frame.grid(
@@ -2184,7 +2184,8 @@ class MissileFlyoutApp(tk.Tk):
         else:
             self._loft_angle_lbl.config(text="Loft Angle:")
             self._loft_angle_unit_lbl.config(text="°  (final elev.)")
-            self._loft_rate_lbl.config(text="Loft Rate:")
+            self._loft_rate_lbl.grid(row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._loft_rate_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
             self._loft_rate_unit_lbl.config(text="°/s")
             self._loft_rate_entry.config(state="normal")
             self._gt_turn_start_lbl.grid_forget()
