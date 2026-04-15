@@ -3613,9 +3613,12 @@ class MissileFlyoutApp(tk.Tk):
                                 'major': _is_major(e, is_debris)})
 
         # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
-        # Pre-apogee labels go LEFT of their dot; post-apogee go RIGHT.
-        # Within each side, major events (white circles) are placed nearest
-        # the dot.  A thin SVG leader line connects each label to its dot.
+        # Labels are split into 4 groups by phase × circle type:
+        #   pre-apogee  major (white) → LEFT of dot, stacked ABOVE
+        #   pre-apogee  minor (black) → LEFT of dot, stacked BELOW
+        #   post-apogee major (white) → RIGHT of dot, stacked ABOVE
+        #   post-apogee minor (black) → RIGHT of dot, stacked BELOW
+        # This places white and black labels on opposite sides of the arc.
         map_var    = fmap.get_name()
         _apo_ms    = next((m for m in r.get('milestones', [])
                            if 'apogee' in m.get('event', '').lower()), None)
@@ -3681,74 +3684,85 @@ class MissileFlyoutApp(tk.Tk):
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
 
-                // Circles within CLUSTER_R px of each other are treated as
-                // one stack; circles farther apart start a fresh stack.
+                // Circles within CLUSTER_R px of each other share a stack.
                 var CLUSTER_R = 60;
 
-                // ── Side assignment ──────────────────────────────────────
-                // Pre-apogee labels go LEFT of their dot (trajectory runs
-                // upper-right, so the left side is clear of the arc).
-                // Post-apogee labels go RIGHT (trajectory descends away to
-                // the right, leaving the upper-right space clear).
-                // Within each side, major events (white circles) are placed
-                // nearest the dot; minor events (black circles) stack further.
-                var leftIdx = [], rightIdx = [];
+                // ── 4-group label placement ───────────────────────────────
+                // Horizontal side: pre-apogee → LEFT (trajectory clears left);
+                //                  post-apogee → RIGHT (trajectory clears right).
+                // Vertical side:   major (white circles) → ABOVE their dot;
+                //                  minor (black circles) → BELOW their dot.
+                // This places the two circle types on opposite sides of the arc.
+                var grpAL = [], grpBL = []; // pre-apogee:  major-left / minor-left
+                var grpAR = [], grpBR = []; // post-apogee: major-right / minor-right
                 order.forEach(function(i) {{
-                    (LABELS[i].t_s < APOGEE_T ? leftIdx : rightIdx).push(i);
+                    var lb = LABELS[i];
+                    var pre = lb.t_s < APOGEE_T;
+                    if (lb.major) {{ (pre ? grpAL : grpAR).push(i); }}
+                    else          {{ (pre ? grpBL : grpBR).push(i); }}
                 }});
-                function byMajorFirst(a, b) {{
-                    if (LABELS[b].major !== LABELS[a].major)
-                        return LABELS[b].major ? 1 : -1;
-                    return LABELS[a].t_s - LABELS[b].t_s;
+                function byTime(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }}
+                grpAL.sort(byTime); grpBL.sort(byTime);
+                grpAR.sort(byTime); grpBR.sort(byTime);
+
+                var topY = {{}}, goLeft = {{}}, lw_cache = {{}}, aboveFlag = {{}};
+
+                // Stack ABOVE the dot (upward, decreasing y).
+                function _stackUp(indices, onLeft) {{
+                    var prevTop = null, prevPt = null;
+                    indices.forEach(function(idx) {{
+                        var pt = pts[idx];
+                        _divs[idx].style.display = 'block';
+                        var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
+                        var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
+                        if (prevPt) {{
+                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
+                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
+                        }}
+                        var idealTop  = pt.y - lh - V_ABOVE;
+                        var candidate = (prevTop === null)
+                            ? idealTop
+                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
+                        if (candidate < EDGE) candidate = EDGE;
+                        prevTop       = candidate;
+                        topY[idx]     = candidate;
+                        goLeft[idx]   = onLeft;
+                        lw_cache[idx] = lw;
+                        aboveFlag[idx] = true;
+                        prevPt        = pt;
+                    }});
                 }}
-                leftIdx.sort(byMajorFirst);
-                rightIdx.sort(byMajorFirst);
 
-                var topY = {{}}, goLeft = {{}}, lw_cache = {{}};
+                // Stack BELOW the dot (downward, increasing y).
+                function _stackDown(indices, onLeft) {{
+                    var prevBottom = null, prevPt = null;
+                    indices.forEach(function(idx) {{
+                        var pt = pts[idx];
+                        _divs[idx].style.display = 'block';
+                        var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
+                        var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
+                        if (prevPt) {{
+                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
+                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevBottom = null;
+                        }}
+                        var idealTop  = pt.y + V_ABOVE;
+                        var candidate = (prevBottom === null)
+                            ? idealTop
+                            : prevBottom + STACK_GAP;
+                        if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
+                        prevBottom    = candidate + lh;
+                        topY[idx]     = candidate;
+                        goLeft[idx]   = onLeft;
+                        lw_cache[idx] = lw;
+                        aboveFlag[idx] = false;
+                        prevPt        = pt;
+                    }});
+                }}
 
-                // ── Left-side labels: stack downward from dot ────────────
-                var prevBottomL = null, prevPtL = null;
-                leftIdx.forEach(function(idx) {{
-                    var pt = pts[idx];
-                    _divs[idx].style.display = 'block';
-                    var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
-                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    if (prevPtL) {{
-                        var dx = pt.x - prevPtL.x, dy = pt.y - prevPtL.y;
-                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevBottomL = null;
-                    }}
-                    var idealTop  = pt.y - lh / 2;
-                    var candidate = (prevBottomL === null)
-                        ? idealTop
-                        : prevBottomL + STACK_GAP;
-                    if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
-                    topY[idx]     = candidate;
-                    goLeft[idx]   = true;
-                    lw_cache[idx] = lw;
-                    prevBottomL   = candidate + lh;
-                    prevPtL       = pt;
-                }});
-
-                // ── Right-side labels: stack upward from dot ─────────────
-                var prevTopR = null, prevPtR = null;
-                rightIdx.forEach(function(idx) {{
-                    var pt = pts[idx];
-                    _divs[idx].style.display = 'block';
-                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    if (prevPtR) {{
-                        var dx = pt.x - prevPtR.x, dy = pt.y - prevPtR.y;
-                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTopR = null;
-                    }}
-                    var idealTop  = pt.y - lh - V_ABOVE;
-                    var candidate = (prevTopR === null)
-                        ? idealTop
-                        : Math.min(idealTop, prevTopR - lh - STACK_GAP);
-                    if (candidate < EDGE) {{ candidate = pt.y + V_ABOVE; prevTopR = null; }}
-                    else {{ prevTopR = candidate; }}
-                    topY[idx]   = candidate;
-                    goLeft[idx] = false;
-                    prevPtR     = pt;
-                }});
+                _stackUp  (grpAL, true );  // pre-apogee  major → left,  above
+                _stackDown(grpBL, true );  // pre-apogee  minor → left,  below
+                _stackUp  (grpAR, false);  // post-apogee major → right, above
+                _stackDown(grpBR, false);  // post-apogee minor → right, below
 
                 // ── Render: position divs + draw leader lines ────────────
                 order.forEach(function(idx) {{
@@ -3768,7 +3782,8 @@ class MissileFlyoutApp(tk.Tk):
                     line.setAttribute('y1', pt.y);
                     // Left label: leader to right edge; right label: to left edge.
                     line.setAttribute('x2', goLeft[idx] ? lx + lw : lx);
-                    line.setAttribute('y2', ly + lh / 2);   // vertical midpoint
+                    // Above: connect to bottom of label; below: connect to top.
+                    line.setAttribute('y2', aboveFlag[idx] ? ly + lh : ly);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
