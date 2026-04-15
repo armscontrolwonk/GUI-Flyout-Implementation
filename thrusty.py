@@ -3644,8 +3644,9 @@ class MissileFlyoutApp(tk.Tk):
             var LABELS    = {label_json};
             var TICKS     = {tick_json};
             var TRAJ      = {traj_json};
-            var H_GAP     = 14;   // px: dot edge → label left edge
-            var STACK_GAP = 4;    // px between stacked labels
+            var V_BELOW   = 22;   // px from dot centre down to label top
+            var H_OFFSET  = 6;    // px: label left edge offset right of dot centre
+            var STACK_GAP = 4;    // px gap between stacked label boxes
             var TICK_HALF = 8;    // px: half-length of tick mark
 
             var _svg = null, _con = null, _divs = [];
@@ -3734,19 +3735,22 @@ class MissileFlyoutApp(tk.Tk):
                 var CLUSTER_R = 60;
                 var topY = {{}}, lw_cache = {{}};
 
-                // Stack labels to the right of their dot, top-to-bottom.
-                // Vertically centre each label on its dot; push down on overlap.
-                var prevBottom = null, prevPt = null;
+                // All labeled events are trajectory endpoints:
+                //   Launch   → trajectory departs upward  → below dot is safe
+                //   Impacts  → trajectory arrives from above → below dot is safe
+                // Place each label below its dot (V_BELOW gap) and stack
+                // downward when dots are close vertically.
+                var prevBottom = null, prevPtY = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lw = (_divs[idx].offsetWidth  || 80);
                     var lh = (_divs[idx].offsetHeight || 14);
-                    if (prevPt) {{
-                        var dy = Math.abs(pt.y - prevPt.y);
-                        if (dy > CLUSTER_R) prevBottom = null;
+                    if (prevPtY !== null &&
+                            Math.abs(pt.y - prevPtY) > CLUSTER_R) {{
+                        prevBottom = null;
                     }}
-                    var idealTop  = pt.y - lh / 2;
+                    var idealTop  = pt.y + V_BELOW;
                     var candidate = (prevBottom === null)
                         ? idealTop
                         : Math.max(idealTop, prevBottom + STACK_GAP);
@@ -3755,7 +3759,7 @@ class MissileFlyoutApp(tk.Tk):
                     topY[idx]     = candidate;
                     lw_cache[idx] = lw;
                     prevBottom    = candidate + lh;
-                    prevPt        = pt;
+                    prevPtY       = pt.y;
                 }});
 
                 // Render: position label divs + leader lines.
@@ -3764,16 +3768,17 @@ class MissileFlyoutApp(tk.Tk):
                     var lh  = (_divs[idx].offsetHeight || 14);
                     var lw  = lw_cache[idx] || 80;
                     var ly  = topY[idx];
-                    var lx  = pt.x + H_GAP;
+                    var lx  = pt.x + H_OFFSET;
                     _divs[idx].style.left = lx + 'px';
                     _divs[idx].style.top  = ly + 'px';
 
+                    // Leader: dot centre → top-left of label box
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
                     line.setAttribute('x2', lx);
-                    line.setAttribute('y2', ly + lh / 2);
+                    line.setAttribute('y2', ly);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
