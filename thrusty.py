@@ -3557,41 +3557,45 @@ class MissileFlyoutApp(tk.Tk):
         merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
 
         # ── Circle markers + label data collection ────────────────────
-        # Reduced event set: launch, stage/shroud impacts, apogee,
-        # re-entry (and query), warhead impact.
-        def _show_event(e, is_debris, ms):
+        # Labeled events (filled circle + label + popup):
+        #   Launch, stage empty impacts, fairing impact, warhead impact.
+        # Tick-mark events (SVG perpendicular line, no circle, no label):
+        #   All other non-debris flight events (apogee, re-entry, burnouts…).
+        def _show_labeled(e, is_debris, ms):
             if is_debris:
                 return (('empty impact' in e or 'shroud impact' in e)
                         and 'impact_lat' in ms)
             return (('ignition' in e and 'stage' not in e) or
-                    'apogee'   in e or
+                    ('impact'   in e and 'empty' not in e
+                                     and 'shroud' not in e))
+
+        def _show_tick(e, is_debris):
+            if is_debris:
+                return False
+            return ('apogee'   in e or
                     're-entry' in e or
-                    ('impact'  in e and 'empty' not in e))
+                    'burnout'  in e or
+                    ('ignition' in e and 'stage' in e) or
+                    'jettison'  in e)
 
         import re as _re_ev, json as _json
 
         def _name_only(raw):
-            """Strip time/data parentheticals; rename Ignition → Launch."""
+            """Strip time/data parentheticals; rename events."""
             name = _re_ev.sub(r'\s*\(\d[^)]*\)\s*$', '', raw).strip()
-            return 'Launch' if name.lower() == 'ignition' else name
+            nl   = name.lower()
+            if nl == 'ignition':        return 'Launch'
+            if 'shroud impact' in nl:   return 'Fairing impact'
+            return name
 
-        def _is_inflight(e):
-            """True for events at altitude: open circle, label above arc."""
-            return 'apogee' in e or 're-entry' in e
-
-        _label_data = []   # [{lat, lon, text, t_s, major}] passed to JS
+        _label_data = []   # [{lat, lon, text, t_s}] for JS labels
+        _tick_data  = []   # [{lat, lon}] for JS tick marks
 
         for group in merged:
             ms        = group[0]
             is_debris = ms.get('is_debris', False)
             label     = " / ".join(g['event'] for g in group)
             e         = label.lower()
-
-            if not _show_event(e, is_debris, ms):
-                continue
-
-            display_name = _name_only(label)
-            inflight     = _is_inflight(e)
 
             if is_debris and 'impact_lat' in ms:
                 mk_lat = ms['impact_lat']
@@ -3600,49 +3604,49 @@ class MissileFlyoutApp(tk.Tk):
                 mk_lat = float(np.interp(ms['t_s'], t, lat))
                 mk_lon = float(np.interp(ms['t_s'], t, lon_uw))
 
-            popup_html = (
-                f"<b>{display_name}</b><br>"
-                f"t = {ms['t_s']:.1f} s<br>"
-                f"Alt: {ms['alt_km']:.1f} km<br>"
-                f"Range: {ms['range_km']:.1f} km<br>"
-                f"Speed: {ms['speed_kms']:.2f} km/s"
-            )
-            popup = folium.Popup(popup_html, max_width=220)
-
-            if inflight:
-                # Open circle — event occurs at altitude
-                folium.CircleMarker(
-                    [mk_lat, mk_lon], radius=7,
-                    color="black", weight=2,
-                    fill=True, fill_color="white", fill_opacity=1.0,
-                    popup=popup, tooltip=display_name,
-                ).add_to(fmap)
-            else:
-                # Filled circle — event occurs at ground level
+            if _show_labeled(e, is_debris, ms):
+                display_name = _name_only(label)
+                popup_html = (
+                    f"<b>{display_name}</b><br>"
+                    f"t = {ms['t_s']:.1f} s<br>"
+                    f"Alt: {ms['alt_km']:.1f} km<br>"
+                    f"Range: {ms['range_km']:.1f} km<br>"
+                    f"Speed: {ms['speed_kms']:.2f} km/s"
+                )
+                popup = folium.Popup(popup_html, max_width=220)
                 folium.CircleMarker(
                     [mk_lat, mk_lon], radius=5,
                     color="black", weight=1,
                     fill=True, fill_color="black", fill_opacity=1.0,
                     popup=popup, tooltip=display_name,
                 ).add_to(fmap)
+                _label_data.append({'lat':  mk_lat, 'lon':  mk_lon,
+                                    'text': display_name, 't_s': ms['t_s']})
+            elif _show_tick(e, is_debris):
+                _tick_data.append({'lat': mk_lat, 'lon': mk_lon})
 
-            _label_data.append({'lat':  mk_lat, 'lon': mk_lon,
-                                'text': display_name, 't_s': ms['t_s'],
-                                'major': inflight})
+        # ── Trajectory skeleton for tick-mark perpendicular computation ──
+        _n_traj   = min(200, len(lat))
+        _idx_traj = np.round(np.linspace(0, len(lat) - 1, _n_traj)).astype(int)
+        _traj_pts = [{'lat': float(lat[i]), 'lon': float(lon_uw[i])}
+                     for i in _idx_traj]
+        traj_json = _json.dumps(_traj_pts)
+        tick_json = _json.dumps(_tick_data)
 
-        # ── Leader-line labels (pure JS, update on zoom + pan) ───────
-        # Open-circle (in-flight) events: label above the dot.
-        # Filled-circle (ground) events: label below the dot.
+        # ── Leader-line labels + tick marks (pure JS, update on zoom+pan) ──
         # Labels are name-only; full detail is in the click popup.
+        # Tick marks are drawn perpendicular to the trajectory skeleton.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS    = {label_json};
-            var H_GAP     = 10;   // px: dot edge → label left edge
-            var V_ABOVE   = 4;    // px: dot edge → nearest label edge
-            var STACK_GAP = 3;    // px between stacked labels
+            var TICKS     = {tick_json};
+            var TRAJ      = {traj_json};
+            var H_GAP     = 14;   // px: dot edge → label left edge
+            var STACK_GAP = 4;    // px between stacked labels
+            var TICK_HALF = 8;    // px: half-length of tick mark
 
             var _svg = null, _con = null, _divs = [];
 
@@ -3675,9 +3679,43 @@ class MissileFlyoutApp(tk.Tk):
                 var mc   = map.getContainer();
                 var mapW = mc.offsetWidth  || 800;
                 var mapH = mc.offsetHeight || 600;
-                var EDGE = 40;   // px margin — markers this close to the edge
-                                 // are still labelled even if partly off-screen
+                var EDGE = 40;
 
+                // ── Convert trajectory skeleton to container points ───────
+                var tPts = TRAJ.map(function(tp) {{
+                    return map.latLngToContainerPoint([tp.lat, tp.lon]);
+                }});
+
+                // ── Draw tick marks ───────────────────────────────────────
+                TICKS.forEach(function(tk) {{
+                    var tp = map.latLngToContainerPoint([tk.lat, tk.lon]);
+                    // Find nearest TRAJ point.
+                    var bestD2 = Infinity, bestI = 0;
+                    for (var i = 0; i < tPts.length; i++) {{
+                        var dx = tp.x - tPts[i].x, dy = tp.y - tPts[i].y;
+                        var d2 = dx*dx + dy*dy;
+                        if (d2 < bestD2) {{ bestD2 = d2; bestI = i; }}
+                    }}
+                    // Local tangent from the nearest segment.
+                    var i0  = Math.min(bestI, tPts.length - 2);
+                    var tdx = tPts[i0 + 1].x - tPts[i0].x;
+                    var tdy = tPts[i0 + 1].y - tPts[i0].y;
+                    var tlen = Math.sqrt(tdx*tdx + tdy*tdy) || 1;
+                    // Perpendicular unit vector (rotated 90°).
+                    var px = -tdy / tlen, py = tdx / tlen;
+                    var tl = document.createElementNS(
+                        'http://www.w3.org/2000/svg', 'line');
+                    tl.setAttribute('x1', tp.x - px * TICK_HALF);
+                    tl.setAttribute('y1', tp.y - py * TICK_HALF);
+                    tl.setAttribute('x2', tp.x + px * TICK_HALF);
+                    tl.setAttribute('y2', tp.y + py * TICK_HALF);
+                    tl.setAttribute('stroke', '#333');
+                    tl.setAttribute('stroke-width', '1.5');
+                    tl.setAttribute('opacity', '0.75');
+                    _svg.appendChild(tl);
+                }});
+
+                // ── Label markers ─────────────────────────────────────────
                 var pts = LABELS.map(function(lb) {{
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
@@ -3685,86 +3723,46 @@ class MissileFlyoutApp(tk.Tk):
                 // Hide all labels first.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
-                // Visible markers only.
+                // Visible markers only, sorted top-to-bottom by screen y.
                 var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
                     var p = pts[i];
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
+                order.sort(function(a, b) {{ return pts[a].y - pts[b].y; }});
 
                 var CLUSTER_R = 60;
+                var topY = {{}}, lw_cache = {{}};
 
-                // ── Split by circle type ─────────────────────────────────
-                // major=true  → in-flight (open circle)  → label ABOVE dot
-                // major=false → ground    (filled circle) → label BELOW dot
-                var aboveIdx = [], belowIdx = [];
-                order.forEach(function(i) {{
-                    (LABELS[i].major ? aboveIdx : belowIdx).push(i);
+                // Stack labels to the right of their dot, top-to-bottom.
+                // Vertically centre each label on its dot; push down on overlap.
+                var prevBottom = null, prevPt = null;
+                order.forEach(function(idx) {{
+                    var pt = pts[idx];
+                    _divs[idx].style.display = 'block';
+                    var lw = (_divs[idx].offsetWidth  || 80);
+                    var lh = (_divs[idx].offsetHeight || 14);
+                    if (prevPt) {{
+                        var dy = Math.abs(pt.y - prevPt.y);
+                        if (dy > CLUSTER_R) prevBottom = null;
+                    }}
+                    var idealTop  = pt.y - lh / 2;
+                    var candidate = (prevBottom === null)
+                        ? idealTop
+                        : Math.max(idealTop, prevBottom + STACK_GAP);
+                    if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
+                    if (candidate < EDGE) candidate = EDGE;
+                    topY[idx]     = candidate;
+                    lw_cache[idx] = lw;
+                    prevBottom    = candidate + lh;
+                    prevPt        = pt;
                 }});
-                function byTime(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }}
-                aboveIdx.sort(byTime);
-                belowIdx.sort(byTime);
 
-                var topY = {{}}, aboveFlag = {{}}, lw_cache = {{}};
-
-                // Stack labels ABOVE their dot (upward, decreasing y).
-                function _stackAbove(indices) {{
-                    var prevTop = null, prevPt = null;
-                    indices.forEach(function(idx) {{
-                        var pt = pts[idx];
-                        _divs[idx].style.display = 'block';
-                        var lw = (_divs[idx].offsetWidth  || 100);
-                        var lh = (_divs[idx].offsetHeight || 14);
-                        if (prevPt) {{
-                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
-                        }}
-                        var idealTop  = pt.y - lh - V_ABOVE;
-                        var candidate = (prevTop === null)
-                            ? idealTop
-                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                        if (candidate < EDGE) candidate = EDGE;
-                        prevTop        = candidate;
-                        topY[idx]      = candidate;
-                        aboveFlag[idx] = true;
-                        lw_cache[idx]  = lw;
-                        prevPt         = pt;
-                    }});
-                }}
-
-                // Stack labels BELOW their dot (downward, increasing y).
-                function _stackBelow(indices) {{
-                    var prevBottom = null, prevPt = null;
-                    indices.forEach(function(idx) {{
-                        var pt = pts[idx];
-                        _divs[idx].style.display = 'block';
-                        var lw = (_divs[idx].offsetWidth  || 100);
-                        var lh = (_divs[idx].offsetHeight || 14);
-                        if (prevPt) {{
-                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevBottom = null;
-                        }}
-                        var idealTop  = pt.y + V_ABOVE;
-                        var candidate = (prevBottom === null)
-                            ? idealTop
-                            : prevBottom + STACK_GAP;
-                        if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
-                        prevBottom     = candidate + lh;
-                        topY[idx]      = candidate;
-                        aboveFlag[idx] = false;
-                        lw_cache[idx]  = lw;
-                        prevPt         = pt;
-                    }});
-                }}
-
-                _stackAbove(aboveIdx);   // apogee, re-entry → above arc
-                _stackBelow(belowIdx);   // launch, impacts  → below arc
-
-                // ── Render: position label divs + leader lines ───────────
+                // Render: position label divs + leader lines.
                 order.forEach(function(idx) {{
                     var pt  = pts[idx];
                     var lh  = (_divs[idx].offsetHeight || 14);
-                    var lw  = lw_cache[idx] || 100;
+                    var lw  = lw_cache[idx] || 80;
                     var ly  = topY[idx];
                     var lx  = pt.x + H_GAP;
                     _divs[idx].style.left = lx + 'px';
@@ -3775,8 +3773,7 @@ class MissileFlyoutApp(tk.Tk):
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
                     line.setAttribute('x2', lx);
-                    // Above: leader to bottom of label; below: to top.
-                    line.setAttribute('y2', aboveFlag[idx] ? ly + lh : ly);
+                    line.setAttribute('y2', ly + lh / 2);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
