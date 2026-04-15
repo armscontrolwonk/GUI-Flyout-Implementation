@@ -3616,13 +3616,16 @@ class MissileFlyoutApp(tk.Tk):
         # the bottom-left corner of its bounding box to the circle centre.
         map_var    = fmap.get_name()
         label_json = _json.dumps(_label_data)
+        _step      = max(1, len(t) // 200)
+        _traj_data = [[float(lat[i]), float(lon_uw[i])] for i in range(0, len(t), _step)]
+        traj_json  = _json.dumps(_traj_data)
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS     = {label_json};
-            var BASE_Y     = 30;   // fallback below-offset when flipped under circle
+            var TRAJ       = {traj_json};
             var H_GAP      = 10;   // px right of the circle centre
-            var V_ABOVE    = 3;    // px above the dot (keeps label clear of trajectory)
+            var V_ABOVE    = 3;    // px away from the dot
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
@@ -3665,6 +3668,25 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
+                // Project trajectory skeleton to screen for tangent computation.
+                var tPts = TRAJ.map(function(ll) {{
+                    return map.latLngToContainerPoint([ll[0], ll[1]]);
+                }});
+                // Returns screen-space dy of trajectory at the point nearest to pt.
+                // dy < 0 → trajectory moving upward on screen (ascending leg).
+                // dy ≥ 0 → trajectory moving downward / flat (descending leg).
+                function tangentDy(pt) {{
+                    var best = Infinity, bestIdx = 0;
+                    for (var i = 0; i < tPts.length; i++) {{
+                        var ddx = tPts[i].x - pt.x, ddy = tPts[i].y - pt.y;
+                        var d2 = ddx*ddx + ddy*ddy;
+                        if (d2 < best) {{ best = d2; bestIdx = i; }}
+                    }}
+                    var i0 = Math.max(0, bestIdx - 1);
+                    var i1 = Math.min(tPts.length - 1, bestIdx + 1);
+                    return tPts[i1].y - tPts[i0].y;
+                }}
+
                 // Hide all labels first; only visible-marker labels are shown.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
@@ -3684,34 +3706,57 @@ class MissileFlyoutApp(tk.Tk):
                 // distant cluster can't drive labels off the screen.
                 var CLUSTER_R = 60;
 
-                var topY    = {{}};
-                var prevTop = null;
-                var prevPt  = null;
+                var topY       = {{}};
+                var below      = {{}};
+                var prevTop    = null;
+                var prevBottom = null;
+                var prevPt     = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    // Ideal: label just above the dot so it clears the trajectory line
-                    var idealTop = pt.y - lh - V_ABOVE;
 
                     // Reset stacking when this circle is far from the previous.
                     if (prevPt) {{
                         var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) {{
+                            prevTop = null; prevBottom = null;
+                        }}
                     }}
 
-                    var candidate = (prevTop === null)
-                        ? idealTop
-                        : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                    // Clamp: if stacking pushes label above the top edge,
-                    // flip it below the circle instead.
-                    if (candidate < EDGE) {{
-                        candidate = pt.y + V_ABOVE;
-                        prevTop = null;   // reset so next circle stacks independently
+                    // Ascending on screen (dy < 0) → place label below the dot
+                    // so it stays on the opposite side of the trajectory line.
+                    var goBelow = tangentDy(pt) < 0;
+                    var candidate;
+                    if (goBelow) {{
+                        var idealBottom = pt.y + V_ABOVE;
+                        candidate = (prevBottom === null)
+                            ? idealBottom
+                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
+                        if (candidate + lh > mapH - EDGE) {{
+                            // No room below — fall through to above placement.
+                            goBelow = false;
+                        }} else {{
+                            prevBottom = candidate;
+                        }}
                     }}
-                    topY[idx] = candidate;
-                    prevTop = candidate;
-                    prevPt  = pt;
+                    if (!goBelow) {{
+                        var idealTop = pt.y - lh - V_ABOVE;
+                        candidate = (prevTop === null)
+                            ? idealTop
+                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
+                        if (candidate < EDGE) {{
+                            // No room above — force below.
+                            candidate = pt.y + V_ABOVE;
+                            goBelow   = true;
+                            prevTop   = null;
+                        }} else {{
+                            prevTop = candidate;
+                        }}
+                    }}
+                    topY[idx]  = candidate;
+                    below[idx] = goBelow;
+                    prevPt     = pt;
                 }});
 
                 order.forEach(function(idx) {{
@@ -3728,8 +3773,9 @@ class MissileFlyoutApp(tk.Tk):
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
                     line.setAttribute('x2', lx);
-                    // Connect to vertical midpoint of label's left edge
-                    line.setAttribute('y2', ly + lh / 2);
+                    // Below placement → connect to top of label (nearest to dot).
+                    // Above placement → connect to bottom of label (nearest to dot).
+                    line.setAttribute('y2', below[idx] ? ly : ly + lh);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
