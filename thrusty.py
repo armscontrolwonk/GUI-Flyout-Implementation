@@ -3608,24 +3608,26 @@ class MissileFlyoutApp(tk.Tk):
                     popup=popup, tooltip=label,
                 ).add_to(fmap)
 
-            _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label})
+            _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label,
+                                't_s': ms['t_s'],
+                                'major': _is_major(e, is_debris)})
 
         # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
-        # Labels are placed to the right of and above their circle, stacked
-        # so they don't overlap.  A thin SVG line connects each label to
-        # the bottom-left corner of its bounding box to the circle centre.
+        # Pre-apogee labels go LEFT of their dot; post-apogee go RIGHT.
+        # Within each side, major events (white circles) are placed nearest
+        # the dot.  A thin SVG leader line connects each label to its dot.
         map_var    = fmap.get_name()
+        _apo_ms    = next((m for m in r.get('milestones', [])
+                           if 'apogee' in m.get('event', '').lower()), None)
+        apogee_t_s = float(_apo_ms['t_s']) if _apo_ms else 1e9
         label_json = _json.dumps(_label_data)
-        _step      = max(1, len(t) // 200)
-        _traj_data = [[float(lat[i]), float(lon_uw[i])] for i in range(0, len(t), _step)]
-        traj_json  = _json.dumps(_traj_data)
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS     = {label_json};
-            var TRAJ       = {traj_json};
-            var H_GAP      = 10;   // px right of the circle centre
-            var V_ABOVE    = 3;    // px away from the dot
+            var APOGEE_T   = {apogee_t_s};
+            var H_GAP      = 10;   // px from circle centre to nearest label edge
+            var V_ABOVE    = 3;    // px clearance from dot to first label
             var STACK_GAP  = 3;    // px between stacked labels
             var PAD        = 2;    // extra padding around each label box
 
@@ -3668,25 +3670,6 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Project trajectory skeleton to screen for tangent computation.
-                var tPts = TRAJ.map(function(ll) {{
-                    return map.latLngToContainerPoint([ll[0], ll[1]]);
-                }});
-                // Returns screen-space dy of trajectory at the point nearest to pt.
-                // dy < 0 → trajectory moving upward on screen (ascending leg).
-                // dy ≥ 0 → trajectory moving downward / flat (descending leg).
-                function tangentDy(pt) {{
-                    var best = Infinity, bestIdx = 0;
-                    for (var i = 0; i < tPts.length; i++) {{
-                        var ddx = tPts[i].x - pt.x, ddy = tPts[i].y - pt.y;
-                        var d2 = ddx*ddx + ddy*ddy;
-                        if (d2 < best) {{ best = d2; bestIdx = i; }}
-                    }}
-                    var i0 = Math.max(0, bestIdx - 1);
-                    var i1 = Math.min(tPts.length - 1, bestIdx + 1);
-                    return tPts[i1].y - tPts[i0].y;
-                }}
-
                 // Hide all labels first; only visible-marker labels are shown.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
@@ -3697,85 +3680,95 @@ class MissileFlyoutApp(tk.Tk):
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
-                // Sort right-to-left so stacking is chronological top-down
-                // and leader lines don't cross.
-                order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
                 // Circles within CLUSTER_R px of each other are treated as
-                // one stack; circles farther apart start a fresh stack so a
-                // distant cluster can't drive labels off the screen.
+                // one stack; circles farther apart start a fresh stack.
                 var CLUSTER_R = 60;
 
-                var topY       = {{}};
-                var below      = {{}};
-                var prevTop    = null;
-                var prevBottom = null;
-                var prevPt     = null;
-                order.forEach(function(idx) {{
+                // ── Side assignment ──────────────────────────────────────
+                // Pre-apogee labels go LEFT of their dot (trajectory runs
+                // upper-right, so the left side is clear of the arc).
+                // Post-apogee labels go RIGHT (trajectory descends away to
+                // the right, leaving the upper-right space clear).
+                // Within each side, major events (white circles) are placed
+                // nearest the dot; minor events (black circles) stack further.
+                var leftIdx = [], rightIdx = [];
+                order.forEach(function(i) {{
+                    (LABELS[i].t_s < APOGEE_T ? leftIdx : rightIdx).push(i);
+                }});
+                function byMajorFirst(a, b) {{
+                    if (LABELS[b].major !== LABELS[a].major)
+                        return LABELS[b].major ? 1 : -1;
+                    return LABELS[a].t_s - LABELS[b].t_s;
+                }}
+                leftIdx.sort(byMajorFirst);
+                rightIdx.sort(byMajorFirst);
+
+                var topY = {{}}, goLeft = {{}}, lw_cache = {{}};
+
+                // ── Left-side labels: stack downward from dot ────────────
+                var prevBottomL = null, prevPtL = null;
+                leftIdx.forEach(function(idx) {{
+                    var pt = pts[idx];
+                    _divs[idx].style.display = 'block';
+                    var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
+                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
+                    if (prevPtL) {{
+                        var dx = pt.x - prevPtL.x, dy = pt.y - prevPtL.y;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevBottomL = null;
+                    }}
+                    var idealTop  = pt.y - lh / 2;
+                    var candidate = (prevBottomL === null)
+                        ? idealTop
+                        : prevBottomL + STACK_GAP;
+                    if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
+                    topY[idx]     = candidate;
+                    goLeft[idx]   = true;
+                    lw_cache[idx] = lw;
+                    prevBottomL   = candidate + lh;
+                    prevPtL       = pt;
+                }});
+
+                // ── Right-side labels: stack upward from dot ─────────────
+                var prevTopR = null, prevPtR = null;
+                rightIdx.forEach(function(idx) {{
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
                     var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-
-                    // Reset stacking when this circle is far from the previous.
-                    if (prevPt) {{
-                        var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) {{
-                            prevTop = null; prevBottom = null;
-                        }}
+                    if (prevPtR) {{
+                        var dx = pt.x - prevPtR.x, dy = pt.y - prevPtR.y;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTopR = null;
                     }}
-
-                    // Ascending on screen (dy < 0) → place label below the dot
-                    // so it stays on the opposite side of the trajectory line.
-                    var goBelow = tangentDy(pt) < 0;
-                    var candidate;
-                    if (goBelow) {{
-                        var idealBottom = pt.y + V_ABOVE;
-                        candidate = (prevBottom === null)
-                            ? idealBottom
-                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
-                        if (candidate + lh > mapH - EDGE) {{
-                            // No room below — fall through to above placement.
-                            goBelow = false;
-                        }} else {{
-                            prevBottom = candidate;
-                        }}
-                    }}
-                    if (!goBelow) {{
-                        var idealTop = pt.y - lh - V_ABOVE;
-                        candidate = (prevTop === null)
-                            ? idealTop
-                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                        if (candidate < EDGE) {{
-                            // No room above — force below.
-                            candidate = pt.y + V_ABOVE;
-                            goBelow   = true;
-                            prevTop   = null;
-                        }} else {{
-                            prevTop = candidate;
-                        }}
-                    }}
-                    topY[idx]  = candidate;
-                    below[idx] = goBelow;
-                    prevPt     = pt;
+                    var idealTop  = pt.y - lh - V_ABOVE;
+                    var candidate = (prevTopR === null)
+                        ? idealTop
+                        : Math.min(idealTop, prevTopR - lh - STACK_GAP);
+                    if (candidate < EDGE) {{ candidate = pt.y + V_ABOVE; prevTopR = null; }}
+                    else {{ prevTopR = candidate; }}
+                    topY[idx]   = candidate;
+                    goLeft[idx] = false;
+                    prevPtR     = pt;
                 }});
 
+                // ── Render: position divs + draw leader lines ────────────
                 order.forEach(function(idx) {{
                     var pt  = pts[idx];
                     var lh  = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    var lx  = pt.x + H_GAP;
+                    var lw  = lw_cache[idx] || (_divs[idx].offsetWidth || 80) + PAD * 2;
                     var ly  = topY[idx];
+                    var lx  = goLeft[idx]
+                        ? pt.x - H_GAP - lw   // label left of dot
+                        : pt.x + H_GAP;        // label right of dot
                     _divs[idx].style.left = lx + 'px';
                     _divs[idx].style.top  = ly + 'px';
 
-                    // Leader line: circle centre → nearest corner of label box
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
-                    line.setAttribute('x2', lx);
-                    // Below placement → connect to top of label (nearest to dot).
-                    // Above placement → connect to bottom of label (nearest to dot).
-                    line.setAttribute('y2', below[idx] ? ly : ly + lh);
+                    // Left label: leader to right edge; right label: to left edge.
+                    line.setAttribute('x2', goLeft[idx] ? lx + lw : lx);
+                    line.setAttribute('y2', ly + lh / 2);   // vertical midpoint
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
