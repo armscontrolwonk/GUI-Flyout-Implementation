@@ -3567,7 +3567,8 @@ class MissileFlyoutApp(tk.Tk):
                     "impact"   in e)
 
         import json as _json
-        _label_data = []   # [{lat, lon, text}] passed to JS
+        _label_data = []   # [{lat, lon, text, t_s, major, num}] passed to JS
+        _label_num  = 0
 
         for group in merged:
             ms        = group[0]
@@ -3608,31 +3609,55 @@ class MissileFlyoutApp(tk.Tk):
                     popup=popup, tooltip=label,
                 ).add_to(fmap)
 
-            _label_data.append({'lat': mk_lat, 'lon': mk_lon, 'text': label,
-                                't_s': ms['t_s'],
-                                'major': _is_major(e, is_debris)})
+            _label_num += 1
+            _label_data.append({'lat':   mk_lat, 'lon':  mk_lon,
+                                'text':  label,  't_s':  ms['t_s'],
+                                'major': _is_major(e, is_debris),
+                                'num':   _label_num})
 
-        # ── Leader-line labels (pure JS, updates on zoom + pan) ───────
-        # Labels are split into 4 groups by phase × circle type:
-        #   pre-apogee  major (white) → LEFT of dot, stacked ABOVE
-        #   pre-apogee  minor (black) → LEFT of dot, stacked BELOW
-        #   post-apogee major (white) → RIGHT of dot, stacked ABOVE
-        #   post-apogee minor (black) → RIGHT of dot, stacked BELOW
-        # This places white and black labels on opposite sides of the arc.
+        # ── Flight-event key panel (upper-right, always visible) ─────
+        # Each milestone gets a sequential number on the map; the key
+        # panel lists the full text.  ○ = major event, ● = minor event.
+        _key_rows = []
+        for _ld in _label_data:
+            _sym = '○' if _ld['major'] else '●'
+            _wt  = 'font-weight:bold;' if _ld['major'] else ''
+            _key_rows.append(
+                f'<tr><td style="padding:1px 6px 1px 0;{_wt}font-size:10px;'
+                f'white-space:nowrap">{_sym}&thinsp;{_ld["num"]}.</td>'
+                f'<td style="padding:1px 0;{_wt}font-size:10px;'
+                f'white-space:nowrap">{_ld["text"]}</td></tr>'
+            )
+        _key_html = (
+            '<div style="position:fixed;top:10px;right:10px;z-index:1000;'
+            'background:rgba(255,255,255,0.88);border:1px solid #bbb;'
+            'border-radius:4px;padding:5px 9px 6px;font-family:sans-serif;'
+            'max-height:80vh;overflow-y:auto;pointer-events:auto;">'
+            '<div style="font-weight:bold;font-size:11px;'
+            'border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:3px">'
+            'Flight Events</div>'
+            '<table style="border-collapse:collapse">'
+            + ''.join(_key_rows) +
+            '</table></div>'
+        )
+        fmap.get_root().html.add_child(folium.Element(_key_html))
+
+        # ── Number markers (pure JS, update on zoom + pan) ────────────
+        # Each dot gets its sequential number placed above it, centred
+        # horizontally, with a short vertical leader line.  Numbers are
+        # small enough that stacking above the arc avoids crossings for
+        # all trajectory orientations that move primarily to the right.
         map_var    = fmap.get_name()
-        _apo_ms    = next((m for m in r.get('milestones', [])
-                           if 'apogee' in m.get('event', '').lower()), None)
-        apogee_t_s = float(_apo_ms['t_s']) if _apo_ms else 1e9
         label_json = _json.dumps(_label_data)
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS     = {label_json};
-            var APOGEE_T   = {apogee_t_s};
-            var H_GAP      = 10;   // px from circle centre to nearest label edge
-            var V_ABOVE    = 3;    // px clearance from dot to first label
-            var STACK_GAP  = 3;    // px between stacked labels
-            var PAD        = 2;    // extra padding around each label box
+            var V_ABOVE    = 5;    // px between dot centre and bottom of number
+            var STACK_GAP  = 2;    // px between stacked numbers
+            var NUM_H      = 16;   // fixed height of a number label (px)
+            var NUM_W_1    = 14;   // width for single-digit numbers
+            var NUM_W_2    = 20;   // width for two-digit numbers
 
             var _svg = null, _con = null, _divs = [];
 
@@ -3649,11 +3674,11 @@ class MissileFlyoutApp(tk.Tk):
                 mc.appendChild(_con);
                 LABELS.forEach(function(lb) {{
                     var d = document.createElement('div');
-                    d.style.cssText = 'position:absolute;font-size:10px;' +
+                    d.style.cssText = 'position:absolute;font-size:11px;' +
                         'font-family:sans-serif;font-weight:bold;' +
-                        'white-space:nowrap;' +
-                        'padding:1px 4px;display:none;';
-                    d.textContent = lb.text;
+                        'text-align:center;line-height:' + NUM_H + 'px;' +
+                        'display:none;';
+                    d.textContent = String(lb.num);
                     _con.appendChild(d);
                     _divs.push(d);
                 }});
@@ -3673,117 +3698,64 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Hide all labels first; only visible-marker labels are shown.
+                // Hide all numbers first.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
-                // Only stack labels for markers inside the current viewport.
-                // Off-screen markers drove labels off the top when zoomed in.
+                // Only show numbers for markers inside the current viewport.
                 var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
                     var p = pts[i];
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
 
-                // Circles within CLUSTER_R px of each other share a stack.
+                // Sort chronologically so stacking order matches reading order.
+                order.sort(function(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }});
+
+                // Numbers within CLUSTER_R px of each other share a stack.
                 var CLUSTER_R = 60;
 
-                // ── 4-group label placement ───────────────────────────────
-                // Horizontal side: pre-apogee → LEFT (trajectory clears left);
-                //                  post-apogee → RIGHT (trajectory clears right).
-                // Vertical side:   major (white circles) → ABOVE their dot;
-                //                  minor (black circles) → BELOW their dot.
-                // This places the two circle types on opposite sides of the arc.
-                var grpAL = [], grpBL = []; // pre-apogee:  major-left / minor-left
-                var grpAR = [], grpBR = []; // post-apogee: major-right / minor-right
-                order.forEach(function(i) {{
-                    var lb = LABELS[i];
-                    var pre = lb.t_s < APOGEE_T;
-                    if (lb.major) {{ (pre ? grpAL : grpAR).push(i); }}
-                    else          {{ (pre ? grpBL : grpBR).push(i); }}
-                }});
-                function byTime(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }}
-                grpAL.sort(byTime); grpBL.sort(byTime);
-                grpAR.sort(byTime); grpBR.sort(byTime);
-
-                var topY = {{}}, goLeft = {{}}, lw_cache = {{}}, aboveFlag = {{}};
-
-                // Stack ABOVE the dot (upward, decreasing y).
-                function _stackUp(indices, onLeft) {{
-                    var prevTop = null, prevPt = null;
-                    indices.forEach(function(idx) {{
-                        var pt = pts[idx];
-                        _divs[idx].style.display = 'block';
-                        var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
-                        var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                        if (prevPt) {{
-                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
-                        }}
-                        var idealTop  = pt.y - lh - V_ABOVE;
-                        var candidate = (prevTop === null)
-                            ? idealTop
-                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                        if (candidate < EDGE) candidate = EDGE;
-                        prevTop       = candidate;
-                        topY[idx]     = candidate;
-                        goLeft[idx]   = onLeft;
-                        lw_cache[idx] = lw;
-                        aboveFlag[idx] = true;
-                        prevPt        = pt;
-                    }});
-                }}
-
-                // Stack BELOW the dot (downward, increasing y).
-                function _stackDown(indices, onLeft) {{
-                    var prevBottom = null, prevPt = null;
-                    indices.forEach(function(idx) {{
-                        var pt = pts[idx];
-                        _divs[idx].style.display = 'block';
-                        var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
-                        var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                        if (prevPt) {{
-                            var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                            if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevBottom = null;
-                        }}
-                        var idealTop  = pt.y + V_ABOVE;
-                        var candidate = (prevBottom === null)
-                            ? idealTop
-                            : prevBottom + STACK_GAP;
-                        if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
-                        prevBottom    = candidate + lh;
-                        topY[idx]     = candidate;
-                        goLeft[idx]   = onLeft;
-                        lw_cache[idx] = lw;
-                        aboveFlag[idx] = false;
-                        prevPt        = pt;
-                    }});
-                }}
-
-                _stackUp  (grpAL, true );  // pre-apogee  major → left,  above
-                _stackDown(grpBL, true );  // pre-apogee  minor → left,  below
-                _stackUp  (grpAR, false);  // post-apogee major → right, above
-                _stackDown(grpBR, false);  // post-apogee minor → right, below
-
-                // ── Render: position divs + draw leader lines ────────────
+                // ── Single upward-stacking pass ──────────────────────────
+                // All numbers go ABOVE their dot, centred horizontally.
+                // For a trajectory moving primarily rightward this keeps
+                // numbers on the safe (north) side of the arc at all phases.
+                // Dots within CLUSTER_R px stack without overlap.
+                var topY = {{}};
+                var prevTop = null, prevPt = null;
                 order.forEach(function(idx) {{
                     var pt  = pts[idx];
-                    var lh  = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    var lw  = lw_cache[idx] || (_divs[idx].offsetWidth || 80) + PAD * 2;
-                    var ly  = topY[idx];
-                    var lx  = goLeft[idx]
-                        ? pt.x - H_GAP - lw   // label left of dot
-                        : pt.x + H_GAP;        // label right of dot
-                    _divs[idx].style.left = lx + 'px';
-                    _divs[idx].style.top  = ly + 'px';
+                    var lw  = LABELS[idx].num >= 10 ? NUM_W_2 : NUM_W_1;
+                    _divs[idx].style.display = 'block';
+                    if (prevPt) {{
+                        var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) prevTop = null;
+                    }}
+                    var idealTop  = pt.y - NUM_H - V_ABOVE;
+                    var candidate = (prevTop === null)
+                        ? idealTop
+                        : Math.min(idealTop, prevTop - NUM_H - STACK_GAP);
+                    if (candidate < EDGE) candidate = EDGE;
+                    prevTop   = candidate;
+                    topY[idx] = candidate;
+                    prevPt    = pt;
+                }});
 
+                // ── Render: position number divs + draw leader stubs ─────
+                order.forEach(function(idx) {{
+                    var pt  = pts[idx];
+                    var lw  = LABELS[idx].num >= 10 ? NUM_W_2 : NUM_W_1;
+                    var ly  = topY[idx];
+                    var lx  = pt.x - lw / 2;   // centred on dot x
+                    _divs[idx].style.left  = lx + 'px';
+                    _divs[idx].style.top   = ly + 'px';
+                    _divs[idx].style.width = lw + 'px';
+
+                    // Short vertical stub: dot centre → bottom of number.
                     var line = document.createElementNS(
                         'http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pt.x);
                     line.setAttribute('y1', pt.y);
-                    // Left label: leader to right edge; right label: to left edge.
-                    line.setAttribute('x2', goLeft[idx] ? lx + lw : lx);
-                    // Above: connect to bottom of label; below: connect to top.
-                    line.setAttribute('y2', aboveFlag[idx] ? ly + lh : ly);
+                    line.setAttribute('x2', pt.x);
+                    line.setAttribute('y2', ly + NUM_H);
                     line.setAttribute('stroke', 'black');
                     line.setAttribute('stroke-width', '0.7');
                     line.setAttribute('opacity', '0.5');
