@@ -2445,31 +2445,44 @@ class MissileFlyoutApp(tk.Tk):
             stage_dry = stage_fueled - prop
             dry_pct   = stage_dry / stage_fueled * 100 if stage_fueled > 0 else 0.0
 
+            # Two-column layout inside the stage LabelFrame.
+            # Left: Dimensions & Masses   Right: Engine Performance
+            lf.columnconfigure(0, weight=1)
+            lf.columnconfigure(2, weight=1)
+            left  = ttk.Frame(lf)
+            left.grid( row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+            ttk.Separator(lf, orient="vertical").grid(
+                row=0, column=1, sticky="ns", padx=4)
+            right = ttk.Frame(lf)
+            right.grid(row=0, column=2, sticky="nsew", padx=(0, 4), pady=4)
+
+            # ── Left: Dimensions & Masses ─────────────────────────────
             r = 0
-            _row(lf, r, "Diameter (m):",          f"{node.diameter_m:.2f}"); r += 1
-            _row(lf, r, "Length (m):",             f"{node.length_m:.2f}"); r += 1
-            _row(lf, r, "Fueled mass (kg):",       f"{stage_fueled:,.0f}"); r += 1
-            _row(lf, r, "Propellant mass (kg):",   f"{prop:,.0f}  (computed)"); r += 1
-            _row(lf, r, "Dry mass (kg):",          f"{stage_dry:,.0f}"); r += 1
-            _row(lf, r, "Dry mass %:",             f"{dry_pct:.1f}%"); r += 1
-            _row(lf, r, "Thrust (kN):",            f"{node.thrust_N/1000:,.0f}"); r += 1
-            _row(lf, r, "ISP (s):",                f"{node.isp_s:.0f}"); r += 1
-            _row(lf, r, "Nozzle exit area (m²):",  f"{node.nozzle_exit_area_m2:.4f}"); r += 1
-            _row(lf, r, "Burntime (s):",           f"{node.burn_time_s:.1f}  (computed)"); r += 1
-            mdot = node.thrust_N / (node.isp_s * _G0)
-            _row(lf, r, "Mass flow (kg/s):",        f"{mdot:.1f}"); r += 1
-            _row(lf, r, "T/W ratio:",              f"{tw:.2f}"); r += 1
+            _row(left, r, "Diameter (m):",      f"{node.diameter_m:.2f}");       r += 1
+            _row(left, r, "Length (m):",         f"{node.length_m:.2f}");         r += 1
+            _row(left, r, "Fueled mass (kg):",   f"{stage_fueled:,.0f}");         r += 1
+            _row(left, r, "Propellant (kg):",    f"{prop:,.0f}  (computed)");     r += 1
+            _row(left, r, "Dry mass (kg):",      f"{stage_dry:,.0f}");            r += 1
+            _row(left, r, "Dry mass %:",         f"{dry_pct:.1f}%");              r += 1
             if not is_last:
-                _row(lf, r, "Coast (s):", f"{node.coast_time_s:.0f}"); r += 1
-            # Show debris β for every jettisoned stage body.
-            # Non-last stages always shed; last stage sheds only when
-            # rv_separates is explicitly set.
+                _row(left, r, "Coast (s):",      f"{node.coast_time_s:.0f}");     r += 1
+            # Debris β for jettisoned stage bodies.
             _body_jettisoned = (not is_last) or p.rv_separates
             if _body_jettisoned:
                 beta = tumbling_cylinder_beta(node.mass_final,
                                               node.diameter_m, node.length_m)
                 if beta > 0:
-                    _row(lf, r, "Empty stage β (kg/m²):", f"{beta:,.0f}"); r += 1
+                    _row(left, r, "Empty β (kg/m²):", f"{beta:,.0f}");            r += 1
+
+            # ── Right: Engine Performance ─────────────────────────────
+            mdot = node.thrust_N / (node.isp_s * _G0)
+            r = 0
+            _row(right, r, "Thrust (kN):",       f"{node.thrust_N/1000:,.0f}");  r += 1
+            _row(right, r, "ISP (s):",            f"{node.isp_s:.0f}");           r += 1
+            _row(right, r, "Nozzle area (m²):",  f"{node.nozzle_exit_area_m2:.4f}"); r += 1
+            _row(right, r, "Burntime (s):",       f"{node.burn_time_s:.1f}  (computed)"); r += 1
+            _row(right, r, "Mass flow (kg/s):",   f"{mdot:.1f}  (computed)");     r += 1
+            _row(right, r, "T/W ratio:",          f"{tw:.2f}  (computed)");       r += 1
 
             sn  += 1
             node = node.stage2
