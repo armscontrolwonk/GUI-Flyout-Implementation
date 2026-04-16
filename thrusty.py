@@ -3622,6 +3622,22 @@ class MissileFlyoutApp(tk.Tk):
                 _label_data.append({'lat':  mk_lat, 'lon':  mk_lon,
                                     'text': display_name, 't_s': ms['t_s']})
             elif _show_tick(e, is_debris):
+                display_name = _name_only(label)
+                popup_html = (
+                    f"<b>{display_name}</b><br>"
+                    f"t = {ms['t_s']:.1f} s<br>"
+                    f"Alt: {ms['alt_km']:.1f} km<br>"
+                    f"Range: {ms['range_km']:.1f} km<br>"
+                    f"Speed: {ms['speed_kms']:.2f} km/s"
+                )
+                folium.CircleMarker(
+                    [mk_lat, mk_lon], radius=8,
+                    color="black", weight=0,
+                    fill=True, fill_color="black", fill_opacity=0.0,
+                    opacity=0.0,
+                    popup=folium.Popup(popup_html, max_width=220),
+                    tooltip=display_name,
+                ).add_to(fmap)
                 _tick_data.append({'lat': mk_lat, 'lon': mk_lon})
 
         # ── Trajectory skeleton for tick-mark perpendicular computation ──
