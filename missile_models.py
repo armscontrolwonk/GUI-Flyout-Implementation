@@ -127,11 +127,12 @@ class MissileParams:
 
     # Nose-shape aerodynamics (FerencDV / HyperCFD model).
     # "forden" = use mach_table/cd_table (default, existing behaviour).
-    # See NOSE_SHAPES for valid values.  ld_ratio = nose_length / body_diameter.
-    nose_shape:           str   = "forden"
-    nose_ld_ratio:        float = 3.0
-    shroud_nose_shape:    str   = "forden"
-    shroud_nose_ld_ratio: float = 3.0
+    # L/D is computed internally as nose_length_m / diameter_m (or shroud_diameter_m).
+    # 0 = not specified → L/D defaults to 3.0 inside _cd_nose_shape.
+    nose_shape:             str   = "forden"
+    nose_length_m:          float = 0.0    # physical nose-cone length (m)
+    shroud_nose_shape:      str   = "forden"
+    shroud_nose_length_m:   float = 0.0    # physical shroud nose-cone length (m)
 
 
 # ---------------------------------------------------------------------------
@@ -766,9 +767,9 @@ def missile_to_dict(p: MissileParams) -> dict:
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
         'solid_motor':            p.solid_motor,
         'nose_shape':             p.nose_shape,
-        'nose_ld_ratio':          p.nose_ld_ratio,
+        'nose_length_m':          p.nose_length_m,
         'shroud_nose_shape':      p.shroud_nose_shape,
-        'shroud_nose_ld_ratio':   p.shroud_nose_ld_ratio,
+        'shroud_nose_length_m':   p.shroud_nose_length_m,
     }
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -825,9 +826,11 @@ def missile_from_dict(d: dict) -> MissileParams:
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
         nose_shape=d.get('nose_shape', 'forden'),
-        nose_ld_ratio=float(d.get('nose_ld_ratio', 3.0)),
+        nose_length_m=float(d.get('nose_length_m',
+                            float(d.get('nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
         shroud_nose_shape=d.get('shroud_nose_shape', 'forden'),
-        shroud_nose_ld_ratio=float(d.get('shroud_nose_ld_ratio', 3.0)),
+        shroud_nose_length_m=float(d.get('shroud_nose_length_m',
+                            float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -1000,10 +1003,15 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
                   and top_params.shroud_diameter_m > 0
                   and altitude_m < top_params.shroud_jettison_alt_km * 1000.0)
     if _shroud_on and top_params.shroud_nose_shape not in ('', 'forden'):
-        cd = _cd_nose_shape(top_params.shroud_nose_shape,
-                            top_params.shroud_nose_ld_ratio, mach)
+        _sd = (top_params.shroud_diameter_m if top_params.shroud_diameter_m > 0
+               else top_params.diameter_m)
+        _ld = (top_params.shroud_nose_length_m / _sd
+               if top_params.shroud_nose_length_m > 0 and _sd > 0 else 3.0)
+        cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach)
     elif top_params is not None and top_params.nose_shape not in ('', 'forden'):
-        cd = _cd_nose_shape(top_params.nose_shape, top_params.nose_ld_ratio, mach)
+        _ld = (top_params.nose_length_m / top_params.diameter_m
+               if top_params.nose_length_m > 0 and top_params.diameter_m > 0 else 3.0)
+        cd = _cd_nose_shape(top_params.nose_shape, _ld, mach)
     else:
         cd = drag_coefficient(params, mach)
 
