@@ -120,9 +120,10 @@ class MissileParams:
     # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
     shroud_mass_kg:         float = 0.0
     shroud_jettison_alt_km: float = 80.0
-    # Physical length of the shroud — used to compute the tumbling-cylinder
-    # ballistic coefficient for the shed shroud debris arc.  0 = not specified.
+    # Physical dimensions of the shroud — used for drag (pre-jettison reference
+    # area uses shroud_diameter_m when > 0) and debris tumbling-cylinder β.
     shroud_length_m:        float = 0.0
+    shroud_diameter_m:      float = 0.0   # outer diameter of shroud/fairing (m)
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +653,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_mass_kg':         p.shroud_mass_kg,
         'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
         'shroud_length_m':        p.shroud_length_m,
+        'shroud_diameter_m':      p.shroud_diameter_m,
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
         'solid_motor':            p.solid_motor,
     }
@@ -706,6 +708,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
+        shroud_diameter_m=float(d.get('shroud_diameter_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
@@ -830,9 +833,21 @@ def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
     return params.mass_final  # shouldn't reach here
 
 
-def missile_area(params: MissileParams) -> float:
-    """Reference cross-sectional area (m^2)."""
-    return np.pi * (params.diameter_m / 2) ** 2
+def missile_area(params: MissileParams, altitude_m: float = None,
+                 top_params: 'MissileParams' = None) -> float:
+    """Reference cross-sectional area (m^2).
+
+    When top_params carries a shroud and altitude_m is below the jettison
+    altitude, returns the shroud frontal area instead of the body area.
+    """
+    if (top_params is not None
+            and top_params.shroud_diameter_m > 0
+            and altitude_m is not None
+            and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
+        d = top_params.shroud_diameter_m
+    else:
+        d = params.diameter_m
+    return np.pi * (d / 2) ** 2
 
 
 def drag_coefficient(params: MissileParams, mach: float) -> float:
@@ -840,15 +855,17 @@ def drag_coefficient(params: MissileParams, mach: float) -> float:
     return float(np.interp(mach, params.mach_table, params.cd_table))
 
 
-def drag_force_vector(params: MissileParams, vel_ecef, altitude_m) -> np.ndarray:
+def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
+                      top_params: 'MissileParams' = None) -> np.ndarray:
     """
     Aerodynamic drag force vector (N) opposing velocity.
 
     Parameters
     ----------
-    params     : MissileParams
+    params     : MissileParams (current stage)
     vel_ecef   : velocity vector in ECEF (m/s), shape (3,)
     altitude_m : scalar altitude (m)
+    top_params : top-level MissileParams (for shroud diameter lookup); optional
 
     Returns
     -------
@@ -860,7 +877,7 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m) -> np.ndarray
     _, _, rho, a_sound = atmosphere(altitude_m)
     mach = speed / a_sound
     cd   = drag_coefficient(params, mach)
-    area = missile_area(params)
+    area = missile_area(params, altitude_m=altitude_m, top_params=top_params)
     q    = 0.5 * rho * speed**2
     drag_mag = cd * q * area
     return -drag_mag * (vel_ecef / speed)

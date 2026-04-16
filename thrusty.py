@@ -603,14 +603,25 @@ class MissileDialog(tk.Toplevel):
 
         # Row 7: Shroud length — used to compute tumbling-cylinder debris β
         ttk.Label(pl, text="  Shroud length (m):").grid(
-            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_length_var = tk.StringVar(value="0")
         _sl_inner = ttk.Frame(pl)
-        _sl_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        _sl_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_length_entry = ttk.Entry(
             _sl_inner, textvariable=self._shroud_length_var, width=10, state="disabled")
         self._shroud_length_entry.pack(side=tk.LEFT)
         ttk.Label(_sl_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Row 8: Shroud diameter — for reference area correction pre-jettison
+        ttk.Label(pl, text="  Shroud diameter (m):").grid(
+            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+        self._shroud_diameter_var = tk.StringVar(value="0")
+        _sd_inner = ttk.Frame(pl)
+        _sd_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        self._shroud_diameter_entry = ttk.Entry(
+            _sd_inner, textvariable=self._shroud_diameter_var, width=10, state="disabled")
+        self._shroud_diameter_entry.pack(side=tk.LEFT)
+        ttk.Label(_sd_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
         # Live total-payload label update
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
@@ -670,6 +681,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_mass_entry.config(state="disabled")
         self._shroud_alt_entry.config(state="disabled")
         self._shroud_length_entry.config(state="disabled")
+        self._shroud_diameter_entry.config(state="disabled")
         self._rv_separates_check.config(state="disabled")
         self._save_btn.pack_forget()
         self._save_as_btn.pack_forget()
@@ -686,11 +698,12 @@ class MissileDialog(tk.Toplevel):
             self._total_payload_lbl.config(text="kg  = ? total")
 
     def _update_shroud_state(self):
-        """Enable/disable shroud mass, altitude, and length entries."""
+        """Enable/disable shroud mass, altitude, length, and diameter entries."""
         state = "normal" if self._shroud_var.get() else "disabled"
         self._shroud_mass_entry.config(state=state)
         self._shroud_alt_entry.config(state=state)
         self._shroud_length_entry.config(state=state)
+        self._shroud_diameter_entry.config(state=state)
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -778,6 +791,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_mass_var.set(f"{shroud_mass:.0f}")
         self._shroud_alt_var.set(f"{p.shroud_jettison_alt_km:.0f}")
         self._shroud_length_var.set(f"{p.shroud_length_m:.1f}")
+        self._shroud_diameter_var.set(f"{p.shroud_diameter_m:.2f}")
         self._update_shroud_state()
 
         # RV / warhead separates flag
@@ -809,16 +823,18 @@ class MissileDialog(tk.Toplevel):
         rv_separates = self._rv_separates_var.get()
 
         # Shroud
-        shroud_mass     = 0.0
-        shroud_alt_km   = 80.0
-        shroud_length_m = 0.0
+        shroud_mass       = 0.0
+        shroud_alt_km     = 80.0
+        shroud_length_m   = 0.0
+        shroud_diameter_m = 0.0
         if self._shroud_var.get():
             try:
-                shroud_mass     = float(self._shroud_mass_var.get())
-                shroud_alt_km   = float(self._shroud_alt_var.get())
-                shroud_length_m = float(self._shroud_length_var.get())
+                shroud_mass       = float(self._shroud_mass_var.get())
+                shroud_alt_km     = float(self._shroud_alt_var.get())
+                shroud_length_m   = float(self._shroud_length_var.get())
+                shroud_diameter_m = float(self._shroud_diameter_var.get())
             except ValueError:
-                raise ValueError("Shroud mass, jettison altitude, and length must be numbers.")
+                raise ValueError("Shroud mass, jettison altitude, length, and diameter must be numbers.")
 
         # Read and validate all active stage frames
         stages = []
@@ -882,6 +898,7 @@ class MissileDialog(tk.Toplevel):
         node.shroud_mass_kg         = shroud_mass
         node.shroud_jettison_alt_km = shroud_alt_km
         node.shroud_length_m        = shroud_length_m
+        node.shroud_diameter_m      = shroud_diameter_m
         return node
 
     # ------------------------------------------------------------------
@@ -2504,10 +2521,16 @@ class MissileFlyoutApp(tk.Tk):
             r = 0
             _row(ff, r, "Mass (kg):",          f"{p.shroud_mass_kg:,.0f}"); r += 1
             _row(ff, r, "Jettison alt (km):",  f"{p.shroud_jettison_alt_km:.0f}"); r += 1
+            if p.shroud_diameter_m > 0:
+                _sd = p.shroud_diameter_m
+                _row(ff, r, "Diameter (m):",   f"{_sd:.2f}"); r += 1
+                _area_ratio = (_sd / p.diameter_m) ** 2
+                _row(ff, r, "Area vs body:",   f"{_area_ratio:.2f}×  (drag pre-jettison)"); r += 1
+            else:
+                _sd = p.diameter_m
             if p.shroud_length_m > 0:
                 _row(ff, r, "Length (m):",     f"{p.shroud_length_m:.2f}"); r += 1
-                beta = tumbling_cylinder_beta(p.shroud_mass_kg,
-                                              p.diameter_m, p.shroud_length_m)
+                beta = tumbling_cylinder_beta(p.shroud_mass_kg, _sd, p.shroud_length_m)
                 if beta > 0:
                     _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
 
