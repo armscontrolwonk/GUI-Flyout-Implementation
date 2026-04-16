@@ -634,17 +634,16 @@ class MissileDialog(tk.Toplevel):
             values=_ns_labels, state="disabled", width=18)
         self._shroud_nose_shape_cb.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # Row 10: Shroud nose L/D
-        ttk.Label(pl, text="  Shroud nose L/D:").grid(
+        # Row 10: Shroud nose length (L/D computed internally)
+        ttk.Label(pl, text="  Shroud nose length (m):").grid(
             row=10, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
-        self._shroud_nose_ld_var = tk.StringVar(value="3.0")
+        self._shroud_nose_length_var = tk.StringVar(value="0")
         _snld_inner = ttk.Frame(pl)
         _snld_inner.grid(row=10, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
-        self._shroud_nose_ld_entry = ttk.Entry(
-            _snld_inner, textvariable=self._shroud_nose_ld_var, width=10, state="disabled")
-        self._shroud_nose_ld_entry.pack(side=tk.LEFT)
-        ttk.Label(_snld_inner, text="(nose length / diameter)").pack(
-            side=tk.LEFT, padx=(4, 0))
+        self._shroud_nose_length_entry = ttk.Entry(
+            _snld_inner, textvariable=self._shroud_nose_length_var, width=10, state="disabled")
+        self._shroud_nose_length_entry.pack(side=tk.LEFT)
+        ttk.Label(_snld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
         # Live total-payload label update
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
@@ -662,16 +661,15 @@ class MissileDialog(tk.Toplevel):
             values=_ns_labels, state="readonly", width=18)
         self._nose_shape_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        ttk.Label(af, text="Nose L/D:").grid(
+        ttk.Label(af, text="Nose length (m):").grid(
             row=1, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
-        self._nose_ld_var = tk.StringVar(value="3.0")
+        self._nose_length_var = tk.StringVar(value="0")
         _nld_inner = ttk.Frame(af)
         _nld_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
-        self._nose_ld_entry = ttk.Entry(
-            _nld_inner, textvariable=self._nose_ld_var, width=10)
-        self._nose_ld_entry.pack(side=tk.LEFT)
-        ttk.Label(_nld_inner, text="(nose length / diameter)").pack(
-            side=tk.LEFT, padx=(4, 0))
+        self._nose_length_entry = ttk.Entry(
+            _nld_inner, textvariable=self._nose_length_var, width=10)
+        self._nose_length_entry.pack(side=tk.LEFT)
+        ttk.Label(_nld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
@@ -729,9 +727,9 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_entry.config(state="disabled")
         self._shroud_diameter_entry.config(state="disabled")
         self._shroud_nose_shape_cb.config(state="disabled")
-        self._shroud_nose_ld_entry.config(state="disabled")
+        self._shroud_nose_length_entry.config(state="disabled")
         self._nose_shape_cb.config(state="disabled")
-        self._nose_ld_entry.config(state="disabled")
+        self._nose_length_entry.config(state="disabled")
         self._rv_separates_check.config(state="disabled")
         self._save_btn.pack_forget()
         self._save_as_btn.pack_forget()
@@ -756,7 +754,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_entry.config(state=state)
         self._shroud_diameter_entry.config(state=state)
         self._shroud_nose_shape_cb.config(state=cb_state)
-        self._shroud_nose_ld_entry.config(state=state)
+        self._shroud_nose_length_entry.config(state=state)
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -847,13 +845,13 @@ class MissileDialog(tk.Toplevel):
         self._shroud_diameter_var.set(f"{p.shroud_diameter_m:.2f}")
         self._shroud_nose_shape_var.set(
             NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, NOSE_SHAPE_LABELS["forden"]))
-        self._shroud_nose_ld_var.set(f"{p.shroud_nose_ld_ratio:.1f}")
+        self._shroud_nose_length_var.set(f"{p.shroud_nose_length_m:.2f}")
         self._update_shroud_state()
 
         # Body nose shape
         self._nose_shape_var.set(
             NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["forden"]))
-        self._nose_ld_var.set(f"{p.nose_ld_ratio:.1f}")
+        self._nose_length_var.set(f"{p.nose_length_m:.2f}")
 
         # RV / warhead separates flag
         self._rv_separates_var.set(p.rv_separates)
@@ -889,16 +887,16 @@ class MissileDialog(tk.Toplevel):
         shroud_length_m      = 0.0
         shroud_diameter_m    = 0.0
         shroud_nose_shape    = "forden"
-        shroud_nose_ld_ratio = 3.0
+        shroud_nose_length_m = 0.0
         if self._shroud_var.get():
             try:
                 shroud_mass       = float(self._shroud_mass_var.get())
                 shroud_alt_km     = float(self._shroud_alt_var.get())
                 shroud_length_m   = float(self._shroud_length_var.get())
                 shroud_diameter_m = float(self._shroud_diameter_var.get())
-                shroud_nose_ld_ratio = float(self._shroud_nose_ld_var.get())
+                shroud_nose_length_m = float(self._shroud_nose_length_var.get())
             except ValueError:
-                raise ValueError("Shroud mass, jettison altitude, length, diameter, and nose L/D must be numbers.")
+                raise ValueError("Shroud mass, jettison altitude, length, diameter, and nose length must be numbers.")
             _label = self._shroud_nose_shape_var.get()
             shroud_nose_shape = next(
                 (k for k, v in NOSE_SHAPE_LABELS.items() if v == _label), "forden")
@@ -908,9 +906,9 @@ class MissileDialog(tk.Toplevel):
         nose_shape    = next(
             (k for k, v in NOSE_SHAPE_LABELS.items() if v == _body_ns_label), "forden")
         try:
-            nose_ld_ratio = float(self._nose_ld_var.get())
+            nose_length_m = float(self._nose_length_var.get())
         except ValueError:
-            raise ValueError("Nose L/D must be a number.")
+            raise ValueError("Nose length must be a number.")
 
         # Read and validate all active stage frames
         stages = []
@@ -976,9 +974,9 @@ class MissileDialog(tk.Toplevel):
         node.shroud_length_m        = shroud_length_m
         node.shroud_diameter_m      = shroud_diameter_m
         node.shroud_nose_shape      = shroud_nose_shape
-        node.shroud_nose_ld_ratio   = shroud_nose_ld_ratio
+        node.shroud_nose_length_m   = shroud_nose_length_m
         node.nose_shape             = nose_shape
-        node.nose_ld_ratio          = nose_ld_ratio
+        node.nose_length_m          = nose_length_m
         return node
 
     # ------------------------------------------------------------------
@@ -2600,7 +2598,10 @@ class MissileFlyoutApp(tk.Tk):
             af.pack(fill=tk.X, **pad)
             _row(af, 0, "Nose shape:",
                  NOSE_SHAPE_LABELS.get(p.nose_shape, p.nose_shape))
-            _row(af, 1, "Nose L/D:", f"{p.nose_ld_ratio:.1f}")
+            if p.nose_length_m > 0 and p.diameter_m > 0:
+                _ld = p.nose_length_m / p.diameter_m
+                _row(af, 1, "Nose length (m):",
+                     f"{p.nose_length_m:.2f}  (L/D = {_ld:.2f})")
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
@@ -2619,12 +2620,36 @@ class MissileFlyoutApp(tk.Tk):
             if p.shroud_nose_shape not in ('', 'forden'):
                 _row(ff, r, "Nose shape:",
                      NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, p.shroud_nose_shape)); r += 1
-                _row(ff, r, "Nose L/D:", f"{p.shroud_nose_ld_ratio:.1f}"); r += 1
+                if p.shroud_nose_length_m > 0 and _sd > 0:
+                    _sld = p.shroud_nose_length_m / _sd
+                    _row(ff, r, "Nose length (m):",
+                         f"{p.shroud_nose_length_m:.2f}  (L/D = {_sld:.2f})"); r += 1
             if p.shroud_length_m > 0:
                 _row(ff, r, "Length (m):",     f"{p.shroud_length_m:.2f}"); r += 1
                 beta = tumbling_cylinder_beta(p.shroud_mass_kg, _sd, p.shroud_length_m)
                 if beta > 0:
                     _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
+
+        # ── Total length ──────────────────────────────────────────────
+        _stage_lengths = []
+        _node = p
+        _sn = 1
+        while _node is not None:
+            if _node.length_m > 0:
+                _stage_lengths.append((_sn, _node.length_m))
+            _node = _node.stage2
+            _sn += 1
+        _total_len = sum(l for _, l in _stage_lengths)
+        if p.shroud_length_m > 0:
+            _total_len += p.shroud_length_m
+        if _total_len > 0:
+            lf_len = ttk.LabelFrame(self._params_inner, text="Total Length")
+            lf_len.pack(fill=tk.X, **pad)
+            _parts = [f"S{n}: {l:.1f} m" for n, l in _stage_lengths]
+            if p.shroud_length_m > 0:
+                _parts.append(f"Shroud: {p.shroud_length_m:.1f} m")
+            _row(lf_len, 0, "Total (m):", f"{_total_len:.2f}")
+            _row(lf_len, 1, "Breakdown:", "  +  ".join(_parts))
 
     # ------------------------------------------------------------------
     # Aim at target
