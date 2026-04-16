@@ -3581,11 +3581,10 @@ class MissileFlyoutApp(tk.Tk):
         import re as _re_ev, json as _json
 
         def _name_only(raw):
-            """Strip time/data parentheticals; rename events."""
+            """Strip time/data parentheticals; rename Ignition → Launch."""
             name = _re_ev.sub(r'\s*\(\d[^)]*\)\s*$', '', raw).strip()
-            nl   = name.lower()
-            if nl == 'ignition':        return 'Launch'
-            if 'shroud impact' in nl:   return 'Fairing impact'
+            if name.lower() == 'ignition':
+                return 'Launch'
             return name
 
         _label_data = []   # [{lat, lon, text, t_s}] for JS labels
@@ -3644,9 +3643,10 @@ class MissileFlyoutApp(tk.Tk):
             var LABELS    = {label_json};
             var TICKS     = {tick_json};
             var TRAJ      = {traj_json};
-            var V_BELOW   = 22;   // px from dot centre down to label top
-            var H_OFFSET  = 6;    // px: label left edge offset right of dot centre
-            var STACK_GAP = 4;    // px gap between stacked label boxes
+            var H_GAP     = 10;   // px right of the dot centre
+            var V_ABOVE   = 4;    // px between dot and nearest edge of label
+            var STACK_GAP = 3;    // px between stacked labels
+            var PAD       = 2;    // extra padding around each label box
             var TICK_HALF = 8;    // px: half-length of tick mark
 
             var _svg = null, _con = null, _divs = [];
@@ -3721,68 +3721,92 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
+                // Returns screen-space dy of the trajectory at the point
+                // nearest to pt.  dy < 0 → ascending (going up-screen);
+                // dy ≥ 0 → descending / flat.
+                function tangentDy(pt) {{
+                    var best = Infinity, bestIdx = 0;
+                    for (var i = 0; i < tPts.length; i++) {{
+                        var ddx = tPts[i].x - pt.x, ddy = tPts[i].y - pt.y;
+                        var d2  = ddx*ddx + ddy*ddy;
+                        if (d2 < best) {{ best = d2; bestIdx = i; }}
+                    }}
+                    var i0 = Math.max(0, bestIdx - 1);
+                    var i1 = Math.min(tPts.length - 1, bestIdx + 1);
+                    return tPts[i1].y - tPts[i0].y;
+                }}
+
                 // Hide all labels first.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
-                // Visible markers only, sorted top-to-bottom by screen y.
+                // Visible markers only, sorted right-to-left so stacking is
+                // chronological and labels don't leap over one another.
                 var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
                     var p = pts[i];
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
-                order.sort(function(a, b) {{ return pts[a].y - pts[b].y; }});
+                order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
 
                 var CLUSTER_R = 60;
-                var topY = {{}}, lw_cache = {{}};
+                var topY  = {{}}, below = {{}};
 
-                // All labeled events are trajectory endpoints:
-                //   Launch   → trajectory departs upward  → below dot is safe
-                //   Impacts  → trajectory arrives from above → below dot is safe
-                // Place each label below its dot (V_BELOW gap) and stack
-                // downward when dots are close vertically.
-                var prevBottom = null, prevPtY = null;
+                var prevTop = null, prevBottom = null, prevPt = null;
                 order.forEach(function(idx) {{
                     var pt = pts[idx];
                     _divs[idx].style.display = 'block';
-                    var lw = (_divs[idx].offsetWidth  || 80);
-                    var lh = (_divs[idx].offsetHeight || 14);
-                    if (prevPtY !== null &&
-                            Math.abs(pt.y - prevPtY) > CLUSTER_R) {{
-                        prevBottom = null;
+                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
+
+                    // Reset stacking group when this dot is far from the last.
+                    if (prevPt) {{
+                        var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
+                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) {{
+                            prevTop = null; prevBottom = null;
+                        }}
                     }}
-                    var idealTop  = pt.y + V_BELOW;
-                    var candidate = (prevBottom === null)
-                        ? idealTop
-                        : Math.max(idealTop, prevBottom + STACK_GAP);
-                    if (candidate + lh > mapH - EDGE) candidate = mapH - EDGE - lh;
-                    if (candidate < EDGE) candidate = EDGE;
-                    topY[idx]     = candidate;
-                    lw_cache[idx] = lw;
-                    prevBottom    = candidate + lh;
-                    prevPtY       = pt.y;
+
+                    // Ascending trajectory at this dot (screen dy < 0) →
+                    // label goes below the dot (opposite side of line).
+                    // Descending / flat (dy ≥ 0) → label goes above.
+                    var goBelow = tangentDy(pt) < 0;
+                    var candidate;
+                    if (goBelow) {{
+                        var idealBottom = pt.y + V_ABOVE;
+                        candidate = (prevBottom === null)
+                            ? idealBottom
+                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
+                        if (candidate + lh > mapH - EDGE) {{
+                            goBelow = false;   // no room below — try above
+                        }} else {{
+                            prevBottom = candidate;
+                        }}
+                    }}
+                    if (!goBelow) {{
+                        var idealTop = pt.y - lh - V_ABOVE;
+                        candidate = (prevTop === null)
+                            ? idealTop
+                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
+                        if (candidate < EDGE) {{
+                            candidate  = pt.y + V_ABOVE;   // force below
+                            goBelow    = true;
+                            prevTop    = null;
+                        }} else {{
+                            prevTop = candidate;
+                        }}
+                    }}
+                    topY[idx]  = candidate;
+                    below[idx] = goBelow;
+                    prevPt     = pt;
                 }});
 
-                // Render: position label divs + leader lines.
+                // Render: position label divs only (no leader lines).
                 order.forEach(function(idx) {{
                     var pt  = pts[idx];
-                    var lh  = (_divs[idx].offsetHeight || 14);
-                    var lw  = lw_cache[idx] || 80;
+                    var lh  = (_divs[idx].offsetHeight || 14) + PAD * 2;
+                    var lx  = pt.x + H_GAP;
                     var ly  = topY[idx];
-                    var lx  = pt.x + H_OFFSET;
                     _divs[idx].style.left = lx + 'px';
                     _divs[idx].style.top  = ly + 'px';
-
-                    // Leader: dot centre → top-left of label box
-                    var line = document.createElementNS(
-                        'http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('x1', pt.x);
-                    line.setAttribute('y1', pt.y);
-                    line.setAttribute('x2', lx);
-                    line.setAttribute('y2', ly);
-                    line.setAttribute('stroke', 'black');
-                    line.setAttribute('stroke-width', '0.7');
-                    line.setAttribute('opacity', '0.5');
-                    _svg.appendChild(line);
                 }});
             }}
 
