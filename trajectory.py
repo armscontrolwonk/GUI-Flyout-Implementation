@@ -1509,6 +1509,29 @@ def _search_one(args):
         return -1.0
 
 
+def _tsiolkovsky_dv(params: MissileParams) -> float:
+    """Ideal (vacuum) delta-V: sum Tsiolkovsky rocket equation over all stages."""
+    G0 = 9.80665
+    dv, node = 0.0, params
+    while node is not None:
+        if node.burn_time_s > 0 and node.mass_initial > node.mass_final > 0:
+            dv += node.isp_s * G0 * np.log(node.mass_initial / node.mass_final)
+        node = node.stage2
+    return dv
+
+
+def _wheelon_gamma_opt(v_bo: float, burnout_alt_m: float = 150_000.0) -> float:
+    """
+    Wheelon optimal burnout elevation angle above local horizontal (degrees).
+    γ_opt = ½ arccos(Q / (2 − Q)),  Q = V²/(g_bo · r_bo).
+    """
+    r_bo = RE + burnout_alt_m
+    g_bo = GM / r_bo ** 2
+    Q = min(v_bo ** 2 / (g_bo * r_bo), 0.9999)
+    cos_2g = max(-1.0, min(1.0, Q / (2.0 - Q)))
+    return 0.5 * np.degrees(np.arccos(cos_2g))
+
+
 def maximize_range(params: MissileParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,
@@ -1541,6 +1564,13 @@ def maximize_range(params: MissileParams,
     total_burn = total_burn_time(params)
     effective_cutoff = cutoff_time_s if cutoff_time_s is not None else total_burn
     effective_guidance = guidance if guidance is not None else params.guidance
+
+    # Wheelon optimal angle: narrow the coarse-grid search window.
+    _dv_ideal  = _tsiolkovsky_dv(params)
+    _v_bo_est  = max(1000.0, _dv_ideal * 0.82 - 300.0)
+    _gamma_opt = _wheelon_gamma_opt(_v_bo_est)
+    _angle_lo  = max(5.0,  _gamma_opt - 10.0)
+    _angle_hi  = min(80.0, _gamma_opt + 10.0)
 
     # If both loft params are supplied, just run and return (no grid search).
     if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
@@ -1615,7 +1645,7 @@ def maximize_range(params: MissileParams,
 
         # ── Phase 1: parallel coarse 2-D grid over (burnout_angle, turn_stop) ──
         coarse_grid = [(float(ba), 1.0, ts)
-                       for ba in range(5, 71, 2)
+                       for ba in np.arange(_angle_lo, _angle_hi + 1.0, 2.0)
                        for ts in ts_candidates]
         for la, lar, ts, rng in _run_parallel(coarse_grid):
             if rng > best_range:
@@ -1642,7 +1672,7 @@ def maximize_range(params: MissileParams,
     else:
         # ── Forden loft: parallel coarse grid over (loft_angle, loft_rate) ──
         coarse_grid = [(float(la), lar_x2 * 0.5, best_ts)
-                       for la in range(20, 75, 10)
+                       for la in np.arange(_angle_lo, _angle_hi + 1.0, 5.0)
                        for lar_x2 in range(1, 7)]
         for la, lar, ts, rng in _run_parallel(coarse_grid):
             if rng > best_range:
