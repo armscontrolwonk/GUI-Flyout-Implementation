@@ -1209,16 +1209,20 @@ def integrate_trajectory(params: MissileParams,
     _pitch_cmd  = []
     _az_cmd     = []
     _last_pitch = 90.0          # carry forward for _last_pitch tracking only
+    _last_az    = float('nan')  # carry forward through inter-stage coasts
     for _t_gp in t_arr:
         # Active stage at this time.
         # active_stage_and_t returns (next_stage, 0.0) during an inter-stage
         # coast — the next stage hasn't ignited yet.
         _gp_stage, _t_since = active_stage_and_t(params, _t_gp)
         _burning = _in_burn_window(_t_gp)
-        # Commanded azimuth: NaN outside burn windows
+        # Commanded azimuth: hold last value through inter-stage coasts,
+        # blank after final burnout (same cutoff as pitch).
         _az_val = np.degrees(_yaw_program(
             _t_gp, az, _gp_stage, _yaw_start, _yaw_stop, _yaw_final))
-        _az_cmd.append(_az_val if _burning else float('nan'))
+        if _burning:
+            _last_az = _az_val
+        _az_cmd.append(_last_az if _t_gp <= _final_burn_end else float('nan'))
         # Commanded pitch (elevation angle)
         if params.guidance in ("gravity_turn", "orbital_insertion"):
             _gp_angle = (_gp_stage.stage_burnout_angle_deg
