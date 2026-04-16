@@ -471,7 +471,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         else:
             f_drag = np.zeros(3)
     else:
-        f_drag = drag_force_vector(astage, vel, alt)
+        f_drag = drag_force_vector(astage, vel, alt, top_params=params)
 
     # --- Thrust with mode-selected guidance ---
     # For orbital_insertion mode with a liquid-engine final stage, check
@@ -1039,13 +1039,14 @@ def integrate_trajectory(params: MissileParams,
         _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
                                 ascending=True)
         if _t_fair is not None and _t_fair <= t_arr[-1]:
+            _sd = params.shroud_diameter_m if params.shroud_diameter_m > 0 else params.diameter_m
             if params.shroud_length_m > 0:
                 beta = tumbling_cylinder_beta(params.shroud_mass_kg,
-                                              params.diameter_m, params.shroud_length_m)
+                                              _sd, params.shroud_length_m)
                 _beta_note = f"β={beta:.0f} kg/m²"
             else:
                 # Length unknown — use end-on disc area as a conservative estimate.
-                _A_end = np.pi * params.diameter_m ** 2 / 4.0
+                _A_end = np.pi * _sd ** 2 / 4.0
                 beta = (params.shroud_mass_kg / _A_end) if _A_end > 0 else 0.0
                 _beta_note = f"β={beta:.0f} kg/m² (disc, no length)"
             if beta > 0:
