@@ -1316,6 +1316,7 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Export trajectory KML…", command=self._export_kml)
         file_menu.add_command(label="Open Folium map…",       command=self._export_folium)
         file_menu.add_command(label="Export timeline CSV…",   command=self._export_timeline)
+        file_menu.add_command(label="Export figures…",        command=self._export_figures)
         file_menu.add_command(label="Export missile JSON…",   command=self._export_missile)
         file_menu.add_separator()
         file_menu.add_command(label="Load NOTAM overlay…",    command=self._load_notam_overlay)
@@ -3190,6 +3191,25 @@ class MissileFlyoutApp(tk.Tk):
 
     # ------------------------------------------------------------------
     # File / Help actions
+    # ------------------------------------------------------------------
+    def _export_figures(self):
+        """Save the trajectory plots to PNG, PDF, or SVG."""
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[
+                ("PNG image",    "*.png"),
+                ("PDF document", "*.pdf"),
+                ("SVG vector",   "*.svg"),
+                ("All files",    "*.*"),
+            ],
+            title="Export figures",
+        )
+        if not path:
+            return
+        self._fig.savefig(path, dpi=150, bbox_inches="tight")
+        self._status_var.set(f"Figures exported: {path}")
+
     # ------------------------------------------------------------------
     def _save_trajectory(self):
         if self._result is None:
