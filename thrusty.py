@@ -1171,7 +1171,7 @@ class ParametricSweepDialog(tk.Toplevel):
         self._stop_evt.clear()
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, _) = self._app._get_inputs()
+             gt_start_s, gt_stop_s, *_) = self._app._get_inputs()
         except Exception as e:
             messagebox.showerror("Input error", str(e), parent=self)
             return
