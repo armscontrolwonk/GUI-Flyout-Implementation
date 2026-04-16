@@ -25,7 +25,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpecFromSubplotSpec
+
 import matplotlib.ticker
 
 from missile_models import (MISSILE_DB, get_missile,
@@ -1967,14 +1967,10 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_spd  = self._fig.add_subplot(gs[0, 1])  # speed vs time
         self._ax_traj = self._fig.add_subplot(gs[1, 0])  # alt vs range
         self._ax_trk  = self._fig.add_subplot(gs[1, 1])  # ground track
-        self._ax_guid      = self._fig.add_subplot(gs[2, 0])  # guidance program
+        self._ax_guid      = self._fig.add_subplot(gs[2, 0])  # pitch / azimuth
         self._ax_guid_twin = self._ax_guid.twinx()            # azimuth axis (created once)
-        # Slot [2,1]: two stacked aerodynamics panels
-        _gs_aero = GridSpecFromSubplotSpec(
-            2, 1, subplot_spec=gs[2, 1], hspace=0.55)
-        self._ax_qmach      = self._fig.add_subplot(_gs_aero[0])  # q + Mach
-        self._ax_qmach_twin = self._ax_qmach.twinx()             # Mach axis
-        self._ax_qlat       = self._fig.add_subplot(_gs_aero[1])  # q × α
+        self._ax_qmach      = self._fig.add_subplot(gs[2, 1]) # q + Mach (burn period)
+        self._ax_qmach_twin = self._ax_qmach.twinx()          # Mach axis
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -1992,9 +1988,8 @@ class MissileFlyoutApp(tk.Tk):
             (self._ax_spd,   "Speed vs Time",           "Time (s)",       "Speed (km/s)"),
             (self._ax_traj,  "Altitude vs Range",       "Downrange (km)", "Altitude (km)"),
             (self._ax_trk,   "Ground Track",            "Longitude (°E)", "Latitude (°N)"),
-            (self._ax_guid,  "Guidance Program",        "Time (s)",       "Elevation (°)"),
-            (self._ax_qmach, "Dyn. Pressure & Mach",   "Time (s)",       "q  (kPa)"),
-            (self._ax_qlat,  "Lateral Aero Load",       "Time (s)",       "q·α  (kPa·°)"),
+            (self._ax_guid,  "Pitch, Azimuth vs. Time",          "Time (s)", "Elevation (°)"),
+            (self._ax_qmach, "Dyn. Pressure, Mach vs. Time",     "Time (s)", "q  (kPa)"),
         ]:
             ax.set_title(title, fontsize=9)
             ax.set_xlabel(xl, fontsize=8)
@@ -3163,7 +3158,7 @@ class MissileFlyoutApp(tk.Tk):
 
         for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk,
                    self._ax_guid, self._ax_guid_twin,
-                   self._ax_qmach, self._ax_qmach_twin, self._ax_qlat):
+                   self._ax_qmach, self._ax_qmach_twin):
             ax.cla()
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
@@ -3298,7 +3293,7 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_trk.set_title("Ground Track", fontsize=9)
         self._ax_trk.legend(fontsize=7)
 
-        # ── Guidance Program ──────────────────────────────────────────
+        # ── Pitch, Azimuth vs. Time ───────────────────────────────────
         ax_g  = self._ax_guid
         ax_g2 = self._ax_guid_twin   # reuse pre-created twin (avoids stacking)
         t_plot = np.asarray(r.get('t', []))
@@ -3333,41 +3328,46 @@ class MissileFlyoutApp(tk.Tk):
         ax_g.set_xlabel('Time (s)', fontsize=7)
         ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
         ax_g.tick_params(labelsize=7, colors='royalblue')
-        ax_g.set_title('Guidance Program', fontsize=8)
+        ax_g.set_title('Pitch, Azimuth vs. Time', fontsize=8)
         ax_g.grid(True, alpha=0.35)
 
-        # ── Aerodynamics panels ───────────────────────────────────────
+        # ── Dyn. Pressure & Mach (burn period only) ──────────────────
         from atmosphere import atmosphere as _atm
-        _alt_m  = np.asarray(r['t']) * 0  # placeholder shape
-        _alt_m  = np.asarray(r.get('alt', []))       # altitude in metres
-        _vel_ec = np.asarray(r.get('vel_ecef', []))  # (N,3) ECEF velocity
+        _alt_m  = np.asarray(r.get('alt', []))
+        _vel_ec = np.asarray(r.get('vel_ecef', []))
         _t_aero = np.asarray(r['t'])
 
         if len(_alt_m) > 1 and _vel_ec.ndim == 2 and len(_vel_ec) == len(_alt_m):
-            # ── Compute q and Mach at each timestep ───────────────────
-            _spd_ms = np.asarray(r['speed'])   # ground speed m/s
+            _spd_ms = np.asarray(r['speed'])
             _rho    = np.empty(len(_alt_m))
             _sound  = np.empty(len(_alt_m))
             for _i, _h in enumerate(_alt_m):
                 _, _, _rho[_i], _sound[_i] = _atm(float(_h))
-            _q_kpa  = 0.5 * _rho * _spd_ms**2 / 1e3   # kPa
-            _mach   = _spd_ms / np.where(_sound > 0, _sound, 1.0)
+            _q_kpa = 0.5 * _rho * _spd_ms**2 / 1e3
+            _mach  = _spd_ms / np.where(_sound > 0, _sound, 1.0)
 
-            # ── Option 1: dynamic pressure + Mach ─────────────────────
+            # Restrict to burn period (t ≤ last burnout milestone)
+            _ms = r.get('milestones', [])
+            _bo_times = [float(m['t_s']) for m in _ms
+                         if any(k in m.get('event', '').lower()
+                                for k in ('burnout', 'cutoff', 'burn out'))]
+            _t_cutoff = max(_bo_times) if _bo_times else float(_t_aero[-1])
+            _mask = _t_aero <= _t_cutoff
+            _tb   = _t_aero[_mask]
+            _qb   = _q_kpa[_mask]
+            _mb   = _mach[_mask]
+
             ax_qm  = self._ax_qmach
             ax_mch = self._ax_qmach_twin
-            ax_qm.fill_between(_t_aero, _q_kpa, alpha=0.18, color='steelblue')
-            ax_qm.plot(_t_aero, _q_kpa, color='steelblue', lw=1.3,
-                       label='q (kPa)')
-            ax_mch.plot(_t_aero, _mach, color='darkorange', lw=1.2,
-                        ls='--', label='Mach')
+            ax_qm.fill_between(_tb, _qb, alpha=0.18, color='steelblue')
+            ax_qm.plot(_tb, _qb, color='steelblue', lw=1.3, label='q (kPa)')
+            ax_mch.plot(_tb, _mb, color='darkorange', lw=1.2, ls='--', label='Mach')
             # Annotate max-q
-            _qmax_i = int(np.argmax(_q_kpa))
-            ax_qm.axvline(_t_aero[_qmax_i], color='steelblue',
-                          lw=0.8, ls=':', alpha=0.7)
+            _qmax_i = int(np.argmax(_qb))
+            ax_qm.axvline(_tb[_qmax_i], color='steelblue', lw=0.8, ls=':', alpha=0.7)
             ax_qm.annotate(
-                f"max-q\n{_q_kpa[_qmax_i]:.1f} kPa\nM {_mach[_qmax_i]:.1f}",
-                xy=(_t_aero[_qmax_i], _q_kpa[_qmax_i]),
+                f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
+                xy=(_tb[_qmax_i], _qb[_qmax_i]),
                 xytext=(6, -4), textcoords='offset points',
                 fontsize=6, color='steelblue', va='top')
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
@@ -3376,61 +3376,12 @@ class MissileFlyoutApp(tk.Tk):
             ax_qm.set_xlabel('Time (s)', fontsize=7)
             ax_qm.set_ylabel('q  (kPa)', fontsize=7, color='steelblue')
             ax_qm.tick_params(labelsize=7, colors='steelblue')
-            ax_qm.set_title('Dyn. Pressure & Mach', fontsize=8)
+            ax_qm.set_title('Dyn. Pressure, Mach vs. Time', fontsize=8)
             ax_qm.grid(True, alpha=0.35)
             ax_mch.set_ylabel('Mach', fontsize=7, color='darkorange')
             ax_mch.tick_params(labelsize=7, colors='darkorange')
             ax_mch.yaxis.set_label_position('right')
             ax_mch.yaxis.set_ticks_position('right')
-
-            # ── Option 3: lateral aero load  q × α ───────────────────
-            # α = angular deviation of velocity azimuth from commanded azimuth.
-            # Velocity azimuth derived by projecting vel_ecef onto local ENU.
-            _lat_r = np.radians(np.asarray(r['lat']))
-            _lon_r = np.radians(np.asarray(r['lon']))
-            _slat, _clat = np.sin(_lat_r), np.cos(_lat_r)
-            _slon, _clon = np.sin(_lon_r), np.cos(_lon_r)
-            # East and North unit vectors in ECEF at each point
-            _e_east  = np.column_stack([-_slon,  _clon,  np.zeros_like(_lon_r)])
-            _e_north = np.column_stack([-_slat*_clon, -_slat*_slon, _clat])
-            _v_east  = np.sum(_vel_ec * _e_east,  axis=1)
-            _v_north = np.sum(_vel_ec * _e_north, axis=1)
-            _vel_az  = np.degrees(np.arctan2(_v_east, _v_north))  # CW from N
-
-            _ac_full = np.asarray(r.get('az_cmd_deg', []))
-            if len(_ac_full) == len(_t_aero):
-                # Forward-fill NaN in commanded azimuth (coast phases)
-                _ac_ff = _ac_full.copy()
-                _last_v = np.nan
-                for _i in range(len(_ac_ff)):
-                    if not np.isnan(_ac_ff[_i]):
-                        _last_v = _ac_ff[_i]
-                    elif not np.isnan(_last_v):
-                        _ac_ff[_i] = _last_v
-                # α: magnitude of azimuth deviation, wrapped to [0, 180]
-                _dalpha = _ac_ff - _vel_az
-                _dalpha = ((_dalpha + 180) % 360) - 180   # wrap ±180
-                _alpha_deg = np.abs(_dalpha)
-                _q_alpha   = _q_kpa * _alpha_deg
-
-                ax_ql = self._ax_qlat
-                ax_ql.fill_between(_t_aero, _q_alpha, alpha=0.18, color='crimson')
-                ax_ql.plot(_t_aero, _q_alpha, color='crimson', lw=1.3)
-                # Annotate peak lateral load
-                _ql_max_i = int(np.argmax(_q_alpha))
-                if _q_alpha[_ql_max_i] > 0:
-                    ax_ql.axvline(_t_aero[_ql_max_i], color='crimson',
-                                  lw=0.8, ls=':', alpha=0.7)
-                    ax_ql.annotate(
-                        f"peak\n{_q_alpha[_ql_max_i]:.1f}",
-                        xy=(_t_aero[_ql_max_i], _q_alpha[_ql_max_i]),
-                        xytext=(6, -4), textcoords='offset points',
-                        fontsize=6, color='crimson', va='top')
-                ax_ql.set_xlabel('Time (s)', fontsize=7)
-                ax_ql.set_ylabel('q·α  (kPa·°)', fontsize=7, color='crimson')
-                ax_ql.tick_params(labelsize=7, colors='crimson')
-                ax_ql.set_title('Lateral Aero Load  (q·α)', fontsize=8)
-                ax_ql.grid(True, alpha=0.35)
 
         self._canvas.draw_idle()
         self._canvas.flush_events()
