@@ -119,11 +119,71 @@ def centrifugal_acceleration(pos_ecef):
     return -np.cross(omega, np.cross(omega, pos_ecef))
 
 
-def range_between(lat1, lon1, lat2, lon2, radius=6371000.0):
+def range_between(lat1, lon1, lat2, lon2, radius=None):
     """
-    Great-circle range between two geodetic points (m).
+    Geodesic distance between two geodetic points on the WGS-84 ellipsoid (m).
+    Uses the Vincenty inverse formula (accurate to ~0.5 mm).
+    Falls back to spherical haversine for near-antipodal points.
+
+    Parameters
+    ----------
+    lat1, lon1 : geodetic latitude/longitude of point 1 (rad)
+    lat2, lon2 : geodetic latitude/longitude of point 2 (rad)
+    radius     : ignored — kept for backward compatibility
     """
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
-    return 2 * radius * np.arcsin(np.sqrt(a))
+    if lat1 == lat2 and lon1 == lon2:
+        return 0.0
+
+    U1 = np.arctan((1.0 - F) * np.tan(lat1))
+    U2 = np.arctan((1.0 - F) * np.tan(lat2))
+    sin_U1, cos_U1 = np.sin(U1), np.cos(U1)
+    sin_U2, cos_U2 = np.sin(U2), np.cos(U2)
+
+    L = lon2 - lon1
+    lam = L
+    cos_2sigma_m = 0.0
+    sin_alpha = 0.0
+    cos2_alpha = 1.0
+    sin_sigma = 0.0
+    cos_sigma = 0.0
+    sigma = 0.0
+    for _ in range(200):
+        sin_lam, cos_lam = np.sin(lam), np.cos(lam)
+        sin_sigma = np.sqrt((cos_U2 * sin_lam) ** 2 +
+                            (cos_U1 * sin_U2 - sin_U1 * cos_U2 * cos_lam) ** 2)
+        if sin_sigma == 0.0:
+            return 0.0
+        cos_sigma = sin_U1 * sin_U2 + cos_U1 * cos_U2 * cos_lam
+        sigma = np.arctan2(sin_sigma, cos_sigma)
+        sin_alpha = cos_U1 * cos_U2 * sin_lam / sin_sigma
+        cos2_alpha = 1.0 - sin_alpha ** 2
+        cos_2sigma_m = (0.0 if cos2_alpha == 0.0
+                        else cos_sigma - 2.0 * sin_U1 * sin_U2 / cos2_alpha)
+        C = F / 16.0 * cos2_alpha * (4.0 + F * (4.0 - 3.0 * cos2_alpha))
+        lam_new = L + (1.0 - C) * F * sin_alpha * (
+            sigma + C * sin_sigma * (
+                cos_2sigma_m + C * cos_sigma * (-1.0 + 2.0 * cos_2sigma_m ** 2)
+            )
+        )
+        if abs(lam_new - lam) < 1e-12:
+            lam = lam_new
+            break
+        lam = lam_new
+    else:
+        # Near-antipodal: Vincenty did not converge; fall back to haversine.
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        h = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+        return 2.0 * RE * np.arcsin(np.sqrt(h))
+
+    u2 = cos2_alpha * (RE ** 2 - RP ** 2) / RP ** 2
+    A_v = 1.0 + u2 / 16384.0 * (4096.0 + u2 * (-768.0 + u2 * (320.0 - 175.0 * u2)))
+    B_v = u2 / 1024.0 * (256.0 + u2 * (-128.0 + u2 * (74.0 - 47.0 * u2)))
+    d_sig = B_v * sin_sigma * (
+        cos_2sigma_m + B_v / 4.0 * (
+            cos_sigma * (-1.0 + 2.0 * cos_2sigma_m ** 2)
+            - B_v / 6.0 * cos_2sigma_m
+            * (-3.0 + 4.0 * sin_sigma ** 2)
+            * (-3.0 + 4.0 * cos_2sigma_m ** 2)
+        )
+    )
+    return RP * A_v * (sigma - d_sig)
