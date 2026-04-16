@@ -125,6 +125,14 @@ class MissileParams:
     shroud_length_m:        float = 0.0
     shroud_diameter_m:      float = 0.0   # outer diameter of shroud/fairing (m)
 
+    # Nose-shape aerodynamics (FerencDV / HyperCFD model).
+    # "forden" = use mach_table/cd_table (default, existing behaviour).
+    # See NOSE_SHAPES for valid values.  ld_ratio = nose_length / body_diameter.
+    nose_shape:           str   = "forden"
+    nose_ld_ratio:        float = 3.0
+    shroud_nose_shape:    str   = "forden"
+    shroud_nose_ld_ratio: float = 3.0
+
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
@@ -132,6 +140,107 @@ class MissileParams:
 # ---------------------------------------------------------------------------
 _FORDEN_MACH = [0.0, 0.85, 1.0,  1.2,  2.0,  4.5]
 _FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
+
+NOSE_SHAPES = ["forden", "v2", "elliptical", "conical",
+               "parabolic", "tangent_ogive", "sears_haack"]
+
+NOSE_SHAPE_LABELS = {
+    "forden":        "Forden (generic)",
+    "v2":            "V2",
+    "elliptical":    "Elliptical",
+    "conical":       "Conical",
+    "parabolic":     "Parabolic",
+    "tangent_ogive": "Tangent Ogive",
+    "sears_haack":   "Sears-Haack",
+}
+
+
+def _cd_nose_shape(nose_shape: str, ld: float, mach: float) -> float:
+    """
+    Total drag coefficient from FerencDV / HyperCFD nose-shape model.
+    Source: github.com/ferencdv/missile_trajectory_simulator (simss514.py)
+
+    nose_shape : key from NOSE_SHAPES (not 'forden')
+    ld         : nose fineness ratio = nose_length / body_diameter  (clamped 1–10)
+    mach       : flight Mach number (must be > 0)
+    """
+    import math
+
+    ld = max(1.0, min(float(ld), 10.0))
+
+    # ── V2 — piecewise linear (independent of L/D) ─────────────────────────
+    if nose_shape == "v2":
+        if mach <= 0.8:
+            return 0.15
+        elif mach <= 1.2:
+            return 0.625 * mach - 0.35
+        elif mach <= 1.8:
+            return -0.25 * mach + 0.7
+        elif mach <= 5.0:
+            return -0.03125 * mach + 0.30625
+        else:
+            return 0.15
+
+    # ── Remaining shapes: subsonic flat, supersonic Hoerl, transonic blend ──
+    def _cd_sub(shape):
+        if shape == "elliptical":    return -0.050 * ld + 0.25
+        if shape == "conical":       return  0.075 * ld + 0.275
+        if shape == "parabolic":     return -0.025 * ld + 0.125
+        if shape == "tangent_ogive": return -0.075 * ld + 0.275
+        if shape == "sears_haack":   return -0.050 * ld + 0.25
+        return 0.20
+
+    def _cd_sup(shape, m):
+        if shape == "elliptical":
+            A = 0.824584774 * ld ** (-0.532619017)
+            B = 1.0156845
+            C = -0.226354 - 0.238389 * math.log(ld)
+            return A * B ** m * m ** C
+
+        if shape == "conical":
+            A = 1.619038033 * math.exp(-1.31926217 * ld)
+            B = ld / (-0.45318 - 0.89392 * ld)   # always negative
+            C = 0.886118 * math.exp(-ld / 1.121185)
+            denom = 1.0 + B * math.exp(-C * m)
+            return A / denom if abs(denom) > 1e-12 else 0.0
+
+        if shape == "parabolic":
+            exp_arg = min(ld ** (-7.1807129), 500.0)   # guard overflow
+            A = 0.2433566382 * math.exp(exp_arg)
+            B = 1.009709
+            C = -0.567521484056 / (1.0 + 5.59560039 * math.exp(-2.23635527 * ld))
+            return A * B ** m * m ** C
+
+        if shape == "tangent_ogive":
+            A = 0.278184983 * math.exp(ld ** (-0.8894687916))
+            B = 1.0129458
+            C = -0.604615023 / (1.0 + 9.5779826 * math.exp(-2.2080809 * ld))
+            return A * B ** m * m ** C
+
+        if shape == "sears_haack":
+            A = 0.243884345 * math.exp(ld ** (-0.80690309))
+            B = 1.0047095
+            C = -0.60330669 / (1.0 + 14.6196742 * math.exp(-3.27801240 * ld))
+            return A * B ** m * m ** C
+
+        return 0.20
+
+    # Conical supersonic regime starts at M=1.5; others at M=1.2
+    M_SUB = 1.05
+    M_SUP = 1.5 if nose_shape == "conical" else 1.2
+
+    if mach <= M_SUB:
+        return _cd_sub(nose_shape)
+
+    cd_sup = _cd_sup(nose_shape, max(mach, M_SUP))
+    if mach >= M_SUP:
+        return cd_sup
+
+    # Transonic: linear interpolation
+    cd_sub = _cd_sub(nose_shape)
+    cd_sup_at_msup = _cd_sup(nose_shape, M_SUP)
+    t = (mach - M_SUB) / (M_SUP - M_SUB)
+    return cd_sub + t * (cd_sup_at_msup - cd_sub)
 
 
 # ---------------------------------------------------------------------------
@@ -656,6 +765,10 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_diameter_m':      p.shroud_diameter_m,
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
         'solid_motor':            p.solid_motor,
+        'nose_shape':             p.nose_shape,
+        'nose_ld_ratio':          p.nose_ld_ratio,
+        'shroud_nose_shape':      p.shroud_nose_shape,
+        'shroud_nose_ld_ratio':   p.shroud_nose_ld_ratio,
     }
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -711,6 +824,10 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_diameter_m=float(d.get('shroud_diameter_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
+        nose_shape=d.get('nose_shape', 'forden'),
+        nose_ld_ratio=float(d.get('nose_ld_ratio', 3.0)),
+        shroud_nose_shape=d.get('shroud_nose_shape', 'forden'),
+        shroud_nose_ld_ratio=float(d.get('shroud_nose_ld_ratio', 3.0)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -876,7 +993,20 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
         return np.zeros(3)
     _, _, rho, a_sound = atmosphere(altitude_m)
     mach = speed / a_sound
-    cd   = drag_coefficient(params, mach)
+
+    # Choose Cd source: FerencDV nose-shape model or Forden mach_table.
+    # Shroud nose shape takes priority while shroud is still attached.
+    _shroud_on = (top_params is not None
+                  and top_params.shroud_diameter_m > 0
+                  and altitude_m < top_params.shroud_jettison_alt_km * 1000.0)
+    if _shroud_on and top_params.shroud_nose_shape not in ('', 'forden'):
+        cd = _cd_nose_shape(top_params.shroud_nose_shape,
+                            top_params.shroud_nose_ld_ratio, mach)
+    elif top_params is not None and top_params.nose_shape not in ('', 'forden'):
+        cd = _cd_nose_shape(top_params.nose_shape, top_params.nose_ld_ratio, mach)
+    else:
+        cd = drag_coefficient(params, mach)
+
     area = missile_area(params, altitude_m=altitude_m, top_params=top_params)
     q    = 0.5 * rho * speed**2
     drag_mag = cd * q * area
