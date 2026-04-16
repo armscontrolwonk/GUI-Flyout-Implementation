@@ -993,6 +993,7 @@ def integrate_trajectory(params: MissileParams,
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_bo)
                 _debris = integrate_debris(_pos_s, _vel_s, beta,
+                                           max_time_s=14400.0,
                                            return_trajectory=True)
                 if _debris is None:
                     # Stage did not re-enter within the integration window —

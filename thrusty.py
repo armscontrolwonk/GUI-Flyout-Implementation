@@ -3992,7 +3992,9 @@ class MissileFlyoutApp(tk.Tk):
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
-                order.sort(function(a, b) {{ return pts[b].x - pts[a].x; }});
+                // Chronological order: earliest event nearest its dot,
+                // later events stacked further in the trajectory direction.
+                order.sort(function(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }});
 
                 var CLUSTER_R = 60;
                 var topY  = {{}}, below = {{}};
