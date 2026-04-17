@@ -31,7 +31,7 @@ import matplotlib.ticker
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
-                           NOSE_SHAPES, NOSE_SHAPE_LABELS)
+                           NOSE_SHAPES, NOSE_SHAPE_LABELS, _cd_nose_shape)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion)
 from coordinates import range_between
@@ -581,10 +581,18 @@ class MissileDialog(tk.Toplevel):
                                             foreground="gray40")
         self._total_payload_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 3: RV ballistic coefficient
-        self._rv_beta_var = _entry_row(pl, "RV β (kg/m²):", 3, "0",
-                                       "(0 = use stage body aero)")
-        self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
+        # Row 3: RV ballistic coefficient + Calculate button
+        ttk.Label(pl, text="RV β (kg/m²):").grid(
+            row=3, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._rv_beta_var = tk.StringVar(value="0")
+        _beta_inner = ttk.Frame(pl)
+        _beta_inner.grid(row=3, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _beta_entry = ttk.Entry(_beta_inner, textvariable=self._rv_beta_var, width=10)
+        _beta_entry.pack(side=tk.LEFT)
+        ttk.Label(_beta_inner, text="kg/m²").pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Button(_beta_inner, text="Calculate…",
+                   command=self._calc_rv_beta).pack(side=tk.LEFT)
+        self._payload_inputs.append(_beta_entry)
 
         # Row 4: Warhead / RV separates checkbox
         self._rv_separates_var = tk.BooleanVar(value=False)
@@ -1028,6 +1036,137 @@ class MissileDialog(tk.Toplevel):
         p.name = new_name
         self._on_save(p)
         self.destroy()
+
+    # ------------------------------------------------------------------
+    def _calc_rv_beta(self):
+        """Open the Calculate β dialog."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Calculate RV β")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        # ── Input fields ──────────────────────────────────────────────
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill=tk.X)
+        frm.columnconfigure(1, weight=1)
+
+        def _lbl(row, text):
+            ttk.Label(frm, text=text).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+
+        # Mass — pre-filled from Per-RV mass, editable
+        _lbl(0, "RV mass (kg):")
+        mass_var = tk.StringVar(value=self._rv_mass_var.get())
+        ttk.Entry(frm, textvariable=mass_var, width=10).grid(
+            row=0, column=1, sticky=tk.W)
+
+        # Diameter — pre-filled from Stage 1 diameter, editable
+        try:
+            _dia_default = self._stage_frames[0]._dia.get()
+        except Exception:
+            _dia_default = "0"
+        _lbl(1, "RV diameter (m):")
+        dia_var = tk.StringVar(value=_dia_default)
+        ttk.Entry(frm, textvariable=dia_var, width=10).grid(
+            row=1, column=1, sticky=tk.W)
+
+        # Nose shape — read-only, reflects current selection
+        _nose_key = next(
+            (k for k, v in NOSE_SHAPE_LABELS.items()
+             if v == self._nose_shape_var.get()), "forden")
+        _nose_label = NOSE_SHAPE_LABELS.get(_nose_key, "Forden (generic)")
+        _lbl(2, "Nose shape:")
+        ttk.Label(frm, text=_nose_label, foreground="gray40").grid(
+            row=2, column=1, sticky=tk.W)
+
+        # Nose L/D — derived from length / diameter, shown read-only
+        _ld_var = tk.StringVar(value="—")
+        _lbl(3, "Nose L/D:")
+        ttk.Label(frm, textvariable=_ld_var, foreground="gray40").grid(
+            row=3, column=1, sticky=tk.W)
+
+        # Reference Mach
+        _lbl(4, "Reference Mach:")
+        mach_var = tk.StringVar(value="5.0")
+        ttk.Entry(frm, textvariable=mach_var, width=10).grid(
+            row=4, column=1, sticky=tk.W)
+
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+
+        # ── Result display ────────────────────────────────────────────
+        res_frm = ttk.Frame(dlg, padding=(12, 8))
+        res_frm.pack(fill=tk.X)
+        res_frm.columnconfigure(1, weight=1)
+        ttk.Label(res_frm, text="Cd at ref. Mach:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        cd_lbl = ttk.Label(res_frm, text="—", foreground="gray40")
+        cd_lbl.grid(row=0, column=1, sticky=tk.W)
+        ttk.Label(res_frm, text="Reference area (m²):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        area_lbl = ttk.Label(res_frm, text="—", foreground="gray40")
+        area_lbl.grid(row=1, column=1, sticky=tk.W)
+        ttk.Label(res_frm, text="β = m / (Cd · A):").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        beta_lbl = ttk.Label(res_frm, text="—",
+                             font=("", 11, "bold"), foreground="navy")
+        beta_lbl.grid(row=2, column=1, sticky=tk.W)
+
+        _beta_result = [None]   # mutable container for the computed value
+
+        def _compute(*_):
+            try:
+                mass = float(mass_var.get())
+                dia  = float(dia_var.get())
+                mach = float(mach_var.get())
+                if dia <= 0 or mass <= 0 or mach <= 0:
+                    raise ValueError
+            except ValueError:
+                cd_lbl.config(text="—")
+                area_lbl.config(text="—")
+                beta_lbl.config(text="invalid input")
+                _beta_result[0] = None
+                return
+
+            # Compute L/D from nose length and diameter
+            try:
+                nose_len = float(self._nose_length_var.get())
+            except ValueError:
+                nose_len = 0.0
+            if dia > 0 and nose_len > 0:
+                ld = nose_len / dia
+                _ld_var.set(f"{ld:.2f}")
+            else:
+                ld = max(1.0, nose_len / dia) if dia > 0 else 1.0
+                _ld_var.set("—")
+
+            cd   = _cd_nose_shape(_nose_key, ld, mach)
+            area = 3.14159265358979 * (dia / 2) ** 2
+            beta = mass / (cd * area) if cd > 0 else float('inf')
+
+            cd_lbl.config(  text=f"{cd:.4f}")
+            area_lbl.config(text=f"{area:.4f} m²")
+            beta_lbl.config(text=f"{beta:,.0f} kg/m²")
+            _beta_result[0] = beta
+
+        # Recompute whenever any input changes
+        for _v in (mass_var, dia_var, mach_var):
+            _v.trace_add("write", _compute)
+        _compute()
+
+        # ── Buttons ───────────────────────────────────────────────────
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+        btn_frm = ttk.Frame(dlg, padding=(12, 8))
+        btn_frm.pack(fill=tk.X)
+
+        def _use():
+            if _beta_result[0] is not None and _beta_result[0] != float('inf'):
+                self._rv_beta_var.set(f"{_beta_result[0]:.0f}")
+            dlg.destroy()
+
+        ttk.Button(btn_frm, text="Use this value",
+                   command=_use).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Cancel",
+                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
 
 # ---------------------------------------------------------------------------
