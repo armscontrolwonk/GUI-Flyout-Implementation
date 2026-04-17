@@ -4331,7 +4331,7 @@ class MissileFlyoutApp(tk.Tk):
             var PAD       = 2;    // extra padding around each label box
             var TICK_HALF = 8;    // px: half-length of tick mark
 
-            var _svg = null, _con = null, _divs = [];
+            var _svg = null, _con = null, _divs = [], _labelsLayer = null;
 
             function _init(map) {{
                 var mc = map.getContainer();
@@ -4353,11 +4353,27 @@ class MissileFlyoutApp(tk.Tk):
                     _con.appendChild(d);
                     _divs.push(d);
                 }});
+
+                // Dummy LayerGroup used purely as a toggle handle for the
+                // Labels overlay (tick marks + leader-line labels).
+                // Added to the map so it starts checked in the layer control.
+                _labelsLayer = L.layerGroup().addTo(map);
+                L.control.layers(
+                    {{}},
+                    {{'Labels': _labelsLayer}},
+                    {{collapsed: false}}
+                ).addTo(map);
             }}
 
             function _update(map) {{
                 if (!_con) return;
                 _svg.innerHTML = '';
+                // If the Labels overlay is unchecked, hide all label divs
+                // (tick SVG was already cleared above) and stop.
+                if (_labelsLayer && !map.hasLayer(_labelsLayer)) {{
+                    _divs.forEach(function(d) {{ d.style.display = 'none'; }});
+                    return;
+                }}
 
                 var mc   = map.getContainer();
                 var mapW = mc.offsetWidth  || 800;
