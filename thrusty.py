@@ -4065,6 +4065,7 @@ class MissileFlyoutApp(tk.Tk):
         lat = np.asarray(r['lat'])
         lon = np.asarray(r['lon'])
         t   = np.asarray(r['t'])
+        alt = np.asarray(r.get('alt', []))   # metres; used for prefer_above
 
         # Unwrap longitude so the polyline never jumps across the antimeridian.
         # Values may exceed ±180°; Leaflet renders them on the correct world copy.
@@ -4204,8 +4205,26 @@ class MissileFlyoutApp(tk.Tk):
                 return 'Launch'
             return name
 
-        _label_data = []   # [{lat, lon, text, t_s}] for JS labels
+        _label_data = []   # [{lat, lon, text, t_s, prefer_above}] for JS labels
         _tick_data  = []   # [{lat, lon}] for JS tick marks
+
+        def _prefer_above(ms, e):
+            """
+            Hint for initial vertical label placement.
+            Impact events (dot at ground level): True so label points back along
+            the incoming arc.  Other events: True while ascending, False while
+            descending.  The JS collision loop may flip to the opposite side if
+            the preferred side is fully blocked.
+            """
+            if 'impact' in e:
+                return True
+            if len(alt) < 2:
+                return True
+            ti  = float(ms['t_s'])
+            ic  = int(np.searchsorted(t, ti))
+            i0  = max(0, ic - 5)
+            i1  = min(len(t) - 1, ic + 5)
+            return bool(alt[i1] >= alt[i0])
 
         for group in merged:
             ms        = group[0]
@@ -4237,7 +4256,8 @@ class MissileFlyoutApp(tk.Tk):
                     popup=popup, tooltip=display_name,
                 ).add_to(fmap)
                 _label_data.append({'lat':  mk_lat, 'lon':  mk_lon,
-                                    'text': display_name, 't_s': ms['t_s']})
+                                    'text': display_name, 't_s': ms['t_s'],
+                                    'prefer_above': _prefer_above(ms, e)})
             elif _show_tick(e, is_debris):
                 display_name = _name_only(label)
                 popup_html = (
@@ -4419,36 +4439,27 @@ class MissileFlyoutApp(tk.Tk):
                 var topY={{}},lxMap={{}},goLeft={{}},goAbove={{}},lwCache={{}};
                 var placed=[];   // already-positioned label rects
 
-                order.forEach(function(idx){{
-                    var pt=pts[idx];
-                    _divs[idx].style.display='block';
-                    var lh=(_divs[idx].offsetHeight||14)+PAD*2;
-                    var lw=(_divs[idx].offsetWidth ||80)+PAD*2;
-                    lwCache[idx]=lw;
-
-                    // Vertical side.
-                    var above=goAbovePt(pt);
-                    goAbove[idx]=above;
-
-                    // Horizontal side — proven safe from trajectory crossing:
-                    //   Label ABOVE dot: go RIGHT when slope ≥ 0, LEFT when < 0.
-                    //   Label BELOW dot: opposite.
-                    // Proof: for label-above + label-right, trajectory at
-                    // x > pt.x has y > pt.y (below label) iff slope > 0.  The
-                    // backward trajectory (x < pt.x) never enters the label x-
-                    // range.  Symmetric argument holds for the other cases.
+                // Horizontal side — proven safe from trajectory crossing:
+                //   Label ABOVE dot: go RIGHT when slope ≥ 0, LEFT when < 0.
+                //   Label BELOW dot: opposite.
+                function sideFor(pt,above){{
                     var tan=trajTan(pt);
                     var slopePos=(tan.dx*tan.dy)>=0;
                     var lRight=above?slopePos:!slopePos;
-                    goLeft[idx]=!lRight;
+                    var lx=lRight?pt.x+H_GAP:pt.x-H_GAP-lwCache[0]||80;
+                    return {{lRight:lRight}};
+                }}
 
+                // Try to place a label on one vertical side (above=true/false).
+                // Returns {{lx,ly,ok}} after up to 40 outward pushes.
+                function tryPlace(pt,lw,lh,above){{
+                    var tan=trajTan(pt);
+                    var slopePos=(tan.dx*tan.dy)>=0;
+                    var lRight=above?slopePos:!slopePos;
                     var lx=lRight?pt.x+H_GAP:pt.x-H_GAP-lw;
                     var ly=above?pt.y-lh-V_ABOVE:pt.y+V_ABOVE;
                     var dir=above?-1:1;
                     var step=lh+STACK_GAP;
-
-                    // Push label outward until it clears the trajectory and
-                    // all already-placed labels (hard constraints).
                     for(var attempt=0;attempt<40;attempt++){{
                         var bad=labelHitsTraj(lx,ly,lw,lh);
                         for(var j=0;j<placed.length&&!bad;j++){{
@@ -4456,13 +4467,42 @@ class MissileFlyoutApp(tk.Tk):
                                 placed[j].lx,placed[j].ly,
                                 placed[j].lw,placed[j].lh);
                         }}
-                        if(!bad)break;
+                        if(!bad)return{{lx:lx,ly:ly,lRight:lRight,ok:true}};
                         ly+=dir*step;
                     }}
+                    return{{lx:lx,ly:ly,lRight:lRight,ok:false}};
+                }}
 
-                    topY[idx]=ly;
-                    lxMap[idx]=lx;
-                    placed.push({{lx:lx,ly:ly,lw:lw,lh:lh}});
+                order.forEach(function(idx){{
+                    var pt=pts[idx];
+                    _divs[idx].style.display='block';
+                    var lh=(_divs[idx].offsetHeight||14)+PAD*2;
+                    var lw=(_divs[idx].offsetWidth ||80)+PAD*2;
+                    lwCache[idx]=lw;
+
+                    // prefer_above from Python (ascending/impact → true, descending → false).
+                    // Falls back to counting trajectory points if not set.
+                    var prefAbove=(LABELS[idx].prefer_above!==undefined)
+                        ?LABELS[idx].prefer_above
+                        :goAbovePt(pt);
+
+                    // Try preferred side first; if exhausted, try the other side.
+                    // This naturally splits two nearby debris impacts: the second
+                    // one finds its preferred side blocked and flips, landing on
+                    // the opposite edge of the dot cluster.
+                    var r1=tryPlace(pt,lw,lh,prefAbove);
+                    var best=r1;
+                    if(!r1.ok){{
+                        var r2=tryPlace(pt,lw,lh,!prefAbove);
+                        if(r2.ok)best=r2;
+                        // If both exhausted, keep preferred side's final position.
+                    }}
+
+                    topY[idx]=best.ly;
+                    lxMap[idx]=best.lx;
+                    goAbove[idx]=prefAbove;
+                    goLeft[idx]=!best.lRight;
+                    placed.push({{lx:best.lx,ly:best.ly,lw:lw,lh:lh}});
                 }});
 
                 // Render.
