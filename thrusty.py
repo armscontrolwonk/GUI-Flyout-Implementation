@@ -4354,37 +4354,42 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Returns {{dx, dy}} of the trajectory tangent (unnormalised)
-                // at the point nearest to pt.
-                function tangent2D(pt) {{
-                    var best = Infinity, bestIdx = 0;
+                // Count trajectory skeleton points on each side of pt.
+                // The label goes to the side with fewer points — away from the arc.
+                // This correctly handles start (departure only), end (arrival only),
+                // and intermediate (both sides) dots without needing tangent direction.
+                function bestSide(pt) {{
+                    var rC = 0, lC = 0, bC = 0, aC = 0;
                     for (var i = 0; i < tPts.length; i++) {{
-                        var ddx = tPts[i].x - pt.x, ddy = tPts[i].y - pt.y;
-                        var d2  = ddx*ddx + ddy*ddy;
-                        if (d2 < best) {{ best = d2; bestIdx = i; }}
+                        var dx = tPts[i].x - pt.x, dy = tPts[i].y - pt.y;
+                        if      (dx >  8) rC++;
+                        else if (dx < -8) lC++;
+                        if      (dy >  8) bC++;
+                        else if (dy < -8) aC++;
                     }}
-                    var i0 = Math.max(0, bestIdx - 1);
-                    var i1 = Math.min(tPts.length - 1, bestIdx + 1);
                     return {{
-                        dx: tPts[i1].x - tPts[i0].x,
-                        dy: tPts[i1].y - tPts[i0].y
+                        goLeft:  rC >= lC,   // more trajectory right  → label left
+                        goAbove: bC >= aC    // more trajectory below  → label above
                     }};
                 }}
 
                 // Hide all labels first.
                 _divs.forEach(function(d) {{ d.style.display = 'none'; }});
 
-                // Visible markers only, sorted chronologically so the earliest
-                // event lands nearest its dot and later ones stack away from it.
                 var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
                     var p = pts[i];
                     return p.x >= -EDGE && p.x <= mapW + EDGE &&
                            p.y >= -EDGE && p.y <= mapH + EDGE;
                 }});
-                order.sort(function(a, b) {{ return LABELS[a].t_s - LABELS[b].t_s; }});
+
+                // Sort DESCENDING by t_s: latest event placed first (nearest dot),
+                // earlier events stack outward.  Reading direction is then
+                // chronological: top-to-bottom for above-labels (falling trajectory)
+                // and bottom-to-top for below-labels (rising trajectory).
+                order.sort(function(a, b) {{ return LABELS[b].t_s - LABELS[a].t_s; }});
 
                 var CLUSTER_R = 60;
-                var topY = {{}}, below = {{}}, goLeft = {{}}, lwCache = {{}};
+                var topY = {{}}, goLeft = {{}}, goAbove = {{}}, lwCache = {{}};
 
                 var prevTop = null, prevBottom = null, prevPt = null;
                 order.forEach(function(idx) {{
@@ -4396,48 +4401,42 @@ class MissileFlyoutApp(tk.Tk):
 
                     // Reset stacking group when this dot is far from the last.
                     if (prevPt) {{
-                        var dx = pt.x - prevPt.x, dy = pt.y - prevPt.y;
-                        if (Math.sqrt(dx*dx + dy*dy) > CLUSTER_R) {{
+                        var cdx = pt.x - prevPt.x, cdy = pt.y - prevPt.y;
+                        if (Math.sqrt(cdx*cdx + cdy*cdy) > CLUSTER_R) {{
                             prevTop = null; prevBottom = null;
                         }}
                     }}
 
-                    // Place label in the quadrant opposite the trajectory
-                    // direction: left when trajectory goes right (tangentDx > 0),
-                    // above when trajectory goes down (tangentDy > 0).
-                    var tan = tangent2D(pt);
-                    var labelLeft  = tan.dx > 0;   // trajectory right → label left
-                    var goBelow    = tan.dy < 0;   // trajectory up   → label below
-                    goLeft[idx]    = labelLeft;
+                    var side = bestSide(pt);
+                    goLeft[idx]  = side.goLeft;
+                    goAbove[idx] = side.goAbove;
 
                     var candidate;
-                    if (goBelow) {{
-                        var idealBottom = pt.y + V_ABOVE;
-                        candidate = (prevBottom === null)
-                            ? idealBottom
-                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
-                        if (candidate + lh > mapH - EDGE) {{
-                            goBelow = false;
-                        }} else {{
-                            prevBottom = candidate;
-                        }}
-                    }}
-                    if (!goBelow) {{
+                    if (side.goAbove) {{
                         var idealTop = pt.y - lh - V_ABOVE;
                         candidate = (prevTop === null)
                             ? idealTop
                             : Math.min(idealTop, prevTop - lh - STACK_GAP);
                         if (candidate < EDGE) {{
-                            candidate  = pt.y + V_ABOVE;
-                            goBelow    = true;
-                            prevTop    = null;
+                            goAbove[idx] = false;   // no room above — fall through
                         }} else {{
                             prevTop = candidate;
                         }}
                     }}
-                    topY[idx]  = candidate;
-                    below[idx] = goBelow;
-                    prevPt     = pt;
+                    if (!goAbove[idx]) {{
+                        var idealBottom = pt.y + V_ABOVE;
+                        candidate = (prevBottom === null)
+                            ? idealBottom
+                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
+                        if (candidate + lh > mapH - EDGE) {{
+                            candidate  = pt.y + V_ABOVE;
+                            prevBottom = null;
+                        }} else {{
+                            prevBottom = candidate;
+                        }}
+                    }}
+                    topY[idx] = candidate;
+                    prevPt    = pt;
                 }});
 
                 // Render: position each label on the correct side of its dot.
@@ -4445,8 +4444,8 @@ class MissileFlyoutApp(tk.Tk):
                     var pt = pts[idx];
                     var lw = lwCache[idx] || (_divs[idx].offsetWidth || 80) + PAD * 2;
                     var lx = goLeft[idx]
-                        ? pt.x - H_GAP - lw   // right edge of label at dot
-                        : pt.x + H_GAP;        // left  edge of label at dot
+                        ? pt.x - H_GAP - lw   // right edge of label flush with dot
+                        : pt.x + H_GAP;        // left  edge of label flush with dot
                     _divs[idx].style.left = lx + 'px';
                     _divs[idx].style.top  = topY[idx] + 'px';
                 }});
