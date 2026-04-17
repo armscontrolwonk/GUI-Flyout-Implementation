@@ -102,6 +102,23 @@ _PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
 _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
 _CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
+# Where per-missile trajectory profiles are saved
+_TRAJ_PATH = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
+
+
+def _load_traj_profiles() -> dict:
+    """Return saved trajectory profiles keyed by missile name."""
+    if not _TRAJ_PATH.exists():
+        return {}
+    try:
+        return json.loads(_TRAJ_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _save_traj_profiles(profiles: dict) -> None:
+    _TRAJ_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _TRAJ_PATH.write_text(json.dumps(profiles, indent=2))
 
 
 def _load_custom_missiles():
@@ -1686,6 +1703,13 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(yf, text=_unit).grid(
                 row=_yr, column=2, sticky=tk.W, padx=(2, 8), pady=1)
 
+        # Row 11: Reset trajectory button — always visible
+        self._reset_traj_btn = ttk.Button(
+            gf, text="Reset trajectory to defaults",
+            command=self._reset_traj_profile)
+        self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
+                                  sticky=tk.EW, padx=8, pady=(4, 6))
+
         # Hide turn-start/stop, orbit-alt, plan-orbit, adv-pitch, and yaw rows by
         # default (loft mode is active at startup)
         self._gt_turn_start_lbl.grid_forget()
@@ -2110,11 +2134,26 @@ class MissileFlyoutApp(tk.Tk):
             return
         self._last_valid_missile = name
         p = get_missile(name)
-        self._cutoff_var.set(str(int(total_burn_time(p))))
-        self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
-        self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
-        self._guidance_var.set(p.guidance)
-        self._update_guidance_labels(p.guidance)
+
+        prof = _load_traj_profiles().get(name)
+        if prof:
+            self._guidance_var.set(prof.get('guidance', p.guidance))
+            self._loft_angle_var.set(str(prof.get('loft_angle_deg', p.loft_angle_deg)))
+            self._loft_rate_var.set(str(prof.get('loft_angle_rate_deg_s', p.loft_angle_rate_deg_s)))
+            gt_start = prof.get('gt_turn_start_s', 5.0)
+            self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
+            gt_stop = prof.get('gt_turn_stop_s')
+            self._gt_turn_stop_var.set(str(gt_stop) if gt_stop is not None else "")
+            cutoff = prof.get('cutoff_time_s')
+            self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
+                                 else str(int(total_burn_time(p))))
+        else:
+            self._cutoff_var.set(str(int(total_burn_time(p))))
+            self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
+            self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
+            self._guidance_var.set(p.guidance)
+
+        self._update_guidance_labels(self._guidance_var.get())
         self._update_params_display(p)
         self._del_btn.config(state=tk.NORMAL)
         if self._adv_pitch_var.get():
@@ -2452,6 +2491,8 @@ class MissileFlyoutApp(tk.Tk):
         name = p.name
         MISSILE_DB[name] = lambda _p=p: _p
         _save_custom_missiles()
+        # Snapshot trajectory panel so saving the missile doesn't reset it.
+        self._snapshot_traj_profile(name)
         self._refresh_missile_list(select_name=name)
         self._status_var.set(f"Missile '{name}' saved.")
 
@@ -2472,8 +2513,56 @@ class MissileFlyoutApp(tk.Tk):
             return
         del MISSILE_DB[name]
         _save_custom_missiles()
+        profiles = _load_traj_profiles()
+        if name in profiles:
+            del profiles[name]
+            _save_traj_profiles(profiles)
         self._refresh_missile_list()
         self._status_var.set(f"Missile '{name}' deleted.")
+
+    def _snapshot_traj_profile(self, missile_name: str) -> None:
+        """Save current trajectory panel fields as a profile for missile_name."""
+        cutoff_str   = self._cutoff_var.get().strip()
+        gt_start_str = self._gt_turn_start_var.get().strip()
+        gt_stop_str  = self._gt_turn_stop_var.get().strip()
+        try:
+            loft_angle = float(self._loft_angle_var.get())
+        except ValueError:
+            loft_angle = 45.0
+        try:
+            loft_rate = float(self._loft_rate_var.get())
+        except ValueError:
+            loft_rate = 2.0
+        prof = {
+            'guidance':              self._guidance_var.get(),
+            'loft_angle_deg':        loft_angle,
+            'loft_angle_rate_deg_s': loft_rate,
+            'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
+            'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
+            'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
+        }
+        profiles = _load_traj_profiles()
+        profiles[missile_name] = prof
+        _save_traj_profiles(profiles)
+
+    def _reset_traj_profile(self) -> None:
+        """Delete the saved trajectory profile for the current missile and restore defaults."""
+        name = self._missile_var.get()
+        if not name:
+            return
+        profiles = _load_traj_profiles()
+        if name in profiles:
+            del profiles[name]
+            _save_traj_profiles(profiles)
+        p = get_missile(name)
+        self._cutoff_var.set(str(int(total_burn_time(p))))
+        self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
+        self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
+        self._guidance_var.set(p.guidance)
+        self._gt_turn_start_var.set("5.0")
+        self._gt_turn_stop_var.set("")
+        self._update_guidance_labels(p.guidance)
+        self._status_var.set(f"Trajectory reset to '{name}' defaults.")
 
     def _update_params_display(self, p=None):
         """Rebuild the Missile Parameters tab with structured label rows."""
