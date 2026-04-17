@@ -31,7 +31,7 @@ import matplotlib.ticker
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
-                           NOSE_SHAPES, NOSE_SHAPE_LABELS, _cd_nose_shape)
+                           NOSE_SHAPES, NOSE_SHAPE_LABELS)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion)
 from coordinates import range_between
@@ -95,6 +95,62 @@ def _draw_borders(ax, center_lon):
 
 # Sentinel string inserted into the missile combobox between non-Forden and
 # Forden entries.  It is never a valid missile name.
+
+# ---------------------------------------------------------------------------
+# Newtonian blunted-cone Cd table — Ref (4) Ch. 5, hypersonic / zero AoA.
+# Rows: half-angle 10°, 20°, 30°, 40°.
+# Cols: nose-radius ratio ε = r_N/r_b  0.0, 0.2, 0.4, 0.6, 0.8, 1.0.
+# ---------------------------------------------------------------------------
+_BCON_THETA = [10.0, 20.0, 30.0, 40.0]
+_BCON_EPS   = [0.0,  0.2,  0.4,  0.6,  0.8,  1.0]
+_BCON_TABLE = [
+    [0.0603, 0.063, 0.068, 0.080, 0.200, 1.00],
+    [0.2340, 0.238, 0.250, 0.310, 0.540, 1.00],
+    [0.5000, 0.507, 0.530, 0.600, 0.750, 1.00],
+    [0.8264, 0.835, 0.860, 0.900, 0.965, 1.00],
+]
+
+
+def _cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
+    """
+    Cd (based on base area) for a spherically-blunted cone at zero angle of
+    attack in hypersonic (Newtonian) flow.
+
+    theta_deg : cone half-angle (degrees)
+    eps       : nose-radius ratio r_N/r_b  (0 = sharp tip, 1 = hemisphere)
+
+    For eps = 0 the exact Newtonian formula 2·sin²θ is returned.
+    For other values bilinear interpolation is used on the chart table;
+    the bluntness excess is scaled by the actual Cd_sharp so that angles
+    outside the 10°–40° table range are handled smoothly.
+    """
+    import math
+    th        = math.radians(max(1.0, min(float(theta_deg), 89.0)))
+    cd_sharp  = 2.0 * math.sin(th) ** 2
+    eps       = max(0.0, min(float(eps), 1.0))
+    if eps == 0.0:
+        return cd_sharp
+
+    theta_c = max(_BCON_THETA[0], min(float(theta_deg), _BCON_THETA[-1]))
+    i_th = next((i for i in range(len(_BCON_THETA) - 1)
+                 if _BCON_THETA[i + 1] >= theta_c), len(_BCON_THETA) - 2)
+    i_ep = next((i for i in range(len(_BCON_EPS) - 1)
+                 if _BCON_EPS[i + 1] >= eps), len(_BCON_EPS) - 2)
+
+    t_th = (theta_c - _BCON_THETA[i_th]) / (_BCON_THETA[i_th + 1] - _BCON_THETA[i_th])
+    t_ep = (eps     - _BCON_EPS[i_ep])   / (_BCON_EPS[i_ep + 1]   - _BCON_EPS[i_ep])
+
+    c = _BCON_TABLE
+    cd_tbl = (c[i_th    ][i_ep    ] * (1 - t_th) * (1 - t_ep) +
+              c[i_th + 1][i_ep    ] * t_th        * (1 - t_ep) +
+              c[i_th    ][i_ep + 1] * (1 - t_th)  * t_ep       +
+              c[i_th + 1][i_ep + 1] * t_th         * t_ep)
+
+    # Bluntness excess at the (clamped) table half-angle
+    cd_sharp_tbl = c[i_th][0] * (1 - t_th) + c[i_th + 1][0] * t_th
+    bluntness    = cd_tbl - cd_sharp_tbl
+    return cd_sharp + bluntness
+
 
 # Names that ship with the program and cannot be deleted
 _PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
@@ -1039,11 +1095,28 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _calc_rv_beta(self):
-        """Open the Calculate β dialog."""
+        """Open the Calculate β dialog (Newtonian hypersonic model)."""
+        import math
         dlg = tk.Toplevel(self)
         dlg.title("Calculate RV β")
         dlg.resizable(False, False)
         dlg.grab_set()
+
+        # ── Pre-fill half-angle from payload nose length / diameter ───
+        try:
+            _nose_len = float(self._nose_length_var.get())
+            _dia0     = float(self._stage_frames[0]._dia.get())
+            if _nose_len > 0 and _dia0 > 0:
+                _ld0 = _nose_len / _dia0
+                _theta0 = f"{math.degrees(math.atan(1.0 / (2.0 * _ld0))):.1f}"
+            else:
+                _theta0 = "10.0"
+        except Exception:
+            _theta0 = "10.0"
+        try:
+            _dia_default = self._stage_frames[0]._dia.get()
+        except Exception:
+            _dia_default = "0"
 
         # ── Input fields ──────────────────────────────────────────────
         frm = ttk.Frame(dlg, padding=12)
@@ -1054,42 +1127,29 @@ class MissileDialog(tk.Toplevel):
             ttk.Label(frm, text=text).grid(
                 row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
 
-        # Mass — pre-filled from Per-RV mass, editable
         _lbl(0, "RV mass (kg):")
         mass_var = tk.StringVar(value=self._rv_mass_var.get())
         ttk.Entry(frm, textvariable=mass_var, width=10).grid(
             row=0, column=1, sticky=tk.W)
 
-        # Diameter — pre-filled from Stage 1 diameter, editable
-        try:
-            _dia_default = self._stage_frames[0]._dia.get()
-        except Exception:
-            _dia_default = "0"
-        _lbl(1, "RV diameter (m):")
+        _lbl(1, "RV base diameter (m):")
         dia_var = tk.StringVar(value=_dia_default)
         ttk.Entry(frm, textvariable=dia_var, width=10).grid(
             row=1, column=1, sticky=tk.W)
 
-        # Nose shape — read-only, reflects current selection
-        _nose_key = next(
-            (k for k, v in NOSE_SHAPE_LABELS.items()
-             if v == self._nose_shape_var.get()), "forden")
-        _nose_label = NOSE_SHAPE_LABELS.get(_nose_key, "Forden (generic)")
-        _lbl(2, "Nose shape:")
-        ttk.Label(frm, text=_nose_label, foreground="gray40").grid(
+        _lbl(2, "Cone half-angle (°):")
+        theta_var = tk.StringVar(value=_theta0)
+        ttk.Entry(frm, textvariable=theta_var, width=10).grid(
             row=2, column=1, sticky=tk.W)
 
-        # Nose L/D — derived from length / diameter, shown read-only
-        _ld_var = tk.StringVar(value="—")
-        _lbl(3, "Nose L/D:")
-        ttk.Label(frm, textvariable=_ld_var, foreground="gray40").grid(
-            row=3, column=1, sticky=tk.W)
-
-        # Reference Mach
-        _lbl(4, "Reference Mach:")
-        mach_var = tk.StringVar(value="5.0")
-        ttk.Entry(frm, textvariable=mach_var, width=10).grid(
-            row=4, column=1, sticky=tk.W)
+        _lbl(3, "Nose radius / base radius:")
+        eps_var = tk.StringVar(value="0.0")
+        eps_inner = ttk.Frame(frm)
+        eps_inner.grid(row=3, column=1, sticky=tk.W)
+        ttk.Entry(eps_inner, textvariable=eps_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(eps_inner,
+                  text="  (0 = sharp tip,  1 = hemisphere)",
+                  foreground="gray50").pack(side=tk.LEFT)
 
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
@@ -1097,28 +1157,35 @@ class MissileDialog(tk.Toplevel):
         res_frm = ttk.Frame(dlg, padding=(12, 8))
         res_frm.pack(fill=tk.X)
         res_frm.columnconfigure(1, weight=1)
-        ttk.Label(res_frm, text="Cd at ref. Mach:").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        cd_lbl = ttk.Label(res_frm, text="—", foreground="gray40")
-        cd_lbl.grid(row=0, column=1, sticky=tk.W)
-        ttk.Label(res_frm, text="Reference area (m²):").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        area_lbl = ttk.Label(res_frm, text="—", foreground="gray40")
-        area_lbl.grid(row=1, column=1, sticky=tk.W)
-        ttk.Label(res_frm, text="β = m / (Cd · A):").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+
+        def _res_row(row, label):
+            ttk.Label(res_frm, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            lbl = ttk.Label(res_frm, text="—", foreground="gray40")
+            lbl.grid(row=row, column=1, sticky=tk.W)
+            return lbl
+
+        cd_lbl   = _res_row(0, "Cd (Newtonian):")
+        area_lbl = _res_row(1, "Reference area (m²):")
         beta_lbl = ttk.Label(res_frm, text="—",
                              font=("", 11, "bold"), foreground="navy")
+        ttk.Label(res_frm, text="β = m / (Cd · A):").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         beta_lbl.grid(row=2, column=1, sticky=tk.W)
+        ttk.Label(res_frm,
+                  text="Hypersonic Newtonian flow (Mach > 8).  Chart: Ref (4) Ch. 5.",
+                  foreground="gray50").grid(
+            row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 
-        _beta_result = [None]   # mutable container for the computed value
+        _beta_result = [None]
 
         def _compute(*_):
             try:
-                mass = float(mass_var.get())
-                dia  = float(dia_var.get())
-                mach = float(mach_var.get())
-                if dia <= 0 or mass <= 0 or mach <= 0:
+                mass  = float(mass_var.get())
+                dia   = float(dia_var.get())
+                theta = float(theta_var.get())
+                eps   = float(eps_var.get())
+                if dia <= 0 or mass <= 0 or theta <= 0:
                     raise ValueError
             except ValueError:
                 cd_lbl.config(text="—")
@@ -1127,20 +1194,8 @@ class MissileDialog(tk.Toplevel):
                 _beta_result[0] = None
                 return
 
-            # Compute L/D from nose length and diameter
-            try:
-                nose_len = float(self._nose_length_var.get())
-            except ValueError:
-                nose_len = 0.0
-            if dia > 0 and nose_len > 0:
-                ld = nose_len / dia
-                _ld_var.set(f"{ld:.2f}")
-            else:
-                ld = max(1.0, nose_len / dia) if dia > 0 else 1.0
-                _ld_var.set("—")
-
-            cd   = _cd_nose_shape(_nose_key, ld, mach)
-            area = 3.14159265358979 * (dia / 2) ** 2
+            cd   = _cd_blunted_cone_newtonian(theta, eps)
+            area = math.pi * (dia / 2.0) ** 2
             beta = mass / (cd * area) if cd > 0 else float('inf')
 
             cd_lbl.config(  text=f"{cd:.4f}")
@@ -1148,8 +1203,7 @@ class MissileDialog(tk.Toplevel):
             beta_lbl.config(text=f"{beta:,.0f} kg/m²")
             _beta_result[0] = beta
 
-        # Recompute whenever any input changes
-        for _v in (mass_var, dia_var, mach_var):
+        for _v in (mass_var, dia_var, theta_var, eps_var):
             _v.trace_add("write", _compute)
         _compute()
 
