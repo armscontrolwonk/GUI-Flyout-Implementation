@@ -4354,100 +4354,121 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Count trajectory skeleton points on each side of pt.
-                // The label goes to the side with fewer points — away from the arc.
-                // This correctly handles start (departure only), end (arrival only),
-                // and intermediate (both sides) dots without needing tangent direction.
-                function bestSide(pt) {{
-                    var rC = 0, lC = 0, bC = 0, aC = 0;
-                    for (var i = 0; i < tPts.length; i++) {{
-                        var dx = tPts[i].x - pt.x, dy = tPts[i].y - pt.y;
-                        if      (dx >  8) rC++;
-                        else if (dx < -8) lC++;
-                        if      (dy >  8) bC++;
-                        else if (dy < -8) aC++;
+                // ── Collision-detection helpers ───────────────────────────
+                // Liang-Barsky segment / axis-aligned rect intersection.
+                function segHitsRect(x1,y1,x2,y2,rx,ry,rw,rh) {{
+                    var dx=x2-x1,dy=y2-y1;
+                    var p=[-dx,dx,-dy,dy],q=[x1-rx,rx+rw-x1,y1-ry,ry+rh-y1];
+                    var u0=0,u1=1;
+                    for(var k=0;k<4;k++){{
+                        if(p[k]===0){{if(q[k]<0)return false;}}
+                        else{{var u=q[k]/p[k];if(p[k]<0)u0=Math.max(u0,u);else u1=Math.min(u1,u);}}
+                        if(u0>u1)return false;
                     }}
-                    return {{
-                        goLeft:  rC >= lC,   // more trajectory right  → label left
-                        goAbove: bC >= aC    // more trajectory below  → label above
-                    }};
+                    return true;
+                }}
+                function labelHitsTraj(lx,ly,lw,lh) {{
+                    for(var i=0;i<tPts.length-1;i++){{
+                        if(segHitsRect(tPts[i].x,tPts[i].y,
+                                       tPts[i+1].x,tPts[i+1].y,
+                                       lx,ly,lw,lh)) return true;
+                    }}
+                    return false;
+                }}
+                function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){{
+                    return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;
                 }}
 
-                // Hide all labels first.
-                _divs.forEach(function(d) {{ d.style.display = 'none'; }});
+                // Vertical side: label above dot when more trajectory points
+                // are below it (more traj below → label above), and vice-versa.
+                function goAbovePt(pt){{
+                    var bC=0,aC=0;
+                    for(var i=0;i<tPts.length;i++){{
+                        var dy=tPts[i].y-pt.y;
+                        if(dy>8)bC++;else if(dy<-8)aC++;
+                    }}
+                    return bC>=aC;
+                }}
 
-                var order = pts.map(function(_, i) {{ return i; }}).filter(function(i) {{
-                    var p = pts[i];
-                    return p.x >= -EDGE && p.x <= mapW + EDGE &&
-                           p.y >= -EDGE && p.y <= mapH + EDGE;
+                // Local trajectory tangent at the nearest skeleton point.
+                function trajTan(pt){{
+                    var best=Infinity,bi=0;
+                    for(var i=0;i<tPts.length;i++){{
+                        var dx=tPts[i].x-pt.x,dy=tPts[i].y-pt.y;
+                        var d=dx*dx+dy*dy;
+                        if(d<best){{best=d;bi=i;}}
+                    }}
+                    var i0=Math.max(0,bi-1),i1=Math.min(tPts.length-1,bi+1);
+                    return {{dx:tPts[i1].x-tPts[i0].x,dy:tPts[i1].y-tPts[i0].y}};
+                }}
+
+                // ── Label placement ───────────────────────────────────────
+                _divs.forEach(function(d){{d.style.display='none';}});
+
+                var order=pts.map(function(_,i){{return i;}}).filter(function(i){{
+                    var p=pts[i];
+                    return p.x>=-EDGE&&p.x<=mapW+EDGE&&p.y>=-EDGE&&p.y<=mapH+EDGE;
                 }});
 
-                // Sort DESCENDING by t_s: latest event placed first (nearest dot),
-                // earlier events stack outward.  Reading direction is then
-                // chronological: top-to-bottom for above-labels (falling trajectory)
-                // and bottom-to-top for below-labels (rising trajectory).
-                order.sort(function(a, b) {{ return LABELS[b].t_s - LABELS[a].t_s; }});
+                // Latest event placed first → sits nearest its dot.
+                // Earlier events are pushed outward by the collision loop.
+                // Reading order: chronological top-to-bottom (above) or
+                //                bottom-to-top (below).
+                order.sort(function(a,b){{return LABELS[b].t_s-LABELS[a].t_s;}});
 
-                var CLUSTER_R = 60;
-                var topY = {{}}, goLeft = {{}}, goAbove = {{}}, lwCache = {{}};
+                var topY={{}},lxMap={{}},goLeft={{}},goAbove={{}},lwCache={{}};
+                var placed=[];   // already-positioned label rects
 
-                var prevTop = null, prevBottom = null, prevPt = null;
-                order.forEach(function(idx) {{
-                    var pt = pts[idx];
-                    _divs[idx].style.display = 'block';
-                    var lh = (_divs[idx].offsetHeight || 14) + PAD * 2;
-                    var lw = (_divs[idx].offsetWidth  || 80) + PAD * 2;
-                    lwCache[idx] = lw;
+                order.forEach(function(idx){{
+                    var pt=pts[idx];
+                    _divs[idx].style.display='block';
+                    var lh=(_divs[idx].offsetHeight||14)+PAD*2;
+                    var lw=(_divs[idx].offsetWidth ||80)+PAD*2;
+                    lwCache[idx]=lw;
 
-                    // Reset stacking group when this dot is far from the last.
-                    if (prevPt) {{
-                        var cdx = pt.x - prevPt.x, cdy = pt.y - prevPt.y;
-                        if (Math.sqrt(cdx*cdx + cdy*cdy) > CLUSTER_R) {{
-                            prevTop = null; prevBottom = null;
+                    // Vertical side.
+                    var above=goAbovePt(pt);
+                    goAbove[idx]=above;
+
+                    // Horizontal side — proven safe from trajectory crossing:
+                    //   Label ABOVE dot: go RIGHT when slope ≥ 0, LEFT when < 0.
+                    //   Label BELOW dot: opposite.
+                    // Proof: for label-above + label-right, trajectory at
+                    // x > pt.x has y > pt.y (below label) iff slope > 0.  The
+                    // backward trajectory (x < pt.x) never enters the label x-
+                    // range.  Symmetric argument holds for the other cases.
+                    var tan=trajTan(pt);
+                    var slopePos=(tan.dx*tan.dy)>=0;
+                    var lRight=above?slopePos:!slopePos;
+                    goLeft[idx]=!lRight;
+
+                    var lx=lRight?pt.x+H_GAP:pt.x-H_GAP-lw;
+                    var ly=above?pt.y-lh-V_ABOVE:pt.y+V_ABOVE;
+                    var dir=above?-1:1;
+                    var step=lh+STACK_GAP;
+
+                    // Push label outward until it clears the trajectory and
+                    // all already-placed labels (hard constraints).
+                    for(var attempt=0;attempt<40;attempt++){{
+                        var bad=labelHitsTraj(lx,ly,lw,lh);
+                        for(var j=0;j<placed.length&&!bad;j++){{
+                            bad=rectsOverlap(lx,ly,lw,lh,
+                                placed[j].lx,placed[j].ly,
+                                placed[j].lw,placed[j].lh);
                         }}
+                        if(!bad)break;
+                        ly+=dir*step;
                     }}
 
-                    var side = bestSide(pt);
-                    goLeft[idx]  = side.goLeft;
-                    goAbove[idx] = side.goAbove;
-
-                    var candidate;
-                    if (side.goAbove) {{
-                        var idealTop = pt.y - lh - V_ABOVE;
-                        candidate = (prevTop === null)
-                            ? idealTop
-                            : Math.min(idealTop, prevTop - lh - STACK_GAP);
-                        if (candidate < EDGE) {{
-                            goAbove[idx] = false;   // no room above — fall through
-                        }} else {{
-                            prevTop = candidate;
-                        }}
-                    }}
-                    if (!goAbove[idx]) {{
-                        var idealBottom = pt.y + V_ABOVE;
-                        candidate = (prevBottom === null)
-                            ? idealBottom
-                            : Math.max(idealBottom, prevBottom + lh + STACK_GAP);
-                        if (candidate + lh > mapH - EDGE) {{
-                            candidate  = pt.y + V_ABOVE;
-                            prevBottom = null;
-                        }} else {{
-                            prevBottom = candidate;
-                        }}
-                    }}
-                    topY[idx] = candidate;
-                    prevPt    = pt;
+                    topY[idx]=ly;
+                    lxMap[idx]=lx;
+                    placed.push({{lx:lx,ly:ly,lw:lw,lh:lh}});
                 }});
 
-                // Render: position each label on the correct side of its dot.
-                order.forEach(function(idx) {{
-                    var pt = pts[idx];
-                    var lw = lwCache[idx] || (_divs[idx].offsetWidth || 80) + PAD * 2;
-                    var lx = goLeft[idx]
-                        ? pt.x - H_GAP - lw   // right edge of label flush with dot
-                        : pt.x + H_GAP;        // left  edge of label flush with dot
-                    _divs[idx].style.left = lx + 'px';
-                    _divs[idx].style.top  = topY[idx] + 'px';
+                // Render.
+                order.forEach(function(idx){{
+                    _divs[idx].style.left=lxMap[idx]+'px';
+                    _divs[idx].style.top =topY[idx]+'px';
                 }});
             }}
 
