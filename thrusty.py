@@ -4378,17 +4378,23 @@ class MissileFlyoutApp(tk.Tk):
                 // ── Draw tick marks ───────────────────────────────────────
                 TICKS.forEach(function(tk) {{
                     var tp = map.latLngToContainerPoint([tk.lat, tk.lon]);
-                    // Find nearest TRAJ point.
+                    // Find nearest TRAJ point by geographic distance so the
+                    // result is zoom-independent (screen distances compress at
+                    // low zoom, causing the wrong segment to be selected).
                     var bestD2 = Infinity, bestI = 0;
-                    for (var i = 0; i < tPts.length; i++) {{
-                        var dx = tp.x - tPts[i].x, dy = tp.y - tPts[i].y;
-                        var d2 = dx*dx + dy*dy;
+                    for (var i = 0; i < TRAJ.length; i++) {{
+                        var dlat = tk.lat - TRAJ[i].lat;
+                        var dlon = tk.lon - TRAJ[i].lon;
+                        var d2   = dlat*dlat + dlon*dlon;
                         if (d2 < bestD2) {{ bestD2 = d2; bestI = i; }}
                     }}
-                    // Local tangent from the nearest segment.
-                    var i0  = Math.min(bestI, tPts.length - 2);
-                    var tdx = tPts[i0 + 1].x - tPts[i0].x;
-                    var tdy = tPts[i0 + 1].y - tPts[i0].y;
+                    // Project the two neighbouring geographic points to screen
+                    // to get the tangent in screen space.
+                    var i0  = Math.min(bestI, TRAJ.length - 2);
+                    var p0  = map.latLngToContainerPoint([TRAJ[i0].lat,   TRAJ[i0].lon]);
+                    var p1  = map.latLngToContainerPoint([TRAJ[i0+1].lat, TRAJ[i0+1].lon]);
+                    var tdx = p1.x - p0.x;
+                    var tdy = p1.y - p0.y;
                     var tlen = Math.sqrt(tdx*tdx + tdy*tdy) || 1;
                     // Perpendicular unit vector (rotated 90°).
                     var px = -tdy / tlen, py = tdx / tlen;
