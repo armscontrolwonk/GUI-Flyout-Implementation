@@ -290,7 +290,16 @@ class _StageFrame(ttk.LabelFrame):
         self._dry         = _entry_row(self, "Dry mass (kg):",       1, d["dry"],         "kg")
         self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
         self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
-        self._thrust_kn   = _entry_row(self, "Thrust (kN):",         4, d["thrust_kn"],   "kN")
+        # Thrust row (row 4) with Suggest button
+        ttk.Label(self, text="Thrust (kN):").grid(
+            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._thrust_kn = tk.StringVar(value=d["thrust_kn"])
+        _thr_inner = ttk.Frame(self)
+        _thr_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Entry(_thr_inner, textvariable=self._thrust_kn, width=10).pack(side=tk.LEFT)
+        ttk.Label(_thr_inner, text="kN").pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Button(_thr_inner, text="Suggest…",
+                   command=self._suggest_thrust).pack(side=tk.LEFT)
         self._isp         = _entry_row(self, "Isp (vacuum, s):",      5, d["isp"],         "s")
         # Nozzle exit area — entry + Suggest button (row 6)
         ttk.Label(self, text="Nozzle exit area (m²):").grid(
@@ -436,6 +445,147 @@ class _StageFrame(ttk.LabelFrame):
         px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
         py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
         dlg.geometry(f"+{px}+{py}")
+
+    def _suggest_thrust(self):
+        """Estimate thrust from observed rocket acceleration during boost."""
+        import math
+        G0 = 9.80665
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Estimate Thrust")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        # ── Input fields ──────────────────────────────────────────────
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill=tk.X)
+        frm.columnconfigure(1, weight=1)
+
+        ttk.Label(frm, text="Fueled mass (kg):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        mass_var = tk.StringVar(value=self._fueled.get())
+        ttk.Entry(frm, textvariable=mass_var, width=10).grid(
+            row=0, column=1, sticky=tk.W)
+
+        ttk.Label(frm, text="Measurement mode:").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(10, 2))
+        mode_var = tk.StringVar(value="1d")
+        mode_inner = ttk.Frame(frm)
+        mode_inner.grid(row=1, column=1, sticky=tk.W, pady=(10, 2))
+        ttk.Radiobutton(mode_inner, text="Along flight path",
+                        variable=mode_var, value="1d",
+                        command=lambda: _on_mode()).pack(side=tk.LEFT)
+        ttk.Radiobutton(mode_inner, text="Vertical / horizontal components",
+                        variable=mode_var, value="2d",
+                        command=lambda: _on_mode()).pack(side=tk.LEFT, padx=(12, 0))
+
+        # 1D sub-frame
+        frm1d = ttk.Frame(frm)
+        frm1d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
+        frm1d.columnconfigure(1, weight=1)
+        ttk.Label(frm1d, text="Measured acceleration (m/s²):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        accel_1d_var = tk.StringVar(value="")
+        ttk.Entry(frm1d, textvariable=accel_1d_var, width=10).grid(
+            row=0, column=1, sticky=tk.W)
+        ttk.Label(frm1d, text="Flight path angle (° from horizontal):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        angle_var = tk.StringVar(value="90")
+        angle_inner = ttk.Frame(frm1d)
+        angle_inner.grid(row=1, column=1, sticky=tk.W)
+        ttk.Entry(angle_inner, textvariable=angle_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(angle_inner, text="  (90 = vertical, 0 = horizontal)",
+                  foreground="gray50").pack(side=tk.LEFT)
+
+        # 2D sub-frame (hidden initially)
+        frm2d = ttk.Frame(frm)
+        frm2d.columnconfigure(1, weight=1)
+        ttk.Label(frm2d, text="Vertical acceleration (m/s², upward +):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        av_var = tk.StringVar(value="")
+        ttk.Entry(frm2d, textvariable=av_var, width=10).grid(
+            row=0, column=1, sticky=tk.W)
+        ttk.Label(frm2d, text="Horizontal acceleration (m/s²):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        ah_var = tk.StringVar(value="0")
+        ttk.Entry(frm2d, textvariable=ah_var, width=10).grid(
+            row=1, column=1, sticky=tk.W)
+
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+
+        # ── Result display ────────────────────────────────────────────
+        res_frm = ttk.Frame(dlg, padding=(12, 8))
+        res_frm.pack(fill=tk.X)
+        res_frm.columnconfigure(1, weight=1)
+        ttk.Label(res_frm, text="Estimated thrust:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        thrust_lbl = ttk.Label(res_frm, text="—",
+                               font=("", 11, "bold"), foreground="navy")
+        thrust_lbl.grid(row=0, column=1, sticky=tk.W)
+        note_lbl = ttk.Label(res_frm, text="", foreground="gray50", wraplength=360)
+        note_lbl.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+
+        _thrust_result = [None]
+
+        def _compute(*_):
+            try:
+                mass = float(mass_var.get())
+                if mass <= 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                thrust_lbl.config(text="—")
+                note_lbl.config(text="invalid mass")
+                _thrust_result[0] = None
+                return
+            try:
+                if mode_var.get() == "1d":
+                    a     = float(accel_1d_var.get())
+                    gamma = math.radians(float(angle_var.get()))
+                    f_n   = mass * (a + G0 * math.sin(gamma))
+                    note  = (f"T = m·(a + g·sin γ)  =  {mass:.0f}·"
+                             f"({a:.2f} + {G0*math.sin(gamma):.3f})  =  {f_n/1000:.2f} kN")
+                else:
+                    av  = float(av_var.get())
+                    ah  = float(ah_var.get())
+                    f_n = mass * math.sqrt(ah**2 + (av + G0)**2)
+                    note = (f"T = m·√(a_h²+(a_v+g)²)  =  {mass:.0f}·"
+                            f"√({ah:.2f}²+{av+G0:.3f}²)  =  {f_n/1000:.2f} kN")
+                if f_n <= 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                thrust_lbl.config(text="—")
+                note_lbl.config(text="")
+                _thrust_result[0] = None
+                return
+            thrust_lbl.config(text=f"{f_n/1000:,.1f} kN")
+            note_lbl.config(text=note)
+            _thrust_result[0] = f_n / 1000.0
+
+        def _on_mode():
+            if mode_var.get() == "1d":
+                frm2d.grid_remove()
+                frm1d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
+            else:
+                frm1d.grid_remove()
+                frm2d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
+            _compute()
+
+        for _v in (mass_var, accel_1d_var, angle_var, av_var, ah_var):
+            _v.trace_add("write", _compute)
+
+        # ── Buttons ───────────────────────────────────────────────────
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+        btn_frm = ttk.Frame(dlg, padding=(12, 8))
+        btn_frm.pack(fill=tk.X)
+
+        def _use():
+            if _thrust_result[0] is not None:
+                self._thrust_kn.set(f"{_thrust_result[0]:.1f}")
+            dlg.destroy()
+
+        ttk.Button(btn_frm, text="Use this value", command=_use).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Cancel",
+                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     def set_readonly(self, readonly: bool):
         """Set all editable entry fields to readonly (for Forden reference missiles)."""
