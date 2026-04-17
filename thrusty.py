@@ -4208,14 +4208,23 @@ class MissileFlyoutApp(tk.Tk):
         _label_data = []   # [{lat, lon, text, t_s, prefer_above}] for JS labels
         _tick_data  = []   # [{lat, lon}] for JS tick marks
 
-        def _prefer_above(ms, e):
+        def _prefer_above(ms, e, is_debris, mk_lat, mk_lon):
             """
             Hint for initial vertical label placement.
-            Impact events (dot at ground level): True so label points back along
-            the incoming arc.  Other events: True while ascending, False while
-            descending.  The JS collision loop may flip to the opposite side if
-            the preferred side is fully blocked.
+            Debris impacts: place the label on the SAME SIDE of the main
+            trajectory as the dot, so no trajectory sits between dot and label.
+            Other impact events: always above (dot at ground, label toward arc).
+            Other events: above while ascending, below while descending.
             """
+            if is_debris and 'impact' in e and 'impact_lat' in ms:
+                # Find nearest main-trajectory point and compare latitudes.
+                dlat2 = (lat - mk_lat) ** 2
+                dlon2 = (lon_uw - mk_lon) ** 2
+                ni    = int(np.argmin(dlat2 + dlon2))
+                diff  = mk_lat - float(lat[ni])
+                if abs(diff) < 1e-5:
+                    return True   # essentially on the main track → default above
+                return bool(diff > 0)   # north of main track → above in screen
             if 'impact' in e:
                 return True
             if len(alt) < 2:
@@ -4257,7 +4266,8 @@ class MissileFlyoutApp(tk.Tk):
                 ).add_to(fmap)
                 _label_data.append({'lat':  mk_lat, 'lon':  mk_lon,
                                     'text': display_name, 't_s': ms['t_s'],
-                                    'prefer_above': _prefer_above(ms, e)})
+                                    'prefer_above': _prefer_above(
+                                        ms, e, is_debris, mk_lat, mk_lon)})
             elif _show_tick(e, is_debris):
                 display_name = _name_only(label)
                 popup_html = (
@@ -4285,6 +4295,24 @@ class MissileFlyoutApp(tk.Tk):
         traj_json = _json.dumps(_traj_pts)
         tick_json = _json.dumps(_tick_data)
 
+        # All trajectory polylines (main + debris arcs) for collision detection.
+        # Passed to JS so that labels are not separated from their dots by ANY arc.
+        _all_traj_polys = [_traj_pts]
+        for _d in r.get('debris_trajectories', []):
+            _dl  = np.asarray(_d['lat'])
+            _dlo = np.asarray(_d['lon'])
+            _dd  = np.diff(_dlo)
+            _dd  = (_dd + 180.0) % 360.0 - 180.0
+            _dlu = np.empty_like(_dlo)
+            _dlu[0] = _dlo[0]
+            if len(_dd):
+                _dlu[1:] = _dlo[0] + np.cumsum(_dd)
+            _nd  = min(100, len(_dl))
+            _ixd = np.round(np.linspace(0, len(_dl) - 1, _nd)).astype(int)
+            _all_traj_polys.append([{'lat': float(_dl[i]), 'lon': float(_dlu[i])}
+                                    for i in _ixd])
+        all_traj_json = _json.dumps(_all_traj_polys)
+
         # ── Leader-line labels + tick marks (pure JS, update on zoom+pan) ──
         # Labels are name-only; full detail is in the click popup.
         # Tick marks are drawn perpendicular to the trajectory skeleton.
@@ -4296,6 +4324,7 @@ class MissileFlyoutApp(tk.Tk):
             var LABELS    = {label_json};
             var TICKS     = {tick_json};
             var TRAJ      = {traj_json};
+            var ALL_TRAJ  = {all_traj_json};
             var H_GAP     = 10;   // px right of the dot centre
             var V_ABOVE   = 4;    // px between dot and nearest edge of label
             var STACK_GAP = 3;    // px between stacked labels
@@ -4338,6 +4367,12 @@ class MissileFlyoutApp(tk.Tk):
                 // ── Convert trajectory skeleton to container points ───────
                 var tPts = TRAJ.map(function(tp) {{
                     return map.latLngToContainerPoint([tp.lat, tp.lon]);
+                }});
+                // All polylines (main + debris arcs) projected for collision checks.
+                var allPts = ALL_TRAJ.map(function(poly) {{
+                    return poly.map(function(tp) {{
+                        return map.latLngToContainerPoint([tp.lat, tp.lon]);
+                    }});
                 }});
 
                 // ── Draw tick marks ───────────────────────────────────────
@@ -4387,13 +4422,31 @@ class MissileFlyoutApp(tk.Tk):
                     }}
                     return true;
                 }}
+                // Check rect against ALL trajectory polylines (main + debris arcs).
                 function labelHitsTraj(lx,ly,lw,lh) {{
-                    for(var i=0;i<tPts.length-1;i++){{
-                        if(segHitsRect(tPts[i].x,tPts[i].y,
-                                       tPts[i+1].x,tPts[i+1].y,
-                                       lx,ly,lw,lh)) return true;
+                    for(var p=0;p<allPts.length;p++){{
+                        var ap=allPts[p];
+                        for(var i=0;i<ap.length-1;i++){{
+                            if(segHitsRect(ap[i].x,ap[i].y,ap[i+1].x,ap[i+1].y,
+                                           lx,ly,lw,lh)) return true;
+                        }}
                     }}
                     return false;
+                }}
+                // Check the GAP corridor between the dot and the label rectangle.
+                // A trajectory can pass through the gap without entering the label
+                // rect; this catches that case.  The immediate dot vicinity (DOT_R)
+                // is excluded so the trajectory passing through the dot itself does
+                // not generate a false positive.
+                var DOT_R=8;
+                function corridorHitsTraj(pt,lx,ly,lw,lh,lRight,above){{
+                    var cx,cy,cw,ch;
+                    if(above){{cy=ly;ch=pt.y-DOT_R-ly;}}
+                    else{{cy=pt.y+DOT_R;ch=ly+lh-(pt.y+DOT_R);}}
+                    if(lRight){{cx=pt.x+DOT_R;cw=lx+lw-(pt.x+DOT_R);}}
+                    else{{cx=lx;cw=pt.x-DOT_R-lx;}}
+                    if(cw<=0||ch<=0)return false;
+                    return labelHitsTraj(cx,cy,cw,ch);
                 }}
                 function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){{
                     return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;
@@ -4461,7 +4514,10 @@ class MissileFlyoutApp(tk.Tk):
                     var dir=above?-1:1;
                     var step=lh+STACK_GAP;
                     for(var attempt=0;attempt<40;attempt++){{
-                        var bad=labelHitsTraj(lx,ly,lw,lh);
+                        // Check the label rect AND the gap corridor between dot
+                        // and label — any trajectory in either region is a violation.
+                        var bad=labelHitsTraj(lx,ly,lw,lh)||
+                                corridorHitsTraj(pt,lx,ly,lw,lh,lRight,above);
                         for(var j=0;j<placed.length&&!bad;j++){{
                             bad=rectsOverlap(lx,ly,lw,lh,
                                 placed[j].lx,placed[j].ly,
