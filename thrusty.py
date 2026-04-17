@@ -594,69 +594,90 @@ class MissileDialog(tk.Toplevel):
         self._rv_separates_check.grid(
             row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
 
-        # Row 5: Shroud — checkbutton acts as label; entry starts disabled
+        # Row 5: Payload nose shape — shape of the exposed tip after shroud jettison
+        # (or throughout flight if no shroud is fitted)
+        _ns_labels = list(NOSE_SHAPE_LABELS.values())
+        ttk.Label(pl, text="Payload nose shape:").grid(
+            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
+        self._nose_shape_cb = ttk.Combobox(
+            pl, textvariable=self._nose_shape_var,
+            values=_ns_labels, state="readonly", width=18)
+        self._nose_shape_cb.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+
+        # Row 6: Payload nose length
+        ttk.Label(pl, text="Payload nose length (m):").grid(
+            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+        self._nose_length_var = tk.StringVar(value="0")
+        _nld_inner = ttk.Frame(pl)
+        _nld_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        self._nose_length_entry = ttk.Entry(
+            _nld_inner, textvariable=self._nose_length_var, width=10)
+        self._nose_length_entry.pack(side=tk.LEFT)
+        ttk.Label(_nld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Row 7: Shroud — checkbutton acts as label; entry starts disabled
         self._shroud_var = tk.BooleanVar(value=False)
         self._shroud_check = ttk.Checkbutton(pl, text="Shroud mass (kg):",
                                              variable=self._shroud_var,
                                              command=self._update_shroud_state)
-        self._shroud_check.grid(row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._shroud_check.grid(row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_mass_var = tk.StringVar(value="0")
         _sm_inner = ttk.Frame(pl)
-        _sm_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sm_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_mass_entry = ttk.Entry(
             _sm_inner, textvariable=self._shroud_mass_var, width=10, state="disabled")
         self._shroud_mass_entry.pack(side=tk.LEFT)
         ttk.Label(_sm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 6: Jettison altitude (indented label to signal dependence on shroud)
+        # Row 8: Jettison altitude (indented label to signal dependence on shroud)
         ttk.Label(pl, text="  Jettison alt (km):").grid(
-            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_alt_var = tk.StringVar(value="80")
         _sa_inner = ttk.Frame(pl)
-        _sa_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sa_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_alt_entry = ttk.Entry(
             _sa_inner, textvariable=self._shroud_alt_var, width=10, state="disabled")
         self._shroud_alt_entry.pack(side=tk.LEFT)
         ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 7: Shroud length — used to compute tumbling-cylinder debris β
+        # Row 9: Shroud length — used to compute tumbling-cylinder debris β
         ttk.Label(pl, text="  Shroud length (m):").grid(
-            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_length_var = tk.StringVar(value="0")
         _sl_inner = ttk.Frame(pl)
-        _sl_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sl_inner.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_length_entry = ttk.Entry(
             _sl_inner, textvariable=self._shroud_length_var, width=10, state="disabled")
         self._shroud_length_entry.pack(side=tk.LEFT)
         ttk.Label(_sl_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 8: Shroud diameter — for reference area correction pre-jettison
+        # Row 10: Shroud diameter — for reference area correction pre-jettison
         ttk.Label(pl, text="  Shroud diameter (m):").grid(
-            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=10, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_diameter_var = tk.StringVar(value="0")
         _sd_inner = ttk.Frame(pl)
-        _sd_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _sd_inner.grid(row=10, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._shroud_diameter_entry = ttk.Entry(
             _sd_inner, textvariable=self._shroud_diameter_var, width=10, state="disabled")
         self._shroud_diameter_entry.pack(side=tk.LEFT)
         ttk.Label(_sd_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Row 9: Shroud nose shape dropdown
-        _ns_labels = list(NOSE_SHAPE_LABELS.values())
+        # Row 11: Shroud nose shape dropdown
         ttk.Label(pl, text="  Shroud nose shape:").grid(
-            row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=11, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
         self._shroud_nose_shape_cb = ttk.Combobox(
             pl, textvariable=self._shroud_nose_shape_var,
             values=_ns_labels, state="disabled", width=18)
-        self._shroud_nose_shape_cb.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._shroud_nose_shape_cb.grid(row=11, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # Row 10: Shroud nose length (L/D computed internally)
+        # Row 12: Shroud nose length (L/D computed internally)
         ttk.Label(pl, text="  Shroud nose length (m):").grid(
-            row=10, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
+            row=12, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
         self._shroud_nose_length_var = tk.StringVar(value="0")
         _snld_inner = ttk.Frame(pl)
-        _snld_inner.grid(row=10, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
+        _snld_inner.grid(row=12, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
         self._shroud_nose_length_entry = ttk.Entry(
             _snld_inner, textvariable=self._shroud_nose_length_var, width=10, state="disabled")
         self._shroud_nose_length_entry.pack(side=tk.LEFT)
@@ -665,28 +686,6 @@ class MissileDialog(tk.Toplevel):
         # Live total-payload label update
         for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
             _v.trace_add("write", self._update_total_payload)
-
-        # ── Aerodynamics (nose shape) ────────────────────────────────────
-        af = ttk.LabelFrame(body, text="Aerodynamics")
-        af.pack(fill=tk.X, padx=8, pady=4)
-
-        ttk.Label(af, text="Nose shape:").grid(
-            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
-        self._nose_shape_cb = ttk.Combobox(
-            af, textvariable=self._nose_shape_var,
-            values=_ns_labels, state="readonly", width=18)
-        self._nose_shape_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-
-        ttk.Label(af, text="Nose length (m):").grid(
-            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
-        self._nose_length_var = tk.StringVar(value="0")
-        _nld_inner = ttk.Frame(af)
-        _nld_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
-        self._nose_length_entry = ttk.Entry(
-            _nld_inner, textvariable=self._nose_length_var, width=10)
-        self._nose_length_entry.pack(side=tk.LEFT)
-        ttk.Label(_nld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
 
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
@@ -2676,15 +2675,15 @@ class MissileFlyoutApp(tk.Tk):
             sn  += 1
             node = node.stage2
 
-        # ── Aerodynamics ──────────────────────────────────────────────
+        # ── Payload nose (shown in Front End section of params display) ──
         if p.nose_shape not in ('', 'forden'):
-            af = ttk.LabelFrame(self._params_inner, text="Aerodynamics")
+            af = ttk.LabelFrame(self._params_inner, text="Front End — Payload Nose")
             af.pack(fill=tk.X, **pad)
-            _row(af, 0, "Nose shape:",
+            _row(af, 0, "Payload nose shape:",
                  NOSE_SHAPE_LABELS.get(p.nose_shape, p.nose_shape))
             if p.nose_length_m > 0 and p.diameter_m > 0:
                 _ld = p.nose_length_m / p.diameter_m
-                _row(af, 1, "Nose length (m):",
+                _row(af, 1, "Payload nose length (m):",
                      f"{p.nose_length_m:.2f}  (L/D = {_ld:.2f})")
 
         # ── Shroud ────────────────────────────────────────────────────
