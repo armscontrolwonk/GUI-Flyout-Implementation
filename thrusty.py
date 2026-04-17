@@ -461,55 +461,27 @@ class _StageFrame(ttk.LabelFrame):
         frm.pack(fill=tk.X)
         frm.columnconfigure(1, weight=1)
 
-        ttk.Label(frm, text="Fueled mass (kg):").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        def _lbl(row, text):
+            ttk.Label(frm, text=text).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+
+        _lbl(0, "Fueled mass (kg):")
         mass_var = tk.StringVar(value=self._fueled.get())
         ttk.Entry(frm, textvariable=mass_var, width=10).grid(
             row=0, column=1, sticky=tk.W)
 
-        ttk.Label(frm, text="Measurement mode:").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(10, 2))
-        mode_var = tk.StringVar(value="1d")
-        mode_inner = ttk.Frame(frm)
-        mode_inner.grid(row=1, column=1, sticky=tk.W, pady=(10, 2))
-        ttk.Radiobutton(mode_inner, text="Along flight path",
-                        variable=mode_var, value="1d",
-                        command=lambda: _on_mode()).pack(side=tk.LEFT)
-        ttk.Radiobutton(mode_inner, text="Vertical / horizontal components",
-                        variable=mode_var, value="2d",
-                        command=lambda: _on_mode()).pack(side=tk.LEFT, padx=(12, 0))
-
-        # 1D sub-frame
-        frm1d = ttk.Frame(frm)
-        frm1d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
-        frm1d.columnconfigure(1, weight=1)
-        ttk.Label(frm1d, text="Measured acceleration (m/s²):").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        accel_1d_var = tk.StringVar(value="")
-        ttk.Entry(frm1d, textvariable=accel_1d_var, width=10).grid(
-            row=0, column=1, sticky=tk.W)
-        ttk.Label(frm1d, text="Flight path angle (° from horizontal):").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        angle_var = tk.StringVar(value="90")
-        angle_inner = ttk.Frame(frm1d)
-        angle_inner.grid(row=1, column=1, sticky=tk.W)
-        ttk.Entry(angle_inner, textvariable=angle_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(angle_inner, text="  (90 = vertical, 0 = horizontal)",
-                  foreground="gray50").pack(side=tk.LEFT)
-
-        # 2D sub-frame (hidden initially)
-        frm2d = ttk.Frame(frm)
-        frm2d.columnconfigure(1, weight=1)
-        ttk.Label(frm2d, text="Vertical acceleration (m/s², upward +):").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        _lbl(1, "Vertical acceleration (m/s², upward +):")
         av_var = tk.StringVar(value="")
-        ttk.Entry(frm2d, textvariable=av_var, width=10).grid(
-            row=0, column=1, sticky=tk.W)
-        ttk.Label(frm2d, text="Horizontal acceleration (m/s²):").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        ah_var = tk.StringVar(value="0")
-        ttk.Entry(frm2d, textvariable=ah_var, width=10).grid(
+        ttk.Entry(frm, textvariable=av_var, width=10).grid(
             row=1, column=1, sticky=tk.W)
+
+        _lbl(2, "Horizontal acceleration (m/s²):")
+        ah_inner = ttk.Frame(frm)
+        ah_inner.grid(row=2, column=1, sticky=tk.W)
+        ah_var = tk.StringVar(value="0")
+        ttk.Entry(ah_inner, textvariable=ah_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(ah_inner, text="  (0 for vertical flight)",
+                  foreground="gray50").pack(side=tk.LEFT)
 
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
@@ -538,18 +510,9 @@ class _StageFrame(ttk.LabelFrame):
                 _thrust_result[0] = None
                 return
             try:
-                if mode_var.get() == "1d":
-                    a     = float(accel_1d_var.get())
-                    gamma = math.radians(float(angle_var.get()))
-                    f_n   = mass * (a + G0 * math.sin(gamma))
-                    note  = (f"T = m·(a + g·sin γ)  =  {mass:.0f}·"
-                             f"({a:.2f} + {G0*math.sin(gamma):.3f})  =  {f_n/1000:.2f} kN")
-                else:
-                    av  = float(av_var.get())
-                    ah  = float(ah_var.get())
-                    f_n = mass * math.sqrt(ah**2 + (av + G0)**2)
-                    note = (f"T = m·√(a_h²+(a_v+g)²)  =  {mass:.0f}·"
-                            f"√({ah:.2f}²+{av+G0:.3f}²)  =  {f_n/1000:.2f} kN")
+                av  = float(av_var.get())
+                ah  = float(ah_var.get())
+                f_n = mass * math.sqrt(ah**2 + (av + G0)**2)
                 if f_n <= 0:
                     raise ValueError
             except (ValueError, TypeError):
@@ -557,20 +520,13 @@ class _StageFrame(ttk.LabelFrame):
                 note_lbl.config(text="")
                 _thrust_result[0] = None
                 return
+            note = (f"T = m·√(a_h²+(a_v+g)²)  =  {mass:.0f}·"
+                    f"√({ah:.2f}²+{av+G0:.3f}²)  =  {f_n/1000:.2f} kN")
             thrust_lbl.config(text=f"{f_n/1000:,.1f} kN")
             note_lbl.config(text=note)
             _thrust_result[0] = f_n / 1000.0
 
-        def _on_mode():
-            if mode_var.get() == "1d":
-                frm2d.grid_remove()
-                frm1d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
-            else:
-                frm1d.grid_remove()
-                frm2d.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=2)
-            _compute()
-
-        for _v in (mass_var, accel_1d_var, angle_var, av_var, ah_var):
+        for _v in (mass_var, av_var, ah_var):
             _v.trace_add("write", _compute)
 
         # ── Buttons ───────────────────────────────────────────────────
