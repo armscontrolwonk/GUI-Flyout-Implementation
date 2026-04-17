@@ -4354,7 +4354,7 @@ class MissileFlyoutApp(tk.Tk):
                     return map.latLngToContainerPoint([lb.lat, lb.lon]);
                 }});
 
-                // Returns {dx, dy} of the trajectory tangent (unnormalised)
+                // Returns {{dx, dy}} of the trajectory tangent (unnormalised)
                 // at the point nearest to pt.
                 function tangent2D(pt) {{
                     var best = Infinity, bestIdx = 0;
