@@ -1331,6 +1331,277 @@ class MissileDialog(tk.Toplevel):
 
 
 # ---------------------------------------------------------------------------
+# Range-ring dialog
+# ---------------------------------------------------------------------------
+
+class RangeRingDialog(tk.Toplevel):
+    """Compute and export a maximum-range ring for the current missile.
+
+    Sweeps 72 azimuths (every 5°) using maximize_range(), collects the
+    impact point for each direction, then renders the closed polygon on a
+    Cartopy map using the shared projection picker.
+    """
+
+    _N_AZ = 72   # number of azimuths → 5° spacing
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._app   = app
+        self._ring  = None   # list of (lon, lat) impact points once computed
+        self._stop  = threading.Event()
+
+        self.title("Range Ring")
+        self.resizable(False, False)
+        self.grab_set()
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill=tk.BOTH)
+        frm.columnconfigure(1, weight=1)
+
+        # Missile label (informational)
+        ttk.Label(frm, text="Missile:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self._missile_lbl = ttk.Label(frm, text=app._missile_var.get(),
+                                      foreground="navy")
+        self._missile_lbl.grid(row=0, column=1, sticky=tk.W)
+
+        # Launch lat
+        ttk.Label(frm, text="Launch lat (°N):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self._lat_var = tk.StringVar(value=app._launch_lat.get())
+        ttk.Entry(frm, textvariable=self._lat_var, width=12).grid(
+            row=1, column=1, sticky=tk.W)
+
+        # Launch lon
+        ttk.Label(frm, text="Launch lon (°E):").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self._lon_var = tk.StringVar(value=app._launch_lon.get())
+        ttk.Entry(frm, textvariable=self._lon_var, width=12).grid(
+            row=2, column=1, sticky=tk.W)
+
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+
+        # Progress bar + status label
+        prog_frm = ttk.Frame(self, padding=(12, 6))
+        prog_frm.pack(fill=tk.X)
+        self._prog_var = tk.StringVar(value="Press Compute to start.")
+        ttk.Label(prog_frm, textvariable=self._prog_var).pack(anchor=tk.W)
+        self._pbar = ttk.Progressbar(prog_frm, maximum=self._N_AZ,
+                                     mode="determinate")
+        self._pbar.pack(fill=tk.X, pady=(4, 0))
+
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+
+        # Buttons
+        btn_frm = ttk.Frame(self, padding=(12, 8))
+        btn_frm.pack(fill=tk.X)
+        self._compute_btn = ttk.Button(btn_frm, text="Compute Ring",
+                                       command=self._compute)
+        self._compute_btn.pack(side=tk.LEFT)
+        self._cancel_btn = ttk.Button(btn_frm, text="Stop",
+                                      command=self._cancel,
+                                      state=tk.DISABLED)
+        self._cancel_btn.pack(side=tk.LEFT, padx=6)
+        self._export_btn = ttk.Button(btn_frm, text="Export Map…",
+                                      command=self._export,
+                                      state=tk.DISABLED)
+        self._export_btn.pack(side=tk.LEFT, padx=(24, 0))
+        ttk.Button(btn_frm, text="Close",
+                   command=self.destroy).pack(side=tk.RIGHT)
+
+        app._center_dialog(self)
+
+    # ------------------------------------------------------------------
+    def _compute(self):
+        try:
+            lat = float(self._lat_var.get())
+            lon = float(self._lon_var.get())
+        except ValueError:
+            messagebox.showerror("Input error",
+                                 "Enter valid launch lat/lon.", parent=self)
+            return
+
+        try:
+            (missile, guidance, _la, _lo, _az, cutoff, la, lar,
+             gt_start_s, gt_stop_s, _orb,
+             _ye, _ys, _ysp, _yfa,
+             launch_elevation_deg) = self._app._get_inputs()
+        except Exception as e:
+            messagebox.showerror("Input error", str(e), parent=self)
+            return
+
+        self._ring = None
+        self._stop.clear()
+        self._pbar["value"] = 0
+        self._prog_var.set(f"Computing 0 / {self._N_AZ}…")
+        self._compute_btn.config(state=tk.DISABLED)
+        self._cancel_btn.config(state=tk.NORMAL)
+        self._export_btn.config(state=tk.DISABLED)
+
+        threading.Thread(
+            target=self._worker,
+            args=(missile, guidance, lat, lon, la, lar,
+                  gt_start_s, gt_stop_s, launch_elevation_deg),
+            daemon=True,
+        ).start()
+
+    def _cancel(self):
+        self._stop.set()
+
+    def _worker(self, missile, guidance, lat, lon, la, lar,
+                gt_start_s, gt_stop_s, launch_elevation_deg):
+        azimuths = np.linspace(0.0, 360.0, self._N_AZ, endpoint=False)
+        points   = []   # (az, impact_lon, impact_lat)
+
+        for i, az in enumerate(azimuths):
+            if self._stop.is_set():
+                self.after(0, self._on_cancelled)
+                return
+            try:
+                result = maximize_range(
+                    missile, lat, lon, az,
+                    guidance=guidance,
+                    loft_angle_deg=la,
+                    loft_angle_rate_deg_s=lar,
+                    gt_turn_start_s=gt_start_s,
+                    gt_turn_stop_s=gt_stop_s,
+                )
+                ms_list = result.get('milestones', [])
+                impact  = next(
+                    (m for m in ms_list
+                     if 'impact' in m.get('event', '').lower()
+                     and not m.get('is_debris', False)),
+                    None)
+                if impact:
+                    t_arr  = np.asarray(result['t'])
+                    la_arr = np.asarray(result['lat'])
+                    lo_arr = np.asarray(result['lon'])
+                    imp_lat = float(np.interp(impact['t_s'], t_arr, la_arr))
+                    imp_lon = float(np.interp(impact['t_s'], t_arr, lo_arr))
+                    points.append((az, imp_lon, imp_lat))
+            except Exception:
+                pass   # skip failed azimuths silently
+
+            self.after(0, self._on_progress, i + 1, len(points))
+
+        self.after(0, self._on_done, points, lat, lon)
+
+    def _on_progress(self, done, n_ok):
+        self._pbar["value"] = done
+        self._prog_var.set(
+            f"Computing {done} / {self._N_AZ}… ({n_ok} points OK)")
+
+    def _on_cancelled(self):
+        self._prog_var.set("Cancelled.")
+        self._compute_btn.config(state=tk.NORMAL)
+        self._cancel_btn.config(state=tk.DISABLED)
+
+    def _on_done(self, points, launch_lat, launch_lon):
+        self._cancel_btn.config(state=tk.DISABLED)
+        self._compute_btn.config(state=tk.NORMAL)
+        if len(points) < 3:
+            self._prog_var.set(
+                f"Too few valid azimuths ({len(points)}). Check missile params.")
+            return
+        avg_range = float(np.mean([
+            np.sqrt((p[2] - launch_lat)**2 + (p[1] - launch_lon)**2)
+            for p in points]))
+        self._ring         = points
+        self._launch_lat   = launch_lat
+        self._launch_lon   = launch_lon
+        self._prog_var.set(
+            f"Done — {len(points)} / {self._N_AZ} azimuths succeeded.")
+        self._export_btn.config(state=tk.NORMAL)
+
+    # ------------------------------------------------------------------
+    def _export(self):
+        if not self._ring:
+            return
+        try:
+            import cartopy.crs as ccrs
+            import cartopy.feature as cfeature
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import matplotlib.patheffects as pe
+        except ImportError as _e:
+            messagebox.showerror("Missing package",
+                                 f"Cartopy not installed.\n{_e}", parent=self)
+            return
+
+        # Reuse the projection picker from the main app.
+        mid_lon = float(np.mean([p[1] for p in self._ring]))
+        mid_lat = float(np.mean([p[2] for p in self._ring]))
+        proj = self._app._pick_cartopy_projection(mid_lon, mid_lat)
+        if proj is None:
+            return
+
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG image",    "*.png"), ("PDF document", "*.pdf"),
+                       ("SVG image",    "*.svg"), ("All files",    "*.*")],
+            title="Save range-ring map",
+            parent=self,
+        )
+        if not path:
+            return
+
+        geo = ccrs.Geodetic()
+
+        fig = plt.figure(figsize=(10, 8), dpi=150)
+        ax  = fig.add_subplot(1, 1, 1, projection=proj)
+        ax.set_global()
+
+        ax.add_feature(cfeature.OCEAN,     facecolor="#d6e8f5", zorder=0)
+        ax.add_feature(cfeature.LAND,      facecolor="#e8e4d8", zorder=1)
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, edgecolor="#555555",
+                       zorder=2)
+        ax.add_feature(cfeature.BORDERS,   linewidth=0.3, edgecolor="#888888",
+                       linestyle=":", zorder=2)
+        ax.add_feature(cfeature.LAKES,     facecolor="#d6e8f5", linewidth=0.3,
+                       edgecolor="#555555", zorder=2)
+        ax.gridlines(color="white", linewidth=0.4, linestyle="--", alpha=0.6,
+                     zorder=3)
+
+        # Ring polygon — close it by repeating the first point.
+        ring_lons = [p[1] for p in self._ring] + [self._ring[0][1]]
+        ring_lats = [p[2] for p in self._ring] + [self._ring[0][2]]
+        ax.fill(ring_lons, ring_lats,
+                color="crimson", alpha=0.12, transform=geo, zorder=4)
+        ax.plot(ring_lons, ring_lats,
+                color="crimson", linewidth=1.6,
+                path_effects=[pe.withStroke(linewidth=3, foreground="white")],
+                transform=geo, zorder=5)
+
+        # Launch point
+        ax.plot(self._launch_lon, self._launch_lat,
+                marker="^", markersize=8, color="black",
+                markeredgecolor="white", markeredgewidth=1.0,
+                transform=geo, zorder=6)
+
+        # Estimate average max range for the title.
+        ranges_km = []
+        for _, imp_lon, imp_lat in self._ring:
+            try:
+                km = range_between(
+                    np.radians(self._launch_lat), np.radians(self._launch_lon),
+                    np.radians(imp_lat), np.radians(imp_lon)) / 1000.0
+                ranges_km.append(km)
+            except Exception:
+                pass
+        rng_str = (f"~{np.mean(ranges_km):.0f} km max range"
+                   if ranges_km else "max range")
+        missile_name = self._app._missile_var.get()
+        ax.set_title(f"{missile_name}  ·  {rng_str}", fontsize=11, pad=8)
+
+        fig.tight_layout()
+        fig.savefig(path, bbox_inches="tight")
+        plt.close(fig)
+        self._app._status_var.set(f"Range ring saved: {path}")
+
+
+# ---------------------------------------------------------------------------
 # Parametric sweep / sensitivity-analysis dialog
 # ---------------------------------------------------------------------------
 
@@ -1744,6 +2015,7 @@ class MissileFlyoutApp(tk.Tk):
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
+        analysis_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
@@ -3248,6 +3520,9 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
+
+    def _open_range_ring(self):
+        RangeRingDialog(self)
 
     def _run_flyout(self):
         if self._running:
