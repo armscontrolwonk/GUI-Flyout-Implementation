@@ -135,6 +135,22 @@ class MissileParams:
     shroud_nose_shape:      str   = "forden"
     shroud_nose_length_m:   float = 0.0    # physical shroud nose-cone length (m)
 
+    # Payload diameter (m).  When > 0, used as the frontal reference diameter
+    # for aerodynamic drag after shroud jettison (or throughout flight when no
+    # shroud is fitted).  Falls back to the stage body diameter_m when 0.
+    payload_diameter_m:     float = 0.0
+
+    # RV geometry — stored for round-tripping the β calculator dialog.
+    # These do not directly affect the trajectory equations of motion;
+    # they are used only to pre-populate the "Estimate β" popup.
+    rv_shape:      str   = "forden"
+    rv_diameter_m: float = 0.0
+    rv_length_m:   float = 0.0
+
+    # Post-boost vehicle (PBV) geometry — mass is already carried in bus_mass_kg.
+    pbv_diameter_m: float = 0.0
+    pbv_length_m:   float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
@@ -144,16 +160,17 @@ _FORDEN_MACH = [0.0, 0.85, 1.0,  1.2,  2.0,  4.5]
 _FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
 
 NOSE_SHAPES = ["forden", "v2", "elliptical", "conical",
-               "parabolic", "tangent_ogive", "sears_haack"]
+               "parabolic", "tangent_ogive", "sears_haack", "blunt_cylinder"]
 
 NOSE_SHAPE_LABELS = {
-    "forden":        "Forden (generic)",
-    "v2":            "V2",
-    "elliptical":    "Elliptical",
-    "conical":       "Conical",
-    "parabolic":     "Parabolic",
-    "tangent_ogive": "Tangent Ogive",
-    "sears_haack":   "Sears-Haack",
+    "forden":          "Forden (generic)",
+    "v2":              "V2",
+    "elliptical":      "Elliptical",
+    "conical":         "Conical",
+    "parabolic":       "Parabolic",
+    "tangent_ogive":   "Tangent Ogive",
+    "sears_haack":     "Sears-Haack",
+    "blunt_cylinder":  "Blunt Cylinder",
 }
 
 
@@ -169,6 +186,15 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float) -> float:
     import math
 
     ld = max(1.0, min(float(ld), 10.0))
+
+    # ── Blunt Cylinder (flat-faced satellite shape) ───────────────────────
+    if nose_shape == "blunt_cylinder":
+        if mach <= 0.8:
+            return 0.9
+        elif mach <= 1.5:
+            return 0.9 + (mach - 0.8) / 0.7 * 1.3   # ramp 0.9 → 2.2
+        else:
+            return 2.2
 
     # ── V2 — piecewise linear (independent of L/D) ─────────────────────────
     if nose_shape == "v2":
@@ -771,6 +797,12 @@ def missile_to_dict(p: MissileParams) -> dict:
         'nose_length_m':          p.nose_length_m,
         'shroud_nose_shape':      p.shroud_nose_shape,
         'shroud_nose_length_m':   p.shroud_nose_length_m,
+        'payload_diameter_m':     p.payload_diameter_m,
+        'rv_shape':               p.rv_shape,
+        'rv_diameter_m':          p.rv_diameter_m,
+        'rv_length_m':            p.rv_length_m,
+        'pbv_diameter_m':         p.pbv_diameter_m,
+        'pbv_length_m':           p.pbv_length_m,
     }
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -832,6 +864,12 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_nose_shape=d.get('shroud_nose_shape', 'forden'),
         shroud_nose_length_m=float(d.get('shroud_nose_length_m',
                             float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
+        payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
+        rv_shape=d.get('rv_shape', 'forden'),
+        rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
+        rv_length_m=float(d.get('rv_length_m', 0.0)),
+        pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
+        pbv_length_m=float(d.get('pbv_length_m', 0.0)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -966,6 +1004,8 @@ def missile_area(params: MissileParams, altitude_m: float = None,
             and altitude_m is not None
             and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
         d = top_params.shroud_diameter_m
+    elif top_params is not None and top_params.payload_diameter_m > 0:
+        d = top_params.payload_diameter_m
     else:
         d = params.diameter_m
     return np.pi * (d / 2) ** 2
@@ -1010,8 +1050,10 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
                if top_params.shroud_nose_length_m > 0 and _sd > 0 else 3.0)
         cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach)
     elif top_params is not None and top_params.nose_shape not in ('', 'forden'):
-        _ld = (top_params.nose_length_m / top_params.diameter_m
-               if top_params.nose_length_m > 0 and top_params.diameter_m > 0 else 3.0)
+        _diam = (top_params.payload_diameter_m if top_params.payload_diameter_m > 0
+                 else top_params.diameter_m)
+        _ld = (top_params.nose_length_m / _diam
+               if top_params.nose_length_m > 0 and _diam > 0 else 3.0)
         cd = _cd_nose_shape(top_params.nose_shape, _ld, mach)
     else:
         cd = drag_coefficient(params, mach)

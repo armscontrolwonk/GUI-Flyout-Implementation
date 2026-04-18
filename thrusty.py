@@ -709,154 +709,185 @@ class MissileDialog(tk.Toplevel):
         body.bind("<Button-4>",   _on_mousewheel_linux_up)
         body.bind("<Button-5>",   _on_mousewheel_linux_down)
 
-        # ── Payload panel — grid layout matching stage entries ───────────────
+        # ── Front End panel ──────────────────────────────────────────────────
         pl = ttk.LabelFrame(body, text="Front End")
         pl.pack(fill=tk.X, padx=8, pady=4)
+        pl.columnconfigure(1, weight=1)
 
-        # Track payload input widgets so _apply_readonly can disable them.
-        self._payload_inputs = []
+        _ns_labels = list(NOSE_SHAPE_LABELS.values())
 
-        # Row 0: PBV mass
-        self._bus_var = _entry_row(pl, "PBV mass (kg):", 0, "0", "kg")
-        self._payload_inputs.append(pl.winfo_children()[-1].winfo_children()[0])
+        def _fe_entry(parent, label, row, default, unit, pady=2):
+            """Helper: label in col 0, entry+unit label in col 1."""
+            ttk.Label(parent, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=pady)
+            _inner = ttk.Frame(parent)
+            _inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 6), pady=pady)
+            _var = tk.StringVar(value=default)
+            _ent = ttk.Entry(_inner, textvariable=_var, width=10)
+            _ent.pack(side=tk.LEFT)
+            ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
+            return _var, _ent
 
-        # Row 1: Number of RVs (spinbox)
-        ttk.Label(pl, text="No. of RVs:").grid(
+        # ── Row 0: Throw weight ──────────────────────────────────────────────
+        ttk.Label(pl, text="Throw weight (kg):").grid(
+            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._throw_weight_var = tk.StringVar(value="1000")
+        _tw_inner = ttk.Frame(pl)
+        _tw_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._throw_weight_entry = ttk.Entry(
+            _tw_inner, textvariable=self._throw_weight_var, width=10)
+        self._throw_weight_entry.pack(side=tk.LEFT)
+        ttk.Label(_tw_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
+
+        # ── Row 1: Payload shape ─────────────────────────────────────────────
+        ttk.Label(pl, text="Payload shape:").grid(
             row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._num_rvs_var = tk.StringVar(value="1")
-        _rvn_inner = ttk.Frame(pl)
-        _rvn_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._num_rvs_spinbox = ttk.Spinbox(_rvn_inner, textvariable=self._num_rvs_var,
-                                            from_=1, to=24, width=4)
-        self._num_rvs_spinbox.pack(side=tk.LEFT)
-        self._payload_inputs.append(self._num_rvs_spinbox)
+        self._payload_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
+        self._payload_shape_cb = ttk.Combobox(
+            pl, textvariable=self._payload_shape_var,
+            values=_ns_labels, state="readonly", width=18)
+        self._payload_shape_cb.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # Row 2: Per-RV mass + computed total (in the unit label position)
-        ttk.Label(pl, text="Per-RV mass (kg):").grid(
-            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_mass_var = tk.StringVar(value="1000")
-        _rvm_inner = ttk.Frame(pl)
-        _rvm_inner.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        _rv_mass_entry = ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10)
-        _rv_mass_entry.pack(side=tk.LEFT)
-        self._payload_inputs.append(_rv_mass_entry)
-        self._total_payload_lbl = ttk.Label(_rvm_inner, text="kg  = 1000 total",
-                                            foreground="gray40")
-        self._total_payload_lbl.pack(side=tk.LEFT, padx=(2, 0))
+        # ── Row 2: Payload diameter ──────────────────────────────────────────
+        self._payload_diameter_var, self._payload_diameter_entry = _fe_entry(
+            pl, "Payload diameter (m):", 2, "0", "m")
 
-        # Row 3: RV ballistic coefficient + Calculate button
-        ttk.Label(pl, text="RV β (kg/m²):").grid(
-            row=3, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_beta_var = tk.StringVar(value="0")
-        _beta_inner = ttk.Frame(pl)
-        _beta_inner.grid(row=3, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        _beta_entry = ttk.Entry(_beta_inner, textvariable=self._rv_beta_var, width=10)
-        _beta_entry.pack(side=tk.LEFT)
-        ttk.Label(_beta_inner, text="kg/m²").pack(side=tk.LEFT, padx=(2, 6))
-        ttk.Button(_beta_inner, text="Calculate…",
-                   command=self._calc_rv_beta).pack(side=tk.LEFT)
-        self._payload_inputs.append(_beta_entry)
+        # ── Row 3: Payload length ────────────────────────────────────────────
+        self._payload_length_var, self._payload_length_entry = _fe_entry(
+            pl, "Payload length (m):", 3, "0", "m", pady=(2, 4))
 
-        # Row 4: Warhead / RV separates checkbox
+        # Keep legacy aliases so _calc_rv_beta pre-fill still resolves
+        self._nose_shape_var   = self._payload_shape_var
+        self._nose_length_var  = self._payload_length_var
+        self._nose_shape_cb    = self._payload_shape_cb
+        self._nose_length_entry = self._payload_length_entry
+
+        # ── Row 4: RV separates toggle ───────────────────────────────────────
         self._rv_separates_var = tk.BooleanVar(value=False)
         self._rv_separates_check = ttk.Checkbutton(
-            pl, text="Warhead / RV separates from stage at burnout",
-            variable=self._rv_separates_var)
+            pl, text="RV separates",
+            variable=self._rv_separates_var,
+            command=self._update_rv_separates_state)
         self._rv_separates_check.grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
-        # Row 5: Payload nose shape — shape of the exposed tip after shroud jettison
-        # (or throughout flight if no shroud is fitted)
-        _ns_labels = list(NOSE_SHAPE_LABELS.values())
-        ttk.Label(pl, text="Payload nose shape:").grid(
-            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
-        self._nose_shape_cb = ttk.Combobox(
-            pl, textvariable=self._nose_shape_var,
+        # ── Row 5: RV section (hidden until checkbox ticked) ─────────────────
+        self._rv_section = ttk.Frame(pl)
+        self._rv_section.grid(row=5, column=0, columnspan=2,
+                              sticky=tk.EW, padx=(16, 0))
+        self._rv_section.columnconfigure(1, weight=1)
+        self._rv_section.grid_remove()
+
+        # Per-RV mass
+        ttk.Label(self._rv_section, text="Per-RV mass (kg):").grid(
+            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._rv_mass_var = tk.StringVar(value="1000")
+        _rvm_inner = ttk.Frame(self._rv_section)
+        _rvm_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._rv_mass_entry = ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10)
+        self._rv_mass_entry.pack(side=tk.LEFT)
+        ttk.Label(_rvm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
+
+        # No. of RVs
+        ttk.Label(self._rv_section, text="No. of RVs:").grid(
+            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._num_rvs_var = tk.StringVar(value="1")
+        _rvn_inner = ttk.Frame(self._rv_section)
+        _rvn_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._num_rvs_spinbox = ttk.Spinbox(
+            _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
+        self._num_rvs_spinbox.pack(side=tk.LEFT)
+
+        # RV shape
+        ttk.Label(self._rv_section, text="RV shape:").grid(
+            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._rv_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["conical"])
+        self._rv_shape_cb = ttk.Combobox(
+            self._rv_section, textvariable=self._rv_shape_var,
             values=_ns_labels, state="readonly", width=18)
-        self._nose_shape_cb.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._rv_shape_cb.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # Row 6: Payload nose length
-        ttk.Label(pl, text="Payload nose length (m):").grid(
-            row=6, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
-        self._nose_length_var = tk.StringVar(value="0")
-        _nld_inner = ttk.Frame(pl)
-        _nld_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
-        self._nose_length_entry = ttk.Entry(
-            _nld_inner, textvariable=self._nose_length_var, width=10)
-        self._nose_length_entry.pack(side=tk.LEFT)
-        ttk.Label(_nld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
+        # RV diameter / length
+        self._rv_diameter_var, self._rv_diameter_entry = _fe_entry(
+            self._rv_section, "RV diameter (m):", 3, "0", "m")
+        self._rv_length_var, self._rv_length_entry = _fe_entry(
+            self._rv_section, "RV length (m):", 4, "0", "m")
 
-        # Row 7: Shroud — checkbutton acts as label; entry starts disabled
+        # Has PBV toggle
+        self._has_pbv_var = tk.BooleanVar(value=False)
+        self._has_pbv_check = ttk.Checkbutton(
+            self._rv_section, text="Has PBV (post-boost vehicle)",
+            variable=self._has_pbv_var,
+            command=self._update_pbv_state)
+        self._has_pbv_check.grid(
+            row=5, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+
+        # PBV sub-section
+        self._pbv_section = ttk.Frame(self._rv_section)
+        self._pbv_section.grid(row=6, column=0, columnspan=2,
+                               sticky=tk.EW, padx=(16, 0))
+        self._pbv_section.columnconfigure(1, weight=1)
+        self._pbv_section.grid_remove()
+
+        self._pbv_mass_var, self._pbv_mass_entry = _fe_entry(
+            self._pbv_section, "PBV mass (kg):", 0, "0", "kg")
+        self._pbv_diameter_var, self._pbv_diameter_entry = _fe_entry(
+            self._pbv_section, "PBV diameter (m):", 1, "0", "m")
+        self._pbv_length_var, self._pbv_length_entry = _fe_entry(
+            self._pbv_section, "PBV length (m):", 2, "0", "m")
+
+        # Legacy alias: bus_var → pbv_mass_var
+        self._bus_var = self._pbv_mass_var
+
+        # RV β + Estimate button
+        ttk.Label(self._rv_section, text="RV β (kg/m²):").grid(
+            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=(4, 2))
+        self._rv_beta_var = tk.StringVar(value="0")
+        _beta_inner = ttk.Frame(self._rv_section)
+        _beta_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=(4, 2))
+        self._rv_beta_entry = ttk.Entry(_beta_inner, textvariable=self._rv_beta_var, width=10)
+        self._rv_beta_entry.pack(side=tk.LEFT)
+        ttk.Label(_beta_inner, text="kg/m²").pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Button(_beta_inner, text="Estimate…",
+                   command=self._calc_rv_beta).pack(side=tk.LEFT)
+
+        # ── Row 6: Has Shroud toggle ─────────────────────────────────────────
         self._shroud_var = tk.BooleanVar(value=False)
-        self._shroud_check = ttk.Checkbutton(pl, text="Shroud mass (kg):",
-                                             variable=self._shroud_var,
-                                             command=self._update_shroud_state)
-        self._shroud_check.grid(row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._shroud_mass_var = tk.StringVar(value="0")
-        _sm_inner = ttk.Frame(pl)
-        _sm_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._shroud_mass_entry = ttk.Entry(
-            _sm_inner, textvariable=self._shroud_mass_var, width=10, state="disabled")
-        self._shroud_mass_entry.pack(side=tk.LEFT)
-        ttk.Label(_sm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
+        self._shroud_check = ttk.Checkbutton(
+            pl, text="Has Shroud",
+            variable=self._shroud_var,
+            command=self._update_shroud_state)
+        self._shroud_check.grid(
+            row=6, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
-        # Row 8: Jettison altitude (indented label to signal dependence on shroud)
-        ttk.Label(pl, text="  Jettison alt (km):").grid(
-            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._shroud_alt_var = tk.StringVar(value="80")
-        _sa_inner = ttk.Frame(pl)
-        _sa_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._shroud_alt_entry = ttk.Entry(
-            _sa_inner, textvariable=self._shroud_alt_var, width=10, state="disabled")
-        self._shroud_alt_entry.pack(side=tk.LEFT)
-        ttk.Label(_sa_inner, text="km").pack(side=tk.LEFT, padx=(2, 0))
+        # ── Row 7: Shroud section (hidden until checkbox ticked) ─────────────
+        self._shroud_section = ttk.Frame(pl)
+        self._shroud_section.grid(row=7, column=0, columnspan=2,
+                                  sticky=tk.EW, padx=(16, 0), pady=(0, 4))
+        self._shroud_section.columnconfigure(1, weight=1)
+        self._shroud_section.grid_remove()
 
-        # Row 9: Shroud length — used to compute tumbling-cylinder debris β
-        ttk.Label(pl, text="  Shroud length (m):").grid(
-            row=9, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._shroud_length_var = tk.StringVar(value="0")
-        _sl_inner = ttk.Frame(pl)
-        _sl_inner.grid(row=9, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._shroud_length_entry = ttk.Entry(
-            _sl_inner, textvariable=self._shroud_length_var, width=10, state="disabled")
-        self._shroud_length_entry.pack(side=tk.LEFT)
-        ttk.Label(_sl_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
-
-        # Row 10: Shroud diameter — for reference area correction pre-jettison
-        ttk.Label(pl, text="  Shroud diameter (m):").grid(
-            row=10, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._shroud_diameter_var = tk.StringVar(value="0")
-        _sd_inner = ttk.Frame(pl)
-        _sd_inner.grid(row=10, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._shroud_diameter_entry = ttk.Entry(
-            _sd_inner, textvariable=self._shroud_diameter_var, width=10, state="disabled")
-        self._shroud_diameter_entry.pack(side=tk.LEFT)
-        ttk.Label(_sd_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
-
-        # Row 11: Shroud nose shape dropdown
-        ttk.Label(pl, text="  Shroud nose shape:").grid(
-            row=11, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._shroud_mass_var, self._shroud_mass_entry = _fe_entry(
+            self._shroud_section, "Mass (kg):", 0, "0", "kg")
+        ttk.Label(self._shroud_section, text="Shape:").grid(
+            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._shroud_nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
         self._shroud_nose_shape_cb = ttk.Combobox(
-            pl, textvariable=self._shroud_nose_shape_var,
-            values=_ns_labels, state="disabled", width=18)
-        self._shroud_nose_shape_cb.grid(row=11, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+            self._shroud_section, textvariable=self._shroud_nose_shape_var,
+            values=_ns_labels, state="readonly", width=18)
+        self._shroud_nose_shape_cb.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._shroud_diameter_var, self._shroud_diameter_entry = _fe_entry(
+            self._shroud_section, "Diameter (m):", 2, "0", "m")
+        self._shroud_length_var, self._shroud_length_entry = _fe_entry(
+            self._shroud_section, "Length (m):", 3, "0", "m")
+        self._shroud_nose_length_var, self._shroud_nose_length_entry = _fe_entry(
+            self._shroud_section, "Nose length (m):", 4, "0", "m")
+        self._shroud_alt_var, self._shroud_alt_entry = _fe_entry(
+            self._shroud_section, "Jettison alt (km):", 5, "80", "km", pady=(2, 4))
 
-        # Row 12: Shroud nose length (L/D computed internally)
-        ttk.Label(pl, text="  Shroud nose length (m):").grid(
-            row=12, column=0, sticky=tk.W, padx=(6, 2), pady=(2, 6))
-        self._shroud_nose_length_var = tk.StringVar(value="0")
-        _snld_inner = ttk.Frame(pl)
-        _snld_inner.grid(row=12, column=1, sticky=tk.W, padx=(0, 6), pady=(2, 6))
-        self._shroud_nose_length_entry = ttk.Entry(
-            _snld_inner, textvariable=self._shroud_nose_length_var, width=10, state="disabled")
-        self._shroud_nose_length_entry.pack(side=tk.LEFT)
-        ttk.Label(_snld_inner, text="m").pack(side=tk.LEFT, padx=(2, 0))
-
-        # Live total-payload label update
-        for _v in (self._bus_var, self._num_rvs_var, self._rv_mass_var):
-            _v.trace_add("write", self._update_total_payload)
+        # Live throw-weight update when RV fields change
+        for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
+            _v.trace_add("write", self._update_throw_weight)
 
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
@@ -906,42 +937,74 @@ class MissileDialog(tk.Toplevel):
             sf.set_readonly(True)
         self._name_entry.config(state="readonly")
         self._stages_cb.config(state="disabled")
-        for w in self._payload_inputs:
-            w.config(state="readonly")
+        # Payload / throw weight
+        self._throw_weight_entry.config(state="disabled")
+        self._payload_shape_cb.config(state="disabled")
+        self._payload_diameter_entry.config(state="disabled")
+        self._payload_length_entry.config(state="disabled")
+        # RV section
+        self._rv_separates_check.config(state="disabled")
+        self._rv_mass_entry.config(state="disabled")
+        self._num_rvs_spinbox.config(state="disabled")
+        self._rv_shape_cb.config(state="disabled")
+        self._rv_diameter_entry.config(state="disabled")
+        self._rv_length_entry.config(state="disabled")
+        self._has_pbv_check.config(state="disabled")
+        self._pbv_mass_entry.config(state="disabled")
+        self._pbv_diameter_entry.config(state="disabled")
+        self._pbv_length_entry.config(state="disabled")
+        self._rv_beta_entry.config(state="disabled")
+        # Shroud section
         self._shroud_check.config(state="disabled")
         self._shroud_mass_entry.config(state="disabled")
-        self._shroud_alt_entry.config(state="disabled")
-        self._shroud_length_entry.config(state="disabled")
-        self._shroud_diameter_entry.config(state="disabled")
         self._shroud_nose_shape_cb.config(state="disabled")
+        self._shroud_diameter_entry.config(state="disabled")
+        self._shroud_length_entry.config(state="disabled")
         self._shroud_nose_length_entry.config(state="disabled")
-        self._nose_shape_cb.config(state="disabled")
-        self._nose_length_entry.config(state="disabled")
-        self._rv_separates_check.config(state="disabled")
+        self._shroud_alt_entry.config(state="disabled")
         self._save_btn.pack_forget()
         self._save_as_btn.pack_forget()
 
     # ------------------------------------------------------------------
-    def _update_total_payload(self, *_):
-        """Recompute and display the total payload label."""
+    def _update_throw_weight(self, *_):
+        """Recompute throw weight from RV fields when RV separates is active."""
+        if not self._rv_separates_var.get():
+            return
         try:
-            bus = float(self._bus_var.get())
             n   = max(1, int(self._num_rvs_var.get()))
             rv  = float(self._rv_mass_var.get())
-            self._total_payload_lbl.config(text=f"kg  = {bus + n * rv:.0f} total")
+            bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
+            total = n * rv + bus
+            self._throw_weight_entry.config(state="normal")
+            self._throw_weight_var.set(f"{total:.0f}")
+            self._throw_weight_entry.config(state="readonly")
         except (ValueError, tk.TclError):
-            self._total_payload_lbl.config(text="kg  = ? total")
+            pass
+
+    def _update_rv_separates_state(self):
+        """Show/hide the RV sub-section; toggle throw weight entry."""
+        if self._rv_separates_var.get():
+            self._rv_section.grid()
+            self._throw_weight_entry.config(state="readonly")
+            self._update_throw_weight()
+        else:
+            self._rv_section.grid_remove()
+            self._throw_weight_entry.config(state="normal")
+
+    def _update_pbv_state(self):
+        """Show/hide PBV sub-section; refresh throw weight."""
+        if self._has_pbv_var.get():
+            self._pbv_section.grid()
+        else:
+            self._pbv_section.grid_remove()
+        self._update_throw_weight()
 
     def _update_shroud_state(self):
-        """Enable/disable shroud mass, altitude, length, diameter and nose widgets."""
-        state = "normal" if self._shroud_var.get() else "disabled"
-        cb_state = "readonly" if self._shroud_var.get() else "disabled"
-        self._shroud_mass_entry.config(state=state)
-        self._shroud_alt_entry.config(state=state)
-        self._shroud_length_entry.config(state=state)
-        self._shroud_diameter_entry.config(state=state)
-        self._shroud_nose_shape_cb.config(state=cb_state)
-        self._shroud_nose_length_entry.config(state=state)
+        """Show/hide the shroud sub-section."""
+        if self._shroud_var.get():
+            self._shroud_section.grid()
+        else:
+            self._shroud_section.grid_remove()
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -1011,17 +1074,37 @@ class MissileDialog(tk.Toplevel):
         for i, sd in enumerate(stage_data):
             self._stage_frames[i].populate(sd)
 
-        # Payload decomposition
-        if p.rv_mass_kg > 0:
-            self._bus_var.set(f"{p.bus_mass_kg:.0f}")
-            self._num_rvs_var.set(str(p.num_rvs))
+        # Throw weight and RV decomposition
+        self._rv_separates_var.set(p.rv_separates)
+        self._throw_weight_var.set(f"{payload:.0f}")
+        if p.rv_separates and p.rv_mass_kg > 0:
             self._rv_mass_var.set(f"{p.rv_mass_kg:.0f}")
+            self._num_rvs_var.set(str(p.num_rvs))
+            has_pbv = p.bus_mass_kg > 0
+            self._has_pbv_var.set(has_pbv)
+            self._pbv_mass_var.set(f"{p.bus_mass_kg:.0f}")
+            self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
+            self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
         else:
-            # Old-style missile: treat entire payload as a single RV
-            self._bus_var.set("0")
-            self._num_rvs_var.set("1")
             self._rv_mass_var.set(f"{payload:.0f}")
+            self._num_rvs_var.set("1")
+            self._has_pbv_var.set(False)
+            self._pbv_mass_var.set("0")
+            self._pbv_diameter_var.set("0")
+            self._pbv_length_var.set("0")
         self._rv_beta_var.set(f"{p.rv_beta_kg_m2:.0f}")
+        self._rv_shape_var.set(
+            NOSE_SHAPE_LABELS.get(getattr(p, 'rv_shape', 'forden'),
+                                  NOSE_SHAPE_LABELS["forden"]))
+        self._rv_diameter_var.set(f"{getattr(p, 'rv_diameter_m', 0.0):.2f}")
+        self._rv_length_var.set(f"{getattr(p, 'rv_length_m', 0.0):.2f}")
+
+        # Payload shape / diameter / length
+        self._payload_shape_var.set(
+            NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["forden"]))
+        self._payload_diameter_var.set(
+            f"{getattr(p, 'payload_diameter_m', 0.0):.2f}")
+        self._payload_length_var.set(f"{p.nose_length_m:.2f}")
 
         # Shroud
         has_shroud = shroud_mass > 0
@@ -1033,15 +1116,11 @@ class MissileDialog(tk.Toplevel):
         self._shroud_nose_shape_var.set(
             NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, NOSE_SHAPE_LABELS["forden"]))
         self._shroud_nose_length_var.set(f"{p.shroud_nose_length_m:.2f}")
+
+        # Apply show/hide state for all sections
+        self._update_rv_separates_state()
+        self._update_pbv_state()
         self._update_shroud_state()
-
-        # Body nose shape
-        self._nose_shape_var.set(
-            NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["forden"]))
-        self._nose_length_var.set(f"{p.nose_length_m:.2f}")
-
-        # RV / warhead separates flag
-        self._rv_separates_var.set(p.rv_separates)
 
         self._name_var.set(name)
         self._guidance_var.set(p.guidance)
@@ -1057,16 +1136,57 @@ class MissileDialog(tk.Toplevel):
 
         n = int(self._n_stages_var.get())
 
-        # Payload decomposition
-        try:
-            bus_mass = float(self._bus_var.get())
-            num_rvs  = max(1, int(self._num_rvs_var.get()))
-            rv_mass  = float(self._rv_mass_var.get())
-        except ValueError:
-            raise ValueError("PBV and per-RV mass must be numbers.")
-        payload = bus_mass + num_rvs * rv_mass
-        rv_beta      = float(self._rv_beta_var.get())
+        # Throw weight / payload decomposition
         rv_separates = self._rv_separates_var.get()
+        if rv_separates:
+            try:
+                num_rvs  = max(1, int(self._num_rvs_var.get()))
+                rv_mass  = float(self._rv_mass_var.get())
+                bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
+            except ValueError:
+                raise ValueError("Per-RV mass and No. of RVs must be numbers.")
+            payload = num_rvs * rv_mass + bus_mass
+        else:
+            try:
+                payload = float(self._throw_weight_var.get())
+            except ValueError:
+                raise ValueError("Throw weight must be a number.")
+            num_rvs = 1
+            rv_mass = payload
+            bus_mass = 0.0
+        try:
+            rv_beta = float(self._rv_beta_var.get()) if rv_separates else 0.0
+        except ValueError:
+            rv_beta = 0.0
+
+        # Payload shape / diameter / length
+        _ps_label = self._payload_shape_var.get()
+        nose_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _ps_label),
+                          "forden")
+        try:
+            payload_diameter_m = float(self._payload_diameter_var.get())
+            nose_length_m      = float(self._payload_length_var.get())
+        except ValueError:
+            raise ValueError("Payload diameter and length must be numbers.")
+
+        # RV geometry (round-trips the Estimate β dialog)
+        _rv_shape_lbl = self._rv_shape_var.get()
+        rv_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _rv_shape_lbl),
+                        "forden")
+        try:
+            rv_diameter_m = float(self._rv_diameter_var.get()) if rv_separates else 0.0
+            rv_length_m   = float(self._rv_length_var.get())   if rv_separates else 0.0
+        except ValueError:
+            raise ValueError("RV diameter and length must be numbers.")
+
+        # PBV geometry
+        try:
+            pbv_diameter_m = (float(self._pbv_diameter_var.get())
+                              if (rv_separates and self._has_pbv_var.get()) else 0.0)
+            pbv_length_m   = (float(self._pbv_length_var.get())
+                              if (rv_separates and self._has_pbv_var.get()) else 0.0)
+        except ValueError:
+            raise ValueError("PBV diameter and length must be numbers.")
 
         # Shroud
         shroud_mass          = 0.0
@@ -1077,25 +1197,16 @@ class MissileDialog(tk.Toplevel):
         shroud_nose_length_m = 0.0
         if self._shroud_var.get():
             try:
-                shroud_mass       = float(self._shroud_mass_var.get())
-                shroud_alt_km     = float(self._shroud_alt_var.get())
-                shroud_length_m   = float(self._shroud_length_var.get())
-                shroud_diameter_m = float(self._shroud_diameter_var.get())
+                shroud_mass          = float(self._shroud_mass_var.get())
+                shroud_alt_km        = float(self._shroud_alt_var.get())
+                shroud_length_m      = float(self._shroud_length_var.get())
+                shroud_diameter_m    = float(self._shroud_diameter_var.get())
                 shroud_nose_length_m = float(self._shroud_nose_length_var.get())
             except ValueError:
-                raise ValueError("Shroud mass, jettison altitude, length, diameter, and nose length must be numbers.")
-            _label = self._shroud_nose_shape_var.get()
+                raise ValueError("Shroud fields must be numbers.")
+            _slabel = self._shroud_nose_shape_var.get()
             shroud_nose_shape = next(
-                (k for k, v in NOSE_SHAPE_LABELS.items() if v == _label), "forden")
-
-        # Body nose shape
-        _body_ns_label = self._nose_shape_var.get()
-        nose_shape    = next(
-            (k for k, v in NOSE_SHAPE_LABELS.items() if v == _body_ns_label), "forden")
-        try:
-            nose_length_m = float(self._nose_length_var.get())
-        except ValueError:
-            raise ValueError("Nose length must be a number.")
+                (k for k, v in NOSE_SHAPE_LABELS.items() if v == _slabel), "forden")
 
         # Read and validate all active stage frames
         stages = []
@@ -1148,22 +1259,28 @@ class MissileDialog(tk.Toplevel):
                 solid_motor=bool(sd.get("solid_motor", False)),
             )
 
-        node.name              = name
-        node.guidance          = self._guidance_var.get()
-        node.payload_kg        = payload
-        node.rv_beta_kg_m2     = rv_beta
-        node.bus_mass_kg       = bus_mass
-        node.num_rvs           = num_rvs
-        node.rv_mass_kg        = rv_mass
+        node.name                   = name
+        node.guidance               = self._guidance_var.get()
+        node.payload_kg             = payload
+        node.rv_beta_kg_m2          = rv_beta
+        node.bus_mass_kg            = bus_mass
+        node.num_rvs                = num_rvs
+        node.rv_mass_kg             = rv_mass
         node.rv_separates           = rv_separates
+        node.nose_shape             = nose_shape
+        node.nose_length_m          = nose_length_m
+        node.payload_diameter_m     = payload_diameter_m
+        node.rv_shape               = rv_shape
+        node.rv_diameter_m          = rv_diameter_m
+        node.rv_length_m            = rv_length_m
+        node.pbv_diameter_m         = pbv_diameter_m
+        node.pbv_length_m           = pbv_length_m
         node.shroud_mass_kg         = shroud_mass
         node.shroud_jettison_alt_km = shroud_alt_km
         node.shroud_length_m        = shroud_length_m
         node.shroud_diameter_m      = shroud_diameter_m
         node.shroud_nose_shape      = shroud_nose_shape
         node.shroud_nose_length_m   = shroud_nose_length_m
-        node.nose_shape             = nose_shape
-        node.nose_length_m          = nose_length_m
         return node
 
     # ------------------------------------------------------------------
@@ -1209,21 +1326,31 @@ class MissileDialog(tk.Toplevel):
         dlg.resizable(False, False)
         dlg.grab_set()
 
-        # ── Pre-fill half-angle from payload nose length / diameter ───
+        # ── Pre-fill from RV geometry fields; fall back to Stage 1 body ─
         try:
-            _nose_len = float(self._nose_length_var.get())
-            _dia0     = float(self._stage_frames[0]._dia.get())
-            if _nose_len > 0 and _dia0 > 0:
-                _ld0 = _nose_len / _dia0
+            _rv_d = float(self._rv_diameter_var.get())
+            _rv_l = float(self._rv_length_var.get())
+            if _rv_d > 0 and _rv_l > 0:
+                _ld0    = _rv_l / _rv_d
                 _theta0 = f"{math.degrees(math.atan(1.0 / (2.0 * _ld0))):.1f}"
+                _dia_default = self._rv_diameter_var.get()
             else:
+                raise ValueError
+        except Exception:
+            try:
+                _nose_len = float(self._payload_length_var.get())
+                _dia0     = float(self._stage_frames[0]._dia.get())
+                if _nose_len > 0 and _dia0 > 0:
+                    _ld0    = _nose_len / _dia0
+                    _theta0 = f"{math.degrees(math.atan(1.0 / (2.0 * _ld0))):.1f}"
+                else:
+                    _theta0 = "10.0"
+            except Exception:
                 _theta0 = "10.0"
-        except Exception:
-            _theta0 = "10.0"
-        try:
-            _dia_default = self._stage_frames[0]._dia.get()
-        except Exception:
-            _dia_default = "0"
+            try:
+                _dia_default = self._stage_frames[0]._dia.get()
+            except Exception:
+                _dia_default = "0"
 
         # ── Input fields ──────────────────────────────────────────────
         frm = ttk.Frame(dlg, padding=12)
