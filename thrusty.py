@@ -1520,10 +1520,8 @@ class RangeRingDialog(tk.Toplevel):
         try:
             import cartopy.crs as ccrs
             import cartopy.feature as cfeature
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
             import matplotlib.patheffects as pe
+            from matplotlib.backends.backend_agg import FigureCanvasAgg
         except ImportError as _e:
             messagebox.showerror("Missing package",
                                  f"Cartopy not installed.\n{_e}", parent=self)
@@ -1547,10 +1545,10 @@ class RangeRingDialog(tk.Toplevel):
         if not path:
             return
 
-        geo = ccrs.Geodetic()
-
-        fig = plt.figure(figsize=(10, 8), dpi=150)
-        ax  = fig.add_subplot(1, 1, 1, projection=proj)
+        geo    = ccrs.Geodetic()
+        fig    = Figure(figsize=(10, 8), dpi=150)
+        canvas = FigureCanvasAgg(fig)
+        ax     = fig.add_subplot(1, 1, 1, projection=proj)
         ax.set_global()
 
         ax.add_feature(cfeature.OCEAN,     facecolor="#d6e8f5", zorder=0)
@@ -1596,9 +1594,13 @@ class RangeRingDialog(tk.Toplevel):
         ax.set_title(f"{missile_name}  ·  {rng_str}", fontsize=11, pad=8)
 
         fig.tight_layout()
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
+        canvas.print_figure(path, bbox_inches="tight")
         self._app._status_var.set(f"Range ring saved: {path}")
+        try:
+            import subprocess
+            subprocess.Popen(["xdg-open", path])
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -4436,10 +4438,8 @@ class MissileFlyoutApp(tk.Tk):
         try:
             import cartopy.crs as ccrs
             import cartopy.feature as cfeature
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
             import matplotlib.patheffects as pe
+            from matplotlib.backends.backend_agg import FigureCanvasAgg
         except ImportError as _e:
             messagebox.showerror(
                 "Missing package",
@@ -4475,8 +4475,9 @@ class MissileFlyoutApp(tk.Tk):
 
         geo = ccrs.Geodetic()
 
-        fig = plt.figure(figsize=(10, 8), dpi=150)
-        ax  = fig.add_subplot(1, 1, 1, projection=proj)
+        fig    = Figure(figsize=(10, 8), dpi=150)
+        canvas = FigureCanvasAgg(fig)
+        ax     = fig.add_subplot(1, 1, 1, projection=proj)
         ax.set_global()
 
         # ── Background features ───────────────────────────────────────
@@ -4553,9 +4554,13 @@ class MissileFlyoutApp(tk.Tk):
         ax.set_title("  ·  ".join(parts), fontsize=11, pad=8)
 
         fig.tight_layout()
-        fig.savefig(path, bbox_inches="tight")
-        plt.close(fig)
+        canvas.print_figure(path, bbox_inches="tight")
         self._status_var.set(f"Cartopy map saved: {path}")
+        try:
+            import subprocess
+            subprocess.Popen(["xdg-open", path])
+        except Exception:
+            pass
 
     def _export_folium(self):
         """Generate an interactive Folium HTML map and open it in the browser."""
