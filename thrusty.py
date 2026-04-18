@@ -298,8 +298,9 @@ class _StageFrame(ttk.LabelFrame):
         _thr_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(_thr_inner, textvariable=self._thrust_kn, width=10).pack(side=tk.LEFT)
         ttk.Label(_thr_inner, text="kN").pack(side=tk.LEFT, padx=(2, 6))
-        ttk.Button(_thr_inner, text="Suggest…",
-                   command=self._suggest_thrust).pack(side=tk.LEFT)
+        if self._stage_num == 1:
+            ttk.Button(_thr_inner, text="Suggest…",
+                       command=self._suggest_thrust).pack(side=tk.LEFT)
         self._isp         = _entry_row(self, "Isp (vacuum, s):",      5, d["isp"],         "s")
         # Nozzle exit area — entry + Suggest button (row 6)
         ttk.Label(self, text="Nozzle exit area (m²):").grid(
