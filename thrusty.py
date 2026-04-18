@@ -4080,6 +4080,82 @@ class MissileFlyoutApp(tk.Tk):
         self._notam_overlay = None
         self._status_var.set("NOTAM overlay cleared.")
 
+    # Projection catalogue used by the Cartopy export dialog.
+    # Each entry: (display label, factory callable(mid_lon, mid_lat) → CRS)
+    _CARTOPY_PROJECTIONS = [
+        ("Orthographic (globe)",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['Orthographic'])
+                        .Orthographic(central_longitude=lo, central_latitude=la)),
+        ("Azimuthal Equidistant (true distances from centre)",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['AzimuthalEquidistant'])
+                        .AzimuthalEquidistant(central_longitude=lo, central_latitude=la)),
+        ("Lambert Conformal Conic (mid-latitude)",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['LambertConformal'])
+                        .LambertConformal(central_longitude=lo, central_latitude=la)),
+        ("Plate Carrée (equirectangular)",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['PlateCarree'])
+                        .PlateCarree()),
+        ("Mercator",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['Mercator'])
+                        .Mercator()),
+        ("Robinson (global overview)",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['Robinson'])
+                        .Robinson(central_longitude=lo)),
+        ("Equal Earth",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['EqualEarth'])
+                        .EqualEarth(central_longitude=lo)),
+        ("North Polar Stereographic",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['NorthPolarStereo'])
+                        .NorthPolarStereo(central_longitude=lo)),
+        ("South Polar Stereographic",
+         lambda lo, la: __import__('cartopy.crs', fromlist=['SouthPolarStereo'])
+                        .SouthPolarStereo(central_longitude=lo)),
+    ]
+
+    def _pick_cartopy_projection(self, mid_lon, mid_lat):
+        """Modal dialog to choose a Cartopy projection. Returns a CRS or None."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Choose Projection")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text="Projection:", padding=(12, 10, 12, 4)).pack(anchor=tk.W)
+
+        lb_frame = ttk.Frame(dlg)
+        lb_frame.pack(fill=tk.BOTH, padx=12)
+        vsb = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
+        lb  = tk.Listbox(lb_frame, yscrollcommand=vsb.set, activestyle="dotbox",
+                         width=52, height=len(self._CARTOPY_PROJECTIONS),
+                         selectmode=tk.SINGLE)
+        vsb.config(command=lb.yview)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        lb.pack(side=tk.LEFT, fill=tk.BOTH)
+
+        for label, _ in self._CARTOPY_PROJECTIONS:
+            lb.insert(tk.END, label)
+        lb.selection_set(0)   # default: Orthographic
+
+        result = [None]
+
+        def _ok(*_):
+            sel = lb.curselection()
+            if sel:
+                _, factory = self._CARTOPY_PROJECTIONS[sel[0]]
+                result[0] = factory(mid_lon, mid_lat)
+            dlg.destroy()
+
+        lb.bind("<Double-Button-1>", _ok)
+
+        btn_frm = ttk.Frame(dlg, padding=(12, 8))
+        btn_frm.pack(fill=tk.X)
+        ttk.Button(btn_frm, text="OK",     command=_ok).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Cancel", command=dlg.destroy).pack(
+            side=tk.LEFT, padx=6)
+
+        self._center_dialog(dlg)
+        self.wait_window(dlg)
+        return result[0]
+
     def _export_cartopy(self):
         """Export a static Cartopy map of the current trajectory."""
         try:
@@ -4100,6 +4176,18 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("No data", "Run a simulation first.")
             return
 
+        r   = self._result
+        lat = np.asarray(r['lat'], dtype=float)
+        lon = np.asarray(r['lon'], dtype=float)
+        t   = np.asarray(r['t'],   dtype=float)
+
+        mid_lat = float(np.mean(lat))
+        mid_lon = float(np.mean(lon))
+
+        proj = self._pick_cartopy_projection(mid_lon, mid_lat)
+        if proj is None:
+            return   # user cancelled
+
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
             defaultextension=".png",
@@ -4110,32 +4198,20 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
 
-        r   = self._result
-        lat = np.asarray(r['lat'],       dtype=float)
-        lon = np.asarray(r['lon'],       dtype=float)
-        t   = np.asarray(r['t'],         dtype=float)
-        alt = np.asarray(r.get('alt', []), dtype=float)
+        geo = ccrs.Geodetic()
 
-        # Centre projection on the midpoint of the ground track.
-        mid_lat = float(np.mean(lat))
-        mid_lon = float(np.mean(lon))
-
-        proj = ccrs.Orthographic(central_longitude=mid_lon,
-                                 central_latitude=mid_lat)
-        geo  = ccrs.Geodetic()
-
-        fig  = plt.figure(figsize=(10, 8), dpi=150)
-        ax   = fig.add_subplot(1, 1, 1, projection=proj)
+        fig = plt.figure(figsize=(10, 8), dpi=150)
+        ax  = fig.add_subplot(1, 1, 1, projection=proj)
         ax.set_global()
 
         # ── Background features ───────────────────────────────────────
-        ax.add_feature(cfeature.OCEAN,      facecolor="#d6e8f5", zorder=0)
-        ax.add_feature(cfeature.LAND,       facecolor="#e8e4d8", zorder=1)
-        ax.add_feature(cfeature.COASTLINE,  linewidth=0.5, edgecolor="#555555",
+        ax.add_feature(cfeature.OCEAN,     facecolor="#d6e8f5", zorder=0)
+        ax.add_feature(cfeature.LAND,      facecolor="#e8e4d8", zorder=1)
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, edgecolor="#555555",
                        zorder=2)
-        ax.add_feature(cfeature.BORDERS,    linewidth=0.3, edgecolor="#888888",
+        ax.add_feature(cfeature.BORDERS,   linewidth=0.3, edgecolor="#888888",
                        linestyle=":", zorder=2)
-        ax.add_feature(cfeature.LAKES,      facecolor="#d6e8f5", linewidth=0.3,
+        ax.add_feature(cfeature.LAKES,     facecolor="#d6e8f5", linewidth=0.3,
                        edgecolor="#555555", zorder=2)
         ax.gridlines(color="white", linewidth=0.4, linestyle="--", alpha=0.6,
                      zorder=3)
@@ -4176,39 +4252,29 @@ class MissileFlyoutApp(tk.Tk):
                     ('impact'   in e and 'empty' not in e
                                      and 'shroud' not in e))
 
-        def _name_only(raw):
-            name = _re_ev.sub(r'\s*\(\d[^)]*\)\s*$', '', raw).strip()
-            return 'Launch' if name.lower() == 'ignition' else name
-
-        raw_milestones = r.get('milestones', [])
-        for ms in raw_milestones:
+        for ms in r.get('milestones', []):
             is_debris = ms.get('is_debris', False)
             e         = ms['event'].lower()
-
             if not _show_labeled(e, is_debris, ms):
                 continue
-
             if is_debris and 'impact_lat' in ms:
                 mk_lat, mk_lon = ms['impact_lat'], ms['impact_lon']
             else:
                 mk_lat = float(np.interp(ms['t_s'], t, lat))
                 mk_lon = float(np.interp(ms['t_s'], t, lon))
-
             is_impact = 'impact' in e and not is_debris
-            color     = "crimson" if is_impact else "white"
-            edgeclr   = "black"
-            size      = 7 if is_impact else 5
-            ax.plot(mk_lon, mk_lat, marker="o", markersize=size,
-                    color=color, markeredgecolor=edgeclr, markeredgewidth=0.8,
+            ax.plot(mk_lon, mk_lat, marker="o",
+                    markersize=7 if is_impact else 5,
+                    color="crimson" if is_impact else "white",
+                    markeredgecolor="black", markeredgewidth=0.8,
                     transform=geo, zorder=6)
 
         # ── Title ─────────────────────────────────────────────────────
-        missile_name = self._missile_var.get()
-        rng  = r.get('range_km')
-        apo  = r.get('apogee_km')
-        parts = [missile_name]
-        if rng  is not None: parts.append(f"Range {rng:.0f} km")
-        if apo  is not None: parts.append(f"Apogee {apo:.0f} km")
+        parts = [self._missile_var.get()]
+        rng = r.get('range_km')
+        apo = r.get('apogee_km')
+        if rng is not None: parts.append(f"Range {rng:.0f} km")
+        if apo is not None: parts.append(f"Apogee {apo:.0f} km")
         ax.set_title("  ·  ".join(parts), fontsize=11, pad=8)
 
         fig.tight_layout()
