@@ -1730,7 +1730,8 @@ class MissileFlyoutApp(tk.Tk):
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Export trajectory CSV…", command=self._save_trajectory)
         file_menu.add_command(label="Export trajectory KML…", command=self._export_kml)
-        file_menu.add_command(label="Open Folium map…",       command=self._export_folium)
+        file_menu.add_command(label="Open Folium map…",        command=self._export_folium)
+        file_menu.add_command(label="Export Cartopy map…",    command=self._export_cartopy)
         file_menu.add_command(label="Export timeline CSV…",   command=self._export_timeline)
         file_menu.add_command(label="Export figures…",        command=self._export_figures)
         file_menu.add_command(label="Export missile JSON…",   command=self._export_missile)
@@ -4078,6 +4079,142 @@ class MissileFlyoutApp(tk.Tk):
     def _clear_notam_overlay(self):
         self._notam_overlay = None
         self._status_var.set("NOTAM overlay cleared.")
+
+    def _export_cartopy(self):
+        """Export a static Cartopy map of the current trajectory."""
+        try:
+            import cartopy.crs as ccrs
+            import cartopy.feature as cfeature
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import matplotlib.patheffects as pe
+        except ImportError as _e:
+            messagebox.showerror(
+                "Missing package",
+                f"Cartopy is not installed.\n\n{_e}\n\nRun:  pip install cartopy",
+            )
+            return
+
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png"), ("PDF document", "*.pdf"),
+                       ("SVG image", "*.svg"), ("All files", "*.*")],
+            title="Save Cartopy map",
+        )
+        if not path:
+            return
+
+        r   = self._result
+        lat = np.asarray(r['lat'],       dtype=float)
+        lon = np.asarray(r['lon'],       dtype=float)
+        t   = np.asarray(r['t'],         dtype=float)
+        alt = np.asarray(r.get('alt', []), dtype=float)
+
+        # Centre projection on the midpoint of the ground track.
+        mid_lat = float(np.mean(lat))
+        mid_lon = float(np.mean(lon))
+
+        proj = ccrs.Orthographic(central_longitude=mid_lon,
+                                 central_latitude=mid_lat)
+        geo  = ccrs.Geodetic()
+
+        fig  = plt.figure(figsize=(10, 8), dpi=150)
+        ax   = fig.add_subplot(1, 1, 1, projection=proj)
+        ax.set_global()
+
+        # ── Background features ───────────────────────────────────────
+        ax.add_feature(cfeature.OCEAN,      facecolor="#d6e8f5", zorder=0)
+        ax.add_feature(cfeature.LAND,       facecolor="#e8e4d8", zorder=1)
+        ax.add_feature(cfeature.COASTLINE,  linewidth=0.5, edgecolor="#555555",
+                       zorder=2)
+        ax.add_feature(cfeature.BORDERS,    linewidth=0.3, edgecolor="#888888",
+                       linestyle=":", zorder=2)
+        ax.add_feature(cfeature.LAKES,      facecolor="#d6e8f5", linewidth=0.3,
+                       edgecolor="#555555", zorder=2)
+        ax.gridlines(color="white", linewidth=0.4, linestyle="--", alpha=0.6,
+                     zorder=3)
+
+        _OUTLINE = [pe.withStroke(linewidth=2.5, foreground="white")]
+
+        # ── Main ground track ─────────────────────────────────────────
+        _ins_t = next(
+            (ms['t_s'] for ms in r.get('milestones', [])
+             if 'orbital insertion' in ms.get('event', '').lower()),
+            None)
+        if _ins_t is not None:
+            _sp = int(np.searchsorted(t, _ins_t))
+            ax.plot(lon[:_sp + 1], lat[:_sp + 1], color="black",
+                    linewidth=1.8, transform=geo, zorder=4,
+                    path_effects=_OUTLINE)
+            ax.plot(lon[_sp:], lat[_sp:], color="#555555",
+                    linewidth=1.2, linestyle="--", transform=geo, zorder=4)
+        else:
+            ax.plot(lon, lat, color="black", linewidth=1.8,
+                    transform=geo, zorder=4, path_effects=_OUTLINE)
+
+        # ── Debris arcs ───────────────────────────────────────────────
+        for d in r.get('debris_trajectories', []):
+            ax.plot(np.asarray(d['lon'], dtype=float),
+                    np.asarray(d['lat'], dtype=float),
+                    color="black", linewidth=1.0, alpha=0.5,
+                    transform=geo, zorder=4)
+
+        # ── Milestone dots ────────────────────────────────────────────
+        import re as _re_ev
+
+        def _show_labeled(e, is_debris, ms):
+            if is_debris:
+                return (('empty impact' in e or 'shroud impact' in e)
+                        and 'impact_lat' in ms)
+            return (('ignition' in e and 'stage' not in e) or
+                    ('impact'   in e and 'empty' not in e
+                                     and 'shroud' not in e))
+
+        def _name_only(raw):
+            name = _re_ev.sub(r'\s*\(\d[^)]*\)\s*$', '', raw).strip()
+            return 'Launch' if name.lower() == 'ignition' else name
+
+        raw_milestones = r.get('milestones', [])
+        for ms in raw_milestones:
+            is_debris = ms.get('is_debris', False)
+            e         = ms['event'].lower()
+
+            if not _show_labeled(e, is_debris, ms):
+                continue
+
+            if is_debris and 'impact_lat' in ms:
+                mk_lat, mk_lon = ms['impact_lat'], ms['impact_lon']
+            else:
+                mk_lat = float(np.interp(ms['t_s'], t, lat))
+                mk_lon = float(np.interp(ms['t_s'], t, lon))
+
+            is_impact = 'impact' in e and not is_debris
+            color     = "crimson" if is_impact else "white"
+            edgeclr   = "black"
+            size      = 7 if is_impact else 5
+            ax.plot(mk_lon, mk_lat, marker="o", markersize=size,
+                    color=color, markeredgecolor=edgeclr, markeredgewidth=0.8,
+                    transform=geo, zorder=6)
+
+        # ── Title ─────────────────────────────────────────────────────
+        missile_name = self._missile_var.get()
+        rng  = r.get('range_km')
+        apo  = r.get('apogee_km')
+        parts = [missile_name]
+        if rng  is not None: parts.append(f"Range {rng:.0f} km")
+        if apo  is not None: parts.append(f"Apogee {apo:.0f} km")
+        ax.set_title("  ·  ".join(parts), fontsize=11, pad=8)
+
+        fig.tight_layout()
+        fig.savefig(path, bbox_inches="tight")
+        plt.close(fig)
+        self._status_var.set(f"Cartopy map saved: {path}")
 
     def _export_folium(self):
         """Generate an interactive Folium HTML map and open it in the browser."""
