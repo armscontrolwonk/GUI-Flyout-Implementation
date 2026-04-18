@@ -263,13 +263,11 @@ def _enu_frame(lat_rad: float, lon_rad: float):
 
 def _prev_burnout_angle(root_params, current_stage) -> float:
     """Return the burnout angle (°) of the stage immediately preceding
-    current_stage in the chain, or 90.0 if current_stage is the first stage.
-
-    Used so that each stage's pitch ramp begins where the previous stage's
-    ramp ended rather than always resetting to vertical (90°).
+    current_stage in the chain, or launch_elevation_deg if current_stage is
+    the first stage (so the pitch ramp starts from the launch angle).
     """
     if current_stage is root_params:
-        return 90.0
+        return float(root_params.launch_elevation_deg)
     s = root_params
     while s.stage2 is not None and s.stage2 is not current_stage:
         s = s.stage2
@@ -348,17 +346,18 @@ def _orbital_insertion_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 
 
 def _loft_angle_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                            loft_angle_deg, loft_angle_rate_deg_s, t):
+                            loft_angle_deg, loft_angle_rate_deg_s, t,
+                            launch_elevation_deg=90.0):
     """
     Unit thrust vector (ECEF) under Forden's loft-angle guidance (Eq. 8).
 
-    el(t) = max(loft_angle_deg, 90° − loft_angle_rate_deg_s * t)
+    el(t) = max(loft_angle_deg, launch_elevation_deg − loft_angle_rate_deg_s * t)
 
     t is mission elapsed time (seconds since launch).  The curve runs
     continuously through all stages and coast phases; during coast no thrust
     is applied so the instantaneous attitude has no effect on the trajectory.
     """
-    el_deg = max(loft_angle_deg, 90.0 - loft_angle_rate_deg_s * t)
+    el_deg = max(loft_angle_deg, launch_elevation_deg - loft_angle_rate_deg_s * t)
     el_rad = np.radians(el_deg)
     e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
     thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
@@ -551,12 +550,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     params.loft_angle_deg,
                     gt_turn_start_s,
                     gt_turn_stop_s,
-                    t)
+                    t,
+                    start_angle_deg=params.launch_elevation_deg)
         else:  # "loft" (Forden)
             thrust_dir = _loft_angle_thrust_dir(lat, lon, azimuth_rad,
                                                 params.loft_angle_deg,
                                                 params.loft_angle_rate_deg_s,
-                                                t)
+                                                t,
+                                                launch_elevation_deg=params.launch_elevation_deg)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -712,6 +713,7 @@ def integrate_trajectory(params: MissileParams,
                          yaw_start_s: float = None,
                          yaw_stop_s: float = None,
                          yaw_final_az_deg: float = None,
+                         launch_elevation_deg: float = None,
                          _search_mode: bool = False):
     """
     Integrate a missile trajectory from launch to impact.
@@ -758,6 +760,8 @@ def integrate_trajectory(params: MissileParams,
             params.loft_angle_deg = loft_angle_deg
         if loft_angle_rate_deg_s is not None:
             params.loft_angle_rate_deg_s = loft_angle_rate_deg_s
+        if launch_elevation_deg is not None:
+            params.launch_elevation_deg = launch_elevation_deg
 
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
@@ -784,10 +788,15 @@ def integrate_trajectory(params: MissileParams,
     lon0 = np.radians(launch_lon_deg)
     az   = np.radians(launch_azimuth_deg)
 
-    # Initial position on surface; initial velocity: small upward nudge
+    # Initial position on surface; initial velocity: small nudge along the
+    # launch direction so the integrator starts above ground.
     pos0 = geodetic_to_ecef(lat0, lon0, 0.0)
-    _, _, e_up = _enu_frame(lat0, lon0)
-    v0 = 10.0 * e_up      # 10 m/s upward so integrator starts above ground
+    e_east0, e_north0, e_up0 = _enu_frame(lat0, lon0)
+    el0  = np.radians(params.launch_elevation_deg)
+    launch_dir = (np.cos(el0) * np.sin(az) * e_east0 +
+                  np.cos(el0) * np.cos(az) * e_north0 +
+                  np.sin(el0) * e_up0)
+    v0 = 10.0 * launch_dir
 
     state0 = np.concatenate([pos0, v0])
 

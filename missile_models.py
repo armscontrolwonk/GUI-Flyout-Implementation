@@ -57,6 +57,7 @@ class MissileParams:
 
     loft_angle_deg: float = 45.0        # Forden: final elev (°); GT: kick elev (°)
     loft_angle_rate_deg_s: float = 2.0  # Forden: pitch rate (°/s); GT: kick rate
+    launch_elevation_deg: float = 90.0  # elevation at liftoff (°); 90 = vertical
 
     # Aerodynamics — Cd vs Mach lookup table
     mach_table: list = field(default_factory=list)

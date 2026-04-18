@@ -1484,7 +1484,8 @@ class ParametricSweepDialog(tk.Toplevel):
         self._stop_evt.clear()
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, *_) = self._app._get_inputs()
+             gt_start_s, gt_stop_s, _orb, _ye, _ys, _ysp, _yfa,
+             launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
             messagebox.showerror("Input error", str(e), parent=self)
             return
@@ -1521,13 +1522,15 @@ class ParametricSweepDialog(tk.Toplevel):
         threading.Thread(
             target=self._sweep_worker,
             args=(missile, guidance, lat, lon, az, la, lar, cutoff,
-                  param_key, points, overplot, gt_start_s, gt_stop_s),
+                  param_key, points, overplot, gt_start_s, gt_stop_s,
+                  launch_elevation_deg),
             daemon=True,
         ).start()
 
     # ------------------------------------------------------------------
     def _sweep_worker(self, missile, guidance, lat, lon, az, la, lar, cutoff,
-                      param_key, points, store_trajs, gt_start_s=5.0, gt_stop_s=None):
+                      param_key, points, store_trajs, gt_start_s=5.0, gt_stop_s=None,
+                      launch_elevation_deg=90.0):
         for i, val in enumerate(points):
             if self._stop_evt.is_set():
                 break
@@ -1544,6 +1547,7 @@ class ParametricSweepDialog(tk.Toplevel):
                     cutoff_time_s=run_cut,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=run_gt_stop,
+                    launch_elevation_deg=launch_elevation_deg,
                 )
                 row  = (val, r["range_km"] if r["range_km"] is not None else float("nan"),
                         r["apogee_km"])
@@ -1909,19 +1913,27 @@ class MissileFlyoutApp(tk.Tk):
                         variable=self._guidance_var, value="orbital_insertion",
                         command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
 
+        ttk.Label(gf, text="Launch elev.:").grid(
+            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        le_frame = ttk.Frame(gf)
+        le_frame.grid(row=1, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._launch_el_var = tk.StringVar(value="90.0")
+        ttk.Entry(le_frame, textvariable=self._launch_el_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(le_frame, text="°  (90 = vertical)").pack(side=tk.LEFT, padx=2)
+
         self._loft_angle_lbl = ttk.Label(gf, text="Loft Angle:")
-        self._loft_angle_lbl.grid(row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._loft_angle_lbl.grid(row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         la_frame = ttk.Frame(gf)
-        la_frame.grid(row=1, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        la_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._loft_angle_var = tk.StringVar(value="45.0")
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
         self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
         self._loft_angle_unit_lbl.pack(side=tk.LEFT, padx=2)
 
         self._loft_rate_lbl = ttk.Label(gf, text="Loft Rate:")
-        self._loft_rate_lbl.grid(row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._loft_rate_lbl.grid(row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         lr_frame = ttk.Frame(gf)
-        lr_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        lr_frame.grid(row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._loft_rate_frame = lr_frame
         self._loft_rate_var = tk.StringVar(value="2.0")
         self._loft_rate_entry = ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8)
@@ -1930,53 +1942,53 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_rate_unit_lbl.pack(side=tk.LEFT, padx=2)
 
         self._gt_turn_start_lbl = ttk.Label(gf, text="Turn Start:")
-        self._gt_turn_start_lbl.grid(row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._gt_turn_start_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         gt_ts_frame = ttk.Frame(gf)
-        gt_ts_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        gt_ts_frame.grid(row=5, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._gt_turn_start_frame = gt_ts_frame
         self._gt_turn_start_var = tk.StringVar(value="5.0")
         ttk.Entry(gt_ts_frame, textvariable=self._gt_turn_start_var, width=8).pack(side=tk.LEFT)
         ttk.Label(gt_ts_frame, text="s").pack(side=tk.LEFT, padx=2)
 
         self._gt_turn_stop_lbl = ttk.Label(gf, text="Turn Stop:")
-        self._gt_turn_stop_lbl.grid(row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._gt_turn_stop_lbl.grid(row=6, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         gt_te_frame = ttk.Frame(gf)
-        gt_te_frame.grid(row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        gt_te_frame.grid(row=6, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._gt_turn_stop_frame = gt_te_frame
         self._gt_turn_stop_var = tk.StringVar(value="")
         ttk.Entry(gt_te_frame, textvariable=self._gt_turn_stop_var, width=8).pack(side=tk.LEFT)
         ttk.Label(gt_te_frame, text="s  (blank = full burn)").pack(side=tk.LEFT, padx=2)
 
         self._orbit_alt_lbl = ttk.Label(gf, text="Target orbit alt:")
-        self._orbit_alt_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._orbit_alt_lbl.grid(row=7, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         orb_frame = ttk.Frame(gf)
-        orb_frame.grid(row=5, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        orb_frame.grid(row=7, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._orbit_alt_frame = orb_frame
         self._orbit_alt_var = tk.StringVar(value="400")
         ttk.Entry(orb_frame, textvariable=self._orbit_alt_var, width=8).pack(side=tk.LEFT)
         ttk.Label(orb_frame, text="km").pack(side=tk.LEFT, padx=2)
 
-        # Row 6: Plan Orbit button — placed directly in gf (no wrapper Frame)
+        # Row 8: Plan Orbit button — placed directly in gf (no wrapper Frame)
         # so grid_forget/grid reliably shows and hides it.
         self._plan_orbit_btn = ttk.Button(gf, text="Plan Orbit",
                                           command=self._plan_orbit)
-        self._plan_orbit_btn.grid(row=6, column=0, columnspan=2,
+        self._plan_orbit_btn.grid(row=8, column=0, columnspan=2,
                                   sticky=tk.EW, padx=8, pady=(4, 6), ipadx=2, ipady=4)
 
-        # Row 7: Advanced pitch program toggle (gravity_turn / orbital_insertion only)
+        # Row 9: Advanced pitch program toggle (gravity_turn / orbital_insertion only)
         self._adv_pitch_var = tk.BooleanVar(value=False)
         self._adv_pitch_chk = ttk.Checkbutton(
             gf, text="Advanced pitch program (per-stage)",
             variable=self._adv_pitch_var,
             command=self._on_adv_pitch_toggled)
-        self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
+        self._adv_pitch_chk.grid(row=9, column=0, columnspan=2,
                                   sticky=tk.W, padx=8, pady=(0, 2))
 
-        # Row 8: Per-stage inline rows — rebuilt whenever missile changes
+        # Row 10: Per-stage inline rows — rebuilt whenever missile changes
         self._adv_pitch_frame = ttk.Frame(gf)
         self._stage_rows = []   # list of dicts with StringVars per stage
 
-        # Row 9: Yaw / dogleg program toggle (gravity_turn / orbital_insertion only)
+        # Row 11: Yaw / dogleg program toggle (gravity_turn / orbital_insertion only)
         self._adv_yaw_var = tk.BooleanVar(value=False)
         self._adv_yaw_chk = ttk.Checkbutton(
             gf, text="Yaw / dogleg program",
@@ -2438,6 +2450,7 @@ class MissileFlyoutApp(tk.Tk):
             self._guidance_var.set(prof.get('guidance', p.guidance))
             self._loft_angle_var.set(str(prof.get('loft_angle_deg', p.loft_angle_deg)))
             self._loft_rate_var.set(str(prof.get('loft_angle_rate_deg_s', p.loft_angle_rate_deg_s)))
+            self._launch_el_var.set(str(prof.get('launch_elevation_deg', p.launch_elevation_deg)))
             gt_start = prof.get('gt_turn_start_s', 5.0)
             self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
             gt_stop = prof.get('gt_turn_stop_s')
@@ -2449,6 +2462,7 @@ class MissileFlyoutApp(tk.Tk):
             self._cutoff_var.set(str(int(total_burn_time(p))))
             self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
             self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
+            self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
             self._guidance_var.set(p.guidance)
 
         self._update_guidance_labels(self._guidance_var.get())
@@ -2831,10 +2845,15 @@ class MissileFlyoutApp(tk.Tk):
             loft_rate = float(self._loft_rate_var.get())
         except ValueError:
             loft_rate = 2.0
+        try:
+            launch_el = float(self._launch_el_var.get())
+        except (ValueError, AttributeError):
+            launch_el = 90.0
         prof = {
             'guidance':              self._guidance_var.get(),
             'loft_angle_deg':        loft_angle,
             'loft_angle_rate_deg_s': loft_rate,
+            'launch_elevation_deg':  launch_el,
             'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
             'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
             'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
@@ -2856,6 +2875,7 @@ class MissileFlyoutApp(tk.Tk):
         self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
         self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
+        self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
         self._guidance_var.set(p.guidance)
         self._gt_turn_start_var.set("5.0")
         self._gt_turn_stop_var.set("")
@@ -3119,6 +3139,10 @@ class MissileFlyoutApp(tk.Tk):
             gt_stop_str  = self._gt_turn_stop_var.get().strip()
             gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
             gt_stop_s    = float(gt_stop_str)  if gt_stop_str  else None
+            try:
+                missile.launch_elevation_deg = float(self._launch_el_var.get())
+            except (ValueError, AttributeError):
+                pass
             threading.Thread(
                 target=self._aim_thread,
                 args=(missile, guidance, lat1_dd, lon1_dd, az, rng_km, la, lar,
@@ -3209,9 +3233,16 @@ class MissileFlyoutApp(tk.Tk):
         else:
             yaw_start_s = yaw_stop_s = yaw_final_az = None
 
+        try:
+            launch_elevation_deg = float(self._launch_el_var.get())
+        except (ValueError, AttributeError):
+            launch_elevation_deg = 90.0
+        missile.launch_elevation_deg = launch_elevation_deg
+
         return (missile, guidance, lat, lon, az, cutoff, la, lar,
                 gt_start_s, gt_stop_s, target_orbit_km,
-                yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az)
+                yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+                launch_elevation_deg)
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
@@ -3222,7 +3253,8 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az) = self._get_inputs()
+             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+             launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -3232,7 +3264,8 @@ class MissileFlyoutApp(tk.Tk):
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
                   gt_start_s, gt_stop_s, target_orbit_km,
-                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, False),
+                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+                  launch_elevation_deg, False),
             daemon=True,
         ).start()
 
@@ -3242,7 +3275,8 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az) = self._get_inputs()
+             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+             launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -3252,7 +3286,8 @@ class MissileFlyoutApp(tk.Tk):
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
                   gt_start_s, None, target_orbit_km,
-                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, True),
+                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+                  launch_elevation_deg, True),
             daemon=True,
         ).start()
 
@@ -3263,7 +3298,8 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             _yaw_en, _yaw_st, _yaw_sp, _yaw_fa) = self._get_inputs()
+             _yaw_en, _yaw_st, _yaw_sp, _yaw_fa,
+             _launch_el) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -3349,7 +3385,8 @@ class MissileFlyoutApp(tk.Tk):
                 (m_run, guidance_run, lat_run, lon_run, az_run,
                  cutoff_run, la_run, lar_run,
                  gts_run, gtstp_run, orb_run,
-                 yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run) = self._get_inputs()
+                 yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run,
+                 el_run) = self._get_inputs()
             except ValueError:
                 # Fallback: use the original plan parameters without per-stage overrides.
                 m_run, guidance_run = missile, "orbital_insertion"
@@ -3357,6 +3394,7 @@ class MissileFlyoutApp(tk.Tk):
                 cutoff_run, la_run, lar_run = None, boost_angle, 0.0
                 gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
                 yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run = False, None, None, None
+                el_run = 90.0
 
             # _run_thread checks self._running; it's still True from _plan_orbit
             threading.Thread(
@@ -3364,7 +3402,8 @@ class MissileFlyoutApp(tk.Tk):
                 args=(m_run, guidance_run, lat_run, lon_run, az_run,
                       cutoff_run, la_run, lar_run,
                       gts_run, gtstp_run, orb_run,
-                      yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run, False),
+                      yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run,
+                      el_run, False),
                 daemon=True,
             ).start()
 
@@ -3372,7 +3411,8 @@ class MissileFlyoutApp(tk.Tk):
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
                     gt_start_s, gt_stop_s, target_orbit_km,
-                    yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az, maximise):
+                    yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
+                    launch_elevation_deg, maximise):
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
@@ -3402,6 +3442,7 @@ class MissileFlyoutApp(tk.Tk):
                     yaw_start_s=yaw_start_s,
                     yaw_stop_s=yaw_stop_s,
                     yaw_final_az_deg=yaw_final_az,
+                    launch_elevation_deg=launch_elevation_deg,
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
