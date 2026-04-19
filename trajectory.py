@@ -271,7 +271,12 @@ def _prev_burnout_angle(root_params, current_stage) -> float:
     s = root_params
     while s.stage2 is not None and s.stage2 is not current_stage:
         s = s.stage2
-    return float(s.stage_burnout_angle_deg) if s.stage_burnout_angle_deg is not None else 90.0
+    # When a stage has no explicit burnout angle (no per-stage pitch override),
+    # fall back to launch_elevation_deg so the pitch display is consistent with
+    # the ODE, which uses root_params.launch_elevation_deg as start_angle_deg.
+    return (float(s.stage_burnout_angle_deg)
+            if s.stage_burnout_angle_deg is not None
+            else float(root_params.launch_elevation_deg))
 
 
 def _gravity_turn_thrust_dir(lat_rad, lon_rad, azimuth_rad,
