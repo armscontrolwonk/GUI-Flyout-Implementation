@@ -3323,26 +3323,57 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(frame, text=value).grid(
                 row=row, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # ── Summary ───────────────────────────────────────────────────
-        sf = ttk.LabelFrame(self._params_inner, text="Summary")
-        sf.pack(fill=tk.X, **pad)
+        def _row2(frame, row, lab1, val1, lab2='', val2=''):
+            """Two label:value pairs on a single row (4-column layout)."""
+            ttk.Label(frame, text=lab1).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            ttk.Label(frame, text=val1).grid(
+                row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+            if lab2:
+                ttk.Label(frame, text=lab2).grid(
+                    row=row, column=2, sticky=tk.W, padx=(8, 2), pady=2)
+                ttk.Label(frame, text=val2).grid(
+                    row=row, column=3, sticky=tk.W, padx=(0, 6), pady=2)
 
+        # ── Compute totals used in summary ────────────────────────────
         total_prop = p.mass_propellant
         node = p.stage2
         while node is not None:
             total_prop += node.mass_propellant
             node = node.stage2
 
-        r = 0
-        _row(sf, r, "Name:", p.name); r += 1
-        _row(sf, r, "Launch mass:", f"{p.mass_initial:,.0f} kg"); r += 1
-        _row(sf, r, "Total propellant:", f"{total_prop:,.0f} kg"); r += 1
-        if p.payload_kg > 0:
-            _row(sf, r, "Payload:", f"{p.payload_kg:,.0f} kg"); r += 1
-        if p.rv_mass_kg > 0:
-            _row(sf, r, "RV mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
+        _node_l, _sn_l, _stage_lengths = p, 1, []
+        while _node_l is not None:
+            if _node_l.length_m > 0:
+                _stage_lengths.append((_sn_l, _node_l.length_m))
+            _node_l = _node_l.stage2
+            _sn_l += 1
+        _total_len = sum(l for _, l in _stage_lengths)
+        if p.shroud_length_m > 0:
+            _total_len += p.shroud_length_m
+
         liftoff_tw = p.thrust_N / (p.mass_initial * _G0)
-        _row(sf, r, "Liftoff T/W:", f"{liftoff_tw:.2f}"); r += 1
+
+        # ── Summary (4-col, 2 pairs per row) ──────────────────────────
+        sf = ttk.LabelFrame(self._params_inner, text="Summary")
+        sf.pack(fill=tk.X, **pad)
+        sf.columnconfigure(1, weight=1)
+        sf.columnconfigure(3, weight=1)
+
+        r = 0
+        ttk.Label(sf, text="Name:").grid(
+            row=r, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        ttk.Label(sf, text=p.name).grid(
+            row=r, column=1, columnspan=3, sticky=tk.W, padx=(0, 6), pady=2)
+        r += 1
+        _len_str = f"{_total_len:.1f} m" if _total_len > 0 else "—"
+        _row2(sf, r, "Launch mass:", f"{p.mass_initial:,.0f} kg",
+              "Total length:", _len_str); r += 1
+        _row2(sf, r, "Total propellant:", f"{total_prop:,.0f} kg",
+              "Liftoff T/W:", f"{liftoff_tw:.2f}"); r += 1
+        if p.payload_kg > 0:
+            _tw_lbl = "Throw weight:" if p.rv_separates else "Payload:"
+            _row2(sf, r, _tw_lbl, f"{p.payload_kg:,.0f} kg"); r += 1
 
         # ── Per-stage blocks ──────────────────────────────────────────
         sn = 1
@@ -3417,16 +3448,41 @@ class MissileFlyoutApp(tk.Tk):
             sn  += 1
             node = node.stage2
 
-        # ── Payload nose (shown in Front End section of params display) ──
-        if p.nose_shape not in ('', 'forden'):
-            af = ttk.LabelFrame(self._params_inner, text="Front End — Payload Nose")
-            af.pack(fill=tk.X, **pad)
-            _row(af, 0, "Payload nose shape:",
-                 NOSE_SHAPE_LABELS.get(p.nose_shape, p.nose_shape))
-            if p.nose_length_m > 0 and p.diameter_m > 0:
-                _ld = p.nose_length_m / p.diameter_m
-                _row(af, 1, "Payload nose length (m):",
-                     f"{p.nose_length_m:.2f}  (L/D = {_ld:.2f})")
+        # ── Front End ─────────────────────────────────────────────────
+        af = ttk.LabelFrame(self._params_inner, text="Front End")
+        af.pack(fill=tk.X, **pad)
+        af.columnconfigure(1, weight=1)
+        af.columnconfigure(3, weight=1)
+
+        _pd_m     = getattr(p, 'payload_diameter_m', 0.0)
+        _pl_m     = p.nose_length_m
+        _fe_shape = NOSE_SHAPE_LABELS.get(p.nose_shape, p.nose_shape)
+        r = 0
+        _row2(af, r, "Payload shape:", _fe_shape,
+              "Payload diameter:", f"{_pd_m:.2f} m" if _pd_m > 0 else "—"); r += 1
+        if _pl_m > 0:
+            _ref_d = _pd_m if _pd_m > 0 else p.diameter_m
+            _ld_str = f"  (L/D {_pl_m / _ref_d:.2f})" if _ref_d > 0 else ""
+            _row2(af, r, "Payload length:", f"{_pl_m:.2f} m{_ld_str}"); r += 1
+
+        if p.rv_separates:
+            _row2(af, r, "No. of RVs:", str(p.num_rvs),
+                  "Per-RV mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
+            _rv_beta = p.rv_beta_kg_m2
+            _pbv_m   = p.bus_mass_kg
+            if _pbv_m > 0:
+                _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
+                      "RV β:", f"{_rv_beta:,.0f} kg/m²" if _rv_beta > 0 else "—"); r += 1
+            elif _rv_beta > 0:
+                _row2(af, r, "RV β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
+            _rv_shape_s = NOSE_SHAPE_LABELS.get(
+                getattr(p, 'rv_shape', 'forden'), NOSE_SHAPE_LABELS['forden'])
+            _rv_d = getattr(p, 'rv_diameter_m', 0.0)
+            _rv_l = getattr(p, 'rv_length_m', 0.0)
+            _row2(af, r, "RV shape:", _rv_shape_s,
+                  "RV diameter:", f"{_rv_d:.2f} m" if _rv_d > 0 else "—"); r += 1
+            if _rv_l > 0:
+                _row2(af, r, "RV length:", f"{_rv_l:.2f} m"); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
@@ -3455,26 +3511,6 @@ class MissileFlyoutApp(tk.Tk):
                 if beta > 0:
                     _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
 
-        # ── Total length ──────────────────────────────────────────────
-        _stage_lengths = []
-        _node = p
-        _sn = 1
-        while _node is not None:
-            if _node.length_m > 0:
-                _stage_lengths.append((_sn, _node.length_m))
-            _node = _node.stage2
-            _sn += 1
-        _total_len = sum(l for _, l in _stage_lengths)
-        if p.shroud_length_m > 0:
-            _total_len += p.shroud_length_m
-        if _total_len > 0:
-            lf_len = ttk.LabelFrame(self._params_inner, text="Total Length")
-            lf_len.pack(fill=tk.X, **pad)
-            _parts = [f"S{n}: {l:.1f} m" for n, l in _stage_lengths]
-            if p.shroud_length_m > 0:
-                _parts.append(f"Shroud: {p.shroud_length_m:.1f} m")
-            _row(lf_len, 0, "Total (m):", f"{_total_len:.2f}")
-            _row(lf_len, 1, "Breakdown:", "  +  ".join(_parts))
 
     # ------------------------------------------------------------------
     # Aim at target
