@@ -313,7 +313,7 @@ class _StageFrame(ttk.LabelFrame):
         ttk.Entry(_thr_inner, textvariable=self._thrust_kn, width=10).pack(side=tk.LEFT)
         ttk.Label(_thr_inner, text="kN").pack(side=tk.LEFT, padx=(2, 6))
         if self._stage_num == 1:
-            ttk.Button(_thr_inner, text="Suggest…",
+            ttk.Button(_thr_inner, text="Estimate…",
                        command=self._suggest_thrust).pack(side=tk.LEFT)
         self._isp         = _entry_row(self, "Isp (vacuum, s):",      5, d["isp"],         "s")
         # Nozzle exit area — entry + Suggest button (row 6)
