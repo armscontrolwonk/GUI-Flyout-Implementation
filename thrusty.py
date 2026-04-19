@@ -2122,6 +2122,16 @@ class MissileFlyoutApp(tk.Tk):
         self._on_missile_changed()   # populate params tab with default missile
 
     # ------------------------------------------------------------------
+    # Utility
+    # ------------------------------------------------------------------
+    def _center_dialog(self, dlg):
+        """Centre a Toplevel dialog over the main window."""
+        dlg.update_idletasks()
+        px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
+        py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
+        dlg.geometry(f"+{max(0, px)}+{max(0, py)}")
+
+    # ------------------------------------------------------------------
     # Menu
     # ------------------------------------------------------------------
     def _build_menu(self):
