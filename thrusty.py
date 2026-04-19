@@ -43,6 +43,20 @@ from slv_performance import schilling_performance
 
 _BORDERS_CACHE = None   # loaded once on first draw, then reused
 
+def _open_file(path: str) -> None:
+    """Open a file with the default viewer, cross-platform."""
+    import subprocess
+    try:
+        if sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        elif sys.platform == 'win32':
+            os.startfile(path)
+        else:
+            subprocess.Popen(['xdg-open', path])
+    except Exception:
+        pass
+
+
 def _load_borders():
     """Return the Natural Earth 110m country GeoJSON (lazy, cached)."""
     global _BORDERS_CACHE
@@ -1723,11 +1737,7 @@ class RangeRingDialog(tk.Toplevel):
         fig.tight_layout()
         canvas.print_figure(path, bbox_inches="tight")
         self._app._status_var.set(f"Range ring saved: {path}")
-        try:
-            import subprocess
-            subprocess.Popen(["xdg-open", path])
-        except Exception:
-            pass
+        _open_file(path)
 
 
 # ---------------------------------------------------------------------------
@@ -4693,11 +4703,7 @@ class MissileFlyoutApp(tk.Tk):
         fig.tight_layout()
         canvas.print_figure(path, bbox_inches="tight")
         self._status_var.set(f"Cartopy map saved: {path}")
-        try:
-            import subprocess
-            subprocess.Popen(["xdg-open", path])
-        except Exception:
-            pass
+        _open_file(path)
 
     def _export_folium(self):
         """Generate an interactive Folium HTML map and open it in the browser."""
