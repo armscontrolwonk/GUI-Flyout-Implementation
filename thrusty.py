@@ -31,7 +31,8 @@ import matplotlib.ticker
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
-                           NOSE_SHAPES, NOSE_SHAPE_LABELS)
+                           NOSE_SHAPES, NOSE_SHAPE_LABELS,
+                           GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion)
 from coordinates import range_between
@@ -451,8 +452,8 @@ class _StageFrame(ttk.LabelFrame):
         self._dia         = _entry_row(self, "Diameter (m):",        2, d["dia"],         "m")
         self._length      = _entry_row(self, "Length (m):",          3, d["length"],      "m")
         # Thrust row (row 4) with Suggest button
-        ttk.Label(self, text="Thrust (kN):").grid(
-            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._thrust_lbl = ttk.Label(self, text="Thrust (kN):")
+        self._thrust_lbl.grid(row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._thrust_kn = tk.StringVar(value=d["thrust_kn"])
         _thr_inner = ttk.Frame(self)
         _thr_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
@@ -474,7 +475,7 @@ class _StageFrame(ttk.LabelFrame):
             ttk.Button(_noz_inner, text="Estimate…",
                        command=self._suggest_nozzle_area).pack(side=tk.LEFT)
 
-        # Burn time — read-only computed field (row 7)
+        # Burn time (row 7) — readonly/computed for liquid; user-entered for solid.
         ttk.Label(self, text="Burn time (s):").grid(
             row=7, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._burn_var = tk.StringVar()
@@ -483,7 +484,9 @@ class _StageFrame(ttk.LabelFrame):
         self._burn_entry = ttk.Entry(_burn_inner, textvariable=self._burn_var,
                                      width=10, state="readonly")
         self._burn_entry.pack(side=tk.LEFT)
-        ttk.Label(_burn_inner, text="s  (computed)").pack(side=tk.LEFT, padx=(2, 0))
+        self._burn_hint_lbl = ttk.Label(_burn_inner, text="s  (computed)",
+                                        foreground="gray50")
+        self._burn_hint_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
         # Coast-time row (row 8) — shown only for non-last stages
         self._coast_var = tk.StringVar(value=d["coast"])
@@ -503,9 +506,82 @@ class _StageFrame(ttk.LabelFrame):
         self._solid_motor_var = tk.BooleanVar(value=False)
         self._solid_motor_check = ttk.Checkbutton(
             self, text="Solid rocket motor (cannot be shut off)",
-            variable=self._solid_motor_var)
+            variable=self._solid_motor_var,
+            command=self._on_solid_toggled)
         self._solid_motor_check.grid(
             row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(2, 4))
+
+        # ── Solid grain profile block (row 10) — hidden until solid is checked ──
+        _GRAIN_KEYS   = list(GRAIN_LABELS.keys())
+        _GRAIN_LABELS = [GRAIN_LABELS[k] for k in _GRAIN_KEYS]
+        self._grain_keys = _GRAIN_KEYS
+
+        self._solid_frame = ttk.LabelFrame(self, text="Grain profile")
+        self._solid_frame.grid(row=10, column=0, columnspan=2,
+                               sticky=tk.EW, padx=4, pady=(0, 4))
+        self._solid_frame.columnconfigure(1, weight=1)
+        self._solid_frame.grid_remove()
+
+        # Row 0: grain type selector
+        ttk.Label(self._solid_frame, text="Grain type:").grid(
+            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._grain_var = tk.StringVar(value=GRAIN_LABELS["star"])
+        self._grain_cb = ttk.Combobox(self._solid_frame, textvariable=self._grain_var,
+                                      values=_GRAIN_LABELS, state="readonly", width=28)
+        self._grain_cb.current(3)   # star
+        self._grain_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._grain_cb.bind("<<ComboboxSelected>>", self._on_grain_changed)
+
+        # Row 1: thrust specification toggle (peak vs average)
+        ttk.Label(self._solid_frame, text="Specify:").grid(
+            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        _tmode_f = ttk.Frame(self._solid_frame)
+        _tmode_f.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._thrust_mode_var = tk.StringVar(value="peak")
+        ttk.Radiobutton(_tmode_f, text="Peak thrust",
+                        variable=self._thrust_mode_var, value="peak",
+                        command=self._on_thrust_mode_changed).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(_tmode_f, text="Average thrust",
+                        variable=self._thrust_mode_var, value="average",
+                        command=self._on_thrust_mode_changed).pack(side=tk.LEFT)
+
+        # Row 2: computed alternate thrust
+        ttk.Label(self._solid_frame, text="Computed:").grid(
+            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._alt_thrust_lbl = ttk.Label(self._solid_frame, text="—",
+                                         foreground="navy")
+        self._alt_thrust_lbl.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+
+        # Row 3: boost-phase fraction (two-phase grains only)
+        self._boost_frac_lbl = ttk.Label(self._solid_frame, text="Boost phase:")
+        self._boost_frac_lbl.grid(row=3, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        _boost_f = ttk.Frame(self._solid_frame)
+        _boost_f.grid(row=3, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._boost_frac_var = tk.StringVar(value="35")
+        ttk.Entry(_boost_f, textvariable=self._boost_frac_var,
+                  width=6).pack(side=tk.LEFT)
+        ttk.Label(_boost_f, text="% of burn time").pack(side=tk.LEFT, padx=(4, 0))
+        self._boost_frac_inner = _boost_f
+        self._boost_frac_lbl.grid_remove()
+        self._boost_frac_inner.grid_remove()
+
+        # Row 4: custom CSV profile
+        ttk.Label(self._solid_frame, text="Custom profile:").grid(
+            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        _csv_f = ttk.Frame(self._solid_frame)
+        _csv_f.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._profile_path_var = tk.StringVar(value="")
+        ttk.Label(_csv_f, textvariable=self._profile_path_var,
+                  foreground="gray50", width=22,
+                  anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Button(_csv_f, text="Browse…",
+                   command=self._browse_profile).pack(side=tk.LEFT, padx=(6, 0))
+
+        # Row 5: fill-factor warning
+        self._fill_warn_lbl = ttk.Label(self._solid_frame, text="",
+                                        foreground="darkorange", wraplength=340)
+        self._fill_warn_lbl.grid(row=5, column=0, columnspan=2,
+                                 sticky=tk.W, padx=(6, 2), pady=(2, 4))
 
         # Recompute burn whenever any of the four driving fields change
         for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
@@ -513,7 +589,11 @@ class _StageFrame(ttk.LabelFrame):
         self._recompute_burn()
 
     def _recompute_burn(self, *_):
-        """Compute burn time = Isp × g₀ × prop / thrust and update the display."""
+        """Liquid: compute burn = Isp×g₀×prop/thrust.  Solid: update alt-thrust display."""
+        if getattr(self, '_solid_motor_var', None) and self._solid_motor_var.get():
+            # Solid motor: burn time is user-entered; update computed alternate thrust.
+            self._recompute_solid()
+            return
         try:
             prop     = float(self._fueled.get()) - float(self._dry.get())
             thrust_n = float(self._thrust_kn.get()) * 1000.0
@@ -523,6 +603,144 @@ class _StageFrame(ttk.LabelFrame):
             self._burn_var.set(f"{isp * self._G0 * prop / thrust_n:.1f}")
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
+
+    def _on_solid_toggled(self):
+        """Show/hide grain frame; switch burn field between computed and user-entered."""
+        is_solid = self._solid_motor_var.get()
+        if is_solid:
+            self._solid_frame.grid()
+            # Burn time becomes user-entered
+            self._burn_entry.config(state="normal")
+            self._burn_hint_lbl.config(text="s  (enter value)")
+            self._thrust_lbl.config(text=self._thrust_label_text())
+        else:
+            self._solid_frame.grid_remove()
+            self._burn_entry.config(state="readonly")
+            self._burn_hint_lbl.config(text="s  (computed)")
+            self._thrust_lbl.config(text="Thrust (kN):")
+            self._recompute_burn()
+
+    def _thrust_label_text(self):
+        mode = getattr(self, '_thrust_mode_var', None)
+        if mode and mode.get() == "average":
+            return "Avg thrust (kN):"
+        return "Peak thrust (kN):"
+
+    def _on_thrust_mode_changed(self):
+        self._thrust_lbl.config(text=self._thrust_label_text())
+        self._recompute_solid()
+
+    def _on_grain_changed(self, *_):
+        key = self._get_grain_key()
+        two_phase = key in ("multi_fin", "dual_composition")
+        if two_phase:
+            self._boost_frac_lbl.grid()
+            self._boost_frac_inner.grid()
+        else:
+            self._boost_frac_lbl.grid_remove()
+            self._boost_frac_inner.grid_remove()
+        self._recompute_solid()
+
+    def _get_grain_key(self):
+        label = self._grain_var.get()
+        for k, v in GRAIN_LABELS.items():
+            if v == label:
+                return k
+        return ""
+
+    def _recompute_solid(self, *_):
+        """Compute the alternate thrust and update the fill-factor warning."""
+        if not (hasattr(self, '_grain_cb') and self._solid_motor_var.get()):
+            return
+        key = self._get_grain_key()
+        fill = grain_fill_factor(key) if key else 1.0
+        try:
+            thrust_entered = float(self._thrust_kn.get())
+            mode = self._thrust_mode_var.get()
+            if mode == "peak":
+                alt_kn = thrust_entered * fill
+                self._alt_thrust_lbl.config(
+                    text=f"{alt_kn:.1f} kN  (average, fill factor {fill:.3f})")
+            else:
+                if fill > 0:
+                    alt_kn = thrust_entered / fill
+                    self._alt_thrust_lbl.config(
+                        text=f"{alt_kn:.1f} kN  (peak, fill factor {fill:.3f})")
+                else:
+                    self._alt_thrust_lbl.config(text="—")
+        except (ValueError, ZeroDivisionError):
+            self._alt_thrust_lbl.config(text="—")
+        # Fill-factor warning
+        if key and key in _GRAIN_FILL_RANGE:
+            lo, hi = _GRAIN_FILL_RANGE[key]
+            if not (lo <= fill <= hi):
+                self._fill_warn_lbl.config(
+                    text=f"\u26a0 Fill factor {fill:.3f} outside typical range "
+                         f"{lo}–{hi} for {GRAIN_LABELS.get(key, key)}")
+            else:
+                self._fill_warn_lbl.config(text="")
+        else:
+            self._fill_warn_lbl.config(text="")
+
+    def _browse_profile(self):
+        """Let user pick a CSV thrust-profile file; show preview plot."""
+        import tkinter.filedialog as fd
+        import csv as _csv
+        path = fd.askopenfilename(
+            parent=self,
+            title="Select thrust profile CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
+        if not path:
+            return
+        # Parse two-column CSV: t_frac, F_frac
+        pairs = []
+        try:
+            with open(path, newline='') as f:
+                reader = _csv.reader(f)
+                for row in reader:
+                    row = [c.strip() for c in row if c.strip()]
+                    if len(row) >= 2:
+                        try:
+                            pairs.append((float(row[0]), float(row[1])))
+                        except ValueError:
+                            pass   # skip header rows
+        except OSError as exc:
+            tk.messagebox.showerror("Cannot open file", str(exc), parent=self)
+            return
+        if len(pairs) < 2:
+            tk.messagebox.showerror(
+                "Invalid profile",
+                "File must contain at least two rows with columns: t_frac, F_frac",
+                parent=self)
+            return
+        import os
+        self._profile_path_var.set(os.path.basename(path))
+        self._profile_data = pairs   # stored for get()
+        self._show_profile_preview(pairs, path)
+
+    def _show_profile_preview(self, pairs, path):
+        """Pop up a small Matplotlib preview of the thrust profile."""
+        try:
+            import matplotlib
+            matplotlib.use("TkAgg")
+            import matplotlib.pyplot as _plt
+        except ImportError:
+            tk.messagebox.showinfo(
+                "No preview",
+                "matplotlib is not installed; profile loaded without preview.",
+                parent=self)
+            return
+        fig, ax = _plt.subplots(figsize=(5, 3), tight_layout=True)
+        ts = [p[0] for p in pairs]
+        fs = [p[1] for p in pairs]
+        ax.step(ts, fs, where='post', color='steelblue', linewidth=1.5)
+        ax.set_xlabel("t / burn time")
+        ax.set_ylabel("F / F_peak")
+        ax.set_title(f"Thrust profile: {path}")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, None)
+        ax.grid(True, alpha=0.3)
+        _plt.show()
 
     @staticmethod
     def _iter_entries(widget):
@@ -709,8 +927,15 @@ class _StageFrame(ttk.LabelFrame):
         state = "readonly" if readonly else "normal"
         cb_state = "disabled" if readonly else "normal"
         self._solid_motor_check.config(state=cb_state)
+        self._grain_cb.config(state="disabled" if readonly else "readonly")
         for entry in self._iter_entries(self):
-            if entry is not self._burn_entry:   # burn time is always readonly
+            # Burn entry: readonly unless solid motor is enabled (managed by _on_solid_toggled)
+            if entry is self._burn_entry:
+                if not readonly and self._solid_motor_var.get():
+                    entry.config(state="normal")
+                else:
+                    entry.config(state="readonly")
+            else:
                 entry.config(state=state)
 
     def set_coast_visible(self, visible: bool):
@@ -749,6 +974,28 @@ class _StageFrame(ttk.LabelFrame):
         except ValueError:
             raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
         result["solid_motor"] = bool(self._solid_motor_var.get())
+
+        # Solid-motor grain fields
+        result["grain_type"]    = ""
+        result["thrust_peak_N"] = 0.0
+        result["thrust_profile"] = []
+        if result["solid_motor"]:
+            grain_key = self._get_grain_key()
+            result["grain_type"] = grain_key
+            fill = grain_fill_factor(grain_key) if grain_key else 1.0
+            try:
+                thrust_entered_n = float(self._thrust_kn.get()) * 1000.0
+                if self._thrust_mode_var.get() == "peak":
+                    result["thrust_peak_N"] = thrust_entered_n
+                    # thrust_kn already holds peak; override to avg for prop-mass consistency
+                    result["thrust_kn"] = thrust_entered_n * fill / 1000.0
+                else:
+                    result["thrust_peak_N"] = (thrust_entered_n / fill
+                                               if fill > 0 else thrust_entered_n)
+                    # thrust_kn holds avg — leave as is
+            except ValueError:
+                pass
+            result["thrust_profile"] = getattr(self, '_profile_data', [])
         return result
 
     def populate(self, d):
@@ -766,9 +1013,37 @@ class _StageFrame(ttk.LabelFrame):
         self._thrust_kn   .set(f"{thrust_kn:.1f}")
         self._isp         .set(str(d["isp"]))
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
-        # _burn_var is updated automatically by the trace
+        # _burn_var is updated automatically by the trace (liquid) or set directly (solid)
         self._coast_var   .set(str(d.get("coast", 0)))
         self._solid_motor_var.set(bool(d.get("solid_motor", False)))
+
+        # Grain profile fields
+        grain_key = d.get("grain_type", "")
+        if grain_key and grain_key in GRAIN_LABELS:
+            self._grain_var.set(GRAIN_LABELS[grain_key])
+        else:
+            self._grain_var.set(GRAIN_LABELS.get("star", ""))
+
+        thrust_peak_N = float(d.get("thrust_peak_N", 0.0))
+        if thrust_peak_N > 0.0:
+            self._thrust_mode_var.set("peak")
+            self._thrust_kn.set(f"{thrust_peak_N / 1000.0:.1f}")
+        else:
+            self._thrust_mode_var.set("peak")
+
+        profile = d.get("thrust_profile", [])
+        self._profile_data = [tuple(p) for p in profile] if profile else []
+        if self._profile_data:
+            self._profile_path_var.set(f"<{len(self._profile_data)} pts>")
+        else:
+            self._profile_path_var.set("")
+
+        # Trigger UI state update
+        if self._solid_motor_var.get():
+            self._on_solid_toggled()
+            self._on_grain_changed()
+            # For solid, burn time was saved as-is — restore directly
+            self._burn_var.set(f"{d['burn']:.1f}")
 
 
 # ---------------------------------------------------------------------------
@@ -1417,6 +1692,9 @@ class MissileDialog(tk.Toplevel):
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
                 solid_motor=bool(sd.get("solid_motor", False)),
+                grain_type=sd.get("grain_type", ""),
+                thrust_peak_N=float(sd.get("thrust_peak_N", 0.0)),
+                thrust_profile=list(sd.get("thrust_profile", [])),
             )
 
         node.name                   = name

@@ -99,6 +99,14 @@ class MissileParams:
     # the resulting orbit rather than commanding a cutoff at the target energy.
     solid_motor:   bool  = False
 
+    # Solid-motor grain profile (Shafer 1959).
+    # grain_type: canonical key from _GRAIN_CURVES, or "" for liquid / constant.
+    # thrust_peak_N: peak vacuum thrust (N); 0 = derive from thrust_N.
+    # thrust_profile: bespoke [(t_frac, F_frac), ...] list; overrides grain_type.
+    grain_type:     str  = ""
+    thrust_peak_N:  float = 0.0
+    thrust_profile: list = field(default_factory=list)
+
     # ── Per-stage advanced pitch program (optional) ──────────────────────────
     # When set on a stage, these override the top-level turn_start / turn_stop /
     # burnout_angle for that stage's burn interval.  None = use global values.
@@ -198,6 +206,75 @@ _WAVE_LD_REF = 3.0
 # Base pressure coefficient (Cpb < 0) vs Mach, power-off — Chin Fig. 3-15.
 _BASE_MACH = [0.0,    0.8,   1.0,   1.2,   1.5,   2.0,   2.5,   3.0,   4.0,   5.0]
 _BASE_CPB  = [0.000, -0.13, -0.20, -0.18, -0.14, -0.10, -0.08, -0.06, -0.05, -0.04]
+
+
+# ---------------------------------------------------------------------------
+# Solid-rocket-motor grain profiles  (Shafer 1959, Ch.16, Space Technology)
+# Normalised (t/burn_time, F/F_peak) piecewise-linear curves.
+# ---------------------------------------------------------------------------
+_GRAIN_CURVES = {
+    # Progressive: growing internal port — thrust rises through burn.
+    "tubular":          [(0.0, 0.700), (0.25, 0.775), (0.50, 0.850),
+                         (0.75, 0.925), (1.0, 1.000)],
+    # Neutral: rod + annular tube areas cancel — nearly flat.
+    "rod_tube":         [(0.0, 1.000), (0.50, 1.000), (1.0, 0.970)],
+    # Regressive: large initial web area decreases with burnback.
+    "double_anchor":    [(0.0, 1.000), (0.25, 0.875), (0.50, 0.750),
+                         (0.75, 0.625), (1.0, 0.500)],
+    # Neutral: star port maintains near-constant burning perimeter.
+    "star":             [(0.0, 0.950), (0.10, 1.000), (0.40, 1.000),
+                         (0.70, 0.980), (1.0, 0.950)],
+    # Two-phase boost-sustain: high initial thrust then step down.
+    "multi_fin":        [(0.0, 1.000), (0.35, 1.000), (0.40, 0.450), (1.0, 0.430)],
+    # Two-phase: high-energy outer propellant then lower-energy core.
+    "dual_composition": [(0.0, 1.000), (0.30, 1.000), (0.33, 0.300), (1.0, 0.280)],
+}
+
+GRAIN_LABELS = {
+    "tubular":          "Tubular (progressive)",
+    "rod_tube":         "Rod and tube (neutral)",
+    "double_anchor":    "Double anchor (regressive)",
+    "star":             "Star (neutral)",
+    "multi_fin":        "Multi-fin (two-phase)",
+    "dual_composition": "Dual composition (two-phase)",
+}
+
+# Realistic fill-factor (F_avg/F_peak) ranges per grain type — for UI warnings.
+_GRAIN_FILL_RANGE = {
+    "tubular":          (0.70, 0.95),
+    "rod_tube":         (0.90, 1.00),
+    "double_anchor":    (0.60, 0.85),
+    "star":             (0.85, 1.00),
+    "multi_fin":        (0.50, 0.75),
+    "dual_composition": (0.35, 0.60),
+}
+
+
+def grain_fill_factor(grain_type: str) -> float:
+    """F_avg/F_peak (fill factor) computed by trapezoidal integration of the grain curve."""
+    curve = _GRAIN_CURVES.get(grain_type)
+    if curve is None:
+        return 1.0
+    total = 0.0
+    for i in range(len(curve) - 1):
+        t0, f0 = curve[i]; t1, f1 = curve[i + 1]
+        total += 0.5 * (f0 + f1) * (t1 - t0)
+    return total
+
+
+def _instantaneous_thrust_frac(grain_type: str, t_frac: float,
+                                thrust_profile=None) -> float:
+    """Return F(t)/F_peak at normalised time t/burn_time."""
+    if thrust_profile:
+        ts = [p[0] for p in thrust_profile]
+        fs = [p[1] for p in thrust_profile]
+        return _lin_interp(t_frac, ts, fs)
+    curve = _GRAIN_CURVES.get(grain_type)
+    if curve is None:
+        return 1.0
+    ts = [p[0] for p in curve]
+    fs = [p[1] for p in curve]
+    return _lin_interp(t_frac, ts, fs)
 
 
 def _lin_interp(x, xs, ys):
@@ -926,6 +1003,9 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_diameter_m':      p.shroud_diameter_m,
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
         'solid_motor':            p.solid_motor,
+        'grain_type':             p.grain_type,
+        'thrust_peak_N':          p.thrust_peak_N,
+        'thrust_profile':         list(p.thrust_profile),
         'nose_shape':             p.nose_shape,
         'nose_length_m':          p.nose_length_m,
         'shroud_nose_shape':      p.shroud_nose_shape,
@@ -991,6 +1071,9 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_diameter_m=float(d.get('shroud_diameter_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
+        grain_type=d.get('grain_type', ''),
+        thrust_peak_N=float(d.get('thrust_peak_N', 0.0)),
+        thrust_profile=list(d.get('thrust_profile', [])),
         nose_shape=d.get('nose_shape', ''),
         nose_length_m=float(d.get('nose_length_m',
                             float(d.get('nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
@@ -1228,12 +1311,20 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
     while s is not None:
         if t_rem <= s.burn_time_s:
             _, P_amb, _, _ = atmosphere(altitude_m)
-            if s.nozzle_exit_area_m2 > 0:
-                # Physics-based correction: T(h) = T_vac − P_amb × Ae
-                thrust_mag = max(0.0, s.thrust_N - P_amb * s.nozzle_exit_area_m2)
+            # Instantaneous vacuum thrust: grain modulation or constant.
+            if s.grain_type or s.thrust_profile:
+                T_peak = s.thrust_peak_N if s.thrust_peak_N > 0.0 else s.thrust_N
+                t_frac = t_rem / s.burn_time_s if s.burn_time_s > 0.0 else 0.0
+                frac   = _instantaneous_thrust_frac(
+                    s.grain_type, t_frac,
+                    s.thrust_profile if s.thrust_profile else None)
+                T_vac = T_peak * frac
             else:
-                # Legacy approximation: ~2 % back-pressure penalty at sea level
-                thrust_mag = s.thrust_N * (1.0 - 0.02 * (P_amb / 101325.0))
+                T_vac = s.thrust_N
+            if s.nozzle_exit_area_m2 > 0:
+                thrust_mag = max(0.0, T_vac - P_amb * s.nozzle_exit_area_m2)
+            else:
+                thrust_mag = T_vac * (1.0 - 0.02 * (P_amb / 101325.0))
             return thrust_mag * thrust_dir
         t_rem -= s.burn_time_s
         if s.stage2 is None:
