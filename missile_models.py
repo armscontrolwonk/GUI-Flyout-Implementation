@@ -53,7 +53,7 @@ class MissileParams:
     #                    vector (IRBM/ICBM).  loft_angle_deg here is the kick
     #                    elevation (°, above horizontal; e.g. 85° = 5° from
     #                    vertical) and loft_angle_rate_deg_s is the kick rate.
-    guidance: str = "loft"
+    guidance: str = "gravity_turn"
 
     loft_angle_deg: float = 45.0        # Forden: final elev (°); GT: kick elev (°)
     loft_angle_rate_deg_s: float = 2.0  # Forden: pitch rate (°/s); GT: kick rate
@@ -503,9 +503,13 @@ def _scud_b():
         burn_time_s=75.0,
         isp_s=230.0,
         payload_kg=1000.0,
-        # Loft angle / rate from Forden Figure 3 (SCUD-B example trajectory)
+        # Pitch profile from Forden Figure 3: 90°→47.66° at 1.348°/s (≈31.4 s)
+        guidance="gravity_turn",
         loft_angle_deg=47.6563,
         loft_angle_rate_deg_s=1.348,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=31.4,
+        stage_burnout_angle_deg=47.6563,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -525,8 +529,12 @@ def _al_hussein():
         burn_time_s=90.0,
         isp_s=230.0,
         payload_kg=191.0,
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=45.0,
+        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -546,8 +554,12 @@ def _nodong():
         burn_time_s=70.0,
         isp_s=240.0,
         payload_kg=1000.0,
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.5,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=30.0,
+        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -569,8 +581,10 @@ def _taepodong_i():
         thrust_N=round(_thrust_from_isp(230, prop2, 75)),   # ≈ 111 200 N
         burn_time_s=75.0,
         isp_s=230.0,
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
+        stage_burnout_angle_deg=45.0,   # hold at stage-1 burnout angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -590,8 +604,12 @@ def _taepodong_i():
         burn_time_s=70.0,
         isp_s=240.0,
         payload_kg=454.0,
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=45.0,
+        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -614,8 +632,12 @@ def _shahab3():
         thrust_N=round(_thrust_from_isp(230, prop, 97)),
         burn_time_s=97.0,
         isp_s=230.0,
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.5,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=30.0,
+        stage_burnout_angle_deg=45.0,
         mach_table=mach,
         cd_table=cd,
     )
@@ -635,8 +657,10 @@ def _generic_icbm():
         thrust_N=round(_thrust_from_isp(290, prop2, 120)),
         burn_time_s=120.0,
         isp_s=290.0,
+        guidance="gravity_turn",
         loft_angle_deg=30.0,
         loft_angle_rate_deg_s=0.5,
+        stage_burnout_angle_deg=30.0,
         mach_table=mach,
         cd_table=cd,
     )
@@ -651,8 +675,12 @@ def _generic_icbm():
         thrust_N=round(_thrust_from_isp(280, prop1, 150)),
         burn_time_s=150.0,
         isp_s=280.0,
+        guidance="gravity_turn",
         loft_angle_deg=30.0,
         loft_angle_rate_deg_s=0.5,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=120.0,
+        stage_burnout_angle_deg=30.0,
         mach_table=mach,
         cd_table=cd,
         stage2=stage2,
@@ -676,8 +704,10 @@ def _taepodong_ii():
         thrust_N=round(_thrust_from_isp(275, prop3, 50)),
         burn_time_s=50.0,
         isp_s=275.0,
+        guidance="gravity_turn",
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
+        stage_burnout_angle_deg=40.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -694,8 +724,10 @@ def _taepodong_ii():
         thrust_N=round(_thrust_from_isp(230, prop2, 75)),
         burn_time_s=75.0,
         isp_s=230.0,
+        guidance="gravity_turn",
         loft_angle_deg=35.0,
         loft_angle_rate_deg_s=0.6,
+        stage_burnout_angle_deg=40.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage3,
@@ -714,8 +746,12 @@ def _taepodong_ii():
         burn_time_s=70.0,
         isp_s=240.0,
         payload_kg=500.0,
+        guidance="gravity_turn",
         loft_angle_deg=40.0,
         loft_angle_rate_deg_s=0.8,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=62.5,
+        stage_burnout_angle_deg=40.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -761,8 +797,10 @@ def _zoljanah():
         thrust_N=round(_thrust_from_isp(isp2, prop, burn)),
         burn_time_s=burn,
         isp_s=isp2,
+        guidance="gravity_turn",
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
+        stage_burnout_angle_deg=35.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -782,8 +820,12 @@ def _zoljanah():
         thrust_N=round(_thrust_from_isp(isp1, prop, burn)),
         burn_time_s=burn,
         isp_s=isp1,
+        guidance="gravity_turn",
         loft_angle_deg=35.0,
         loft_angle_rate_deg_s=0.8,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=68.8,
+        stage_burnout_angle_deg=35.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -838,9 +880,10 @@ def _zoljanah_slv():
         burn_time_s=burn3,
         isp_s=isp3,
         nozzle_exit_area_m2=0.14,    # 2 × 0.3 m diameter verniers
-        guidance="loft",
+        guidance="gravity_turn",
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
+        stage_burnout_angle_deg=45.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -863,9 +906,10 @@ def _zoljanah_slv():
         burn_time_s=71.0,
         isp_s=isp2,
         nozzle_exit_area_m2=1.77,
-        guidance="loft",
+        guidance="gravity_turn",
         loft_angle_deg=35.0,
         loft_angle_rate_deg_s=0.6,
+        stage_burnout_angle_deg=45.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage3,
@@ -888,9 +932,12 @@ def _zoljanah_slv():
         burn_time_s=71.0,
         isp_s=isp1,
         nozzle_exit_area_m2=0.90,
-        guidance="loft",
+        guidance="gravity_turn",
         loft_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=45.0,
+        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -923,10 +970,11 @@ def _aur():
         burn_time_s=63.0,
         isp_s=280.0,
         nozzle_exit_area_m2=0.30,
-        guidance="loft",
+        guidance="gravity_turn",
         # Depressed-trajectory — starting values; tune experimentally.
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=3.0,
+        stage_burnout_angle_deg=25.0,   # hold at stage-1 target angle
         coast_time_s=0.0,
         # Empty tables → legacy 2 % sea-level back-pressure approximation used.
         mach_table=[],
@@ -948,10 +996,13 @@ def _aur():
         burn_time_s=54.0,
         isp_s=280.0,
         nozzle_exit_area_m2=0.30,
-        guidance="loft",
+        guidance="gravity_turn",
         # Depressed-trajectory — starting values; tune experimentally.
         loft_angle_deg=25.0,
         loft_angle_rate_deg_s=3.0,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=21.7,
+        stage_burnout_angle_deg=25.0,
         coast_time_s=0.0,
         payload_kg=450.0,
         rv_beta_kg_m2=1500.0,
@@ -972,6 +1023,31 @@ def get_missile(name: str) -> MissileParams:
     if name not in MISSILE_DB:
         raise ValueError(f"Unknown missile '{name}'. Available: {list(MISSILE_DB)}")
     return MISSILE_DB[name]()
+
+
+def _convert_loft_to_gravity_turn(p: MissileParams) -> None:
+    """In-place conversion of a 'loft' missile to equivalent gravity_turn pitch overrides.
+
+    The Forden formula el(t)=max(la, 90−rate·t) is mathematically identical to
+    a linear gravity_turn with turn_start=0 and turn_stop=(90−la)/rate.
+    """
+    la   = p.loft_angle_deg
+    rate = p.loft_angle_rate_deg_s
+    p.guidance = 'gravity_turn'
+    if p.stage_turn_start_s is None:
+        p.stage_turn_start_s = 0.0
+    if p.stage_turn_stop_s is None and rate > 0:
+        p.stage_turn_stop_s = round((90.0 - la) / rate, 1)
+    if p.stage_burnout_angle_deg is None:
+        p.stage_burnout_angle_deg = la
+    # Inner stages: set guidance and hold at the top-level target angle.
+    s = p.stage2
+    while s is not None:
+        if s.guidance == 'loft':
+            s.guidance = 'gravity_turn'
+        if s.stage_burnout_angle_deg is None:
+            s.stage_burnout_angle_deg = la
+        s = s.stage2
 
 
 def missile_to_dict(p: MissileParams) -> dict:
@@ -1042,7 +1118,7 @@ def missile_from_dict(d: dict) -> MissileParams:
     isp   = float(d['isp_s'])
     m0    = float(d['mass_initial'])
     stage2 = missile_from_dict(d['stage2']) if d.get('stage2') else None
-    return MissileParams(
+    _p = MissileParams(
         name=d['name'],
         mass_initial=m0,
         mass_propellant=prop,
@@ -1053,7 +1129,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         burn_time_s=burn,
         coast_time_s=float(d.get('coast_time_s', 0.0)),
         isp_s=isp,
-        guidance=d.get('guidance', 'loft'),
+        guidance=d.get('guidance', 'gravity_turn'),
         loft_angle_deg=float(d.get('loft_angle_deg', 45.0)),
         loft_angle_rate_deg_s=float(d.get('loft_angle_rate_deg_s', 2.0)),
         mach_table=list(d.get('mach_table', _FORDEN_MACH)),
@@ -1099,6 +1175,11 @@ def missile_from_dict(d: dict) -> MissileParams:
         stage_yaw_final_az_deg=(float(d['stage_yaw_final_az_deg'])
                                 if d.get('stage_yaw_final_az_deg') is not None else None),
     )
+    # Backwards compatibility: old saved missiles with guidance="loft" are
+    # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
+    if d.get('guidance', '') == 'loft':
+        _convert_loft_to_gravity_turn(_p)
+    return _p  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

@@ -1329,13 +1329,10 @@ class MissileDialog(tk.Toplevel):
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
         gf.pack(fill=tk.X, padx=8, pady=4)
-        self._guidance_var = tk.StringVar(value="loft")
-        ttk.Radiobutton(gf, text="Forden Loft (SRBM / MRBM)",
-                        variable=self._guidance_var, value="loft").pack(
-            anchor=tk.W, padx=8, pady=(4, 0))
-        ttk.Radiobutton(gf, text="Gravity Turn (IRBM / ICBM)",
+        self._guidance_var = tk.StringVar(value="gravity_turn")
+        ttk.Radiobutton(gf, text="Gravity Turn (SRBM / MRBM / IRBM / ICBM)",
                         variable=self._guidance_var, value="gravity_turn").pack(
-            anchor=tk.W, padx=8, pady=(0, 2))
+            anchor=tk.W, padx=8, pady=(4, 2))
         ttk.Radiobutton(gf, text="Orbital Insertion",
                         variable=self._guidance_var, value="orbital_insertion").pack(
             anchor=tk.W, padx=8, pady=(0, 4))
@@ -2759,13 +2756,10 @@ class MissileFlyoutApp(tk.Tk):
         self._guidance_frame = gf          # saved for dynamic grid management
         gf.columnconfigure(1, weight=1)    # column 1 fills available width
 
-        self._guidance_var = tk.StringVar(value="loft")
+        self._guidance_var = tk.StringVar(value="gravity_turn")
         gmode_frame = ttk.Frame(gf)
         gmode_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W,
                          padx=6, pady=(4, 2))
-        ttk.Radiobutton(gmode_frame, text="Forden Loft",
-                        variable=self._guidance_var, value="loft",
-                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(gmode_frame, text="Gravity Turn",
                         variable=self._guidance_var, value="gravity_turn",
                         command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
@@ -2881,17 +2875,13 @@ class MissileFlyoutApp(tk.Tk):
         self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
                                   sticky=tk.EW, padx=8, pady=(4, 6))
 
-        # Hide turn-start/stop, orbit-alt, plan-orbit, adv-pitch, and yaw rows by
-        # default (loft mode is active at startup)
-        self._gt_turn_start_lbl.grid_forget()
-        self._gt_turn_start_frame.grid_forget()
-        self._gt_turn_stop_lbl.grid_forget()
-        self._gt_turn_stop_frame.grid_forget()
+        # Initialise guidance-specific row visibility for the default mode.
         self._orbit_alt_lbl.grid_forget()
         self._orbit_alt_frame.grid_forget()
         self._plan_orbit_btn.grid_forget()
         self._adv_pitch_chk.grid_forget()
         self._adv_yaw_chk.grid_forget()
+        self._update_guidance_labels("gravity_turn")
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -5847,7 +5837,7 @@ class MissileFlyoutApp(tk.Tk):
             "  • COESA 1976 standard atmosphere\n"
             "  • WGS-84 J2 gravity (ECEF)\n"
             "  • Coriolis & centrifugal corrections\n"
-            "  • Per-stage loft-angle guidance (Forden Eq. 8)\n"
+            "  • Gravity-turn guidance with per-stage pitch profiles\n"
             "  • Up to 4 stages with inter-stage coast\n\n"
             "Packaged missiles (Forden Table 1 + extension):\n"
             "  Scud-B, Al Hussein, No-dong,\n"
