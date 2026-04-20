@@ -2652,6 +2652,15 @@ class MissileFlyoutApp(tk.Tk):
         # Right panel — tabbed notebook (Plots | Flight Timeline)
         right = ttk.Frame(top)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Pinned results strip — always visible above the notebook tabs
+        self._results_strip_var = tk.StringVar(value="")
+        results_strip = ttk.Frame(right, relief=tk.GROOVE, borderwidth=1)
+        results_strip.pack(fill=tk.X, padx=2, pady=(0, 3))
+        ttk.Label(results_strip, textvariable=self._results_strip_var,
+                  anchor=tk.W, font=("", 9, "bold")).pack(
+            fill=tk.X, padx=8, pady=3)
+
         self._right_nb = ttk.Notebook(right)
         self._right_nb.pack(fill=tk.BOTH, expand=True)
 
@@ -4394,25 +4403,20 @@ class MissileFlyoutApp(tk.Tk):
                        f"  T={oe['period_min']:.1f} min")
 
         if orbital and r.get('max_range_km') is None:
-            self._status_var.set(
-                "Max Range: no sub-orbital solution found — "
-                "vehicle exceeds orbital velocity at all tested burnout angles.  "
-                f"Apogee: {apogee_km*scale:.1f} {ulbl}"
-            )
+            _strip = (f"No sub-orbital solution — exceeds orbital velocity.  "
+                      f"Apogee: {apogee_km*scale:.1f} {ulbl}")
+            self._status_var.set("Max Range: " + _strip)
         elif orbital:
-            self._status_var.set(
-                f"In orbit (no ground impact within integration window).  "
-                f"Apogee: {apogee_km*scale:.1f} {ulbl}"
-                + _oe_str
-            )
+            _strip = (f"In orbit.  Apogee: {apogee_km*scale:.1f} {ulbl}" + _oe_str)
+            self._status_var.set(_strip)
         else:
-            self._status_var.set(
-                f"Done.  Range: {rng_km*scale:.1f} {ulbl}  |  "
-                f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
-                f"ToF: {tof_s:.0f} s  |  "
-                f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
-                f"Impact spd: {imp_spd_kms:.2f} km/s"
-            )
+            _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
+                      f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
+                      f"ToF: {tof_s:.0f} s  |  "
+                      f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
+                      f"Impact spd: {imp_spd_kms:.2f} km/s")
+            self._status_var.set("Done.  " + _strip)
+        self._results_strip_var.set(_strip)
         self._plot_results(r, scale, ulbl)
         self._populate_timeline(r)
 
