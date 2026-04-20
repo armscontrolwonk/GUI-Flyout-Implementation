@@ -126,13 +126,13 @@ class MissileParams:
     shroud_length_m:        float = 0.0
     shroud_diameter_m:      float = 0.0   # outer diameter of shroud/fairing (m)
 
-    # Nose-shape aerodynamics (FerencDV / HyperCFD model).
-    # "forden" = use mach_table/cd_table (default, existing behaviour).
+    # Nose-shape aerodynamics (Chin/NACA decomposed model).
+    # "" = no shape set → drag_force_vector falls back to mach_table/cd_table.
     # L/D is computed internally as nose_length_m / diameter_m (or shroud_diameter_m).
     # 0 = not specified → L/D defaults to 3.0 inside _cd_nose_shape.
-    nose_shape:             str   = "forden"
+    nose_shape:             str   = ""
     nose_length_m:          float = 0.0    # physical nose-cone length (m)
-    shroud_nose_shape:      str   = "forden"
+    shroud_nose_shape:      str   = ""
     shroud_nose_length_m:   float = 0.0    # physical shroud nose-cone length (m)
 
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
@@ -143,7 +143,7 @@ class MissileParams:
     # RV geometry — stored for round-tripping the β calculator dialog.
     # These do not directly affect the trajectory equations of motion;
     # they are used only to pre-populate the "Estimate β" popup.
-    rv_shape:      str   = "forden"
+    rv_shape:      str   = ""
     rv_diameter_m: float = 0.0
     rv_length_m:   float = 0.0
 
@@ -164,11 +164,10 @@ _FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
 # Cd_total = Cd_wave_nose + Cd_friction + Cd_base
 # ---------------------------------------------------------------------------
 
-NOSE_SHAPES = ["forden", "cone", "tangent_ogive", "von_karman",
+NOSE_SHAPES = ["cone", "tangent_ogive", "von_karman",
                "lv_haack", "parabola", "blunt_cylinder"]
 
 NOSE_SHAPE_LABELS = {
-    "forden":         "Forden (generic)",
     "cone":           "Cone",
     "tangent_ogive":  "Tangent Ogive",
     "von_karman":     "Von Kármán (LD-Haack)",
@@ -992,14 +991,14 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_diameter_m=float(d.get('shroud_diameter_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
         solid_motor=bool(d.get('solid_motor', False)),
-        nose_shape=d.get('nose_shape', 'forden'),
+        nose_shape=d.get('nose_shape', ''),
         nose_length_m=float(d.get('nose_length_m',
                             float(d.get('nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
-        shroud_nose_shape=d.get('shroud_nose_shape', 'forden'),
+        shroud_nose_shape=d.get('shroud_nose_shape', ''),
         shroud_nose_length_m=float(d.get('shroud_nose_length_m',
                             float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
-        rv_shape=d.get('rv_shape', 'forden'),
+        rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
         rv_length_m=float(d.get('rv_length_m', 0.0)),
         pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
