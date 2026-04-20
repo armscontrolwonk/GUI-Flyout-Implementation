@@ -902,7 +902,7 @@ class MissileDialog(tk.Toplevel):
         # ── Row 1: Payload shape ─────────────────────────────────────────────
         ttk.Label(pl, text="Payload shape:").grid(
             row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._payload_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
+        self._payload_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
         self._payload_shape_cb = ttk.Combobox(
             pl, textvariable=self._payload_shape_var,
             values=_ns_labels, state="readonly", width=18)
@@ -1031,7 +1031,7 @@ class MissileDialog(tk.Toplevel):
             self._shroud_section, "Mass (kg):", 0, "0", "kg")
         ttk.Label(self._shroud_section, text="Shape:").grid(
             row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._shroud_nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["forden"])
+        self._shroud_nose_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
         self._shroud_nose_shape_cb = ttk.Combobox(
             self._shroud_section, textvariable=self._shroud_nose_shape_var,
             values=_ns_labels, state="readonly", width=18)
@@ -1254,14 +1254,14 @@ class MissileDialog(tk.Toplevel):
             self._pbv_length_var.set("0")
         self._rv_beta_var.set(f"{p.rv_beta_kg_m2:.0f}")
         self._rv_shape_var.set(
-            NOSE_SHAPE_LABELS.get(getattr(p, 'rv_shape', 'forden'),
-                                  NOSE_SHAPE_LABELS["forden"]))
+            NOSE_SHAPE_LABELS.get(getattr(p, 'rv_shape', ''),
+                                  NOSE_SHAPE_LABELS["cone"]))
         self._rv_diameter_var.set(f"{getattr(p, 'rv_diameter_m', 0.0):.2f}")
         self._rv_length_var.set(f"{getattr(p, 'rv_length_m', 0.0):.2f}")
 
         # Payload shape / diameter / length
         self._payload_shape_var.set(
-            NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["forden"]))
+            NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["cone"]))
         self._payload_diameter_var.set(
             f"{getattr(p, 'payload_diameter_m', 0.0):.2f}")
         self._payload_length_var.set(f"{p.nose_length_m:.2f}")
@@ -1274,7 +1274,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_var.set(f"{p.shroud_length_m:.1f}")
         self._shroud_diameter_var.set(f"{p.shroud_diameter_m:.2f}")
         self._shroud_nose_shape_var.set(
-            NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, NOSE_SHAPE_LABELS["forden"]))
+            NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, NOSE_SHAPE_LABELS["cone"]))
         self._shroud_nose_length_var.set(f"{p.shroud_nose_length_m:.2f}")
 
         # Apply show/hide state for all sections
@@ -1322,7 +1322,7 @@ class MissileDialog(tk.Toplevel):
         # Payload shape / diameter / length
         _ps_label = self._payload_shape_var.get()
         nose_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _ps_label),
-                          "forden")
+                          "")
         try:
             payload_diameter_m = float(self._payload_diameter_var.get())
             nose_length_m      = float(self._payload_length_var.get())
@@ -1332,7 +1332,7 @@ class MissileDialog(tk.Toplevel):
         # RV geometry (round-trips the Estimate β dialog)
         _rv_shape_lbl = self._rv_shape_var.get()
         rv_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _rv_shape_lbl),
-                        "forden")
+                        "")
         try:
             rv_diameter_m = float(self._rv_diameter_var.get()) if rv_separates else 0.0
             rv_length_m   = float(self._rv_length_var.get())   if rv_separates else 0.0
@@ -1353,7 +1353,7 @@ class MissileDialog(tk.Toplevel):
         shroud_alt_km        = 80.0
         shroud_length_m      = 0.0
         shroud_diameter_m    = 0.0
-        shroud_nose_shape    = "forden"
+        shroud_nose_shape    = ""
         shroud_nose_length_m = 0.0
         if self._shroud_var.get():
             try:
@@ -1366,7 +1366,7 @@ class MissileDialog(tk.Toplevel):
                 raise ValueError("Shroud fields must be numbers.")
             _slabel = self._shroud_nose_shape_var.get()
             shroud_nose_shape = next(
-                (k for k, v in NOSE_SHAPE_LABELS.items() if v == _slabel), "forden")
+                (k for k, v in NOSE_SHAPE_LABELS.items() if v == _slabel), "")
 
         # Read and validate all active stage frames
         stages = []
@@ -3640,7 +3640,7 @@ class MissileFlyoutApp(tk.Tk):
             elif _rv_beta > 0:
                 _row2(af, r, "RV β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
             _rv_shape_s = NOSE_SHAPE_LABELS.get(
-                getattr(p, 'rv_shape', 'forden'), NOSE_SHAPE_LABELS['forden'])
+                getattr(p, 'rv_shape', ''), NOSE_SHAPE_LABELS['cone'])
             _rv_d = getattr(p, 'rv_diameter_m', 0.0)
             _rv_l = getattr(p, 'rv_length_m', 0.0)
             _row2(af, r, "RV shape:", _rv_shape_s,
