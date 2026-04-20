@@ -218,6 +218,59 @@ def _save_custom_missiles():
 
 _SITE_SEPARATOR = "──────────────────────────────"
 
+
+def _bind_typeahead(cb):
+    """
+    Add prefix-typeahead to a readonly ttk.Combobox.
+
+    While the combobox (or its embedded entry) has focus, typing any
+    printable characters accumulates a prefix and selects the first list
+    item whose text starts with that prefix (case-insensitive).  The
+    accumulated prefix resets one second after the last keystroke.
+    Separator-style entries (those whose text begins with '─') are skipped.
+    A match fires <<ComboboxSelected>> so existing callbacks work unchanged.
+    """
+    state = {'prefix': '', 'timer': None}
+
+    def _reset():
+        state['prefix'] = ''
+        state['timer'] = None
+
+    def _on_key(event):
+        ch = event.char
+        if not ch or not ch.isprintable():
+            return 'break' if ch == '\r' else None
+        if state['timer'] is not None:
+            cb.after_cancel(state['timer'])
+        state['prefix'] += ch
+        _try_select()
+        state['timer'] = cb.after(1000, _reset)
+        return 'break'
+
+    def _try_select():
+        prefix = state['prefix'].lower()
+        values = cb['values']
+        match = next(
+            (v for v in values
+             if not v.startswith('─') and v.lower().startswith(prefix)),
+            None,
+        )
+        if match is None and len(state['prefix']) > 1:
+            # No multi-char match — restart with just the latest character.
+            state['prefix'] = state['prefix'][-1]
+            prefix = state['prefix'].lower()
+            match = next(
+                (v for v in values
+                 if not v.startswith('─') and v.lower().startswith(prefix)),
+                None,
+            )
+        if match is not None:
+            cb.set(match)
+            cb.event_generate('<<ComboboxSelected>>')
+
+    cb.bind('<KeyPress>', _on_key)
+
+
 # Bundled sites (read-only) come from launch_sites.json in the source tree.
 # User-added sites are stored separately so the bundled file stays clean.
 _USER_SITES_PATH = Path.home() / ".gui_missile_flyout" / "user_sites.json"
@@ -2266,6 +2319,7 @@ class MissileFlyoutApp(tk.Tk):
                                         state="readonly", width=24)
         self._missile_cb.pack(padx=6, pady=(4, 2))
         self._missile_cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
+        _bind_typeahead(self._missile_cb)
 
         mb = ttk.Frame(mf)
         mb.pack(padx=6, pady=(0, 4))
@@ -2298,6 +2352,7 @@ class MissileFlyoutApp(tk.Tk):
                                      values=_site_values, state="readonly", width=26)
         self._site_cb.pack(padx=6, pady=(4, 2))
         self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
+        _bind_typeahead(self._site_cb)
 
         sb = ttk.Frame(lf)
         sb.pack(padx=6, pady=(0, 4))
