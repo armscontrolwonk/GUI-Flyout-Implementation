@@ -172,9 +172,9 @@ _PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
 # Packaged missiles the user has overridden with custom edits
 _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
-_CUSTOM_PATH = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
-# Where per-missile trajectory profiles are saved
-_TRAJ_PATH = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
+_CUSTOM_PATH  = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
+_TRAJ_PATH    = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
+_AUTOSAVE_DIR = Path.home() / ".gui_missile_flyout" / "autosave"
 
 
 def _load_traj_profiles() -> dict:
@@ -4359,6 +4359,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _on_result_ready(self):
         r = self._result
+        self._autosave_trajectory()
 
         # If this was a Max Range run, update guidance fields now — all GUI
         # mutations happen here in one batch so nothing fires between the field
@@ -4737,6 +4738,37 @@ class MissileFlyoutApp(tk.Tk):
             return
         self._fig.savefig(path, dpi=150, bbox_inches="tight")
         self._status_var.set(f"Figures exported: {path}")
+
+    # ------------------------------------------------------------------
+    def _autosave_trajectory(self):
+        """Silently write a timestamped CSV to the autosave folder after every run."""
+        r = self._result
+        if r is None:
+            return
+        try:
+            import datetime, re
+            _AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
+            # Purge autosaves older than the 20 most recent
+            existing = sorted(_AUTOSAVE_DIR.glob("*.csv"))
+            for old in existing[:-19]:
+                old.unlink(missing_ok=True)
+            ts      = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            missile = re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
+            path    = _AUTOSAVE_DIR / f"{ts}_{missile}.csv"
+            rows = ["piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
+            for i, ti in enumerate(r['t']):
+                rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
+                            f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
+            for d in r.get('debris_trajectories', []):
+                label = d['label'].replace(',', ' ')
+                for i, ti in enumerate(d['t']):
+                    rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
+                                f"{d['alt'][i]:.1f},,")
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            self._status_var.set(
+                self._status_var.get() + f"  |  autosaved → {path.name}")
+        except Exception:
+            pass   # autosave is best-effort; never interrupt the user
 
     # ------------------------------------------------------------------
     def _save_trajectory(self):
