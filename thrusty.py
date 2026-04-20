@@ -221,54 +221,62 @@ _SITE_SEPARATOR = "────────────────────�
 
 def _bind_typeahead(cb):
     """
-    Add prefix-typeahead to a readonly ttk.Combobox.
+    Prefix-typeahead for a ttk.Combobox.  Works on macOS/Linux/Windows.
 
-    While the combobox (or its embedded entry) has focus, typing any
-    printable characters accumulates a prefix and selects the first list
-    item whose text starts with that prefix (case-insensitive).  The
-    accumulated prefix resets one second after the last keystroke.
-    Separator-style entries (those whose text begins with '─') are skipped.
-    A match fires <<ComboboxSelected>> so existing callbacks work unchanged.
+    Switches the widget to state='normal' so key events are received by
+    Python (readonly Comboboxes on macOS swallow events at the native layer).
+    As the user types, the dropdown list is narrowed to items whose names
+    start with the typed prefix (case-insensitive).  Separator entries
+    (beginning with '─') are excluded from matching.
+
+    Commit paths:
+      • Selecting from the dropdown fires <<ComboboxSelected>> normally.
+      • Enter or Tab snaps to the best prefix match and fires the event.
+      • Losing focus snaps to the best match silently so the field always
+        shows a valid value without triggering a re-run.
     """
-    state = {'prefix': '', 'timer': None}
+    _all = list(cb['values'])
+    cb.config(state='normal')
 
-    def _reset():
-        state['prefix'] = ''
-        state['timer'] = None
+    def _is_sep(v):
+        return v.startswith('─')
 
-    def _on_key(event):
-        ch = event.char
-        if not ch or not ch.isprintable():
-            return 'break' if ch == '\r' else None
-        if state['timer'] is not None:
-            cb.after_cancel(state['timer'])
-        state['prefix'] += ch
-        _try_select()
-        state['timer'] = cb.after(1000, _reset)
-        return 'break'
+    def _best(prefix):
+        p = prefix.lower()
+        return next((v for v in _all if not _is_sep(v) and v.lower().startswith(p)), None)
 
-    def _try_select():
-        prefix = state['prefix'].lower()
-        values = cb['values']
-        match = next(
-            (v for v in values
-             if not v.startswith('─') and v.lower().startswith(prefix)),
-            None,
-        )
-        if match is None and len(state['prefix']) > 1:
-            # No multi-char match — restart with just the latest character.
-            state['prefix'] = state['prefix'][-1]
-            prefix = state['prefix'].lower()
-            match = next(
-                (v for v in values
-                 if not v.startswith('─') and v.lower().startswith(prefix)),
-                None,
-            )
-        if match is not None:
+    def _filter(event=None):
+        if event and event.keysym in ('Return', 'KP_Enter', 'Tab',
+                                       'Up', 'Down', 'Escape'):
+            return
+        typed = cb.get()
+        filtered = [v for v in _all
+                    if not _is_sep(v) and v.lower().startswith(typed.lower())]
+        cb['values'] = filtered if filtered else _all
+
+    def _commit_and_fire(event=None):
+        typed = cb.get()
+        cb['values'] = _all
+        match = _best(typed)
+        if match:
             cb.set(match)
             cb.event_generate('<<ComboboxSelected>>')
 
-    cb.bind('<KeyPress>', _on_key)
+    def _commit_silent(event=None):
+        typed = cb.get()
+        cb['values'] = _all
+        match = _best(typed)
+        if match:
+            cb.set(match)
+
+    def _on_selected(event=None):
+        cb['values'] = _all
+
+    cb.bind('<KeyRelease>', _filter)
+    cb.bind('<Return>',   _commit_and_fire)
+    cb.bind('<Tab>',      _commit_and_fire)
+    cb.bind('<FocusOut>', _commit_silent)
+    cb.bind('<<ComboboxSelected>>', _on_selected, add='+')
 
 
 # Bundled sites (read-only) come from launch_sites.json in the source tree.
