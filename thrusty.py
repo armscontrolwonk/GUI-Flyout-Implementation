@@ -2348,6 +2348,7 @@ class MissileFlyoutApp(tk.Tk):
         self._loft_angle_lbl.grid(row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         la_frame = ttk.Frame(gf)
         la_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._loft_angle_frame = la_frame
         self._loft_angle_var = tk.StringVar(value="45.0")
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
         self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
@@ -3152,12 +3153,16 @@ class MissileFlyoutApp(tk.Tk):
         if guidance in ("gravity_turn", "orbital_insertion"):
             self._loft_angle_lbl.config(text="Burnout Angle:")
             self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
+            self._loft_angle_lbl.grid(
+                row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._loft_angle_frame.grid(
+                row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
             self._loft_rate_lbl.grid_forget()
             self._loft_rate_frame.grid_forget()
             self._gt_turn_start_lbl.grid(
-                row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+                row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._gt_turn_start_frame.grid(
-                row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+                row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
             self._gt_turn_stop_lbl.grid(
                 row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._gt_turn_stop_frame.grid(
@@ -3165,6 +3170,10 @@ class MissileFlyoutApp(tk.Tk):
         else:
             self._loft_angle_lbl.config(text="Loft Angle:")
             self._loft_angle_unit_lbl.config(text="°  (final elev.)")
+            self._loft_angle_lbl.grid(
+                row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+            self._loft_angle_frame.grid(
+                row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
             self._loft_rate_lbl.grid(row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._loft_rate_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
             self._loft_rate_unit_lbl.config(text="°/s")
