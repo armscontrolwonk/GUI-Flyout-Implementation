@@ -221,61 +221,146 @@ _SITE_SEPARATOR = "────────────────────�
 
 def _bind_typeahead(cb):
     """
-    Prefix-typeahead for a ttk.Combobox.  Works on macOS/Linux/Windows.
+    Prefix-typeahead via a Toplevel autocomplete popup.
 
-    Switches the widget to state='normal' so key events are received by
-    Python (readonly Comboboxes on macOS swallow events at the native layer).
-    As the user types, the dropdown list is narrowed to items whose names
-    start with the typed prefix (case-insensitive).  Separator entries
-    (beginning with '─') are excluded from matching.
+    As the user types, a popup appears directly below the combobox listing
+    every item whose name begins with the typed prefix (case-insensitive).
+    Separator entries (starting with '─') are excluded.  Works on macOS,
+    Linux, and Windows without relying on the native dropdown widget.
 
-    Commit paths:
-      • Selecting from the dropdown fires <<ComboboxSelected>> normally.
-      • Enter or Tab snaps to the best prefix match and fires the event.
-      • Losing focus snaps to the best match silently so the field always
-        shows a valid value without triggering a re-run.
+    Commit paths
+    ────────────
+    • Click an item in the popup  → select + fire <<ComboboxSelected>>
+    • Enter / Tab                 → best-prefix match + fire the event
+    • ↓ arrow                     → move keyboard focus into the popup list
+    • Escape                      → dismiss popup, leave field unchanged
+    • FocusOut (click elsewhere)  → silently snap to best match
     """
-    _all = list(cb['values'])
+    _all   = list(cb['values'])
+    _popup = [None]   # Toplevel reference (reused, not recreated)
+    _lb    = [None]   # Listbox inside the popup
+
     cb.config(state='normal')
 
-    def _is_sep(v):
-        return v.startswith('─')
+    def _is_sep(v): return v.startswith('─')
 
     def _best(prefix):
         p = prefix.lower()
         return next((v for v in _all if not _is_sep(v) and v.lower().startswith(p)), None)
 
-    def _filter(event=None):
-        if event and event.keysym in ('Return', 'KP_Enter', 'Tab',
-                                       'Up', 'Down', 'Escape'):
-            return
-        typed = cb.get()
-        filtered = [v for v in _all
-                    if not _is_sep(v) and v.lower().startswith(typed.lower())]
-        cb['values'] = filtered if filtered else _all
+    def _matches(prefix):
+        p = prefix.lower()
+        return [v for v in _all if not _is_sep(v) and v.lower().startswith(p)]
 
-    def _commit_and_fire(event=None):
-        typed = cb.get()
-        cb['values'] = _all
-        match = _best(typed)
-        if match:
-            cb.set(match)
+    # ── popup lifecycle ───────────────────────────────────────────────────
+
+    def _dismiss(event=None):
+        if _popup[0] and _popup[0].winfo_exists():
+            _popup[0].withdraw()
+
+    def _show(items):
+        if not _popup[0] or not _popup[0].winfo_exists():
+            pop = tk.Toplevel(cb)
+            pop.wm_overrideredirect(True)
+            pop.attributes('-topmost', True)
+            lb = tk.Listbox(pop, selectmode=tk.SINGLE,
+                            exportselection=False, activestyle='dotbox')
+            sb = ttk.Scrollbar(pop, orient=tk.VERTICAL, command=lb.yview)
+            lb.config(yscrollcommand=sb.set)
+            lb.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            sb.pack(side=tk.RIGHT, fill=tk.Y)
+            lb.bind('<ButtonRelease-1>', _pick)
+            lb.bind('<Return>', _pick)
+            lb.bind('<Escape>', lambda e: (_dismiss(), cb.focus_set()))
+            _popup[0] = pop
+            _lb[0]    = lb
+
+        lb = _lb[0]
+        lb.delete(0, tk.END)
+        for item in items:
+            lb.insert(tk.END, item)
+
+        n = min(10, len(items))
+        lb.config(height=n)
+        x = cb.winfo_rootx()
+        y = cb.winfo_rooty() + cb.winfo_height()
+        w = max(cb.winfo_width(), 180)
+        _popup[0].geometry(f'{w}x{n * 20}+{x}+{y}')
+        _popup[0].deiconify()
+        _popup[0].lift()
+
+    # ── selection ─────────────────────────────────────────────────────────
+
+    def _pick(event=None):
+        lb  = _lb[0]
+        sel = lb.curselection()
+        if not sel and event:
+            sel = (lb.nearest(event.y),)
+        if sel:
+            value = lb.get(sel[0])
+            _dismiss()
+            cb.focus_set()
+            cb.set(value)
+            cb['values'] = _all
             cb.event_generate('<<ComboboxSelected>>')
 
-    def _commit_silent(event=None):
-        typed = cb.get()
+    def _commit_fire(event=None):
+        _dismiss()
         cb['values'] = _all
-        match = _best(typed)
-        if match:
-            cb.set(match)
+        m = _best(cb.get())
+        if m:
+            cb.set(m)
+            cb.event_generate('<<ComboboxSelected>>')
+
+    def _commit_silent_later(event=None):
+        # Delay so a listbox click can register before we snap.
+        cb.after(150, _do_commit_silent)
+
+    def _do_commit_silent():
+        try:
+            focused = cb.focus_get()
+        except Exception:
+            focused = None
+        if focused is _lb[0]:
+            return   # user is navigating the popup — let _pick handle it
+        _dismiss()
+        cb['values'] = _all
+        m = _best(cb.get())
+        if m:
+            cb.set(m)
 
     def _on_selected(event=None):
         cb['values'] = _all
+        _dismiss()
 
-    cb.bind('<KeyRelease>', _filter)
-    cb.bind('<Return>',   _commit_and_fire)
-    cb.bind('<Tab>',      _commit_and_fire)
-    cb.bind('<FocusOut>', _commit_silent)
+    # ── key handler ───────────────────────────────────────────────────────
+
+    def _on_key(event=None):
+        keysym = event.keysym if event else ''
+        if keysym == 'Escape':
+            _dismiss()
+            return
+        if keysym in ('Return', 'KP_Enter', 'Tab'):
+            _commit_fire()
+            return
+        if keysym == 'Down':
+            if _lb[0] and _popup[0] and _popup[0].winfo_exists():
+                _lb[0].focus_set()
+                if not _lb[0].curselection():
+                    _lb[0].selection_set(0)
+            return
+        typed = cb.get()
+        if not typed:
+            _dismiss()
+            return
+        hits = _matches(typed)
+        if hits:
+            _show(hits)
+        else:
+            _dismiss()
+
+    cb.bind('<KeyRelease>', _on_key)
+    cb.bind('<FocusOut>',   _commit_silent_later)
     cb.bind('<<ComboboxSelected>>', _on_selected, add='+')
 
 
