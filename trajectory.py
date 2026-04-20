@@ -557,12 +557,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     gt_turn_stop_s,
                     t,
                     start_angle_deg=params.launch_elevation_deg)
-        else:  # "loft" (Forden)
-            thrust_dir = _loft_angle_thrust_dir(lat, lon, azimuth_rad,
-                                                params.loft_angle_deg,
-                                                params.loft_angle_rate_deg_s,
-                                                t,
-                                                launch_elevation_deg=params.launch_elevation_deg)
+        else:
+            # Defensive fallback for any missile still carrying guidance="loft"
+            # from an old file that bypassed missile_from_dict conversion.
+            # Treat as gravity_turn using the stored loft parameters.
+            thrust_dir = _gravity_turn_thrust_dir(lat, lon, azimuth_rad,
+                                                   params.loft_angle_deg,
+                                                   gt_turn_start_s, gt_turn_stop_s,
+                                                   t,
+                                                   start_angle_deg=params.launch_elevation_deg)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -1682,44 +1685,6 @@ def maximize_range(params: MissileParams,
             best_range, best_la = -res.fun, float(res.x)
 
         best_lar = 1.0   # placeholder — not used by gravity-turn pitch program
-
-    else:
-        # ── Forden loft: parallel coarse grid over (loft_angle, loft_rate) ──
-        coarse_grid = [(float(la), lar_x2 * 0.5, best_ts)
-                       for la in np.arange(_angle_lo, _angle_hi + 1.0, 5.0)
-                       for lar_x2 in range(1, 7)]
-        for la, lar, ts, rng in _run_parallel(coarse_grid):
-            if rng > best_range:
-                best_range, best_la, best_lar = rng, la, lar
-
-        # ── Fine 1-D minimiser: angle first, then rate (two alternating passes) ──
-        # Each pass is a single minimize_scalar (~15 calls) rather than a
-        # dense grid, and they share state so the second pass benefits from
-        # the refined angle found in the first.
-        for _pass in range(2):
-            def _neg_range_la(la, _lar=best_lar):
-                r = _search_one((la, _lar, best_ts, *_common))
-                return -r if r > 0 else 0.0
-
-            res = minimize_scalar(_neg_range_la,
-                                  bounds=(max(5.0, best_la - 10.0),
-                                          min(85.0, best_la + 10.0)),
-                                  method='bounded',
-                                  options={'xatol': 0.25, 'maxiter': 20})
-            if -res.fun > best_range:
-                best_range, best_la = -res.fun, float(res.x)
-
-            def _neg_range_lar(lar, _la=best_la):
-                r = _search_one((_la, max(0.1, lar), best_ts, *_common))
-                return -r if r > 0 else 0.0
-
-            res = minimize_scalar(_neg_range_lar,
-                                  bounds=(max(0.1, best_lar - 1.0),
-                                          min(5.0, best_lar + 1.0)),
-                                  method='bounded',
-                                  options={'xatol': 0.05, 'maxiter': 15})
-            if -res.fun > best_range:
-                best_range, best_lar = -res.fun, float(res.x)
 
     if best_range < 0.0:
         # Every candidate was orbital or failed; return as-is so the caller
