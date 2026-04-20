@@ -13,9 +13,9 @@ Al Hussein, No-dong, and Taepodong-I.
 
 | File | Lines | Purpose |
 |---|---|---|
-| `thrusty.py` | ~4 600 | GUI application — all Tkinter widgets, dialogs, plotting, export |
-| `trajectory.py` | ~1 750 | 3-DOF integrator, guidance laws, range optimiser, orbital planner |
-| `missile_models.py` | ~1 060 | `MissileParams` dataclass, drag, thrust, mass, staging logic |
+| `thrusty.py` | ~5 860 | GUI application — all Tkinter widgets, dialogs, plotting, export |
+| `trajectory.py` | ~1 720 | 3-DOF integrator, guidance laws, range optimiser, orbital planner |
+| `missile_models.py` | ~1 430 | `MissileParams` dataclass, drag, thrust, mass, staging logic |
 | `coordinates.py` | ~190 | WGS-84 coordinate conversions, Vincenty geodesic, Coriolis/centrifugal |
 | `atmosphere.py` | ~97 | COESA 1976 standard atmosphere (0–86 km), dynamic pressure |
 | `gravity.py` | ~62 | WGS-84 J2 gravity vector in ECEF |
@@ -47,12 +47,12 @@ tabbed notebook**.
 
 ### Left control panel
 
-- **Missile Type** — select from built-in (Forden) or user-defined missiles;
+- **Missile Type** — select from built-in or user-defined missiles;
   New / Edit… / Delete buttons open `MissileDialog`.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
-- **Guidance** — three modes (see below), with loft angle, pitch rate, turn
+- **Guidance** — two modes (see below), with loft angle, pitch rate, turn
   start/stop, and optional advanced per-stage pitch and yaw programs.
 - **Engine Cutoff** — optional early cutoff time (s); blank = full burn.
 - **Target / Range** — optional target lat/lon or slant range for the
@@ -66,7 +66,7 @@ tabbed notebook**.
 
 | Tab | Contents |
 |---|---|
-| **Plots** | Altitude-vs-range, altitude-vs-time, and speed-vs-time curves on a Matplotlib canvas |
+| **Plots** | Altitude-vs-range, altitude-vs-time, speed-vs-time, and dynamic pressure / Mach curves on a Matplotlib canvas |
 | **Flight Timeline** | Tabular milestone events (ignition, burnout, apogee, shroud jettison, re-entry, impact) with lat/lon/alt/speed/range |
 | **Missile Parameters** | Read-only summary of the active missile's mass, geometry, propulsion, and payload |
 | **SLV Performance** | Algebraic payload-to-orbit analysis (circular or elliptical orbit) |
@@ -76,9 +76,9 @@ tabbed notebook**.
 - **MissileDialog** — define a missile with up to three stages plus payload/shroud/RV.
   Each stage has: fueled mass, dry mass, diameter, length, thrust (with Suggest
   estimator), Isp, nozzle exit area (with Estimate tool), burn time (computed),
-  coast time, and a solid-motor flag.
+  coast time, and a solid-motor flag with grain type selection.
   The Front End section covers payload mass, RV β (with Calculate… dialog using
-  Newtonian hypersonic model), payload nose shape/length, and shroud parameters.
+  Newtonian hypersonic model), RV shape/diameter/length, and shroud parameters.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates RV ballistic coefficient from cone geometry
@@ -96,12 +96,29 @@ upper stages).  Key fields on the top-level node:
 
 **Propulsion (per stage)**
 - `mass_initial`, `mass_propellant`, `mass_final` (kg)
-- `thrust_N` (vacuum, N), `isp_s` (s), `burn_time_s` (s)
+- `thrust_N` (average vacuum thrust, N), `isp_s` (s), `burn_time_s` (s)
 - `nozzle_exit_area_m2` — enables proper ambient-pressure thrust correction
   `T(h) = T_vac − P_amb(h) · Ae`; zero falls back to a 2 % sea-level
   back-pressure approximation
 - `coast_time_s` — inter-stage coast interval (s)
 - `solid_motor` — if true the engine cannot be shut off early
+
+**Solid motor grain profile (per stage)**
+- `grain_type` — one of six Shafer (1959) grain geometries (see table below);
+  controls the instantaneous thrust-vs-time curve shape
+- `thrust_peak_N` — peak vacuum thrust (N); `thrust_N` holds the average;
+  the ratio `thrust_N / thrust_peak_N` is the fill factor for the chosen grain
+- `thrust_profile` — optional list of `(t_frac, F_frac)` pairs for a
+  user-supplied CSV curve; overrides the built-in grain shape when present
+
+| Grain type | Burn character | Approx. fill factor |
+|---|---|---|
+| Tubular | Progressive | 0.85 |
+| Rod and tube | Neutral | 0.99 |
+| Double anchor | Regressive | 0.75 |
+| Star | Neutral | 0.98 |
+| Multi-fin | Two-phase | 0.65 |
+| Dual composition | Two-phase | 0.51 |
 
 **Geometry (per stage)**
 - `diameter_m`, `length_m`
@@ -119,14 +136,19 @@ upper stages).  Key fields on the top-level node:
 - `rv_beta_kg_m2` — RV ballistic coefficient β = m/(Cd·A) kg/m²; activates
   β-based drag for the post-burnout arc when > 0
 - `rv_mass_kg`, `num_rvs`, `bus_mass_kg` — payload decomposition
-- `rv_separates` — if true, the empty last-stage body follows a separate
-  tumbling-cylinder debris arc
+- `rv_separates` — if true, the RV separates from the final stage body;
+  post-shroud ascent drag uses `rv_shape / rv_diameter_m / rv_length_m`
+  for the nose geometry instead of the payload shape fields
+- `rv_shape`, `rv_diameter_m`, `rv_length_m` — RV aerodynamic geometry
 
-**Guidance (per stage, with global defaults)**
-- `guidance`: `loft`, `gravity_turn`, or `orbital_insertion`
-- `loft_angle_deg`, `loft_angle_rate_deg_s`
-- Per-stage pitch/yaw overrides: `stage_turn_start_s`, `stage_turn_stop_s`,
-  `stage_burnout_angle_deg`, `stage_yaw_*`
+**Guidance (top-level, with optional per-stage overrides)**
+- `guidance`: `gravity_turn` or `orbital_insertion`
+- `loft_angle_deg` — kick (burnout) elevation angle (°)
+- `loft_angle_rate_deg_s` — pitch-over rate during the kick phase (°/s)
+- Per-stage overrides: `stage_turn_start_s`, `stage_turn_stop_s`,
+  `stage_burnout_angle_deg`, `stage_yaw_*` — override the global schedule
+  for a specific stage; used by the built-in missiles to replicate
+  published boost-phase pitch programs
 
 ---
 
@@ -173,15 +195,15 @@ Three regimes depending on flight phase:
 
 | Phase | Drag model |
 |---|---|
-| **Boost** (motor burning, shroud attached) | Cd × A from Forden Mach-table, reference area uses shroud diameter |
-| **Boost** (motor burning, shroud jettisoned) | Cd × A, reference area uses body diameter; nose-shape FerencDV model if not `forden` |
+| **Boost** (shroud attached) | Cd × A; reference area uses shroud diameter and nose shape |
+| **Boost** (shroud jettisoned, `rv_separates` false) | Cd × A; reference area and nose shape from payload geometry |
+| **Boost** (shroud jettisoned, `rv_separates` true) | Cd × A; reference area and nose shape from RV geometry |
 | **Coast / re-entry** (`rv_beta > 0`) | β ballistic coefficient: `F_drag = q · m_rv / β` |
 | **Coast / re-entry** (`rv_beta = 0`) | Falls back to final-stage Mach-table Cd × A |
 
 The shroud-jettison event fires on the first upward crossing of
-`shroud_jettison_alt_km`.  At that point shroud mass is subtracted, the
-reference area switches from shroud to body diameter, and the nose-shape
-model switches from `shroud_nose_shape` to `nose_shape`.
+`shroud_jettison_alt_km`.  At that point shroud mass is subtracted and the
+reference geometry switches accordingly.
 
 The Forden Mach table (Figure 1, piecewise linear):
 `Mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5]`,
@@ -189,20 +211,22 @@ The Forden Mach table (Figure 1, piecewise linear):
 
 ### Guidance laws
 
-**Forden Loft** (`loft`) — Forden Eq. 8.  The missile launches vertically
-and pitches over at `loft_angle_rate_deg_s` until it reaches `loft_angle_deg`,
-then holds.  Azimuth is fixed at launch.
+**Gravity Turn** (`gravity_turn`) — The missile launches at
+`launch_elevation_deg` and pitches over at `loft_angle_rate_deg_s` from
+`stage_turn_start_s` until reaching `loft_angle_deg` (the burnout elevation),
+then locks thrust to the velocity vector for the remainder of powered flight.
+Per-stage overrides (`stage_turn_start_s`, `stage_turn_stop_s`,
+`stage_burnout_angle_deg`) allow each stage to follow an independent pitch
+program — this is how the built-in missiles replicate their published boost-phase
+pitch schedules.  Azimuth is fixed at launch; optional yaw overrides add
+cross-range steering.
 
-**Gravity Turn** (`gravity_turn`) — The missile kicks off vertical at
-`loft_angle_rate_deg_s` until reaching `loft_angle_deg` (the kick elevation),
-then locks thrust to the velocity vector.  Appropriate for IRBM/ICBM.
+**Orbital Insertion** (`orbital_insertion`) — Identical to gravity turn during
+boost, but engine cutoff is commanded when the state vector reaches the target
+orbital energy rather than at a fixed burn time.  Solid stages burn to natural
+burnout regardless.
 
-**Orbital Insertion** (`orbital_insertion`) — The pitch program follows the
-velocity vector after the kick (same as gravity turn) but engine cutoff is
-commanded when the state vector reaches the target orbital energy, not at a
-fixed time.  Solid stages burn to natural burnout.
-
-All three modes support optional per-stage advanced pitch and yaw programs that
+Both modes support optional advanced per-stage pitch and yaw programs that
 override the global schedule for a specific stage.
 
 ---
@@ -237,11 +261,10 @@ Used to estimate burnout speed before the range-maximisation search.
 
 Two-phase parallel search:
 
-1. **Coarse grid** — evaluate candidate (loft angle, pitch rate) pairs on a
+1. **Coarse grid** — evaluate candidate loft angle / pitch-rate pairs on a
    thread pool; search window is ±10° of the Wheelon optimum.
 2. **Fine optimisation** — `scipy.optimize.minimize_scalar` (Brent) polishes
-   the best coarse result for loft mode, or optimises independently for
-   gravity-turn mode.
+   the best coarse result.
 
 ### Aim at target (`aim_missile`, `trajectory.py:1295`)
 
@@ -271,9 +294,10 @@ the exact Newtonian value for out-of-range angles.
 | Output | How to produce |
 |---|---|
 | **Altitude / speed plots** | Runs automatically; displayed in the Plots tab |
+| **Dynamic pressure / Mach plot** | Displayed in the Plots tab alongside altitude curves |
 | **Flight Timeline** | Tabular milestones in the Flight Timeline tab |
 | **Missile Parameters** | Summary in the Missile Parameters tab |
-| **Folium map** | File → Export Folium Map; produces an interactive HTML map with the ground track, milestone markers, debris arcs, and leader-line labels |
+| **Folium map** | File → Export Folium Map; interactive HTML map with ground track, milestone markers, debris arcs, and leader-line labels |
 | **KML** | File → Export KML; opens in Google Earth |
 | **Trajectory CSV** | File → Save Trajectory; time-series state vector |
 | **Timeline CSV** | File → Export Timeline |
@@ -283,14 +307,22 @@ the exact Newtonian value for out-of-range angles.
 
 ## Built-in missiles
 
-The four Forden (2007) Table 1 reference missiles are included read-only:
+All built-in missiles use gravity-turn guidance with per-stage pitch overrides
+tuned to replicate published boost-phase pitch programs.  The four Forden (2007)
+Table 1 reference missiles are validated against his Table 3 maximum-range figures.
 
-| Missile | Class | Stages | Max range |
+| Missile | Class | Stages | Guidance notes |
 |---|---|---|---|
-| Scud-B | SRBM | 1 | ~288 km |
-| Al Hussein | SRBM | 1 | ~693 km |
-| No-dong | MRBM | 1 | ~973 km |
-| Taepodong-I | IRBM | 2 | ~2 349 km |
+| Scud-B | SRBM | 1 | Forden Table 1 reference |
+| Al Hussein | SRBM | 1 | Forden Table 1 reference |
+| No-dong | MRBM | 1 | Forden Table 1 reference |
+| Taepodong-I | IRBM | 2 | Forden Table 1 reference |
+| Shahab-3 | MRBM | 1 | No-dong derivative |
+| Taepodong-II | ICBM | 3 | Forden (2007) discussion |
+| Generic ICBM | ICBM | 3 | Representative three-stage solid |
+| Zoljanah IRBM | IRBM | 3 | Iranian Zoljanah solid-motor stack |
+| Zoljanah SLV | SLV | 3 | Zoljanah space launch configuration |
+| AUR | MRBM | 2 | Depressed-trajectory capable |
 
 ---
 
