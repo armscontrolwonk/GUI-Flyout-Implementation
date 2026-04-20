@@ -1174,41 +1174,43 @@ class MissileDialog(tk.Toplevel):
         self._throw_weight_entry.pack(side=tk.LEFT)
         ttk.Label(_tw_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
 
-        # ── Row 1: Payload shape ─────────────────────────────────────────────
-        ttk.Label(pl, text="Payload shape:").grid(
-            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        # ── Rows 1-3: Payload nose shape/size (hidden when RV separates) ────────
+        self._payload_shape_frame = ttk.Frame(pl)
+        self._payload_shape_frame.grid(row=1, column=0, columnspan=2,
+                                       sticky=tk.EW, pady=0)
+        self._payload_shape_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self._payload_shape_frame, text="Payload shape:").grid(
+            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._payload_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
         self._payload_shape_cb = ttk.Combobox(
-            pl, textvariable=self._payload_shape_var,
+            self._payload_shape_frame, textvariable=self._payload_shape_var,
             values=_ns_labels, state="readonly", width=18)
-        self._payload_shape_cb.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._payload_shape_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
 
-        # ── Row 2: Payload diameter ──────────────────────────────────────────
         self._payload_diameter_var, self._payload_diameter_entry = _fe_entry(
-            pl, "Payload diameter (m):", 2, "0", "m")
-
-        # ── Row 3: Payload length ────────────────────────────────────────────
+            self._payload_shape_frame, "Payload diameter (m):", 1, "0", "m")
         self._payload_length_var, self._payload_length_entry = _fe_entry(
-            pl, "Payload length (m):", 3, "0", "m", pady=(2, 4))
+            self._payload_shape_frame, "Payload length (m):", 2, "0", "m", pady=(2, 4))
 
         # Keep legacy aliases so _calc_rv_beta pre-fill still resolves
-        self._nose_shape_var   = self._payload_shape_var
-        self._nose_length_var  = self._payload_length_var
-        self._nose_shape_cb    = self._payload_shape_cb
+        self._nose_shape_var    = self._payload_shape_var
+        self._nose_length_var   = self._payload_length_var
+        self._nose_shape_cb     = self._payload_shape_cb
         self._nose_length_entry = self._payload_length_entry
 
-        # ── Row 4: RV separates toggle ───────────────────────────────────────
+        # ── Row 2: RV separates toggle (row numbering continues in pl) ────────
         self._rv_separates_var = tk.BooleanVar(value=False)
         self._rv_separates_check = ttk.Checkbutton(
             pl, text="RV separates",
             variable=self._rv_separates_var,
             command=self._update_rv_separates_state)
         self._rv_separates_check.grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
-        # ── Row 5: RV section (hidden until checkbox ticked) ─────────────────
+        # ── Row 3: RV section (hidden until checkbox ticked) ─────────────────
         self._rv_section = ttk.Frame(pl)
-        self._rv_section.grid(row=5, column=0, columnspan=2,
+        self._rv_section.grid(row=3, column=0, columnspan=2,
                               sticky=tk.EW, padx=(16, 0))
         self._rv_section.columnconfigure(1, weight=1)
         self._rv_section.grid_remove()
@@ -1417,13 +1419,15 @@ class MissileDialog(tk.Toplevel):
             pass
 
     def _update_rv_separates_state(self):
-        """Show/hide the RV sub-section; toggle throw weight entry."""
+        """Show/hide the RV sub-section; toggle payload-shape rows and throw weight."""
         if self._rv_separates_var.get():
             self._rv_section.grid()
+            self._payload_shape_frame.grid_remove()   # RV geometry takes over
             self._throw_weight_entry.config(state="readonly")
             self._update_throw_weight()
         else:
             self._rv_section.grid_remove()
+            self._payload_shape_frame.grid()
             self._throw_weight_entry.config(state="normal")
 
     def _update_pbv_state(self):
