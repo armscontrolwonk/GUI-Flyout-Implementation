@@ -2118,8 +2118,15 @@ class MissileFlyoutApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Thrusty")
-        self.geometry("1340x820")
-        self.minsize(900, 620)
+        self.minsize(900, 700)
+        # Size to 92 % of the available screen, capped at 1600 × 1050.
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w = min(1600, int(sw * 0.92))
+        h = min(1050, int(sh * 0.92))
+        x = (sw - w) // 2
+        y = max(0, (sh - h) // 2 - 24)   # shift up slightly for macOS menu bar
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         self._result         = None
         self._running        = False
