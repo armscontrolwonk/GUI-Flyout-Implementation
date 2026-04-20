@@ -537,7 +537,7 @@ class _StageFrame(ttk.LabelFrame):
             row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         _tmode_f = ttk.Frame(self._solid_frame)
         _tmode_f.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._thrust_mode_var = tk.StringVar(value="peak")
+        self._thrust_mode_var = tk.StringVar(value="average")
         ttk.Radiobutton(_tmode_f, text="Peak thrust",
                         variable=self._thrust_mode_var, value="peak",
                         command=self._on_thrust_mode_changed).pack(side=tk.LEFT, padx=(0, 10))
@@ -1029,7 +1029,8 @@ class _StageFrame(ttk.LabelFrame):
             self._thrust_mode_var.set("peak")
             self._thrust_kn.set(f"{thrust_peak_N / 1000.0:.1f}")
         else:
-            self._thrust_mode_var.set("peak")
+            self._thrust_mode_var.set("average")
+            # thrust_kn is already set above from Isp/prop/burn (average thrust)
 
         profile = d.get("thrust_profile", [])
         self._profile_data = [tuple(p) for p in profile] if profile else []
@@ -1042,6 +1043,7 @@ class _StageFrame(ttk.LabelFrame):
         if self._solid_motor_var.get():
             self._on_solid_toggled()
             self._on_grain_changed()
+            self._on_thrust_mode_changed()
             # For solid, burn time was saved as-is — restore directly
             self._burn_var.set(f"{d['burn']:.1f}")
 
@@ -1495,11 +1497,14 @@ class MissileDialog(tk.Toplevel):
             # older serialised file.
             dry = fueled - node.mass_propellant
             stage_data.append({
-                "fueled":      fueled,                   "dry":         dry,
-                "dia":         node.diameter_m,          "length":      node.length_m,
-                "burn":        node.burn_time_s,         "isp":         node.isp_s,
-                "nozzle_area": node.nozzle_exit_area_m2, "coast":       node.coast_time_s,
-                "solid_motor": getattr(node, 'solid_motor', False),
+                "fueled":        fueled,                   "dry":          dry,
+                "dia":           node.diameter_m,          "length":       node.length_m,
+                "burn":          node.burn_time_s,         "isp":          node.isp_s,
+                "nozzle_area":   node.nozzle_exit_area_m2, "coast":        node.coast_time_s,
+                "solid_motor":   getattr(node, 'solid_motor', False),
+                "grain_type":    getattr(node, 'grain_type', ''),
+                "thrust_peak_N": getattr(node, 'thrust_peak_N', 0.0),
+                "thrust_profile": list(getattr(node, 'thrust_profile', [])),
             })
             node = nxt
             stage_idx += 1
