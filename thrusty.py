@@ -815,7 +815,7 @@ class MissileDialog(tk.Toplevel):
         # RV shape
         ttk.Label(self._rv_section, text="RV shape:").grid(
             row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["conical"])
+        self._rv_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
         self._rv_shape_cb = ttk.Combobox(
             self._rv_section, textvariable=self._rv_shape_var,
             values=_ns_labels, state="readonly", width=18)
