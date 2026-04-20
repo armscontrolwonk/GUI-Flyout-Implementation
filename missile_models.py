@@ -1220,6 +1220,8 @@ def missile_area(params: MissileParams, altitude_m: float = None,
             and altitude_m is not None
             and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
         d = top_params.shroud_diameter_m
+    elif top_params is not None and top_params.rv_separates and top_params.rv_diameter_m > 0:
+        d = top_params.rv_diameter_m
     elif top_params is not None and top_params.payload_diameter_m > 0:
         d = top_params.payload_diameter_m
     else:
@@ -1271,15 +1273,25 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
                     if top_params.shroud_length_m > 0 and _sd > 0 else None)
         cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach,
                             re_l=re_l, ld_body=_ld_body)
-    elif top_params is not None and top_params.nose_shape not in ('', 'forden'):
-        _diam = (top_params.payload_diameter_m if top_params.payload_diameter_m > 0
-                 else params.diameter_m)
-        _ld = (top_params.nose_length_m / _diam
-               if top_params.nose_length_m > 0 and _diam > 0 else 3.0)
-        _ld_body = (params.length_m / _diam
-                    if params.length_m > 0 and _diam > 0 else None)
-        cd = _cd_nose_shape(top_params.nose_shape, _ld, mach,
-                            re_l=re_l, ld_body=_ld_body)
+    elif top_params is not None and (
+            (top_params.rv_separates
+             and top_params.rv_shape not in ('', 'forden')
+             and top_params.rv_diameter_m > 0)
+            or (not top_params.rv_separates
+                and top_params.nose_shape not in ('', 'forden'))):
+        # After shroud jettison: use RV geometry when rv_separates, else payload nose.
+        if top_params.rv_separates and top_params.rv_shape not in ('', 'forden'):
+            _shape  = top_params.rv_shape
+            _diam   = top_params.rv_diameter_m
+            _length = top_params.rv_length_m
+        else:
+            _shape  = top_params.nose_shape
+            _diam   = (top_params.payload_diameter_m if top_params.payload_diameter_m > 0
+                       else params.diameter_m)
+            _length = top_params.nose_length_m
+        _ld = (_length / _diam if _length > 0 and _diam > 0 else 3.0)
+        _ld_body = (params.length_m / _diam if params.length_m > 0 and _diam > 0 else None)
+        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
     else:
         cd = drag_coefficient(params, mach)
 
