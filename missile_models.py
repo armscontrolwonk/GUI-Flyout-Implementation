@@ -159,116 +159,250 @@ class MissileParams:
 _FORDEN_MACH = [0.0, 0.85, 1.0,  1.2,  2.0,  4.5]
 _FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
 
-NOSE_SHAPES = ["forden", "v2", "elliptical", "conical",
-               "parabolic", "tangent_ogive", "sears_haack", "blunt_cylinder"]
+# ---------------------------------------------------------------------------
+# Decomposed drag model  (Chin 1961; NACA TN 4201; Crowell 1996)
+# Cd_total = Cd_wave_nose + Cd_friction + Cd_base
+# ---------------------------------------------------------------------------
+
+NOSE_SHAPES = ["forden", "cone", "tangent_ogive", "von_karman",
+               "lv_haack", "parabola", "blunt_cylinder"]
 
 NOSE_SHAPE_LABELS = {
-    "forden":          "Forden (generic)",
-    "v2":              "V2",
-    "elliptical":      "Elliptical",
-    "conical":         "Conical",
-    "parabolic":       "Parabolic",
-    "tangent_ogive":   "Tangent Ogive",
-    "sears_haack":     "Sears-Haack",
-    "blunt_cylinder":  "Blunt Cylinder",
+    "forden":         "Forden (generic)",
+    "cone":           "Cone",
+    "tangent_ogive":  "Tangent Ogive",
+    "von_karman":     "Von Kármán (LD-Haack)",
+    "lv_haack":       "LV-Haack (Sears-Haack)",
+    "parabola":       "Parabola",
+    "blunt_cylinder": "Blunt Cylinder",
 }
 
+# Backwards-compatibility aliases for configurations saved with old shape names.
+_SHAPE_ALIAS = {
+    "conical":    "cone",
+    "parabolic":  "parabola",
+    "sears_haack":"lv_haack",
+    "v2":         "tangent_ogive",
+    "elliptical": "cone",
+}
 
-def _cd_nose_shape(nose_shape: str, ld: float, mach: float) -> float:
+# Tabulated wave drag (Cd_wave) at reference l/d_nose = 3.0.
+# Source: NACA TN 4201 comparison data (models 56-63, l/d_nose=3, M=0.8-2.0)
+# calibrated against Chin (1961) cone formula to isolate wave component.
+# Scaled to actual ld via (ld_ref/ld)^2 from slender-body theory.
+_WAVE_MACH   = [0.0,  0.6,  0.8,  0.9,  1.0,  1.1,  1.2,  1.5,  2.0,  3.0,  4.0,  5.0]
+_WAVE_VK     = [0.000, 0.000, 0.000, 0.010, 0.030, 0.050, 0.060, 0.069, 0.067, 0.058, 0.052, 0.047]
+_WAVE_LVH    = [0.000, 0.000, 0.010, 0.030, 0.070, 0.082, 0.085, 0.084, 0.077, 0.068, 0.061, 0.055]
+_WAVE_PARA   = [0.000, 0.000, 0.010, 0.040, 0.090, 0.100, 0.100, 0.094, 0.087, 0.077, 0.069, 0.062]
+_WAVE_LD_REF = 3.0
+
+# Base pressure coefficient (Cpb < 0) vs Mach, power-off — Chin Fig. 3-15.
+_BASE_MACH = [0.0,    0.8,   1.0,   1.2,   1.5,   2.0,   2.5,   3.0,   4.0,   5.0]
+_BASE_CPB  = [0.000, -0.13, -0.20, -0.18, -0.14, -0.10, -0.08, -0.06, -0.05, -0.04]
+
+
+def _lin_interp(x, xs, ys):
+    """Piecewise-linear interpolation, clamped at endpoints."""
+    if x <= xs[0]:  return ys[0]
+    if x >= xs[-1]: return ys[-1]
+    for i in range(len(xs) - 1):
+        if xs[i] <= x <= xs[i + 1]:
+            t = (x - xs[i]) / (xs[i + 1] - xs[i])
+            return ys[i] + t * (ys[i + 1] - ys[i])
+    return ys[-1]
+
+
+def _chin_pressure_coeff(sigma_deg: float, mach: float) -> float:
+    """Chin (1961) Eq. 3-4: pressure coefficient for a cone of half-angle σ°."""
+    if mach < 1e-6:
+        return 0.0
+    return (0.083 + 0.096 / mach**2) * (sigma_deg / 10.0) ** 1.69
+
+
+def _cd_wave_cone(ld: float, mach: float) -> float:
+    """Cone wave drag — Chin (1961) Eq. 3-4/3-6.  Linear ramp M=0.8→1.0."""
+    import math
+    sigma_deg = math.degrees(math.atan(1.0 / (2.0 * max(0.5, ld))))
+    if mach >= 1.0:
+        return _chin_pressure_coeff(sigma_deg, mach)
+    if mach <= 0.8:
+        return 0.0
+    return _chin_pressure_coeff(sigma_deg, 1.0) * (mach - 0.8) / 0.2
+
+
+def _cd_wave_ogive(ld: float, mach: float) -> float:
+    """Tangent-ogive wave drag — Chin (1961) Eq. 3-9 (Miles formula)."""
+    import math
+    ld = max(0.5, ld)
+    sigma_deg = math.degrees(math.atan(1.0 / (2.0 * ld)))
+    if mach >= 1.0:
+        P      = _chin_pressure_coeff(sigma_deg, mach)
+        num    = 2.0 * (196.0 * ld**2 - 16.0)
+        denom  = 28.0 * (mach + 18.0) * ld**2
+        factor = max(0.0, 1.0 - num / denom)
+        return P * factor
+    if mach <= 0.8:
+        return 0.0
+    return _cd_wave_ogive(ld, 1.0) * (mach - 0.8) / 0.2
+
+
+def _cd_wave_table(table_y, ld: float, mach: float) -> float:
+    """Wave drag from NACA TN 4201 table at reference ld=3, scaled via (3/ld)²."""
+    cd3 = _lin_interp(mach, _WAVE_MACH, table_y)
+    return cd3 * (_WAVE_LD_REF / max(0.5, ld)) ** 2
+
+
+def _nose_profile(shape: str, ld: float, n: int = 200):
     """
-    Total drag coefficient from FerencDV / HyperCFD nose-shape model.
-    Source: github.com/ferencdv/missile_trajectory_simulator (simss514.py)
-
-    nose_shape : key from NOSE_SHAPES (not 'forden')
-    ld         : nose fineness ratio = nose_length / body_diameter  (clamped 1–10)
-    mach       : flight Mach number (must be > 0)
+    Normalised (x, r) profile for a nose cone: x ∈ [0,1] (tip→base), r ∈ [0,1].
+    r is radius / R_body, x is axial / L_nose.  Crowell (1996) geometry.
     """
     import math
+    xs = np.linspace(0.0, 1.0, n + 1)
 
-    ld = max(1.0, min(float(ld), 10.0))
+    if shape == 'cone':
+        rs = xs.copy()
 
-    # ── Blunt Cylinder (flat-faced satellite shape) ───────────────────────
-    if nose_shape == "blunt_cylinder":
-        if mach <= 0.8:
-            return 0.9
-        elif mach <= 1.5:
-            return 0.9 + (mach - 0.8) / 0.7 * 1.3   # ramp 0.9 → 2.2
-        else:
-            return 2.2
+    elif shape == 'tangent_ogive':
+        lod = 2.0 * max(0.5, ld)              # L/R
+        rho = (lod**2 + 1.0) / 2.0            # radius of curvature / R
+        rs  = np.sqrt(np.maximum(0.0, rho**2 - (lod * (1.0 - xs))**2)) - (rho - 1.0)
 
-    # ── V2 — piecewise linear (independent of L/D) ─────────────────────────
-    if nose_shape == "v2":
-        if mach <= 0.8:
-            return 0.15
-        elif mach <= 1.2:
-            return 0.625 * mach - 0.35
-        elif mach <= 1.8:
-            return -0.25 * mach + 0.7
-        elif mach <= 5.0:
-            return -0.03125 * mach + 0.30625
-        else:
-            return 0.15
+    elif shape == 'von_karman':
+        theta = np.arccos(np.clip(1.0 - 2.0 * xs, -1.0, 1.0))
+        rs    = np.sqrt(np.maximum(0.0, theta - np.sin(2.0 * theta) / 2.0)) / math.sqrt(math.pi)
 
-    # ── Remaining shapes: subsonic flat, supersonic Hoerl, transonic blend ──
-    def _cd_sub(shape):
-        if shape == "elliptical":    return -0.050 * ld + 0.25
-        if shape == "conical":       return  0.075 * ld + 0.275
-        if shape == "parabolic":     return -0.025 * ld + 0.125
-        if shape == "tangent_ogive": return -0.075 * ld + 0.275
-        if shape == "sears_haack":   return -0.050 * ld + 0.25
-        return 0.20
+    elif shape == 'lv_haack':
+        theta = np.arccos(np.clip(1.0 - 2.0 * xs, -1.0, 1.0))
+        rs    = np.sqrt(np.maximum(0.0,
+                    theta - np.sin(2.0 * theta) / 2.0 + np.sin(theta)**3 / 3.0
+                )) / math.sqrt(math.pi)
 
-    def _cd_sup(shape, m):
-        if shape == "elliptical":
-            A = 0.824584774 * ld ** (-0.532619017)
-            B = 1.0156845
-            C = -0.226354 - 0.238389 * math.log(ld)
-            return A * B ** m * m ** C
+    elif shape == 'parabola':
+        rs = 2.0 * xs - xs**2   # K'=1 tangent parabola (Crowell Eq. 7)
 
-        if shape == "conical":
-            A = 1.619038033 * math.exp(-1.31926217 * ld)
-            B = ld / (-0.45318 - 0.89392 * ld)   # always negative
-            C = 0.886118 * math.exp(-ld / 1.121185)
-            denom = 1.0 + B * math.exp(-C * m)
-            return A / denom if abs(denom) > 1e-12 else 0.0
+    else:
+        rs = xs.copy()
 
-        if shape == "parabolic":
-            exp_arg = min(ld ** (-7.1807129), 500.0)   # guard overflow
-            A = 0.2433566382 * math.exp(exp_arg)
-            B = 1.009709
-            C = -0.567521484056 / (1.0 + 5.59560039 * math.exp(-2.23635527 * ld))
-            return A * B ** m * m ** C
+    rs[0] = 0.0
+    return xs, rs
 
-        if shape == "tangent_ogive":
-            A = 0.278184983 * math.exp(ld ** (-0.8894687916))
-            B = 1.0129458
-            C = -0.604615023 / (1.0 + 9.5779826 * math.exp(-2.2080809 * ld))
-            return A * B ** m * m ** C
 
-        if shape == "sears_haack":
-            A = 0.243884345 * math.exp(ld ** (-0.80690309))
-            B = 1.0047095
-            C = -0.60330669 / (1.0 + 14.6196742 * math.exp(-3.27801240 * ld))
-            return A * B ** m * m ** C
+def _s_wet_ratio(shape: str, ld: float) -> float:
+    """
+    Nose wetted area / reference area (A_ref = π R²).
+    Numerical integration of 2π r ds.  (Crowell 1996 §5)
+    ld = nose_length / body_diameter.
+    """
+    xs, rs   = _nose_profile(shape, ld)
+    k        = 1.0 / (2.0 * max(0.5, ld))      # R/L
+    drs      = np.diff(rs) / np.diff(xs)
+    rs_mid   = 0.5 * (rs[:-1] + rs[1:])
+    integrand = rs_mid * np.sqrt(1.0 + (k * drs)**2)
+    return 4.0 * ld * float(np.sum(integrand * np.diff(xs)))  # = 2(L/R)·∫
 
-        return 0.20
 
-    # Conical supersonic regime starts at M=1.5; others at M=1.2
-    M_SUB = 1.05
-    M_SUP = 1.5 if nose_shape == "conical" else 1.2
+def _mu_air(T_K: float) -> float:
+    """Dynamic viscosity of air (Pa·s) — Sutherland's law."""
+    T_ref, mu_ref, S = 273.15, 1.716e-5, 110.4
+    return mu_ref * (T_K / T_ref) ** 1.5 * (T_ref + S) / (T_K + S)
 
-    if mach <= M_SUB:
-        return _cd_sub(nose_shape)
 
-    cd_sup = _cd_sup(nose_shape, max(mach, M_SUP))
-    if mach >= M_SUP:
-        return cd_sup
+def _cf_schoenherr(re_l: float) -> float:
+    """Turbulent Cf — Schoenherr (Chin Eq. 4-2): √Cf·log₁₀(Cf·Re)=0.242."""
+    import math
+    cf = max(1e-8, 0.074 / re_l ** 0.2)   # Prandtl–Schlichting initial guess
+    for _ in range(30):
+        sq = math.sqrt(cf)
+        f  = sq * math.log10(cf * re_l) - 0.242
+        df = (math.log10(cf * re_l) / (2.0 * sq)
+              + sq / (cf * math.log(10.0)))
+        if abs(df) < 1e-15:
+            break
+        cf = max(1e-8, cf - f / df)
+    return cf
 
-    # Transonic: linear interpolation
-    cd_sub = _cd_sub(nose_shape)
-    cd_sup_at_msup = _cd_sup(nose_shape, M_SUP)
-    t = (mach - M_SUB) / (M_SUP - M_SUB)
-    return cd_sub + t * (cd_sup_at_msup - cd_sub)
+
+def _cd_friction(re_l: float, mach: float, s_wet_ratio: float) -> float:
+    """
+    Friction drag coefficient.
+      Blasius laminar Cf (Chin Eq. 4-1) + Schoenherr turbulent Cf (Chin Eq. 4-2)
+      Mixed BL at Re_transition = 5×10^5 (Chin Eq. 4-3)
+      Frankl-Voishel compressibility correction (Chin Eq. 4-6)
+      +10 % roughness allowance (Chin §4-2)
+    s_wet_ratio : S_wet / A_ref
+    """
+    import math
+    if re_l < 1.0 or s_wet_ratio <= 0.0:
+        return 0.0
+    re_tr  = 5.0e5
+    cf_lam  = 1.328 / math.sqrt(re_l)   # Blasius (Chin Eq. 4-1)
+    cf_turb = _cf_schoenherr(re_l)       # Schoenherr (Chin Eq. 4-2)
+    s_lam   = min(1.0, re_tr / re_l)
+    cf_mix  = cf_lam * s_lam + cf_turb * (1.0 - s_lam)   # Chin Eq. 4-3
+    fv      = (1.0 + 0.2 * mach**2) ** (-0.467)           # Frankl-Voishel (Chin Eq. 4-6)
+    return cf_mix * fv * 1.10 * s_wet_ratio                # +10% roughness
+
+
+def _cd_base(mach: float, base_area_ratio: float = 1.0) -> float:
+    """Base pressure drag — Chin Fig. 3-15, power-off."""
+    cpb = _lin_interp(mach, _BASE_MACH, _BASE_CPB)
+    return -cpb * base_area_ratio   # Cpb < 0 → Cd_base > 0
+
+
+def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
+                   re_l: float = 5e6, ld_body: float = None) -> float:
+    """
+    Total zero-lift drag coefficient (Cd_wave + Cd_friction + Cd_base).
+    Source: Chin (1961) *Missile Configuration Design*; NACA TN 4201; Crowell (1996).
+
+    nose_shape : key from NOSE_SHAPES
+    ld         : nose fineness ratio = nose_length / body_diameter (clamped 0.5–10)
+    mach       : free-stream Mach number
+    re_l       : Reynolds number based on body length (default 5×10^6)
+    ld_body    : full-body fineness ratio = body_length / body_diameter;
+                 drives cylinder friction term.  None → 2×ld estimate.
+    """
+    nose_shape = _SHAPE_ALIAS.get(nose_shape, nose_shape)
+    ld   = max(0.5, min(float(ld), 10.0))
+    mach = max(0.0, float(mach))
+
+    # ── Blunt Cylinder ────────────────────────────────────────────────────────
+    if nose_shape == 'blunt_cylinder':
+        if mach <= 0.8:   return 0.9
+        if mach <= 1.5:   return 0.9 + (mach - 0.8) / 0.7 * 1.3
+        return 2.2
+
+    # ── Forden fallback (legacy) ──────────────────────────────────────────────
+    if nose_shape in ('forden', '', None):
+        return _lin_interp(mach, _FORDEN_MACH, _FORDEN_CD)
+
+    # ── Wave drag (nose shape-specific) ──────────────────────────────────────
+    if nose_shape == 'cone':
+        cd_wave = _cd_wave_cone(ld, mach)
+    elif nose_shape == 'tangent_ogive':
+        cd_wave = _cd_wave_ogive(ld, mach)
+    elif nose_shape == 'von_karman':
+        cd_wave = _cd_wave_table(_WAVE_VK, ld, mach)
+    elif nose_shape == 'lv_haack':
+        cd_wave = _cd_wave_table(_WAVE_LVH, ld, mach)
+    elif nose_shape == 'parabola':
+        cd_wave = _cd_wave_table(_WAVE_PARA, ld, mach)
+    else:
+        cd_wave = _cd_wave_cone(ld, mach)
+
+    # ── Friction drag (nose wetted area + cylindrical body section) ───────────
+    nose_swet = _s_wet_ratio(nose_shape, ld)
+    if ld_body is None:
+        ld_body = max(ld * 2.0, ld + 2.0)
+    # cylinder S_wet/A_ref = π D L_cyl/(π R²) = 4 L_cyl/D = 4(ld_body − ld_nose)
+    cyl_swet = 4.0 * max(0.0, ld_body - ld)
+    cd_fric  = _cd_friction(re_l, mach, nose_swet + cyl_swet)
+
+    # ── Base drag ─────────────────────────────────────────────────────────────
+    cd_base = _cd_base(mach)
+
+    return cd_wave + cd_fric + cd_base
 
 
 # ---------------------------------------------------------------------------
@@ -1035,26 +1169,35 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     speed = np.linalg.norm(vel_ecef)
     if speed < 1e-6:
         return np.zeros(3)
-    _, _, rho, a_sound = atmosphere(altitude_m)
-    mach = speed / a_sound
+    T, _, rho, a_sound = atmosphere(altitude_m)
+    mach  = speed / a_sound
+    mu    = _mu_air(T)
+    L_ref = params.length_m if params.length_m > 0.0 else 1.0
+    re_l  = rho * speed * L_ref / mu if mu > 0.0 else 5e6
 
-    # Choose Cd source: FerencDV nose-shape model or Forden mach_table.
+    # Choose Cd source: decomposed nose-shape model or Forden mach_table.
     # Shroud nose shape takes priority while shroud is still attached.
     _shroud_on = (top_params is not None
                   and top_params.shroud_diameter_m > 0
                   and altitude_m < top_params.shroud_jettison_alt_km * 1000.0)
     if _shroud_on and top_params.shroud_nose_shape not in ('', 'forden'):
         _sd = (top_params.shroud_diameter_m if top_params.shroud_diameter_m > 0
-               else top_params.diameter_m)
+               else params.diameter_m)
         _ld = (top_params.shroud_nose_length_m / _sd
                if top_params.shroud_nose_length_m > 0 and _sd > 0 else 3.0)
-        cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach)
+        _ld_body = (top_params.shroud_length_m / _sd
+                    if top_params.shroud_length_m > 0 and _sd > 0 else None)
+        cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach,
+                            re_l=re_l, ld_body=_ld_body)
     elif top_params is not None and top_params.nose_shape not in ('', 'forden'):
         _diam = (top_params.payload_diameter_m if top_params.payload_diameter_m > 0
-                 else top_params.diameter_m)
+                 else params.diameter_m)
         _ld = (top_params.nose_length_m / _diam
                if top_params.nose_length_m > 0 and _diam > 0 else 3.0)
-        cd = _cd_nose_shape(top_params.nose_shape, _ld, mach)
+        _ld_body = (params.length_m / _diam
+                    if params.length_m > 0 and _diam > 0 else None)
+        cd = _cd_nose_shape(top_params.nose_shape, _ld, mach,
+                            re_l=re_l, ld_body=_ld_body)
     else:
         cd = drag_coefficient(params, mach)
 
