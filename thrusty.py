@@ -172,9 +172,12 @@ _PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
 # Packaged missiles the user has overridden with custom edits
 _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
-_CUSTOM_PATH  = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
-_TRAJ_PATH    = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
-_AUTOSAVE_DIR = Path.home() / ".gui_missile_flyout" / "autosave"
+_CUSTOM_PATH      = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
+_TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
+_AUTOSAVE_DIR     = Path.home() / ".gui_missile_flyout" / "autosave"
+_EXPORT_TRAJ_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "trajectories"
+_EXPORT_MISS_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "missiles"
+_EXPORT_SITE_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "sites"
 
 
 def _load_traj_profiles() -> dict:
@@ -2585,15 +2588,19 @@ class MissileFlyoutApp(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Load trajectory CSV…",   command=self._load_trajectory)
+        file_menu.add_command(label="Load Trajectory…",       command=self._load_trajectory)
+        file_menu.add_command(label="Load Missile…",          command=self._load_missile)
+        file_menu.add_command(label="Load Launch Site…",      command=self._load_site)
         file_menu.add_separator()
-        file_menu.add_command(label="Export trajectory CSV…", command=self._save_trajectory)
-        file_menu.add_command(label="Export trajectory KML…", command=self._export_kml)
-        file_menu.add_command(label="Open Folium map…",        command=self._export_folium)
-        file_menu.add_command(label="Export Cartopy map…",    command=self._export_cartopy)
-        file_menu.add_command(label="Export timeline CSV…",   command=self._export_timeline)
-        file_menu.add_command(label="Export figures…",        command=self._export_figures)
-        file_menu.add_command(label="Export missile JSON…",   command=self._export_missile)
+        file_menu.add_command(label="Export Trajectory…",     command=self._save_trajectory)
+        file_menu.add_command(label="Export Trajectory KML…", command=self._export_kml)
+        file_menu.add_command(label="Export Missile…",        command=self._export_missile)
+        file_menu.add_command(label="Export Launch Site…",    command=self._export_site)
+        file_menu.add_separator()
+        file_menu.add_command(label="Open Folium Map…",       command=self._export_folium)
+        file_menu.add_command(label="Export Cartopy Map…",    command=self._export_cartopy)
+        file_menu.add_command(label="Export Timeline CSV…",   command=self._export_timeline)
+        file_menu.add_command(label="Export Figures…",        command=self._export_figures)
         file_menu.add_separator()
         file_menu.add_command(label="Load NOTAM overlay…",    command=self._load_notam_overlay)
         file_menu.add_command(label="Clear NOTAM overlay",    command=self._clear_notam_overlay)
@@ -4965,12 +4972,14 @@ class MissileFlyoutApp(tk.Tk):
             import datetime, re
             _AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
             # Purge autosaves older than the 20 most recent
-            existing = sorted(_AUTOSAVE_DIR.glob("*.csv"))
+            existing = sorted(_AUTOSAVE_DIR.glob("*.traj.csv"))
             for old in existing[:-19]:
                 old.unlink(missing_ok=True)
             ts      = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             missile = re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
-            path    = _AUTOSAVE_DIR / f"{ts}_{missile}.csv"
+            rng_km  = r.get('range_km')
+            rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
+            path    = _AUTOSAVE_DIR / f"{ts}_{missile}{rng_sfx}.traj.csv"
             meta_json = json.dumps(self._trajectory_metadata())
             rows = [f"# {meta_json}",
                     "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
@@ -4993,11 +5002,19 @@ class MissileFlyoutApp(tk.Tk):
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
             return
+        import re as _re, datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        _EXPORT_TRAJ_DIR.mkdir(parents=True, exist_ok=True)
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            title="Export trajectory CSV",
+            defaultextension=".traj.csv",
+            initialdir=str(_EXPORT_TRAJ_DIR),
+            initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
+            filetypes=[("Trajectory CSV", "*.traj.csv"), ("All files", "*.*")],
+            title="Export Trajectory",
         )
         if not path:
             return
@@ -6061,24 +6078,116 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Timeline exported: {path}")
 
     def _export_missile(self):
-        """Export the current missile definition to a JSON file."""
+        """Export the current missile definition to a .missile.json file."""
         name = self._missile_var.get()
         if not name or name not in MISSILE_DB:
             messagebox.showinfo("No missile", "Select a missile first.")
             return
         from tkinter.filedialog import asksaveasfilename
+        _EXPORT_MISS_DIR.mkdir(parents=True, exist_ok=True)
         safe = name.replace(" ", "_").replace("/", "-")
         path = asksaveasfilename(
-            defaultextension=".json",
-            initialfile=f"{safe}.json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Export missile definition",
+            defaultextension=".missile.json",
+            initialdir=str(_EXPORT_MISS_DIR),
+            initialfile=f"{safe}.missile.json",
+            filetypes=[("Missile definition", "*.missile.json"),
+                       ("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export Missile",
         )
         if not path:
             return
         data = missile_to_dict(MISSILE_DB[name]())
         Path(path).write_text(json.dumps(data, indent=2))
         self._status_var.set(f"Missile exported: {path}")
+
+    def _load_missile(self):
+        """Import a .missile.json file into the custom missile library."""
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            initialdir=str(_EXPORT_MISS_DIR) if _EXPORT_MISS_DIR.exists() else str(Path.home()),
+            filetypes=[("Missile definition", "*.missile.json"),
+                       ("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load Missile",
+        )
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text())
+            p    = missile_from_dict(data)
+        except Exception as e:
+            messagebox.showerror("Load error", f"Could not parse missile file:\n{e}")
+            return
+        name = data.get('name') or Path(path).stem.replace('.missile', '')
+        if not name:
+            messagebox.showerror("Load error", "Missile file has no name field.")
+            return
+        if name in MISSILE_DB and not messagebox.askyesno(
+                "Overwrite?", f"'{name}' already exists. Overwrite?"):
+            return
+        MISSILE_DB[name] = lambda p=p: p
+        _save_custom_missiles()
+        self._refresh_missile_list(select_name=name)
+        self._status_var.set(f"Missile '{name}' loaded from {Path(path).name}")
+
+    def _export_site(self):
+        """Export the current launch site to a .site.json file."""
+        name = self._site_var.get()
+        lat_s = self._launch_lat.get().strip()
+        lon_s = self._launch_lon.get().strip()
+        if not lat_s or not lon_s:
+            messagebox.showinfo("No site", "Enter a launch site location first.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        _EXPORT_SITE_DIR.mkdir(parents=True, exist_ok=True)
+        safe = (name or "site").replace(" ", "_").replace("/", "-")
+        path = asksaveasfilename(
+            defaultextension=".site.json",
+            initialdir=str(_EXPORT_SITE_DIR),
+            initialfile=f"{safe}.site.json",
+            filetypes=[("Launch site", "*.site.json"),
+                       ("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export Launch Site",
+        )
+        if not path:
+            return
+        data = {"name": name, "lat": float(lat_s), "lon": float(lon_s)}
+        Path(path).write_text(json.dumps(data, indent=2))
+        self._status_var.set(f"Site exported: {path}")
+
+    def _load_site(self):
+        """Import a .site.json file into the custom launch-site library."""
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            initialdir=str(_EXPORT_SITE_DIR) if _EXPORT_SITE_DIR.exists() else str(Path.home()),
+            filetypes=[("Launch site", "*.site.json"),
+                       ("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load Launch Site",
+        )
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text())
+            name = data['name']
+            lat  = float(data['lat'])
+            lon  = float(data['lon'])
+        except Exception as e:
+            messagebox.showerror("Load error", f"Could not parse site file:\n{e}")
+            return
+        user_sites = _load_user_sites()
+        if any(s['name'] == name for s in user_sites):
+            if not messagebox.askyesno("Overwrite?",
+                                       f"'{name}' already exists. Overwrite?"):
+                return
+            user_sites = [s for s in user_sites if s['name'] != name]
+        user_sites.append({"name": name, "lat": lat, "lon": lon})
+        _save_user_sites(user_sites)
+        new_values, new_map = _load_launch_sites()
+        self._site_map = new_map
+        self._site_cb.config(values=new_values)
+        self._site_var.set(name)
+        self._launch_lat.set(f"{lat:.4f}")
+        self._launch_lon.set(f"{lon:.4f}")
+        self._status_var.set(f"Site '{name}' loaded from {Path(path).name}")
 
     def _show_about(self):
         messagebox.showinfo(
