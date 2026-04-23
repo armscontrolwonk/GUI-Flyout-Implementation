@@ -2658,7 +2658,7 @@ class MissileFlyoutApp(tk.Tk):
         results_strip = ttk.Frame(right, relief=tk.GROOVE, borderwidth=1)
         results_strip.pack(fill=tk.X, padx=2, pady=(0, 3))
         ttk.Label(results_strip, textvariable=self._results_strip_var,
-                  anchor=tk.W, font=("", 9, "bold")).pack(
+                  anchor=tk.W).pack(
             fill=tk.X, padx=8, pady=3)
 
         self._right_nb = ttk.Notebook(right)
