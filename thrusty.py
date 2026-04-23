@@ -2585,6 +2585,8 @@ class MissileFlyoutApp(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Load trajectory CSV…",   command=self._load_trajectory)
+        file_menu.add_separator()
         file_menu.add_command(label="Export trajectory CSV…", command=self._save_trajectory)
         file_menu.add_command(label="Export trajectory KML…", command=self._export_kml)
         file_menu.add_command(label="Open Folium map…",        command=self._export_folium)
@@ -4744,6 +4746,216 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Figures exported: {path}")
 
     # ------------------------------------------------------------------
+    def _trajectory_metadata(self):
+        """Return a dict of all guidance/launch settings for CSV header embedding."""
+        meta = {
+            'missile':              self._missile_var.get(),
+            'launch_lat':           self._launch_lat.get(),
+            'launch_lon':           self._launch_lon.get(),
+            'azimuth_deg':          self._azimuth_var.get(),
+            'guidance':             self._guidance_var.get(),
+            'loft_angle_deg':       self._loft_angle_var.get(),
+            'loft_rate_deg_s':      self._loft_rate_var.get(),
+            'gt_turn_start_s':      self._gt_turn_start_var.get(),
+            'gt_turn_stop_s':       self._gt_turn_stop_var.get(),
+            'cutoff_s':             self._cutoff_var.get(),
+            'launch_elevation_deg': getattr(self, '_launch_el_var',
+                                            tk.StringVar(value='90')).get(),
+            'adv_pitch':            self._adv_pitch_var.get(),
+            'adv_yaw':              self._adv_yaw_var.get(),
+            'yaw_start_s':          self._yaw_start_var.get(),
+            'yaw_stop_s':           self._yaw_stop_var.get(),
+            'yaw_final_az_deg':     self._yaw_final_az_var.get(),
+        }
+        # Per-stage pitch / yaw overrides
+        if self._adv_pitch_var.get() and self._stage_rows:
+            meta['stage_overrides'] = [
+                {
+                    'start':       row['start'].get(),
+                    'stop':        row['stop'].get(),
+                    'angle':       row['angle'].get(),
+                    'yaw_start':   row.get('yaw_start', tk.StringVar()).get(),
+                    'yaw_stop':    row.get('yaw_stop',  tk.StringVar()).get(),
+                    'yaw_final_az':row.get('yaw_final_az', tk.StringVar()).get(),
+                }
+                for row in self._stage_rows
+            ]
+        return meta
+
+    def _apply_trajectory_metadata(self, meta):
+        """Restore GUI fields from a metadata dict loaded from a CSV header."""
+        name = meta.get('missile', '')
+        if name in MISSILE_DB or name in [m for m in MISSILE_DB]:
+            self._missile_var.set(name)
+            self._on_missile_changed()
+        self._launch_lat.set(meta.get('launch_lat', ''))
+        self._launch_lon.set(meta.get('launch_lon', ''))
+        self._azimuth_var.set(meta.get('azimuth_deg', '0.0'))
+        guidance = meta.get('guidance', 'gravity_turn')
+        self._guidance_var.set(guidance)
+        self._update_guidance_labels(guidance)
+        self._loft_angle_var.set(meta.get('loft_angle_deg', '45.0'))
+        self._loft_rate_var.set(meta.get('loft_rate_deg_s', '2.0'))
+        self._gt_turn_start_var.set(meta.get('gt_turn_start_s', '5.0'))
+        self._gt_turn_stop_var.set(meta.get('gt_turn_stop_s', ''))
+        self._cutoff_var.set(meta.get('cutoff_s', ''))
+        if hasattr(self, '_launch_el_var'):
+            self._launch_el_var.set(meta.get('launch_elevation_deg', '90.0'))
+        self._adv_yaw_var.set(bool(meta.get('adv_yaw', False)))
+        self._yaw_start_var.set(meta.get('yaw_start_s', ''))
+        self._yaw_stop_var.set(meta.get('yaw_stop_s', ''))
+        self._yaw_final_az_var.set(meta.get('yaw_final_az_deg', ''))
+        # Per-stage overrides — expand the panel then fill row by row
+        adv = bool(meta.get('adv_pitch', False))
+        self._adv_pitch_var.set(adv)
+        self._on_adv_pitch_toggled()
+        overrides = meta.get('stage_overrides', [])
+        if adv and overrides and self._stage_rows:
+            for row, ov in zip(self._stage_rows, overrides):
+                row['start'].set(ov.get('start', ''))
+                row['stop'].set(ov.get('stop', ''))
+                row['angle'].set(ov.get('angle', ''))
+                if 'yaw_start' in row:
+                    row['yaw_start'].set(ov.get('yaw_start', ''))
+                if 'yaw_stop' in row:
+                    row['yaw_stop'].set(ov.get('yaw_stop', ''))
+                if 'yaw_final_az' in row:
+                    row['yaw_final_az'].set(ov.get('yaw_final_az', ''))
+
+    def _load_trajectory(self):
+        """Load a previously saved trajectory CSV, restore guidance params and plots."""
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Load trajectory CSV",
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as fh:
+                lines = fh.readlines()
+        except Exception as e:
+            messagebox.showerror("Load error", str(e))
+            return
+
+        # Parse optional JSON metadata from first comment line
+        meta = {}
+        data_lines = lines
+        if lines and lines[0].startswith('#'):
+            try:
+                meta = json.loads(lines[0][1:].strip())
+            except Exception:
+                pass
+            data_lines = lines[1:]
+
+        # Parse CSV rows
+        vehicle_t, vehicle_lat, vehicle_lon, vehicle_alt, vehicle_spd, vehicle_rng = \
+            [], [], [], [], [], []
+        debris = {}  # label -> lists
+
+        header_skipped = False
+        for line in data_lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if not header_skipped and line.startswith('piece'):
+                header_skipped = True
+                continue
+            parts = line.split(',')
+            if len(parts) < 5:
+                continue
+            piece = parts[0]
+            try:
+                t_s   = float(parts[1])
+                lat   = float(parts[2])
+                lon   = float(parts[3])
+                alt   = float(parts[4])
+                spd   = float(parts[5]) if len(parts) > 5 and parts[5] else float('nan')
+                rng   = float(parts[6]) * 1000.0 if len(parts) > 6 and parts[6] else float('nan')
+            except (ValueError, IndexError):
+                continue
+            if piece == 'vehicle':
+                vehicle_t.append(t_s);   vehicle_lat.append(lat)
+                vehicle_lon.append(lon); vehicle_alt.append(alt)
+                vehicle_spd.append(spd); vehicle_rng.append(rng)
+            else:
+                if piece not in debris:
+                    debris[piece] = {'t': [], 'lat': [], 'lon': [], 'alt': [],
+                                     'label': piece}
+                debris[piece]['t'].append(t_s)
+                debris[piece]['lat'].append(lat)
+                debris[piece]['lon'].append(lon)
+                debris[piece]['alt'].append(alt)
+
+        if not vehicle_t:
+            messagebox.showerror("Load error", "No vehicle trajectory data found.")
+            return
+
+        vt  = np.asarray(vehicle_t)
+        vla = np.asarray(vehicle_lat)
+        vlo = np.asarray(vehicle_lon)
+        va  = np.asarray(vehicle_alt)
+        vs  = np.asarray(vehicle_spd)
+        vr  = np.asarray(vehicle_rng)
+
+        nan_arr = np.full(len(vt), float('nan'))
+        result = {
+            't':                  vt,
+            'lat':                vla,
+            'lon':                vlo,
+            'alt':                va,
+            'speed':              vs,
+            'inertial_speed':     nan_arr.copy(),
+            'accel':              nan_arr.copy(),
+            'mass':               nan_arr.copy(),
+            'range':              vr,
+            'pos_ecef':           None,
+            'vel_ecef':           None,
+            'orbital':            False,
+            'impact_lat':         float(vla[-1]),
+            'impact_lon':         float(vlo[-1]),
+            'range_km':           float(vr[-1]) / 1000.0 if not np.isnan(vr[-1]) else None,
+            'apogee_km':          float(np.nanmax(va)) / 1000.0,
+            'time_of_flight_s':   float(vt[-1]),
+            'impact_speed_ms':    float(vs[-1]) if not np.isnan(vs[-1]) else None,
+            'milestones':         [],
+            'debris_trajectories': [
+                {k: np.asarray(v) if isinstance(v, list) else v
+                 for k, v in d.items()}
+                for d in debris.values()
+            ],
+            'pitch_cmd':          nan_arr.copy(),
+        }
+
+        self._result = result
+
+        # Restore guidance settings before redrawing
+        if meta:
+            try:
+                self._apply_trajectory_metadata(meta)
+            except Exception:
+                pass
+
+        # Redraw plots and timeline
+        units = self._units_var.get() if hasattr(self, '_units_var') else 'km'
+        scale = 1.0 if units == 'km' else (1/1.852 if units == 'nmi' else 1/1.60934)
+        ulbl  = units
+        self._plot_results(result, scale, ulbl)
+        self._populate_timeline(result)
+
+        rng_km = result['range_km']
+        apo_km = result['apogee_km']
+        tof    = result['time_of_flight_s']
+        ispd   = result['impact_speed_ms']
+        _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
+                  f"Apogee: {apo_km*scale:.1f} {ulbl}  |  "
+                  f"ToF: {tof:.0f} s  |  "
+                  f"Impact: {result['impact_lat']:.2f}°N, {result['impact_lon']:.2f}°E  |  "
+                  f"Impact spd: {ispd/1000.0:.2f} km/s") if ispd else ""
+        self._results_strip_var.set(_strip)
+        self._status_var.set(f"Loaded: {path}")
+
+    # ------------------------------------------------------------------
     def _autosave_trajectory(self):
         """Silently write a timestamped CSV to the autosave folder after every run."""
         r = self._result
@@ -4759,7 +4971,9 @@ class MissileFlyoutApp(tk.Tk):
             ts      = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             missile = re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
             path    = _AUTOSAVE_DIR / f"{ts}_{missile}.csv"
-            rows = ["piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
+            meta_json = json.dumps(self._trajectory_metadata())
+            rows = [f"# {meta_json}",
+                    "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
             for i, ti in enumerate(r['t']):
                 rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
                             f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
@@ -4788,21 +5002,19 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         r = self._result
-        rows = []
-        # Main vehicle trajectory
+        meta_json = json.dumps(self._trajectory_metadata())
+        rows = [f"# {meta_json}",
+                "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
         for i, ti in enumerate(r['t']):
             rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
                         f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
-        # Debris / stage trajectories
         for d in r.get('debris_trajectories', []):
             label = d['label'].replace(',', ' ')
             for i, ti in enumerate(d['t']):
                 rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
                             f"{d['alt'][i]:.1f},,")
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write("piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km\n")
-            fh.write("\n".join(rows))
-            fh.write("\n")
+            fh.write("\n".join(rows) + "\n")
         self._status_var.set(f"Trajectory CSV exported: {path}")
 
     def _export_kml(self):
