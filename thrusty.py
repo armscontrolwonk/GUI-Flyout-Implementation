@@ -2547,6 +2547,12 @@ class MissileFlyoutApp(tk.Tk):
         self._build_ui()
         self._on_missile_changed()   # populate params tab with default missile
 
+    def report_callback_exception(self, exc_type, exc_value, exc_tb):
+        """Show unhandled callback exceptions as a dialog instead of crashing."""
+        import traceback as _tb
+        detail = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
+        messagebox.showerror("Unexpected error", detail[:3000])
+
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
