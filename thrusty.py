@@ -491,21 +491,7 @@ class _StageFrame(ttk.LabelFrame):
                                         foreground="gray50")
         self._burn_hint_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
-        # Coast-time row (row 8) — shown only for non-last stages
-        self._coast_var = tk.StringVar(value=d["coast"])
-        self._coast_lbl = ttk.Label(self, text="Coast after (s):")
-        self._coast_lbl.grid(row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        coast_inner = ttk.Frame(self)
-        coast_inner.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        ttk.Entry(coast_inner, textvariable=self._coast_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(coast_inner, text="s  (0 = instant ignition)").pack(
-            side=tk.LEFT, padx=(2, 0))
-        self._coast_inner = coast_inner
-        # Hidden by default; _update_stage_frames() reveals it for non-last stages
-        self._coast_lbl.grid_remove()
-        self._coast_inner.grid_remove()
-
-        # Solid motor checkbox (row 9)
+        # Solid motor checkbox (row 9) — coast time moved to advanced pitch panel
         self._solid_motor_var = tk.BooleanVar(value=False)
         self._solid_motor_check = ttk.Checkbutton(
             self, text="Solid rocket motor (cannot be shut off)",
@@ -941,15 +927,6 @@ class _StageFrame(ttk.LabelFrame):
             else:
                 entry.config(state=state)
 
-    def set_coast_visible(self, visible: bool):
-        """Show or hide the inter-stage coast-time row."""
-        if visible:
-            self._coast_lbl.grid()
-            self._coast_inner.grid()
-        else:
-            self._coast_lbl.grid_remove()
-            self._coast_inner.grid_remove()
-
     def get(self):
         burn_str = self._burn_var.get()
         if burn_str == "—":
@@ -957,14 +934,14 @@ class _StageFrame(ttk.LabelFrame):
         _LABELS = {
             "fueled": "Fueled Mass", "dry": "Dry Mass", "dia": "Diameter",
             "length": "Length", "thrust_kn": "Thrust", "isp": "Isp",
-            "nozzle_area": "Nozzle Exit Area", "coast": "Coast Time",
+            "nozzle_area": "Nozzle Exit Area",
         }
         result = {}
         for k, v in [
             ("fueled",      self._fueled),      ("dry",         self._dry),
             ("dia",         self._dia),         ("length",      self._length),
             ("thrust_kn",   self._thrust_kn),   ("isp",         self._isp),
-            ("nozzle_area", self._nozzle_area), ("coast",       self._coast_var),
+            ("nozzle_area", self._nozzle_area),
         ]:
             try:
                 result[k] = float(v.get())
@@ -976,6 +953,7 @@ class _StageFrame(ttk.LabelFrame):
             result["burn"] = float(burn_str)
         except ValueError:
             raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
+        result["coast"] = 0.0   # coast is now set in the advanced pitch panel
         result["solid_motor"] = bool(self._solid_motor_var.get())
 
         # Solid-motor grain fields
@@ -1017,7 +995,6 @@ class _StageFrame(ttk.LabelFrame):
         self._isp         .set(str(d["isp"]))
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
         # _burn_var is updated automatically by the trace (liquid) or set directly (solid)
-        self._coast_var   .set(str(d.get("coast", 0)))
         self._solid_motor_var.set(bool(d.get("solid_motor", False)))
 
         # Grain profile fields
@@ -1455,8 +1432,6 @@ class MissileDialog(tk.Toplevel):
         for i, sf in enumerate(self._stage_frames):
             if i < n:
                 sf.pack(fill=tk.X, **pad)
-                # Coast row visible only for non-last stages
-                sf.set_coast_visible(i < n - 1)
             else:
                 sf.pack_forget()
 
@@ -3408,11 +3383,12 @@ class MissileFlyoutApp(tk.Tk):
             (1, "Turn start (s)"),
             (2, "Turn stop (s)"),
             (3, "Angle (°)"),
-            (4, ""),                  # separator column
-            (5, "Yaw start (s)"),
-            (6, "Yaw end (s)"),
-            (7, "Final az (°)"),
-            (8, "Burn window"),
+            (4, "Coast (s)"),
+            (5, ""),                  # separator column
+            (6, "Yaw start (s)"),
+            (7, "Yaw end (s)"),
+            (8, "Final az (°)"),
+            (9, "Burn window"),
         ]
         for col, hdr in _headers:
             ttk.Label(af, text=hdr, foreground="#555555").grid(
@@ -3420,7 +3396,7 @@ class MissileFlyoutApp(tk.Tk):
                 pady=(4, 1), sticky=tk.W)
         # Thin visual separator between pitch and yaw columns
         ttk.Separator(af, orient=tk.VERTICAL).grid(
-            row=0, column=4, rowspan=len(stages) + 1,
+            row=0, column=5, rowspan=len(stages) + 1,
             sticky=tk.NS, padx=4, pady=2)
 
         for i, s in enumerate(stages):
@@ -3461,6 +3437,10 @@ class MissileFlyoutApp(tk.Tk):
             sv_stop  = tk.StringVar(value=f"{def_stop:.1f}")
             sv_angle = tk.StringVar(value=f"{def_angle:.1f}")
 
+            # Coast — pre-populate from missile definition; blank for last stage
+            sv_coast = tk.StringVar(
+                value=f"{node.coast_time_s:.1f}" if not is_last else "")
+
             # Yaw fields — empty by default; populate from node if set
             sv_yaw_start  = tk.StringVar(
                 value=f"{node.stage_yaw_start_s:.1f}"
@@ -3481,18 +3461,23 @@ class MissileFlyoutApp(tk.Tk):
                 row=row, column=2, padx=4, pady=1)
             ttk.Entry(af, textvariable=sv_angle, width=7).grid(
                 row=row, column=3, padx=4, pady=1)
+            coast_e = ttk.Entry(af, textvariable=sv_coast, width=7)
+            coast_e.grid(row=row, column=4, padx=4, pady=1)
+            if is_last:
+                coast_e.config(state="disabled")
             ttk.Entry(af, textvariable=sv_yaw_start, width=7).grid(
-                row=row, column=5, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_stop,  width=7).grid(
                 row=row, column=6, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_final, width=7).grid(
+            ttk.Entry(af, textvariable=sv_yaw_stop,  width=7).grid(
                 row=row, column=7, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_final, width=7).grid(
+                row=row, column=8, padx=4, pady=1)
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
-                row=row, column=8, sticky=tk.W, padx=(4, 8), pady=1)
+                row=row, column=9, sticky=tk.W, padx=(4, 8), pady=1)
 
             self._stage_rows.append(
                 {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
+                 'coast': sv_coast,
                  'yaw_start': sv_yaw_start, 'yaw_stop': sv_yaw_stop,
                  'yaw_final_az': sv_yaw_final, 'node': node})
 
@@ -4124,6 +4109,12 @@ class MissileFlyoutApp(tk.Tk):
                     node.stage_burnout_angle_deg  = float(row['angle'].get())
                 except ValueError:
                     pass  # leave existing/None values if field is blank
+                coast_s = row.get('coast', tk.StringVar()).get().strip()
+                if coast_s:
+                    try:
+                        node.coast_time_s = float(coast_s)
+                    except ValueError:
+                        pass
                 # Per-stage yaw overrides (blank = no yaw on this stage)
                 _ys = row.get('yaw_start', tk.StringVar()).get().strip()
                 _ye = row.get('yaw_stop',  tk.StringVar()).get().strip()
@@ -4781,6 +4772,7 @@ class MissileFlyoutApp(tk.Tk):
                     'start':       row['start'].get(),
                     'stop':        row['stop'].get(),
                     'angle':       row['angle'].get(),
+                    'coast':       row.get('coast', tk.StringVar()).get(),
                     'yaw_start':   row.get('yaw_start', tk.StringVar()).get(),
                     'yaw_stop':    row.get('yaw_stop',  tk.StringVar()).get(),
                     'yaw_final_az':row.get('yaw_final_az', tk.StringVar()).get(),
@@ -4822,6 +4814,8 @@ class MissileFlyoutApp(tk.Tk):
                 row['start'].set(ov.get('start', ''))
                 row['stop'].set(ov.get('stop', ''))
                 row['angle'].set(ov.get('angle', ''))
+                if 'coast' in row:
+                    row['coast'].set(ov.get('coast', ''))
                 if 'yaw_start' in row:
                     row['yaw_start'].set(ov.get('yaw_start', ''))
                 if 'yaw_stop' in row:
