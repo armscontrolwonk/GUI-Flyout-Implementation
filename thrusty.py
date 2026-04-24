@@ -1620,7 +1620,9 @@ class MissileDialog(tk.Toplevel):
                 shroud_alt_km        = float(self._shroud_alt_var.get())
                 shroud_length_m      = float(self._shroud_length_var.get())
                 shroud_diameter_m    = float(self._shroud_diameter_var.get())
-                shroud_nose_length_m = float(self._shroud_nose_length_var.get())
+                _snl = self._shroud_nose_length_var.get().strip()
+                shroud_nose_length_m = float(_snl) if _snl and float(_snl) > 0 \
+                                       else shroud_length_m
             except ValueError:
                 raise ValueError("Shroud fields must be numbers.")
             _slabel = self._shroud_nose_shape_var.get()
