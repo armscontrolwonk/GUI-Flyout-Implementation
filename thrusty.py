@@ -5292,6 +5292,127 @@ class MissileFlyoutApp(tk.Tk):
         self.wait_window(dlg)
         return result[0]
 
+    def _pick_cartopy_export_options(self, mid_lon, mid_lat):
+        """Combined projection + map-extent dialog.
+
+        Returns (proj, extent_spec) on OK, or (None, None) on cancel.
+        extent_spec is one of:
+          None                       → global (ax.set_global)
+          ('auto', pad_pct)          → auto-fit with % padding
+          (lon_min, lon_max, lat_min, lat_max) → explicit bounds
+        """
+        dlg = tk.Toplevel(self)
+        dlg.title("Cartopy Export Options")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        # ── Projection list ───────────────────────────────────────────
+        ttk.Label(dlg, text="Projection:", padding=(12, 10, 12, 4)).pack(anchor=tk.W)
+        lb_frame = ttk.Frame(dlg)
+        lb_frame.pack(fill=tk.BOTH, padx=12)
+        vsb = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
+        lb  = tk.Listbox(lb_frame, yscrollcommand=vsb.set, activestyle="dotbox",
+                         width=52, height=len(self._CARTOPY_PROJECTIONS),
+                         selectmode=tk.SINGLE)
+        vsb.config(command=lb.yview)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        lb.pack(side=tk.LEFT, fill=tk.BOTH)
+        for _lbl, _ in self._CARTOPY_PROJECTIONS:
+            lb.insert(tk.END, _lbl)
+        lb.selection_set(0)
+
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 4))
+
+        # ── Map extent ────────────────────────────────────────────────
+        ttk.Label(dlg, text="Map extent:", padding=(12, 0, 12, 4)).pack(anchor=tk.W)
+        extent_var = tk.StringVar(value="auto")
+        ef = ttk.Frame(dlg, padding=(12, 0, 12, 4))
+        ef.pack(fill=tk.X)
+
+        ttk.Radiobutton(ef, text="Global (full world)", variable=extent_var,
+                        value="global").grid(row=0, column=0, columnspan=6,
+                                            sticky=tk.W, pady=2)
+
+        # Auto-fit row
+        af = ttk.Frame(ef)
+        af.grid(row=1, column=0, columnspan=6, sticky=tk.W, pady=2)
+        ttk.Radiobutton(af, text="Auto-fit to trajectory  —  padding:",
+                        variable=extent_var, value="auto").pack(side=tk.LEFT)
+        pad_var = tk.StringVar(value="25")
+        ttk.Entry(af, textvariable=pad_var, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Label(af, text="%").pack(side=tk.LEFT)
+
+        ttk.Radiobutton(ef, text="Custom bounds:", variable=extent_var,
+                        value="custom").grid(row=2, column=0, columnspan=6,
+                                            sticky=tk.W, pady=(6, 2))
+
+        # Custom bounds sub-grid
+        cf = ttk.Frame(ef)
+        cf.grid(row=3, column=0, columnspan=6, sticky=tk.W, padx=20, pady=(0, 4))
+        ttk.Label(cf, text="N:").grid(row=0, column=0, padx=(0, 2))
+        n_var = tk.StringVar(value="")
+        ttk.Entry(cf, textvariable=n_var, width=7).grid(row=0, column=1, padx=2)
+        ttk.Label(cf, text="°").grid(row=0, column=2)
+        ttk.Label(cf, text="S:").grid(row=0, column=3, padx=(8, 2))
+        s_var = tk.StringVar(value="")
+        ttk.Entry(cf, textvariable=s_var, width=7).grid(row=0, column=4, padx=2)
+        ttk.Label(cf, text="°").grid(row=0, column=5)
+        ttk.Label(cf, text="W:").grid(row=1, column=0, padx=(0, 2), pady=2)
+        w_var = tk.StringVar(value="")
+        ttk.Entry(cf, textvariable=w_var, width=7).grid(row=1, column=1, padx=2)
+        ttk.Label(cf, text="°").grid(row=1, column=2)
+        ttk.Label(cf, text="E:").grid(row=1, column=3, padx=(8, 2))
+        e_var = tk.StringVar(value="")
+        ttk.Entry(cf, textvariable=e_var, width=7).grid(row=1, column=4, padx=2)
+        ttk.Label(cf, text="°").grid(row=1, column=5)
+
+        result = [None, None]
+
+        def _ok(*_):
+            sel = lb.curselection()
+            if not sel:
+                dlg.destroy()
+                return
+            _, factory = self._CARTOPY_PROJECTIONS[sel[0]]
+            result[0] = factory(mid_lon, mid_lat)
+            mode = extent_var.get()
+            if mode == "global":
+                result[1] = None
+            elif mode == "auto":
+                try:
+                    pad = max(0.0, float(pad_var.get()))
+                except ValueError:
+                    pad = 25.0
+                result[1] = ('auto', pad)
+            else:
+                try:
+                    n = float(n_var.get())
+                    s = float(s_var.get())
+                    w = float(w_var.get())
+                    e = float(e_var.get())
+                    if s >= n or w >= e:
+                        raise ValueError("degenerate bounds")
+                    result[1] = (w, e, s, n)
+                except ValueError:
+                    messagebox.showerror(
+                        "Invalid bounds",
+                        "Enter numeric values where N > S and E > W.",
+                        parent=dlg,
+                    )
+                    return
+            dlg.destroy()
+
+        lb.bind("<Double-Button-1>", _ok)
+        btn_frm = ttk.Frame(dlg, padding=(12, 8))
+        btn_frm.pack(fill=tk.X)
+        ttk.Button(btn_frm, text="OK",     command=_ok).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Cancel", command=dlg.destroy).pack(
+            side=tk.LEFT, padx=6)
+
+        self._center_dialog(dlg)
+        self.wait_window(dlg)
+        return result[0], result[1]
+
     def _export_cartopy(self):
         """Export a static Cartopy map of the current trajectory."""
         try:
@@ -5318,7 +5439,7 @@ class MissileFlyoutApp(tk.Tk):
         mid_lat = float(np.mean(lat))
         mid_lon = float(np.mean(lon))
 
-        proj = self._pick_cartopy_projection(mid_lon, mid_lat)
+        proj, extent_spec = self._pick_cartopy_export_options(mid_lon, mid_lat)
         if proj is None:
             return   # user cancelled
 
@@ -5337,7 +5458,30 @@ class MissileFlyoutApp(tk.Tk):
         fig    = Figure(figsize=(10, 8), dpi=150)
         canvas = FigureCanvasAgg(fig)
         ax     = fig.add_subplot(1, 1, 1, projection=proj)
-        ax.set_global()
+
+        # ── Map extent ────────────────────────────────────────────────
+        if extent_spec is None:
+            ax.set_global()
+        elif extent_spec[0] == 'auto':
+            pad_frac = extent_spec[1] / 100.0
+            # Include debris track points in bounding box
+            _all_lat = [lat]
+            _all_lon = [lon]
+            for _d in r.get('debris_trajectories', []):
+                _all_lat.append(np.asarray(_d['lat'], dtype=float))
+                _all_lon.append(np.asarray(_d['lon'], dtype=float))
+            _flat = np.concatenate(_all_lat)
+            _flon = np.concatenate(_all_lon)
+            lat_span = max(float(np.max(_flat) - np.min(_flat)), 2.0)
+            lon_span = max(float(np.max(_flon) - np.min(_flon)), 2.0)
+            ax.set_extent([
+                max(-180.0, float(np.min(_flon)) - lon_span * pad_frac),
+                min(+180.0, float(np.max(_flon)) + lon_span * pad_frac),
+                max( -90.0, float(np.min(_flat)) - lat_span * pad_frac),
+                min( +90.0, float(np.max(_flat)) + lat_span * pad_frac),
+            ], crs=ccrs.PlateCarree())
+        else:
+            ax.set_extent(list(extent_spec), crs=ccrs.PlateCarree())
 
         # ── Background features ───────────────────────────────────────
         ax.add_feature(cfeature.OCEAN,     facecolor="#d6e8f5", zorder=0)
@@ -5350,6 +5494,20 @@ class MissileFlyoutApp(tk.Tk):
                        edgecolor="#555555", zorder=2)
         ax.gridlines(color="white", linewidth=0.4, linestyle="--", alpha=0.6,
                      zorder=3)
+
+        # ── NOTAM overlay ─────────────────────────────────────────────
+        if self._notam_overlay:
+            try:
+                from shapely.geometry import Polygon as _ShapelyPoly
+                from cartopy.feature import ShapelyFeature as _ShapelyFeat
+                _polys = [_ShapelyPoly(ring) for ring in self._notam_overlay]
+                ax.add_feature(_ShapelyFeat(
+                    _polys, ccrs.PlateCarree(),
+                    facecolor="#f5f5f5", edgecolor="#c0392b",
+                    linewidth=1.5, alpha=0.7, zorder=3,
+                ))
+            except Exception:
+                pass
 
         _OUTLINE = [pe.withStroke(linewidth=2.5, foreground="white")]
 
