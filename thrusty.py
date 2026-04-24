@@ -2605,7 +2605,7 @@ class MissileFlyoutApp(tk.Tk):
         top.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
         # Left control panel — fixed width, vertically scrollable
-        LEFT_W = 350
+        LEFT_W = 490
         left_outer = ttk.Frame(top, width=LEFT_W)
         left_outer.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
         left_outer.pack_propagate(False)
@@ -3457,22 +3457,22 @@ class MissileFlyoutApp(tk.Tk):
             row = i + 1
             ttk.Label(af, text=f"Stage {i+1}:").grid(
                 row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
-            ttk.Entry(af, textvariable=sv_start, width=7).grid(
-                row=row, column=1, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_stop,  width=7).grid(
-                row=row, column=2, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_angle, width=7).grid(
-                row=row, column=3, padx=4, pady=1)
-            coast_e = ttk.Entry(af, textvariable=sv_coast, width=7)
-            coast_e.grid(row=row, column=4, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_start, width=5).grid(
+                row=row, column=1, padx=3, pady=1)
+            ttk.Entry(af, textvariable=sv_stop,  width=5).grid(
+                row=row, column=2, padx=3, pady=1)
+            ttk.Entry(af, textvariable=sv_angle, width=5).grid(
+                row=row, column=3, padx=3, pady=1)
+            coast_e = ttk.Entry(af, textvariable=sv_coast, width=5)
+            coast_e.grid(row=row, column=4, padx=3, pady=1)
             if is_last:
                 coast_e.config(state="disabled")
-            ttk.Entry(af, textvariable=sv_yaw_start, width=7).grid(
-                row=row, column=6, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_stop,  width=7).grid(
-                row=row, column=7, padx=4, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_final, width=7).grid(
-                row=row, column=8, padx=4, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_start, width=5).grid(
+                row=row, column=6, padx=3, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_stop,  width=5).grid(
+                row=row, column=7, padx=3, pady=1)
+            ttk.Entry(af, textvariable=sv_yaw_final, width=5).grid(
+                row=row, column=8, padx=3, pady=1)
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
                 row=row, column=9, sticky=tk.W, padx=(4, 8), pady=1)
