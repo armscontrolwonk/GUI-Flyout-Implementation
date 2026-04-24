@@ -3386,20 +3386,12 @@ class MissileFlyoutApp(tk.Tk):
             (2, "Turn stop (s)"),
             (3, "Angle (°)"),
             (4, "Coast (s)"),
-            (5, ""),                  # separator column
-            (6, "Yaw start (s)"),
-            (7, "Yaw end (s)"),
-            (8, "Final az (°)"),
-            (9, "Burn window"),
+            (5, "Burn window"),
         ]
         for col, hdr in _headers:
             ttk.Label(af, text=hdr, foreground="#555555").grid(
                 row=0, column=col, padx=(8 if col == 0 else 4, 4),
                 pady=(4, 1), sticky=tk.W)
-        # Thin visual separator between pitch and yaw columns
-        ttk.Separator(af, orient=tk.VERTICAL).grid(
-            row=0, column=5, rowspan=len(stages) + 1,
-            sticky=tk.NS, padx=4, pady=2)
 
         for i, s in enumerate(stages):
             node = s['node']
@@ -3443,17 +3435,6 @@ class MissileFlyoutApp(tk.Tk):
             sv_coast = tk.StringVar(
                 value=f"{node.coast_time_s:.1f}" if not is_last else "")
 
-            # Yaw fields — empty by default; populate from node if set
-            sv_yaw_start  = tk.StringVar(
-                value=f"{node.stage_yaw_start_s:.1f}"
-                      if node.stage_yaw_start_s  is not None else "")
-            sv_yaw_stop   = tk.StringVar(
-                value=f"{node.stage_yaw_stop_s:.1f}"
-                      if node.stage_yaw_stop_s   is not None else "")
-            sv_yaw_final  = tk.StringVar(
-                value=f"{node.stage_yaw_final_az_deg:.1f}"
-                      if node.stage_yaw_final_az_deg is not None else "")
-
             row = i + 1
             ttk.Label(af, text=f"Stage {i+1}:").grid(
                 row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
@@ -3467,21 +3448,13 @@ class MissileFlyoutApp(tk.Tk):
             coast_e.grid(row=row, column=4, padx=3, pady=1)
             if is_last:
                 coast_e.config(state="disabled")
-            ttk.Entry(af, textvariable=sv_yaw_start, width=5).grid(
-                row=row, column=6, padx=3, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_stop,  width=5).grid(
-                row=row, column=7, padx=3, pady=1)
-            ttk.Entry(af, textvariable=sv_yaw_final, width=5).grid(
-                row=row, column=8, padx=3, pady=1)
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
-                row=row, column=9, sticky=tk.W, padx=(4, 8), pady=1)
+                row=row, column=5, sticky=tk.W, padx=(4, 8), pady=1)
 
             self._stage_rows.append(
                 {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
-                 'coast': sv_coast,
-                 'yaw_start': sv_yaw_start, 'yaw_stop': sv_yaw_stop,
-                 'yaw_final_az': sv_yaw_final, 'node': node})
+                 'coast': sv_coast, 'node': node})
 
     # ------------------------------------------------------------------
     def _on_site_selected(self, _event=None):
@@ -4117,13 +4090,6 @@ class MissileFlyoutApp(tk.Tk):
                         node.coast_time_s = float(coast_s)
                     except ValueError:
                         pass
-                # Per-stage yaw overrides (blank = no yaw on this stage)
-                _ys = row.get('yaw_start', tk.StringVar()).get().strip()
-                _ye = row.get('yaw_stop',  tk.StringVar()).get().strip()
-                _ya = row.get('yaw_final_az', tk.StringVar()).get().strip()
-                if _ys: node.stage_yaw_start_s      = float(_ys)
-                if _ye: node.stage_yaw_stop_s        = float(_ye)
-                if _ya: node.stage_yaw_final_az_deg  = float(_ya)
                 node = node.stage2
 
         # Global yaw program (checkbox + three fields)
@@ -4771,13 +4737,10 @@ class MissileFlyoutApp(tk.Tk):
         if self._adv_pitch_var.get() and self._stage_rows:
             meta['stage_overrides'] = [
                 {
-                    'start':       row['start'].get(),
-                    'stop':        row['stop'].get(),
-                    'angle':       row['angle'].get(),
-                    'coast':       row.get('coast', tk.StringVar()).get(),
-                    'yaw_start':   row.get('yaw_start', tk.StringVar()).get(),
-                    'yaw_stop':    row.get('yaw_stop',  tk.StringVar()).get(),
-                    'yaw_final_az':row.get('yaw_final_az', tk.StringVar()).get(),
+                    'start': row['start'].get(),
+                    'stop':  row['stop'].get(),
+                    'angle': row['angle'].get(),
+                    'coast': row.get('coast', tk.StringVar()).get(),
                 }
                 for row in self._stage_rows
             ]
@@ -4818,12 +4781,6 @@ class MissileFlyoutApp(tk.Tk):
                 row['angle'].set(ov.get('angle', ''))
                 if 'coast' in row:
                     row['coast'].set(ov.get('coast', ''))
-                if 'yaw_start' in row:
-                    row['yaw_start'].set(ov.get('yaw_start', ''))
-                if 'yaw_stop' in row:
-                    row['yaw_stop'].set(ov.get('yaw_stop', ''))
-                if 'yaw_final_az' in row:
-                    row['yaw_final_az'].set(ov.get('yaw_final_az', ''))
 
     def _load_trajectory(self):
         """Load a previously saved trajectory CSV, restore guidance params and plots."""
