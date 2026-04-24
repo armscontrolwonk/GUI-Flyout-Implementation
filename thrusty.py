@@ -1298,9 +1298,9 @@ class MissileDialog(tk.Toplevel):
         self._shroud_diameter_var, self._shroud_diameter_entry = _fe_entry(
             self._shroud_section, "Diameter (m):", 2, "0", "m")
         self._shroud_length_var, self._shroud_length_entry = _fe_entry(
-            self._shroud_section, "Length (m):", 3, "0", "m")
+            self._shroud_section, "Total shroud length (m):", 3, "0", "m")
         self._shroud_nose_length_var, self._shroud_nose_length_entry = _fe_entry(
-            self._shroud_section, "Nose length (m):", 4, "0", "m")
+            self._shroud_section, "Nose segment length (m):", 4, "0", "m")
         self._shroud_alt_var, self._shroud_alt_entry = _fe_entry(
             self._shroud_section, "Jettison alt (km):", 5, "80", "km", pady=(2, 4))
 
