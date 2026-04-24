@@ -376,37 +376,41 @@ def _loft_angle_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 # Yaw (dogleg) program
 # ---------------------------------------------------------------------------
 
-def _yaw_program(t, launch_az_rad, active_stage,
-                 global_yaw_start_s, global_yaw_stop_s, global_yaw_final_az_deg):
+def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
     """
-    Linear azimuth schedule for dogleg maneuvers (mission-elapsed time).
+    Multi-segment azimuth schedule for dogleg maneuvers (mission-elapsed time).
 
-    Priority: per-stage fields on active_stage override the global params.
+    yaw_maneuvers is a list of (start_s, stop_s, final_az_deg) tuples in
+    chronological order.  Each segment linearly interpolates from the previous
+    segment's ending azimuth (or launch_az for the first) to its own final
+    azimuth.  Per-stage override fields on active_stage take priority.
     Returns commanded azimuth in radians at time t.
-
-    Architecture note: the caller can derive sideslip angle as
-    (commanded_az - velocity_az) for future aerodynamic drag coupling
-    during in-atmosphere maneuvers without changing this interface.
     """
     if (active_stage is not None
             and active_stage.stage_yaw_final_az_deg is not None):
-        yaw_start = active_stage.stage_yaw_start_s
-        yaw_stop  = active_stage.stage_yaw_stop_s
-        yaw_final = active_stage.stage_yaw_final_az_deg
+        maneuvers = [(active_stage.stage_yaw_start_s,
+                      active_stage.stage_yaw_stop_s,
+                      active_stage.stage_yaw_final_az_deg)]
     else:
-        yaw_start = global_yaw_start_s
-        yaw_stop  = global_yaw_stop_s
-        yaw_final = global_yaw_final_az_deg
+        maneuvers = yaw_maneuvers or []
 
-    if yaw_final is None or yaw_start is None or yaw_stop is None:
-        return launch_az_rad
-    yaw_final_rad = np.radians(yaw_final)
-    if t <= yaw_start:
-        return launch_az_rad
-    if t >= yaw_stop:
-        return yaw_final_rad
-    frac = (t - yaw_start) / max(yaw_stop - yaw_start, 1.0)
-    return launch_az_rad + frac * (yaw_final_rad - launch_az_rad)
+    current_az = launch_az_rad
+    for (yaw_start, yaw_stop, yaw_final_deg) in maneuvers:
+        if yaw_final_deg is None:
+            continue
+        if yaw_start is None:
+            yaw_start = 0.0
+        if yaw_stop is None:
+            yaw_stop = yaw_start
+        yaw_final_rad = np.radians(yaw_final_deg)
+        if t < yaw_start:
+            return current_az
+        if t >= yaw_stop:
+            current_az = yaw_final_rad
+            continue
+        frac = (t - yaw_start) / max(yaw_stop - yaw_start, 1.0)
+        return current_az + frac * (yaw_final_rad - current_az)
+    return current_az
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +419,7 @@ def _yaw_program(t, launch_az_rad, active_stage,
 
 def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
          gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
-         yaw_start_s=None, yaw_stop_s=None, yaw_final_az_deg=None):
+         yaw_maneuvers=None):
     """
     Equations of motion in ECEF frame (Forden Eq. 5/6).
 
@@ -516,8 +520,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # Compute time-varying azimuth (dogleg yaw program).
     # This runs regardless of engine state so the guidance attitude is
     # always defined; future callers can derive sideslip from the result.
-    azimuth_rad = _yaw_program(t, azimuth_rad, astage,
-                               yaw_start_s, yaw_stop_s, yaw_final_az_deg)
+    azimuth_rad = _yaw_program(t, azimuth_rad, astage, yaw_maneuvers)
 
     if engine_on:
         if params.guidance in ("gravity_turn", "orbital_insertion"):
@@ -585,7 +588,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 
 def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
-                yaw_start_s=None, yaw_stop_s=None, yaw_final_az_deg=None):
+                yaw_maneuvers=None):
     """Event: missile hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
@@ -717,10 +720,7 @@ def integrate_trajectory(params: MissileParams,
                          gt_turn_stop_s: float = None,
                          reentry_query_alt_km: float = None,
                          target_orbit_alt_km: float = None,
-                         yaw_enabled: bool = False,
-                         yaw_start_s: float = None,
-                         yaw_stop_s: float = None,
-                         yaw_final_az_deg: float = None,
+                         yaw_maneuvers: list = None,
                          launch_elevation_deg: float = None,
                          _search_mode: bool = False):
     """
@@ -811,12 +811,10 @@ def integrate_trajectory(params: MissileParams,
     t_span    = (0.0, max_time_s)
     _target_orbit_alt_m = (target_orbit_alt_km * 1000.0
                            if target_orbit_alt_km is not None else 0.0)
-    _yaw_start = yaw_start_s     if yaw_enabled else None
-    _yaw_stop  = yaw_stop_s      if yaw_enabled else None
-    _yaw_final = yaw_final_az_deg if yaw_enabled else None
+    _yaw_maneuvers = yaw_maneuvers or None
     eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
                  gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition,
-                 _yaw_start, _yaw_stop, _yaw_final)
+                 _yaw_maneuvers)
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.
@@ -1116,16 +1114,21 @@ def integrate_trajectory(params: MissileParams,
                     break
 
     # Yaw (dogleg) maneuver milestones
-    if yaw_enabled and _yaw_start is not None and _yaw_stop is not None:
-        if _yaw_start <= t_arr[-1]:
-            _ym = _milestone(_yaw_start)
-            _ym['event'] = (f"Yaw start "
-                            f"({np.degrees(az):.1f}°\u2192{_yaw_final:.1f}°)")
-            _insert_chrono(_ym)
-        if _yaw_stop <= t_arr[-1]:
-            _ym = _milestone(_yaw_stop)
-            _ym['event'] = f"Yaw end ({_yaw_final:.1f}°)"
-            _insert_chrono(_ym)
+    if _yaw_maneuvers:
+        _prev_az_deg = np.degrees(az)
+        for _mi, (_ys, _ye, _yf) in enumerate(_yaw_maneuvers):
+            if _yf is None:
+                continue
+            _lbl = f"Yaw {_mi + 1}" if len(_yaw_maneuvers) > 1 else "Yaw"
+            if _ys is not None and _ys <= t_arr[-1]:
+                _ym = _milestone(_ys)
+                _ym['event'] = f"{_lbl} start ({_prev_az_deg:.1f}°\u2192{_yf:.1f}°)"
+                _insert_chrono(_ym)
+            if _ye is not None and _ye <= t_arr[-1]:
+                _ym = _milestone(_ye)
+                _ym['event'] = f"{_lbl} end ({_yf:.1f}°)"
+                _insert_chrono(_ym)
+            _prev_az_deg = _yf
 
     # Re-entry interface — first downward crossing of 100 km (after apogee)
     REENTRY_ALT_M = 100_000.0
@@ -1237,8 +1240,7 @@ def integrate_trajectory(params: MissileParams,
         _burning = _in_burn_window(_t_gp)
         # Commanded azimuth: hold last value through inter-stage coasts,
         # blank after final burnout (same cutoff as pitch).
-        _az_val = np.degrees(_yaw_program(
-            _t_gp, az, _gp_stage, _yaw_start, _yaw_stop, _yaw_final))
+        _az_val = np.degrees(_yaw_program(_t_gp, az, _gp_stage, _yaw_maneuvers))
         if _burning:
             _last_az = _az_val
         _az_cmd.append(_last_az if _t_gp <= _final_burn_end else float('nan'))
