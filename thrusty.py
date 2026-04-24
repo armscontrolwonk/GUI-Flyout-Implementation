@@ -2851,22 +2851,29 @@ class MissileFlyoutApp(tk.Tk):
             command=self._on_adv_yaw_toggled)
 
         # Row 10: Global yaw fields — shown when checkbox enabled
+        # Three maneuvers laid out as a grid: rows=field, cols=maneuver
         yf = ttk.Frame(gf)
         self._adv_yaw_frame = yf
-        self._yaw_start_var    = tk.StringVar(value="")
-        self._yaw_stop_var     = tk.StringVar(value="")
-        self._yaw_final_az_var = tk.StringVar(value="")
-        yf.columnconfigure(1, weight=1)
-        for _yr, _lbl, _sv, _unit in [
-                (0, "Yaw start:",  self._yaw_start_var,    "s"),
-                (1, "Yaw end:",    self._yaw_stop_var,     "s"),
-                (2, "Final az:",   self._yaw_final_az_var, "°")]:
+        self._yaw_vars = [
+            {'start': tk.StringVar(value=""),
+             'stop':  tk.StringVar(value=""),
+             'final_az': tk.StringVar(value="")}
+            for _ in range(3)
+        ]
+        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
+            ttk.Label(yf, text=_hdr, foreground="#555555").grid(
+                row=0, column=_mc, padx=4, pady=(4, 1))
+        for _yr, _lbl, _key, _unit in [
+                (1, "Yaw start:", "start",    "s"),
+                (2, "Yaw end:",   "stop",     "s"),
+                (3, "Final az:",  "final_az", "°")]:
             ttk.Label(yf, text=_lbl).grid(
                 row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-            ttk.Entry(yf, textvariable=_sv, width=8).grid(
-                row=_yr, column=1, sticky=tk.W, padx=2, pady=1)
+            for _mc, _yvars in enumerate(self._yaw_vars, start=1):
+                ttk.Entry(yf, textvariable=_yvars[_key], width=6).grid(
+                    row=_yr, column=_mc, padx=3, pady=1)
             ttk.Label(yf, text=_unit).grid(
-                row=_yr, column=2, sticky=tk.W, padx=(2, 8), pady=1)
+                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
 
         # Row 11: Reset trajectory button — always visible
         self._reset_traj_btn = ttk.Button(
@@ -4102,13 +4109,14 @@ class MissileFlyoutApp(tk.Tk):
         _yaw_chk = getattr(self, '_adv_yaw_var', None)
         yaw_enabled = (bool(_yaw_chk and _yaw_chk.get())
                        and guidance in ("gravity_turn", "orbital_insertion"))
+        yaw_maneuvers = []
         if yaw_enabled:
-            yaw_start_s  = _fon(self._yaw_start_var)
-            yaw_stop_s   = _fon(self._yaw_stop_var)
-            yaw_final_az = _fon(self._yaw_final_az_var)
-            yaw_enabled  = (yaw_final_az is not None)
-        else:
-            yaw_start_s = yaw_stop_s = yaw_final_az = None
+            for _yvars in self._yaw_vars:
+                fa = _fon(_yvars['final_az'])
+                if fa is not None:
+                    yaw_maneuvers.append((_fon(_yvars['start']),
+                                          _fon(_yvars['stop']),
+                                          fa))
 
         try:
             launch_elevation_deg = float(self._launch_el_var.get())
@@ -4118,8 +4126,7 @@ class MissileFlyoutApp(tk.Tk):
 
         return (missile, guidance, lat, lon, az, cutoff, la, lar,
                 gt_start_s, gt_stop_s, target_orbit_km,
-                yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-                launch_elevation_deg)
+                yaw_maneuvers, launch_elevation_deg)
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
@@ -4133,8 +4140,7 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-             launch_elevation_deg) = self._get_inputs()
+             yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -4144,8 +4150,7 @@ class MissileFlyoutApp(tk.Tk):
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
                   gt_start_s, gt_stop_s, target_orbit_km,
-                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-                  launch_elevation_deg, False),
+                  yaw_maneuvers, launch_elevation_deg, False),
             daemon=True,
         ).start()
 
@@ -4155,8 +4160,7 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-             launch_elevation_deg) = self._get_inputs()
+             yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -4166,8 +4170,7 @@ class MissileFlyoutApp(tk.Tk):
             target=self._run_thread,
             args=(missile, guidance, lat, lon, az, cutoff, la, lar,
                   gt_start_s, None, target_orbit_km,
-                  yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-                  launch_elevation_deg, True),
+                  yaw_maneuvers, launch_elevation_deg, True),
             daemon=True,
         ).start()
 
@@ -4178,8 +4181,7 @@ class MissileFlyoutApp(tk.Tk):
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
              gt_start_s, gt_stop_s, target_orbit_km,
-             _yaw_en, _yaw_st, _yaw_sp, _yaw_fa,
-             _launch_el) = self._get_inputs()
+             _yaw_maneuvers, _launch_el) = self._get_inputs()
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
@@ -4265,15 +4267,14 @@ class MissileFlyoutApp(tk.Tk):
                 (m_run, guidance_run, lat_run, lon_run, az_run,
                  cutoff_run, la_run, lar_run,
                  gts_run, gtstp_run, orb_run,
-                 yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run,
-                 el_run) = self._get_inputs()
+                 yaw_maneuvers_run, el_run) = self._get_inputs()
             except ValueError:
                 # Fallback: use the original plan parameters without per-stage overrides.
                 m_run, guidance_run = missile, "orbital_insertion"
                 lat_run, lon_run, az_run = lat, lon, az
                 cutoff_run, la_run, lar_run = None, boost_angle, 0.0
                 gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
-                yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run = False, None, None, None
+                yaw_maneuvers_run = []
                 el_run = 90.0
 
             # _run_thread checks self._running; it's still True from _plan_orbit
@@ -4282,8 +4283,7 @@ class MissileFlyoutApp(tk.Tk):
                 args=(m_run, guidance_run, lat_run, lon_run, az_run,
                       cutoff_run, la_run, lar_run,
                       gts_run, gtstp_run, orb_run,
-                      yaw_en_run, yaw_st_run, yaw_sp_run, yaw_fa_run,
-                      el_run, False),
+                      yaw_maneuvers_run, el_run, False),
                 daemon=True,
             ).start()
 
@@ -4291,8 +4291,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
                     gt_start_s, gt_stop_s, target_orbit_km,
-                    yaw_enabled, yaw_start_s, yaw_stop_s, yaw_final_az,
-                    launch_elevation_deg, maximise):
+                    yaw_maneuvers, launch_elevation_deg, maximise):
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
@@ -4318,10 +4317,7 @@ class MissileFlyoutApp(tk.Tk):
                     gt_turn_stop_s=gt_stop_s,
                     reentry_query_alt_km=q_alt,
                     target_orbit_alt_km=target_orbit_km,
-                    yaw_enabled=yaw_enabled,
-                    yaw_start_s=yaw_start_s,
-                    yaw_stop_s=yaw_stop_s,
-                    yaw_final_az_deg=yaw_final_az,
+                    yaw_maneuvers=yaw_maneuvers,
                     launch_elevation_deg=launch_elevation_deg,
                     max_time_s=_max_t)
             self._result = result
@@ -4729,9 +4725,12 @@ class MissileFlyoutApp(tk.Tk):
                                             tk.StringVar(value='90')).get(),
             'adv_pitch':            self._adv_pitch_var.get(),
             'adv_yaw':              self._adv_yaw_var.get(),
-            'yaw_start_s':          self._yaw_start_var.get(),
-            'yaw_stop_s':           self._yaw_stop_var.get(),
-            'yaw_final_az_deg':     self._yaw_final_az_var.get(),
+            'yaw_maneuvers': [
+                {'start':    v['start'].get(),
+                 'stop':     v['stop'].get(),
+                 'final_az': v['final_az'].get()}
+                for v in self._yaw_vars
+            ],
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -4766,9 +4765,17 @@ class MissileFlyoutApp(tk.Tk):
         if hasattr(self, '_launch_el_var'):
             self._launch_el_var.set(meta.get('launch_elevation_deg', '90.0'))
         self._adv_yaw_var.set(bool(meta.get('adv_yaw', False)))
-        self._yaw_start_var.set(meta.get('yaw_start_s', ''))
-        self._yaw_stop_var.set(meta.get('yaw_stop_s', ''))
-        self._yaw_final_az_var.set(meta.get('yaw_final_az_deg', ''))
+        saved_yaw = meta.get('yaw_maneuvers', [])
+        # Back-compat: old single-maneuver keys
+        if not saved_yaw and meta.get('yaw_final_az_deg', ''):
+            saved_yaw = [{'start': meta.get('yaw_start_s', ''),
+                          'stop':  meta.get('yaw_stop_s', ''),
+                          'final_az': meta.get('yaw_final_az_deg', '')}]
+        for _i, _yvars in enumerate(self._yaw_vars):
+            _d = saved_yaw[_i] if _i < len(saved_yaw) else {}
+            _yvars['start'].set(_d.get('start', ''))
+            _yvars['stop'].set(_d.get('stop', ''))
+            _yvars['final_az'].set(_d.get('final_az', ''))
         # Per-stage overrides — expand the panel then fill row by row
         adv = bool(meta.get('adv_pitch', False))
         self._adv_pitch_var.set(adv)
