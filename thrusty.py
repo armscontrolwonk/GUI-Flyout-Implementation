@@ -4356,8 +4356,8 @@ class MissileFlyoutApp(tk.Tk):
 
         tof_s       = r['time_of_flight_s']
         imp_spd_kms = r['impact_speed_ms'] / 1000.0 if r['impact_speed_ms'] is not None else None
-        apo_lat     = r['apogee_lat_deg']
-        apo_lon     = r['apogee_lon_deg']
+        apo_lat     = r.get('apogee_lat_deg')
+        apo_lon     = r.get('apogee_lon_deg')
 
         units = self._units_var.get()
         scale_map = {"km": (1.0, "km"), "nm": (1/1.852, "nmi"), "mi": (1/1.60934, "mi")}
@@ -4413,17 +4413,21 @@ class MissileFlyoutApp(tk.Tk):
                             f"   i={oe['inclination_deg']:.1f}°"
                             f"   e={oe['eccentricity']:.4f}"
                             f"   T={oe['period_min']:.1f} min")
+            _apo_loc = (f"{r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E"
+                        if r.get('apogee_lat_deg') is not None else "—")
             self._tl_summary_var.set(
                 f"In orbit — no ground impact within integration window\n"
                 f"Apogee: {apogee_km:.1f} km   "
-                f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E"
+                f"Apogee loc: {_apo_loc}"
                 + _oe_line
             )
         else:
+            _apo_loc = (f"{r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E"
+                        if r.get('apogee_lat_deg') is not None else "—")
             self._tl_summary_var.set(
                 f"Range: {rng_km:.1f} km  /  {rng_nm:.1f} nmi  /  {rng_mi:.1f} mi\n"
                 f"Apogee: {apogee_km:.1f} km   "
-                f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E\n"
+                f"Apogee loc: {_apo_loc}\n"
                 f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E   "
                 f"Flight time: {tof_s:.0f} s   "
                 f"Impact speed: {f'{imp_spd:.2f} km/s' if imp_spd is not None else '—'}"
