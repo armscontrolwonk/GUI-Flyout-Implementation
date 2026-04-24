@@ -1975,8 +1975,7 @@ class RangeRingDialog(tk.Toplevel):
         try:
             (missile, guidance, _la, _lo, _az, cutoff, la, lar,
              gt_start_s, gt_stop_s, _orb,
-             _ye, _ys, _ysp, _yfa,
-             launch_elevation_deg) = self._app._get_inputs()
+             _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
             messagebox.showerror("Input error", str(e), parent=self)
             return
@@ -2305,8 +2304,8 @@ class ParametricSweepDialog(tk.Toplevel):
         self._stop_evt.clear()
         try:
             (missile, guidance, lat, lon, az, cutoff, la, lar,
-             gt_start_s, gt_stop_s, _orb, _ye, _ys, _ysp, _yfa,
-             launch_elevation_deg) = self._app._get_inputs()
+             gt_start_s, gt_stop_s, _orb,
+             _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
             messagebox.showerror("Input error", str(e), parent=self)
             return
@@ -4374,11 +4373,12 @@ class MissileFlyoutApp(tk.Tk):
             _strip = (f"In orbit.  Apogee: {apogee_km*scale:.1f} {ulbl}" + _oe_str)
             self._status_var.set(_strip)
         else:
+            _spd_str = f"{imp_spd_kms:.2f} km/s" if imp_spd_kms is not None else "—"
             _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
                       f"Apogee: {apogee_km*scale:.1f} {ulbl}  |  "
                       f"ToF: {tof_s:.0f} s  |  "
                       f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
-                      f"Impact spd: {imp_spd_kms:.2f} km/s")
+                      f"Impact spd: {_spd_str}")
             self._status_var.set("Done.  " + _strip)
         self._results_strip_var.set(_strip)
         self._plot_results(r, scale, ulbl)
@@ -4420,7 +4420,7 @@ class MissileFlyoutApp(tk.Tk):
                 f"Apogee loc: {r['apogee_lat_deg']:.2f}°N  {r['apogee_lon_deg']:.2f}°E\n"
                 f"Impact: {r['impact_lat']:.2f}°N  {r['impact_lon']:.2f}°E   "
                 f"Flight time: {tof_s:.0f} s   "
-                f"Impact speed: {imp_spd:.2f} km/s"
+                f"Impact speed: {f'{imp_spd:.2f} km/s' if imp_spd is not None else '—'}"
             )
 
         # Key events highlighted differently; debris impact rows get their own tag
