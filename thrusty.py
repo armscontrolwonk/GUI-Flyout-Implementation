@@ -2549,9 +2549,19 @@ class MissileFlyoutApp(tk.Tk):
 
     def report_callback_exception(self, exc_type, exc_value, exc_tb):
         """Show unhandled callback exceptions as a dialog instead of crashing."""
-        import traceback as _tb
+        import traceback as _tb, os as _os
         detail = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
-        messagebox.showerror("Unexpected error", detail[:3000])
+        # Always write to log first — dialog may itself fail on Python 3.11/macOS.
+        try:
+            _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
+            with open(_log, "a") as _f:
+                _f.write(detail + "\n---\n")
+        except Exception:
+            pass
+        try:
+            messagebox.showerror("Unexpected error", detail[:3000])
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Utility
@@ -4336,6 +4346,23 @@ class MissileFlyoutApp(tk.Tk):
     # Display results
     # ------------------------------------------------------------------
     def _on_result_ready(self):
+        try:
+            self._on_result_ready_impl()
+        except Exception:
+            import traceback as _tb, os as _os
+            detail = _tb.format_exc()
+            try:
+                _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
+                with open(_log, "a") as _f:
+                    _f.write(detail + "\n---\n")
+            except Exception:
+                pass
+            try:
+                messagebox.showerror("Error displaying results", detail[:2000])
+            except Exception:
+                pass
+
+    def _on_result_ready_impl(self):
         r = self._result
         self._autosave_trajectory()
 
