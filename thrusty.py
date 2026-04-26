@@ -6364,7 +6364,44 @@ class MissileFlyoutApp(tk.Tk):
 
 
 # ---------------------------------------------------------------------------
+def _patch_tkinter_callwrapper():
+    """Replace CallWrapper.__call__ with a version that never leaks exceptions.
+
+    Python 3.11 on macOS has a bug where if _report_exception() itself raises
+    (e.g. because messagebox re-enters tkinter in a broken state), the secondary
+    exception propagates all the way out of tk.mainloop() and crashes the app,
+    displaying a misleading 'UnboundLocalError: cannot access local variable self'.
+    Patching __call__ means ALL after() callbacks are safe regardless of which
+    function is responsible.
+    """
+    import tkinter as _tk, traceback as _tb, os as _os
+
+    def _safe_call(cw_self, *args):
+        try:
+            if cw_self.subst:
+                args = cw_self.subst(*args)
+            return cw_self.func(*args)
+        except SystemExit:
+            raise   # let sys.exit() still work
+        except Exception:
+            detail = _tb.format_exc()
+            try:
+                _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
+                with open(_log, "a") as _f:
+                    _f.write(detail + "\n---\n")
+            except Exception:
+                pass
+            try:
+                from tkinter import messagebox as _mb
+                _mb.showerror("Unexpected error", detail[:3000])
+            except Exception:
+                pass
+
+    _tk.CallWrapper.__call__ = _safe_call
+
+
 def main():
+    _patch_tkinter_callwrapper()
     app = MissileFlyoutApp()
     app.mainloop()
 
