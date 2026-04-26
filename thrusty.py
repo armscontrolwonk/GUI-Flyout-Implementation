@@ -2548,18 +2548,21 @@ class MissileFlyoutApp(tk.Tk):
         self._on_missile_changed()   # populate params tab with default missile
 
     def report_callback_exception(self, exc_type, exc_value, exc_tb):
-        """Show unhandled callback exceptions as a dialog instead of crashing."""
-        import traceback as _tb, os as _os
-        detail = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
-        # Always write to log first — dialog may itself fail on Python 3.11/macOS.
+        """Log callback exceptions to stderr and file; never raise or show a dialog.
+
+        Showing a dialog here creates a re-entrant Tk event loop, which can
+        trigger further callbacks, further exceptions, and ultimately a
+        RecursionError that Python 3.11 misreports as an UnboundLocalError.
+        The real traceback is always visible in the terminal and ~/thrusty_error.log.
+        High-level callers (e.g. _on_result_ready) show their own dialogs.
+        """
         try:
+            import traceback as _tb, os as _os, sys as _sys
+            detail = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
+            print(detail, file=_sys.stderr, flush=True)
             _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
             with open(_log, "a") as _f:
                 _f.write(detail + "\n---\n")
-        except Exception:
-            pass
-        try:
-            messagebox.showerror("Unexpected error", detail[:3000])
         except Exception:
             pass
 
@@ -6364,41 +6367,7 @@ class MissileFlyoutApp(tk.Tk):
 
 
 # ---------------------------------------------------------------------------
-def _patch_tkinter_callwrapper():
-    """Replace CallWrapper.__call__ with a version that never leaks exceptions.
-
-    Python 3.11 on macOS has a bug where exceptions that escape the except
-    handler inside __call__ are reported as a misleading 'UnboundLocalError:
-    cannot access local variable self/cw_self'.  Using except BaseException
-    and avoiding any dialog (which would create a re-entrant event loop and
-    risk RecursionError) keeps the mainloop alive.  Errors go to stderr and
-    ~/thrusty_error.log so they are always visible.
-    """
-    import tkinter as _tk
-
-    def _safe_call(cw_self, *args):
-        try:
-            if cw_self.subst:
-                args = cw_self.subst(*args)
-            return cw_self.func(*args)
-        except SystemExit:
-            raise
-        except BaseException:
-            try:
-                import traceback as _tb, os as _os, sys as _sys
-                detail = _tb.format_exc()
-                print(detail, file=_sys.stderr, flush=True)
-                _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
-                with open(_log, "a") as _f:
-                    _f.write(detail + "\n---\n")
-            except BaseException:
-                pass
-
-    _tk.CallWrapper.__call__ = _safe_call
-
-
 def main():
-    _patch_tkinter_callwrapper()
     app = MissileFlyoutApp()
     app.mainloop()
 
