@@ -4349,14 +4349,11 @@ class MissileFlyoutApp(tk.Tk):
     # Display results
     # ------------------------------------------------------------------
     def _on_result_ready(self):
-        print("DEBUG: _on_result_ready entered", flush=True)
         try:
             self._on_result_ready_impl()
-            print("DEBUG: _on_result_ready_impl returned normally", flush=True)
         except Exception:
             import traceback as _tb, os as _os
             detail = _tb.format_exc()
-            print("DEBUG: _on_result_ready caught exception:\n" + detail, flush=True)
             try:
                 _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
                 with open(_log, "a") as _f:
@@ -4722,8 +4719,7 @@ class MissileFlyoutApp(tk.Tk):
             ax_mch.yaxis.set_label_position('right')
             ax_mch.yaxis.set_ticks_position('right')
 
-        self._canvas.draw_idle()
-        self._canvas.flush_events()
+        self._canvas.draw()
 
     # ------------------------------------------------------------------
     # File / Help actions
