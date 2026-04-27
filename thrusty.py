@@ -2219,7 +2219,7 @@ class RangeRingDialog(tk.Toplevel):
             return
 
         geo    = ccrs.Geodetic()
-        fig    = Figure(figsize=(10, 8), dpi=150)
+        fig    = Figure(figsize=(10, 8), dpi=300)
         canvas = FigureCanvasAgg(fig)
         ax     = fig.add_subplot(1, 1, 1, projection=proj)
         ax.set_global()
@@ -5559,7 +5559,7 @@ class MissileFlyoutApp(tk.Tk):
 
         geo = ccrs.Geodetic()
 
-        fig    = Figure(figsize=(10, 8), dpi=150)
+        fig    = Figure(figsize=(10, 8), dpi=300)
         canvas = FigureCanvasAgg(fig)
         ax     = fig.add_subplot(1, 1, 1, projection=proj)
 
