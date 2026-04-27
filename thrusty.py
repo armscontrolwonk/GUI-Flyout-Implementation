@@ -3696,8 +3696,6 @@ class MissileFlyoutApp(tk.Tk):
                 row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._loft_angle_frame.grid(
                 row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._loft_rate_lbl.grid_forget()
-            self._loft_rate_frame.grid_forget()
             self._gt_turn_start_lbl.grid(
                 row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._gt_turn_start_frame.grid(
