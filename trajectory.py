@@ -75,6 +75,7 @@ from coordinates import (
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
+    booster_drag_vector,
 )
 
 
@@ -221,6 +222,17 @@ def _stage_event_times(params: MissileParams):
             t = t_burnout + node.coast_time_s
         node = node.stage2
         stage += 1
+
+    # Insert booster separation in chronological order
+    if params.n_boosters > 0 and params.booster_burn_time_s > 0:
+        t_sep = params.booster_burn_time_s
+        for i, (_, t_ev) in enumerate(events):
+            if t_ev > t_sep:
+                events.insert(i, ("Booster separation", t_sep))
+                break
+        else:
+            events.append(("Booster separation", t_sep))
+
     return events
 
 
@@ -480,6 +492,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             f_drag = np.zeros(3)
     else:
         f_drag = drag_force_vector(astage, vel, alt, top_params=params)
+        if params.n_boosters > 0 and t <= params.booster_burn_time_s:
+            f_drag = f_drag + booster_drag_vector(params, vel, alt)
 
     # --- Thrust with mode-selected guidance ---
     # For orbital_insertion mode with a liquid-engine final stage, check
@@ -1089,6 +1103,48 @@ def integrate_trajectory(params: MissileParams,
                     _d_traj['t'] = _d_traj['t'] + _t_fair
                     _debris_trajectories.append({
                         'label': 'Shroud',
+                        **_d_traj,
+                    })
+
+    # Booster casing debris — all n_boosters casings follow the same tumbling arc.
+    if (params.n_boosters > 0
+            and params.booster_diam_m > 0
+            and params.booster_inert_kg > 0):
+        _t_bsep = params.booster_burn_time_s
+        if _t_bsep > 0 and _t_bsep <= t_arr[-1]:
+            _b_len = (params.booster_length_m
+                      if params.booster_length_m > 0
+                      else 2.0 * params.booster_diam_m)
+            _beta_b = tumbling_cylinder_beta(
+                params.booster_inert_kg,
+                params.booster_diam_m,
+                _b_len,
+            )
+            if _beta_b > 0:
+                _pos_b, _vel_b = _ecef_state_at(_t_bsep)
+                _debris_b = integrate_debris(_pos_b, _vel_b, _beta_b,
+                                             max_time_s=14400.0,
+                                             return_trajectory=True)
+                if _debris_b is not None:
+                    _d_lat, _d_lon, _dt, _d_spd, _d_traj = _debris_b
+                    _rng = range_between(lat0, lon0,
+                                         np.radians(_d_lat), np.radians(_d_lon))
+                    _insert_chrono({
+                        'event':              "Booster casing impact",
+                        't_s':                _t_bsep + _dt,
+                        'alt_km':             0.0,
+                        'range_km':           _rng / 1000.0,
+                        'speed_kms':          _d_spd / 1000.0,
+                        'inertial_speed_kms': _d_spd / 1000.0,
+                        'accel_ms2':          0.0,
+                        'mass_t':             params.booster_inert_kg / 1000.0,
+                        'is_debris':          True,
+                        'impact_lat':         _d_lat,
+                        'impact_lon':         _d_lon,
+                    })
+                    _d_traj['t'] = _d_traj['t'] + _t_bsep
+                    _debris_trajectories.append({
+                        'label': f'Booster casings ({params.n_boosters}×)',
                         **_d_traj,
                     })
 

@@ -1079,6 +1079,14 @@ class MissileDialog(tk.Toplevel):
         self._stages_cb.pack(side=tk.LEFT, padx=(4, 0))
         self._stages_cb.bind("<<ComboboxSelected>>",
                              lambda _: self._update_stage_frames())
+        ttk.Label(nf, text="  Boosters:").pack(side=tk.LEFT)
+        self._n_boosters_var = tk.StringVar(value="0")
+        self._n_boosters_spin = ttk.Spinbox(
+            nf, textvariable=self._n_boosters_var, from_=0, to=9,
+            width=2, command=self._update_booster_frame)
+        self._n_boosters_spin.pack(side=tk.LEFT, padx=(4, 0))
+        self._n_boosters_var.trace_add("write",
+                                       lambda *_: self._update_booster_frame())
 
         # Scrollable body: canvas + scrollbar sandwiched between the name row
         # and the Save/Cancel buttons so buttons are always visible.
@@ -1319,6 +1327,35 @@ class MissileDialog(tk.Toplevel):
                         variable=self._guidance_var, value="orbital_insertion").pack(
             anchor=tk.W, padx=8, pady=(0, 4))
 
+        # ── Strap-on Boosters panel ─────────────────────────────────────────
+        self._booster_frame = ttk.LabelFrame(body, text="Strap-on Boosters")
+        self._booster_frame.columnconfigure(1, weight=1)
+        # (packed/unpacked dynamically by _update_booster_frame)
+
+        def _be_entry(row, label, default, unit, pady=2):
+            ttk.Label(self._booster_frame, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=pady)
+            _inner = ttk.Frame(self._booster_frame)
+            _inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 6), pady=pady)
+            _var = tk.StringVar(value=default)
+            ttk.Entry(_inner, textvariable=_var, width=10).pack(side=tk.LEFT)
+            ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
+            return _var
+
+        self._b_thrust_var   = _be_entry(0, "Thrust per booster (kN):", "500",  "kN")
+        self._b_burn_var     = _be_entry(1, "Burn time (s):",            "60",   "s")
+        self._b_inert_var    = _be_entry(2, "Inert mass per booster (kg):", "2000", "kg")
+        self._b_prop_var     = _be_entry(3, "Propellant per booster (kg):", "10000","kg")
+        self._b_isp_var      = _be_entry(4, "Isp (vacuum, s):",          "270",  "s")
+        self._b_nozzle_var   = _be_entry(5, "Nozzle exit area (m²):",    "0",    "m²")
+        self._b_diam_var     = _be_entry(6, "Diameter (m):",              "1.2",  "m")
+        self._b_length_var   = _be_entry(7, "Length (m):",               "0",    "m  (0 = 2×dia)")
+        self._b_cd_var       = _be_entry(8, "Cd (drag coeff):",          "0.20", "",
+                                         pady=(2, 6))
+        ttk.Label(self._booster_frame, text="Cd guide: 0.10 ogive · 0.20 cone · 0.40 hemi · 1.0 flat",
+                  foreground="gray50").grid(
+            row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 6), pady=(0, 4))
+
         # Stage frames (1 always visible; 2-4 toggled).
         # A dedicated container ensures dynamically-packed stages always appear
         # between the payload row and the buttons (not after the buttons).
@@ -1378,6 +1415,19 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_entry.config(state="disabled")
         self._shroud_nose_length_entry.config(state="disabled")
         self._shroud_alt_entry.config(state="disabled")
+        # Booster section
+        self._n_boosters_spin.config(state="disabled")
+        for _bv in (self._b_thrust_var, self._b_burn_var, self._b_inert_var,
+                    self._b_prop_var, self._b_isp_var, self._b_nozzle_var,
+                    self._b_diam_var, self._b_length_var, self._b_cd_var):
+            for _w in self._booster_frame.winfo_children():
+                if isinstance(_w, ttk.Frame):
+                    for _c in _w.winfo_children():
+                        if isinstance(_c, ttk.Entry):
+                            try:
+                                _c.config(state="disabled")
+                            except tk.TclError:
+                                pass
         self._save_btn.pack_forget()
         self._save_as_btn.pack_forget()
 
@@ -1423,6 +1473,19 @@ class MissileDialog(tk.Toplevel):
             self._shroud_section.grid()
         else:
             self._shroud_section.grid_remove()
+
+    # ------------------------------------------------------------------
+    def _update_booster_frame(self, *_):
+        """Show or hide the booster parameter panel based on booster count."""
+        try:
+            n = int(self._n_boosters_var.get())
+        except (ValueError, tk.TclError):
+            n = 0
+        if n > 0:
+            self._booster_frame.pack(fill=tk.X, padx=8, pady=4,
+                                     before=self._stages_container)
+        else:
+            self._booster_frame.pack_forget()
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -1535,6 +1598,28 @@ class MissileDialog(tk.Toplevel):
         self._shroud_nose_shape_var.set(
             NOSE_SHAPE_LABELS.get(p.shroud_nose_shape, NOSE_SHAPE_LABELS["cone"]))
         self._shroud_nose_length_var.set(f"{p.shroud_nose_length_m:.2f}")
+
+        # Strap-on boosters
+        nb = getattr(p, 'n_boosters', 0)
+        self._n_boosters_var.set(str(nb))
+        if nb > 0:
+            G0 = 9.80665
+            b_prop = getattr(p, 'booster_prop_kg', 0.0)
+            b_burn = getattr(p, 'booster_burn_time_s', 0.0)
+            b_isp  = getattr(p, 'booster_isp_s', 0.0)
+            b_thrust_kn = (b_isp * G0 * b_prop / b_burn / 1000.0
+                           if b_burn > 0 and b_prop > 0 and b_isp > 0
+                           else getattr(p, 'booster_thrust_n', 0.0) / 1000.0)
+            self._b_thrust_var.set(f"{b_thrust_kn:.1f}")
+            self._b_burn_var.set(f"{b_burn:.1f}")
+            self._b_inert_var.set(f"{getattr(p, 'booster_inert_kg', 0.0):.0f}")
+            self._b_prop_var.set(f"{b_prop:.0f}")
+            self._b_isp_var.set(f"{b_isp:.1f}")
+            self._b_nozzle_var.set(f"{getattr(p, 'booster_nozzle_area_m2', 0.0):.4f}")
+            self._b_diam_var.set(f"{getattr(p, 'booster_diam_m', 0.0):.2f}")
+            self._b_length_var.set(f"{getattr(p, 'booster_length_m', 0.0):.2f}")
+            self._b_cd_var.set(f"{getattr(p, 'booster_cd', 0.20):.2f}")
+        self._update_booster_frame()
 
         # Apply show/hide state for all sections
         self._update_rv_separates_state()
@@ -1705,6 +1790,40 @@ class MissileDialog(tk.Toplevel):
         node.shroud_diameter_m      = shroud_diameter_m
         node.shroud_nose_shape      = shroud_nose_shape
         node.shroud_nose_length_m   = shroud_nose_length_m
+
+        # Strap-on boosters
+        try:
+            _n_b = max(0, min(9, int(self._n_boosters_var.get())))
+        except (ValueError, tk.TclError):
+            _n_b = 0
+        if _n_b > 0:
+            try:
+                _b_thrust_kn   = float(self._b_thrust_var.get())
+                _b_burn        = float(self._b_burn_var.get())
+                _b_inert       = float(self._b_inert_var.get())
+                _b_prop        = float(self._b_prop_var.get())
+                _b_isp         = float(self._b_isp_var.get())
+                _b_nozzle      = float(self._b_nozzle_var.get())
+                _b_diam        = float(self._b_diam_var.get())
+                _b_length      = float(self._b_length_var.get())
+                _b_cd          = float(self._b_cd_var.get())
+            except ValueError as exc:
+                raise ValueError(f"Booster field: {exc}") from exc
+            if _b_burn <= 0:
+                raise ValueError("Booster burn time must be > 0.")
+            if _b_diam <= 0:
+                raise ValueError("Booster diameter must be > 0.")
+            node.n_boosters             = _n_b
+            node.booster_thrust_n       = _b_thrust_kn * 1000.0
+            node.booster_burn_time_s    = _b_burn
+            node.booster_inert_kg       = _b_inert
+            node.booster_prop_kg        = _b_prop
+            node.booster_isp_s          = _b_isp
+            node.booster_nozzle_area_m2 = _b_nozzle
+            node.booster_diam_m         = _b_diam
+            node.booster_length_m       = _b_length
+            node.booster_cd             = _b_cd
+
         return node
 
     # ------------------------------------------------------------------
