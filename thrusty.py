@@ -5638,7 +5638,7 @@ class MissileFlyoutApp(tk.Tk):
                     color="black", linewidth=1.0, alpha=0.5,
                     transform=geo, zorder=4)
 
-        # ── Milestone dots ────────────────────────────────────────────
+        # ── Milestone markers and tick marks ──────────────────────────
 
         def _show_labeled(e, is_debris, ms):
             if is_debris:
@@ -5660,6 +5660,15 @@ class MissileFlyoutApp(tk.Tk):
             return (float(np.interp(ms['t_s'], t, lat)),
                     float(np.interp(ms['t_s'], t, lon)))
 
+        # Tick half-length: ~1.5 % of the map's latitude span so ticks scale
+        # with the map extent (same visual weight at all ranges).
+        try:
+            _ext = ax.get_extent(crs=ccrs.PlateCarree())
+            _lat_span = max(1.0, _ext[3] - _ext[2])
+        except Exception:
+            _lat_span = max(1.0, float(np.ptp(lat)))
+        _tick_half = max(0.25, _lat_span * 0.015)
+
         for ms in r.get('milestones', []):
             is_debris = ms.get('is_debris', False)
             e         = ms['event'].lower()
@@ -5673,10 +5682,23 @@ class MissileFlyoutApp(tk.Tk):
                         transform=geo, zorder=6)
             elif _show_tick(e, is_debris):
                 mk_lat, mk_lon = _mk_pos(ms)
-                ax.plot(mk_lon, mk_lat, marker="o",
-                        markersize=4,
-                        color="white",
-                        markeredgecolor="black", markeredgewidth=0.7,
+                # Find nearest trajectory index to get the local tangent.
+                _i = int(np.argmin(np.abs(t - ms['t_s'])))
+                _i = int(np.clip(_i, 1, len(t) - 2))
+                _dlat = float(lat[_i + 1] - lat[_i - 1])
+                _dlon = float(lon[_i + 1] - lon[_i - 1])
+                _cos  = np.cos(np.radians(mk_lat)) or 1e-9
+                # Magnitude in (north, east) space
+                _mag  = np.hypot(_dlat, _dlon * _cos) or 1e-9
+                # Perpendicular unit vector (CW rotation): (−E, N) / mag
+                _pn = -_dlon * _cos / _mag   # northward component
+                _pe =  _dlat       / _mag    # eastward component
+                # Offset in geographic degrees
+                _dlat_t = _tick_half * _pn
+                _dlon_t = _tick_half * _pe / _cos
+                ax.plot([mk_lon - _dlon_t, mk_lon + _dlon_t],
+                        [mk_lat - _dlat_t, mk_lat + _dlat_t],
+                        color="#333333", linewidth=1.5,
                         transform=geo, zorder=6)
 
         # ── Title ─────────────────────────────────────────────────────
