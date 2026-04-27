@@ -5639,7 +5639,6 @@ class MissileFlyoutApp(tk.Tk):
                     transform=geo, zorder=4)
 
         # ── Milestone dots ────────────────────────────────────────────
-        import re as _re_ev
 
         def _show_labeled(e, is_debris, ms):
             if is_debris:
@@ -5649,22 +5648,36 @@ class MissileFlyoutApp(tk.Tk):
                     ('impact'   in e and 'empty' not in e
                                      and 'shroud' not in e))
 
+        def _show_tick(e, is_debris):
+            if is_debris:
+                return False
+            return ('apogee' in e or 're-entry' in e or 'burnout' in e or
+                    ('ignition' in e and 'stage' in e) or 'jettison' in e)
+
+        def _mk_pos(ms):
+            if ms.get('is_debris') and 'impact_lat' in ms:
+                return ms['impact_lat'], ms['impact_lon']
+            return (float(np.interp(ms['t_s'], t, lat)),
+                    float(np.interp(ms['t_s'], t, lon)))
+
         for ms in r.get('milestones', []):
             is_debris = ms.get('is_debris', False)
             e         = ms['event'].lower()
-            if not _show_labeled(e, is_debris, ms):
-                continue
-            if is_debris and 'impact_lat' in ms:
-                mk_lat, mk_lon = ms['impact_lat'], ms['impact_lon']
-            else:
-                mk_lat = float(np.interp(ms['t_s'], t, lat))
-                mk_lon = float(np.interp(ms['t_s'], t, lon))
-            is_impact = 'impact' in e and not is_debris
-            ax.plot(mk_lon, mk_lat, marker="o",
-                    markersize=7 if is_impact else 5,
-                    color="crimson" if is_impact else "white",
-                    markeredgecolor="black", markeredgewidth=0.8,
-                    transform=geo, zorder=6)
+            if _show_labeled(e, is_debris, ms):
+                mk_lat, mk_lon = _mk_pos(ms)
+                is_impact = 'impact' in e and not is_debris
+                ax.plot(mk_lon, mk_lat, marker="o",
+                        markersize=7 if is_impact else 5,
+                        color="crimson" if is_impact else "white",
+                        markeredgecolor="black", markeredgewidth=0.8,
+                        transform=geo, zorder=6)
+            elif _show_tick(e, is_debris):
+                mk_lat, mk_lon = _mk_pos(ms)
+                ax.plot(mk_lon, mk_lat, marker="o",
+                        markersize=4,
+                        color="white",
+                        markeredgecolor="black", markeredgewidth=0.7,
+                        transform=geo, zorder=6)
 
         # ── Title ─────────────────────────────────────────────────────
         parts = [self._missile_var.get()]
