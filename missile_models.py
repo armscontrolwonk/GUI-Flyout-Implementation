@@ -172,6 +172,9 @@ class MissileParams:
     booster_diam_m:         float = 0.0    # outer diameter per booster (m)
     booster_length_m:       float = 0.0    # length per booster (0 → 2×diameter)
     booster_cd:             float = 0.20   # zero-lift Cd (0.20 = tangent ogive)
+    # Seconds after T=0 (strap-on ignition / liftoff) before stage-1 core ignites.
+    # 0 = all ignite together (Soyuz).  >0 = sequential (LVM3, Titan IIIC).
+    booster_core_delay_s:   float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -1116,6 +1119,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'booster_diam_m':         p.booster_diam_m,
         'booster_length_m':       p.booster_length_m,
         'booster_cd':             p.booster_cd,
+        'booster_core_delay_s':   p.booster_core_delay_s,
     }
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -1196,6 +1200,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         booster_diam_m=float(d.get('booster_diam_m', 0.0)),
         booster_length_m=float(d.get('booster_length_m', 0.0)),
         booster_cd=float(d.get('booster_cd', 0.20)),
+        booster_core_delay_s=float(d.get('booster_core_delay_s', 0.0)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -1244,8 +1249,11 @@ def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
 
 
 def total_burn_time(params: MissileParams) -> float:
-    """Total time from launch to end of last stage's burn (burn + coast phases)."""
-    t, s = 0.0, params
+    """Total time from launch (T=0) to end of last stage's burn.
+
+    Includes booster_core_delay_s when strap-ons ignite before the core.
+    """
+    t, s = params.booster_core_delay_s, params
     while s is not None:
         t += s.burn_time_s
         if s.stage2 is not None:
@@ -1331,8 +1339,11 @@ def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
     strap-on boosters.
 
     alt_m is the current altitude in metres; used for shroud-jettison accounting.
+    When booster_core_delay_s > 0 the stage chain hasn't started burning until
+    t >= delay, so we shift the time seen by _stage_chain_mass.
     """
-    return (_stage_chain_mass(params, t, alt_m)
+    t_chain = t - params.booster_core_delay_s
+    return (_stage_chain_mass(params, max(0.0, t_chain), alt_m)
             + _booster_mass_addend(params, max(0.0, t)))
 
 
@@ -1478,7 +1489,10 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
     -------
     F_thrust : ndarray (3,) Newtons
     """
-    f = _stage_chain_thrust(params, t, altitude_m, thrust_dir)
+    # Stage chain only fires after booster_core_delay_s has elapsed.
+    t_chain = t - params.booster_core_delay_s
+    f = (_stage_chain_thrust(params, t_chain, altitude_m, thrust_dir)
+         if t_chain >= 0 else np.zeros(3))
 
     # Add strap-on booster thrust while boosters are burning
     n, t_b = params.n_boosters, params.booster_burn_time_s
