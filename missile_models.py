@@ -159,6 +159,20 @@ class MissileParams:
     pbv_diameter_m: float = 0.0
     pbv_length_m:   float = 0.0
 
+    # Strap-on boosters — fire from t=0 in parallel with stage 1; separate at
+    # booster_burn_time_s.  These fields are only meaningful on the top-level
+    # (stage-1) node; upper-stage nodes ignore them.
+    n_boosters:             int   = 0
+    booster_thrust_n:       float = 0.0    # vacuum thrust per booster (N)
+    booster_burn_time_s:    float = 0.0    # burn duration (s)
+    booster_inert_kg:       float = 0.0    # inert (empty) mass per booster (kg)
+    booster_prop_kg:        float = 0.0    # propellant mass per booster (kg)
+    booster_isp_s:          float = 0.0    # specific impulse (s)
+    booster_nozzle_area_m2: float = 0.0    # nozzle exit area for P correction (m²)
+    booster_diam_m:         float = 0.0    # outer diameter per booster (m)
+    booster_length_m:       float = 0.0    # length per booster (0 → 2×diameter)
+    booster_cd:             float = 0.20   # zero-lift Cd (0.20 = tangent ogive)
+
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
@@ -1092,6 +1106,16 @@ def missile_to_dict(p: MissileParams) -> dict:
         'rv_length_m':            p.rv_length_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
+        'n_boosters':             p.n_boosters,
+        'booster_thrust_n':       p.booster_thrust_n,
+        'booster_burn_time_s':    p.booster_burn_time_s,
+        'booster_inert_kg':       p.booster_inert_kg,
+        'booster_prop_kg':        p.booster_prop_kg,
+        'booster_isp_s':          p.booster_isp_s,
+        'booster_nozzle_area_m2': p.booster_nozzle_area_m2,
+        'booster_diam_m':         p.booster_diam_m,
+        'booster_length_m':       p.booster_length_m,
+        'booster_cd':             p.booster_cd,
     }
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -1162,6 +1186,16 @@ def missile_from_dict(d: dict) -> MissileParams:
         rv_length_m=float(d.get('rv_length_m', 0.0)),
         pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
         pbv_length_m=float(d.get('pbv_length_m', 0.0)),
+        n_boosters=int(d.get('n_boosters', 0)),
+        booster_thrust_n=float(d.get('booster_thrust_n', 0.0)),
+        booster_burn_time_s=float(d.get('booster_burn_time_s', 0.0)),
+        booster_inert_kg=float(d.get('booster_inert_kg', 0.0)),
+        booster_prop_kg=float(d.get('booster_prop_kg', 0.0)),
+        booster_isp_s=float(d.get('booster_isp_s', 0.0)),
+        booster_nozzle_area_m2=float(d.get('booster_nozzle_area_m2', 0.0)),
+        booster_diam_m=float(d.get('booster_diam_m', 0.0)),
+        booster_length_m=float(d.get('booster_length_m', 0.0)),
+        booster_cd=float(d.get('booster_cd', 0.20)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -1259,12 +1293,18 @@ def active_stage_and_t(params: MissileParams, t: float):
     return s, t_rem   # last stage
 
 
-def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
-    """Current mass (kg) at time t seconds after launch.  Handles N stages.
+def _booster_mass_addend(params: MissileParams, t: float) -> float:
+    """Mass (kg) contributed by attached strap-on boosters; 0 after separation."""
+    n, t_b = params.n_boosters, params.booster_burn_time_s
+    if n <= 0 or t_b <= 0 or t > t_b:
+        return 0.0
+    t = max(0.0, t)
+    return (n * (params.booster_prop_kg + params.booster_inert_kg)
+            - n * params.booster_prop_kg / t_b * t)
 
-    alt_m is the current altitude in metres; it is used to determine whether
-    a shroud has been jettisoned (when alt_m / 1000 >= shroud_jettison_alt_km).
-    """
+
+def _stage_chain_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
+    """Mass of the stage chain only (excludes strap-on boosters)."""
     if t <= 0:
         return params.mass_initial
     t_rem, s = t, params
@@ -1272,21 +1312,28 @@ def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
         if t_rem < s.burn_time_s:
             mdot = s.mass_propellant / s.burn_time_s
             mass = s.mass_initial - mdot * t_rem
-            # Subtract shroud once jettison altitude is crossed (during powered flight)
             if (params.shroud_mass_kg > 0
                     and alt_m / 1000.0 >= params.shroud_jettison_alt_km):
                 mass -= params.shroud_mass_kg
             return mass
         t_rem -= s.burn_time_s
         if s.stage2 is None:
-            # RV separates at last-stage burnout; coast on payload mass if known.
-            # (Shroud is assumed already jettisoned before burnout.)
             return params.payload_kg if params.payload_kg > 0 else s.mass_final
         if t_rem < s.coast_time_s:
-            return s.stage2.mass_initial   # stage s jettisoned, next stage is vehicle
+            return s.stage2.mass_initial
         t_rem -= s.coast_time_s
         s = s.stage2
-    return params.mass_final  # shouldn't reach here
+    return params.mass_final
+
+
+def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
+    """Current mass (kg) at time t seconds after launch.  Handles N stages and
+    strap-on boosters.
+
+    alt_m is the current altitude in metres; used for shroud-jettison accounting.
+    """
+    return (_stage_chain_mass(params, t, alt_m)
+            + _booster_mass_addend(params, max(0.0, t)))
 
 
 def missile_area(params: MissileParams, altitude_m: float = None,
@@ -1382,29 +1429,15 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     return -drag_mag * (vel_ecef / speed)
 
 
-def thrust_force(params: MissileParams, t: float, altitude_m: float,
-                 thrust_dir: np.ndarray) -> np.ndarray:
-    """
-    Thrust force vector (N).  Handles N stages.
-
-    Parameters
-    ----------
-    params     : MissileParams (stage-1 node of the linked list)
-    t          : time since launch (s)
-    altitude_m : current altitude for ambient pressure correction
-    thrust_dir : unit vector in direction of thrust (ECEF)
-
-    Returns
-    -------
-    F_thrust : ndarray (3,) Newtons
-    """
+def _stage_chain_thrust(params: MissileParams, t: float, altitude_m: float,
+                        thrust_dir: np.ndarray) -> np.ndarray:
+    """Thrust from the stage chain only (excludes strap-on boosters)."""
     if t < 0:
         return np.zeros(3)
     t_rem, s = t, params
     while s is not None:
         if t_rem <= s.burn_time_s:
             _, P_amb, _, _ = atmosphere(altitude_m)
-            # Instantaneous vacuum thrust: grain modulation or constant.
             if s.grain_type or s.thrust_profile:
                 T_peak = s.thrust_peak_N if s.thrust_peak_N > 0.0 else s.thrust_N
                 t_frac = t_rem / s.burn_time_s if s.burn_time_s > 0.0 else 0.0
@@ -1423,7 +1456,62 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
         if s.stage2 is None:
             return np.zeros(3)
         if t_rem <= s.coast_time_s:
-            return np.zeros(3)   # coasting between stages
+            return np.zeros(3)
         t_rem -= s.coast_time_s
         s      = s.stage2
-    return np.zeros(3)  # all stages burned out
+    return np.zeros(3)
+
+
+def thrust_force(params: MissileParams, t: float, altitude_m: float,
+                 thrust_dir: np.ndarray) -> np.ndarray:
+    """
+    Thrust force vector (N).  Handles N stages and strap-on boosters.
+
+    Parameters
+    ----------
+    params     : MissileParams (stage-1 node of the linked list)
+    t          : time since launch (s)
+    altitude_m : current altitude for ambient pressure correction
+    thrust_dir : unit vector in direction of thrust (ECEF)
+
+    Returns
+    -------
+    F_thrust : ndarray (3,) Newtons
+    """
+    f = _stage_chain_thrust(params, t, altitude_m, thrust_dir)
+
+    # Add strap-on booster thrust while boosters are burning
+    n, t_b = params.n_boosters, params.booster_burn_time_s
+    if n > 0 and t_b > 0 and 0.0 <= t <= t_b:
+        _, P_amb, _, _ = atmosphere(altitude_m)
+        T_vac = params.booster_thrust_n
+        if params.booster_nozzle_area_m2 > 0:
+            T_mag = max(0.0, T_vac - P_amb * params.booster_nozzle_area_m2)
+        else:
+            T_mag = T_vac * (1.0 - 0.02 * (P_amb / 101325.0))
+        f = f + n * T_mag * thrust_dir
+
+    return f
+
+
+def booster_drag_vector(top_params: MissileParams, vel_ecef: np.ndarray,
+                        altitude_m: float) -> np.ndarray:
+    """
+    Aerodynamic drag force (N) from the strap-on booster pack.
+
+    Returns a zero vector when n_boosters == 0, booster_diam_m == 0, or
+    speed is negligible.  Callers must gate by time: only invoke while
+    t <= top_params.booster_burn_time_s.
+    """
+    n = top_params.n_boosters
+    d = top_params.booster_diam_m
+    if n <= 0 or d <= 0:
+        return np.zeros(3)
+    speed = np.linalg.norm(vel_ecef)
+    if speed < 1e-6:
+        return np.zeros(3)
+    _, _, rho, _ = atmosphere(altitude_m)
+    q        = 0.5 * rho * speed ** 2
+    A_total  = n * np.pi * (d / 2.0) ** 2
+    drag_mag = top_params.booster_cd * q * A_total
+    return -drag_mag * (vel_ecef / speed)
