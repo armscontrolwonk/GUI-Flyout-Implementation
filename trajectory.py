@@ -209,12 +209,22 @@ def _stage_event_times(params: MissileParams):
     coast_time_s == 0 both events share the same timestamp; when there is
     a coast gap they are separated by that gap.
     """
+    delay = getattr(params, 'booster_core_delay_s', 0.0)
     events = []
-    t = 0.0
+
+    # When strap-ons ignite before the core, T=0 is liftoff (strap-on ignition)
+    # and core/stage-1 ignites later.
+    if delay > 0:
+        events.append(("Launch", 0.0))
+
+    t = delay
     node = params
     stage = 1
     while node is not None:
-        label = "Ignition" if stage == 1 else f"Stage {stage} ignition"
+        if stage == 1:
+            label = "Core ignition" if delay > 0 else "Ignition"
+        else:
+            label = f"Stage {stage} ignition"
         events.append((label, t))
         t_burnout = t + node.burn_time_s
         events.append((f"Stage {stage} burnout", t_burnout))
