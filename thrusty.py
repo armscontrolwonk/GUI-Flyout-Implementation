@@ -2092,7 +2092,7 @@ class RangeRingDialog(tk.Toplevel):
             return
 
         try:
-            (missile, guidance, _la, _lo, _az, cutoff, la, lar,
+            (missile, guidance, _la, _lo, _az, cutoff, la,
              gt_start_s, gt_stop_s, _orb,
              _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
@@ -2109,7 +2109,7 @@ class RangeRingDialog(tk.Toplevel):
 
         threading.Thread(
             target=self._worker,
-            args=(missile, guidance, lat, lon, la, lar,
+            args=(missile, guidance, lat, lon, la,
                   gt_start_s, gt_stop_s, launch_elevation_deg),
             daemon=True,
         ).start()
@@ -2117,7 +2117,7 @@ class RangeRingDialog(tk.Toplevel):
     def _cancel(self):
         self._stop.set()
 
-    def _worker(self, missile, guidance, lat, lon, la, lar,
+    def _worker(self, missile, guidance, lat, lon, la,
                 gt_start_s, gt_stop_s, launch_elevation_deg):
         azimuths = np.linspace(0.0, 360.0, self._N_AZ, endpoint=False)
         points   = []   # (az, impact_lon, impact_lat)
@@ -2131,7 +2131,6 @@ class RangeRingDialog(tk.Toplevel):
                     missile, lat, lon, az,
                     guidance=guidance,
                     loft_angle_deg=la,
-                    loft_angle_rate_deg_s=lar,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
                 )
@@ -2422,7 +2421,7 @@ class ParametricSweepDialog(tk.Toplevel):
     def _run(self):
         self._stop_evt.clear()
         try:
-            (missile, guidance, lat, lon, az, cutoff, la, lar,
+            (missile, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, _orb,
              _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
@@ -2460,14 +2459,14 @@ class ParametricSweepDialog(tk.Toplevel):
 
         threading.Thread(
             target=self._sweep_worker,
-            args=(missile, guidance, lat, lon, az, la, lar, cutoff,
+            args=(missile, guidance, lat, lon, az, la, cutoff,
                   param_key, points, overplot, gt_start_s, gt_stop_s,
                   launch_elevation_deg),
             daemon=True,
         ).start()
 
     # ------------------------------------------------------------------
-    def _sweep_worker(self, missile, guidance, lat, lon, az, la, lar, cutoff,
+    def _sweep_worker(self, missile, guidance, lat, lon, az, la, cutoff,
                       param_key, points, store_trajs, gt_start_s=5.0, gt_stop_s=None,
                       launch_elevation_deg=90.0):
         for i, val in enumerate(points):
@@ -2482,7 +2481,6 @@ class ParametricSweepDialog(tk.Toplevel):
                     missile, lat, lon, run_az,
                     guidance=guidance,
                     loft_angle_deg=run_la,
-                    loft_angle_rate_deg_s=lar,
                     cutoff_time_s=run_cut,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=run_gt_stop,
@@ -2921,17 +2919,6 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
         self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
         self._loft_angle_unit_lbl.pack(side=tk.LEFT, padx=2)
-
-        self._loft_rate_lbl = ttk.Label(gf, text="Loft Rate:")
-        self._loft_rate_lbl.grid(row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-        lr_frame = ttk.Frame(gf)
-        lr_frame.grid(row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-        self._loft_rate_frame = lr_frame
-        self._loft_rate_var = tk.StringVar(value="2.0")
-        self._loft_rate_entry = ttk.Entry(lr_frame, textvariable=self._loft_rate_var, width=8)
-        self._loft_rate_entry.pack(side=tk.LEFT)
-        self._loft_rate_unit_lbl = ttk.Label(lr_frame, text="°/s")
-        self._loft_rate_unit_lbl.pack(side=tk.LEFT, padx=2)
 
         self._gt_turn_start_lbl = ttk.Label(gf, text="Turn Start:")
         self._gt_turn_start_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -3444,7 +3431,6 @@ class MissileFlyoutApp(tk.Tk):
         if prof:
             self._guidance_var.set(prof.get('guidance', p.guidance))
             self._loft_angle_var.set(str(prof.get('loft_angle_deg', p.loft_angle_deg)))
-            self._loft_rate_var.set(str(prof.get('loft_angle_rate_deg_s', p.loft_angle_rate_deg_s)))
             self._launch_el_var.set(str(prof.get('launch_elevation_deg', p.launch_elevation_deg)))
             gt_start = prof.get('gt_turn_start_s', 5.0)
             self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
@@ -3456,7 +3442,6 @@ class MissileFlyoutApp(tk.Tk):
         else:
             self._cutoff_var.set(str(int(total_burn_time(p))))
             self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
-            self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
             self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
             self._guidance_var.set(p.guidance)
 
@@ -3721,21 +3706,6 @@ class MissileFlyoutApp(tk.Tk):
                 row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._gt_turn_stop_frame.grid(
                 row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-        else:
-            self._loft_angle_lbl.config(text="Loft Angle:")
-            self._loft_angle_unit_lbl.config(text="°  (final elev.)")
-            self._loft_angle_lbl.grid(
-                row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-            self._loft_angle_frame.grid(
-                row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._loft_rate_lbl.grid(row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-            self._loft_rate_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._loft_rate_unit_lbl.config(text="°/s")
-            self._loft_rate_entry.config(state="normal")
-            self._gt_turn_start_lbl.grid_forget()
-            self._gt_turn_start_frame.grid_forget()
-            self._gt_turn_stop_lbl.grid_forget()
-            self._gt_turn_stop_frame.grid_forget()
         if guidance == "orbital_insertion":
             self._orbit_alt_lbl.grid(
                 row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -3828,18 +3798,13 @@ class MissileFlyoutApp(tk.Tk):
         except ValueError:
             loft_angle = 45.0
         try:
-            loft_rate = float(self._loft_rate_var.get())
-        except ValueError:
-            loft_rate = 2.0
-        try:
             launch_el = float(self._launch_el_var.get())
         except (ValueError, AttributeError):
             launch_el = 90.0
         prof = {
-            'guidance':              self._guidance_var.get(),
-            'loft_angle_deg':        loft_angle,
-            'loft_angle_rate_deg_s': loft_rate,
-            'launch_elevation_deg':  launch_el,
+            'guidance':             self._guidance_var.get(),
+            'loft_angle_deg':       loft_angle,
+            'launch_elevation_deg': launch_el,
             'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
             'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
             'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
@@ -3860,7 +3825,6 @@ class MissileFlyoutApp(tk.Tk):
         p = get_missile(name)
         self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
-        self._loft_rate_var.set(f"{p.loft_angle_rate_deg_s:.3f}")
         self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
         self._guidance_var.set(p.guidance)
         self._gt_turn_start_var.set("5.0")
@@ -4155,8 +4119,7 @@ class MissileFlyoutApp(tk.Tk):
 
             missile  = get_missile(self._missile_var.get())
             guidance = self._guidance_var.get()
-            la  = float(self._loft_angle_var.get())
-            lar = float(self._loft_rate_var.get())
+            la           = float(self._loft_angle_var.get())
             gt_start_str = self._gt_turn_start_var.get().strip()
             gt_stop_str  = self._gt_turn_stop_var.get().strip()
             gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
@@ -4167,7 +4130,7 @@ class MissileFlyoutApp(tk.Tk):
                 pass
             threading.Thread(
                 target=self._aim_thread,
-                args=(missile, guidance, lat1_dd, lon1_dd, az, rng_km, la, lar,
+                args=(missile, guidance, lat1_dd, lon1_dd, az, rng_km, la,
                       gt_start_s, gt_stop_s),
                 daemon=True,
             ).start()
@@ -4175,13 +4138,12 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Aim error", str(e))
 
-    def _aim_thread(self, missile, guidance, lat, lon, az, rng_km, la, lar,
+    def _aim_thread(self, missile, guidance, lat, lon, az, rng_km, la,
                     gt_start_s=5.0, gt_stop_s=None):
         try:
             cutoff = aim_missile(missile, lat, lon, az, rng_km,
                                  guidance=guidance,
                                  loft_angle_deg=la,
-                                 loft_angle_rate_deg_s=lar,
                                  gt_turn_start_s=gt_start_s,
                                  gt_turn_stop_s=gt_stop_s)
             self.after(0, lambda: self._cutoff_var.set(f"{cutoff:.1f}"))
@@ -4202,8 +4164,7 @@ class MissileFlyoutApp(tk.Tk):
         az       = float(self._azimuth_var.get())
         cutoff_str = self._cutoff_var.get().strip()
         cutoff   = float(cutoff_str) if cutoff_str else None
-        la       = float(self._loft_angle_var.get())
-        lar      = float(self._loft_rate_var.get())
+        la           = float(self._loft_angle_var.get())
         gt_start_str = self._gt_turn_start_var.get().strip()
         gt_stop_str  = self._gt_turn_stop_var.get().strip()
         gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
@@ -4261,7 +4222,7 @@ class MissileFlyoutApp(tk.Tk):
             launch_elevation_deg = 90.0
         missile.launch_elevation_deg = launch_elevation_deg
 
-        return (missile, guidance, lat, lon, az, cutoff, la, lar,
+        return (missile, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
                 yaw_maneuvers, launch_elevation_deg)
 
@@ -4275,7 +4236,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la, lar,
+            (missile, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
@@ -4285,7 +4246,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Running simulation…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la, lar,
+            args=(missile, guidance, lat, lon, az, cutoff, la,
                   gt_start_s, gt_stop_s, target_orbit_km,
                   yaw_maneuvers, launch_elevation_deg, False),
             daemon=True,
@@ -4295,7 +4256,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la, lar,
+            (missile, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
@@ -4305,7 +4266,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la, lar,
+            args=(missile, guidance, lat, lon, az, cutoff, la,
                   gt_start_s, None, target_orbit_km,
                   yaw_maneuvers, launch_elevation_deg, True),
             daemon=True,
@@ -4316,7 +4277,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la, lar,
+            (missile, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              _yaw_maneuvers, _launch_el) = self._get_inputs()
         except ValueError as e:
@@ -4402,14 +4363,14 @@ class MissileFlyoutApp(tk.Tk):
             # are applied to the missile before running the simulation.
             try:
                 (m_run, guidance_run, lat_run, lon_run, az_run,
-                 cutoff_run, la_run, lar_run,
+                 cutoff_run, la_run,
                  gts_run, gtstp_run, orb_run,
                  yaw_maneuvers_run, el_run) = self._get_inputs()
             except ValueError:
                 # Fallback: use the original plan parameters without per-stage overrides.
                 m_run, guidance_run = missile, "orbital_insertion"
                 lat_run, lon_run, az_run = lat, lon, az
-                cutoff_run, la_run, lar_run = None, boost_angle, 0.0
+                cutoff_run, la_run = None, boost_angle
                 gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
                 yaw_maneuvers_run = []
                 el_run = 90.0
@@ -4418,7 +4379,7 @@ class MissileFlyoutApp(tk.Tk):
             threading.Thread(
                 target=self._run_thread,
                 args=(m_run, guidance_run, lat_run, lon_run, az_run,
-                      cutoff_run, la_run, lar_run,
+                      cutoff_run, la_run,
                       gts_run, gtstp_run, orb_run,
                       yaw_maneuvers_run, el_run, False),
                 daemon=True,
@@ -4426,7 +4387,7 @@ class MissileFlyoutApp(tk.Tk):
 
         self.after(0, _apply_and_run)
 
-    def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la, lar,
+    def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la,
                     gt_start_s, gt_stop_s, target_orbit_km,
                     yaw_maneuvers, launch_elevation_deg, maximise):
         q_str = self._query_alt_km_var.get().strip()
@@ -4448,7 +4409,6 @@ class MissileFlyoutApp(tk.Tk):
                     missile, lat, lon, az,
                     guidance=guidance,
                     loft_angle_deg=la,
-                    loft_angle_rate_deg_s=lar,
                     cutoff_time_s=cutoff,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
@@ -4489,7 +4449,6 @@ class MissileFlyoutApp(tk.Tk):
         # updates and the canvas redraw.
         if r.get('optimal_loft_angle_deg') is not None:
             self._loft_angle_var.set(f"{r['optimal_loft_angle_deg']:.4f}")
-            self._loft_rate_var .set(f"{r['optimal_loft_rate_deg_s']:.3f}")
         if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "gravity_turn":
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
@@ -4869,10 +4828,9 @@ class MissileFlyoutApp(tk.Tk):
             'launch_lat':           self._launch_lat.get(),
             'launch_lon':           self._launch_lon.get(),
             'azimuth_deg':          self._azimuth_var.get(),
-            'guidance':             self._guidance_var.get(),
-            'loft_angle_deg':       self._loft_angle_var.get(),
-            'loft_rate_deg_s':      self._loft_rate_var.get(),
-            'gt_turn_start_s':      self._gt_turn_start_var.get(),
+            'guidance':        self._guidance_var.get(),
+            'loft_angle_deg': self._loft_angle_var.get(),
+            'gt_turn_start_s': self._gt_turn_start_var.get(),
             'gt_turn_stop_s':       self._gt_turn_stop_var.get(),
             'cutoff_s':             self._cutoff_var.get(),
             'launch_elevation_deg': getattr(self, '_launch_el_var',
@@ -4912,7 +4870,6 @@ class MissileFlyoutApp(tk.Tk):
         self._guidance_var.set(guidance)
         self._update_guidance_labels(guidance)
         self._loft_angle_var.set(meta.get('loft_angle_deg', '45.0'))
-        self._loft_rate_var.set(meta.get('loft_rate_deg_s', '2.0'))
         self._gt_turn_start_var.set(meta.get('gt_turn_start_s', '5.0'))
         self._gt_turn_stop_var.set(meta.get('gt_turn_stop_s', ''))
         self._cutoff_var.set(meta.get('cutoff_s', ''))

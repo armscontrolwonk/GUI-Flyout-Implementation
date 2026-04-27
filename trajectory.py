@@ -35,21 +35,21 @@ Physics included
 ----------------
   - Gravity (J2 spheroid — more accurate than Forden's point-mass)
   - Aerodynamic drag  (Forden Eq. 3)
-  - Thrust (powered phase, loft-angle pitch-over guidance)
+  - Thrust (powered phase, user-directed gravity-turn pitch program)
   - Coriolis acceleration  (-2 ω × v)
   - Centrifugal acceleration  (-ω × (ω × r))
 
-Guidance law — Forden Eq. 8
-----------------------------
-The missile launches vertically (elevation 90° from horizontal) and pitches
-over at a constant rate loft_angle_rate_deg_s until the elevation reaches
-loft_angle_deg, where it holds for the remainder of powered flight:
+Guidance law — user-directed gravity turn
+-----------------------------------------
+The missile launches at launch_elevation_deg (default 90° vertical) and
+linearly pitches from that angle to burnout_angle_deg between turn_start_s
+and turn_stop_s, then holds the burnout angle for the remainder of powered
+flight.  Per-stage overrides (stage_turn_start_s, stage_turn_stop_s,
+stage_burnout_angle_deg) take priority over the global pitch program.
 
-    el(t) = max(loft_angle_deg, 90° - loft_angle_rate_deg_s * t)
-
-Azimuth is constant (set at launch).  The ENU frame is re-evaluated at the
-missile's current geodetic position each step so that "local vertical" tracks
-the missile as it moves downrange.
+Azimuth is constant by default; optional yaw maneuvers provide dogleg
+corrections.  The ENU frame is re-evaluated at each step so that "local
+vertical" tracks the missile as it moves downrange.
 
 Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
   Missile         Our model   Forden    Notes
@@ -362,27 +362,6 @@ def _orbital_insertion_thrust_dir(lat_rad, lon_rad, azimuth_rad,
 
 
 
-def _loft_angle_thrust_dir(lat_rad, lon_rad, azimuth_rad,
-                            loft_angle_deg, loft_angle_rate_deg_s, t,
-                            launch_elevation_deg=90.0):
-    """
-    Unit thrust vector (ECEF) under Forden's loft-angle guidance (Eq. 8).
-
-    el(t) = max(loft_angle_deg, launch_elevation_deg − loft_angle_rate_deg_s * t)
-
-    t is mission elapsed time (seconds since launch).  The curve runs
-    continuously through all stages and coast phases; during coast no thrust
-    is applied so the instantaneous attitude has no effect on the trajectory.
-    """
-    el_deg = max(loft_angle_deg, launch_elevation_deg - loft_angle_rate_deg_s * t)
-    el_rad = np.radians(el_deg)
-    e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
-    thrust = (np.cos(el_rad) * np.sin(azimuth_rad) * e_east +
-              np.cos(el_rad) * np.cos(azimuth_rad) * e_north +
-              np.sin(el_rad) * e_up)
-    norm = np.linalg.norm(thrust)
-    return thrust / norm if norm > 1e-12 else e_up
-
 
 # ---------------------------------------------------------------------------
 # Yaw (dogleg) program
@@ -438,10 +417,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     state = [x, y, z, vx, vy, vz]
     Returns d(state)/dt.
 
-    Guidance uses a single continuous pitch-over driven by mission elapsed
-    time t and the top-level params.loft_angle_deg / loft_angle_rate_deg_s.
-    The curve runs through all stages and coast phases; thrust_force() returns
-    zero during coast so attitude during coast has no effect on the trajectory.
+    Guidance uses the user-directed gravity-turn pitch program driven by
+    mission elapsed time t.  thrust_force() returns zero during coast so
+    attitude during coast has no effect on the trajectory.
 
     gt_turn_start_s / gt_turn_stop_s are used only when params.guidance ==
     "gravity_turn"; they bound the active pitch window.
@@ -537,52 +515,42 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     azimuth_rad = _yaw_program(t, azimuth_rad, astage, yaw_maneuvers)
 
     if engine_on:
-        if params.guidance in ("gravity_turn", "orbital_insertion"):
-            # Per-stage advanced pitch: if the active stage carries its own
-            # turn_start / turn_stop / burnout_angle overrides, use those;
-            # otherwise fall back to the global gravity-turn params.
-            # For orbital_insertion without per-stage overrides, the legacy
-            # two-phase function still applies (final stage forced horizontal).
-            _stage_override = (astage is not None and
-                               astage.stage_burnout_angle_deg is not None)
-            if _stage_override:
-                _eff_angle = astage.stage_burnout_angle_deg
-                _eff_start = (astage.stage_turn_start_s
-                              if astage.stage_turn_start_s is not None
-                              else gt_turn_start_s)
-                _eff_stop  = (astage.stage_turn_stop_s
-                              if astage.stage_turn_stop_s is not None
-                              else gt_turn_stop_s)
-                _entry_ang = _prev_burnout_angle(params, astage)
-                thrust_dir = _gravity_turn_thrust_dir(
-                    lat, lon, azimuth_rad,
-                    _eff_angle, _eff_start, _eff_stop, t,
-                    start_angle_deg=_entry_ang)
-            elif params.guidance == "orbital_insertion":
-                thrust_dir = _orbital_insertion_thrust_dir(
-                    lat, lon, azimuth_rad,
-                    params.loft_angle_deg,
-                    gt_turn_start_s,
-                    gt_turn_stop_s,
-                    t_final_ignition,
-                    t)
-            else:
-                thrust_dir = _gravity_turn_thrust_dir(
-                    lat, lon, azimuth_rad,
-                    params.loft_angle_deg,
-                    gt_turn_start_s,
-                    gt_turn_stop_s,
-                    t,
-                    start_angle_deg=params.launch_elevation_deg)
+        # Per-stage advanced pitch: if the active stage carries its own
+        # turn_start / turn_stop / burnout_angle overrides, use those;
+        # otherwise fall back to the global gravity-turn params.
+        # For orbital_insertion without per-stage overrides, the two-phase
+        # function applies (final stage forced horizontal).
+        _stage_override = (astage is not None and
+                           astage.stage_burnout_angle_deg is not None)
+        if _stage_override:
+            _eff_angle = astage.stage_burnout_angle_deg
+            _eff_start = (astage.stage_turn_start_s
+                          if astage.stage_turn_start_s is not None
+                          else gt_turn_start_s)
+            _eff_stop  = (astage.stage_turn_stop_s
+                          if astage.stage_turn_stop_s is not None
+                          else gt_turn_stop_s)
+            _entry_ang = _prev_burnout_angle(params, astage)
+            thrust_dir = _gravity_turn_thrust_dir(
+                lat, lon, azimuth_rad,
+                _eff_angle, _eff_start, _eff_stop, t,
+                start_angle_deg=_entry_ang)
+        elif params.guidance == "orbital_insertion":
+            thrust_dir = _orbital_insertion_thrust_dir(
+                lat, lon, azimuth_rad,
+                params.loft_angle_deg,
+                gt_turn_start_s,
+                gt_turn_stop_s,
+                t_final_ignition,
+                t)
         else:
-            # Defensive fallback for any missile still carrying guidance="loft"
-            # from an old file that bypassed missile_from_dict conversion.
-            # Treat as gravity_turn using the stored loft parameters.
-            thrust_dir = _gravity_turn_thrust_dir(lat, lon, azimuth_rad,
-                                                   params.loft_angle_deg,
-                                                   gt_turn_start_s, gt_turn_stop_s,
-                                                   t,
-                                                   start_angle_deg=params.launch_elevation_deg)
+            thrust_dir = _gravity_turn_thrust_dir(
+                lat, lon, azimuth_rad,
+                params.loft_angle_deg,
+                gt_turn_start_s,
+                gt_turn_stop_s,
+                t,
+                start_angle_deg=params.launch_elevation_deg)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -726,7 +694,6 @@ def integrate_trajectory(params: MissileParams,
                          launch_azimuth_deg: float,
                          guidance: str = None,
                          loft_angle_deg: float = None,
-                         loft_angle_rate_deg_s: float = None,
                          cutoff_time_s: float = None,
                          dt_output: float = 1.0,
                          max_time_s: float = 3600.0,
@@ -746,10 +713,8 @@ def integrate_trajectory(params: MissileParams,
     launch_lat_deg        : geodetic launch latitude (degrees)
     launch_lon_deg        : launch longitude (degrees)
     launch_azimuth_deg    : launch azimuth clockwise from North (degrees)
-    loft_angle_deg        : final elevation above horizontal (°); defaults to
+    loft_angle_deg        : burnout elevation above horizontal (°); defaults to
                             params.loft_angle_deg
-    loft_angle_rate_deg_s : pitch-over rate (°/s); defaults to
-                            params.loft_angle_rate_deg_s
     cutoff_time_s         : engine cutoff time (s); defaults to full burn
     dt_output             : output time step (s)
     max_time_s            : maximum flight time (s)
@@ -771,17 +736,15 @@ def integrate_trajectory(params: MissileParams,
         'apogee_km' : maximum altitude (km)
     """
     import copy
-    # Apply session-level overrides non-destructively.  guidance, loft_angle_deg
-    # and loft_angle_rate_deg_s are flight parameters (like launch site) that
-    # the caller may override independently of the stored missile definition.
-    if guidance is not None or loft_angle_deg is not None or loft_angle_rate_deg_s is not None:
+    # Apply session-level overrides non-destructively.  guidance and
+    # loft_angle_deg are flight parameters (like launch site) that the caller
+    # may override independently of the stored missile definition.
+    if guidance is not None or loft_angle_deg is not None or launch_elevation_deg is not None:
         params = copy.copy(params)
         if guidance is not None:
             params.guidance = guidance
         if loft_angle_deg is not None:
             params.loft_angle_deg = loft_angle_deg
-        if loft_angle_rate_deg_s is not None:
-            params.loft_angle_rate_deg_s = loft_angle_rate_deg_s
         if launch_elevation_deg is not None:
             params.launch_elevation_deg = launch_elevation_deg
 
@@ -1331,9 +1294,7 @@ def integrate_trajectory(params: MissileParams,
                 _frac = (_t_gp - _gp_ts) / max(_gp_tp - _gp_ts, 1.0)
                 _pitch_val = _entry_ang - _frac * (_entry_ang - _gp_angle)
         else:
-            # Loft mode: el(t) = max(loft_angle, 90 - rate*t)
-            _pitch_val = max(params.loft_angle_deg,
-                             90.0 - params.loft_angle_rate_deg_s * _t_gp)
+            _pitch_val = _last_pitch
         _last_pitch = _pitch_val
         # Show pitch during burns and inter-stage coasts; blank after final burnout
         _pitch_cmd.append(_pitch_val if _t_gp <= _final_burn_end else float('nan'))
@@ -1374,26 +1335,22 @@ def aim_missile(params: MissileParams,
                 target_range_km: float,
                 guidance: str = None,
                 loft_angle_deg: float = None,
-                loft_angle_rate_deg_s: float = None,
                 gt_turn_start_s: float = 5.0,
                 gt_turn_stop_s: float = None) -> float:
     """
-    Find the engine cutoff time (seconds) that produces the desired range,
-    using the missile's loft-angle guidance parameters.
+    Find the engine cutoff time (seconds) that produces the desired range.
 
     Returns cutoff_time_s.
     """
     from scipy.optimize import brentq
 
-    la  = loft_angle_deg          if loft_angle_deg          is not None else params.loft_angle_deg
-    lar = loft_angle_rate_deg_s   if loft_angle_rate_deg_s   is not None else params.loft_angle_rate_deg_s
+    la = loft_angle_deg if loft_angle_deg is not None else params.loft_angle_deg
 
     def range_error(cutoff):
         r = integrate_trajectory(params, launch_lat_deg, launch_lon_deg,
                                  launch_azimuth_deg,
                                  guidance=guidance,
                                  loft_angle_deg=la,
-                                 loft_angle_rate_deg_s=lar,
                                  cutoff_time_s=cutoff,
                                  gt_turn_start_s=gt_turn_start_s,
                                  gt_turn_stop_s=gt_turn_stop_s)
@@ -1413,13 +1370,11 @@ def find_range(params: MissileParams,
                launch_lon_deg: float,
                launch_azimuth_deg: float,
                loft_angle_deg: float = None,
-               loft_angle_rate_deg_s: float = None,
                cutoff_time_s: float = None) -> float:
-    """Return the range (km) for the given loft parameters and cutoff time."""
+    """Return the range (km) for the given burnout angle and cutoff time."""
     result = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         loft_angle_deg=loft_angle_deg,
-        loft_angle_rate_deg_s=loft_angle_rate_deg_s,
         cutoff_time_s=cutoff_time_s,
     )
     return result['range_km']
@@ -1552,13 +1507,13 @@ def plan_orbital_insertion(params: MissileParams,
 
 def _search_one(args):
     """
-    Evaluate a single (loft_angle, loft_rate, turn_stop) candidate and
-    return range_km, or -1.0 on failure / orbital.
+    Evaluate a single (burnout_angle, turn_stop) candidate and return
+    range_km, or -1.0 on failure / orbital.
 
     All arguments are passed as a single tuple so the function can be
     submitted to concurrent.futures without lambda.
     """
-    (la, lar, ts,
+    (la, ts,
      params, lat, lon, az,
      guidance, cutoff, gt_start, max_time_s) = args
     ts_str = f"ts={ts:.1f}s" if ts is not None else "ts=full"
@@ -1567,7 +1522,6 @@ def _search_one(args):
             params, lat, lon, az,
             guidance=guidance,
             loft_angle_deg=la,
-            loft_angle_rate_deg_s=lar,
             cutoff_time_s=cutoff,
             gt_turn_start_s=gt_start,
             gt_turn_stop_s=ts,
@@ -1575,12 +1529,12 @@ def _search_one(args):
             _search_mode=True,
         )
         if r.get('orbital', False):
-            print(f"  [{la:.1f}° lar={lar:.2f} {ts_str}] → ORBITAL")
+            print(f"  [{la:.1f}° {ts_str}] → ORBITAL")
             return -1.0
         rng = float(r.get('range_km') or -1.0)
         return rng
     except Exception as e:
-        print(f"  [{la:.1f}° lar={lar:.2f} {ts_str}] → ERROR {type(e).__name__}: {e}")
+        print(f"  [{la:.1f}° {ts_str}] → ERROR {type(e).__name__}: {e}")
         return -1.0
 
 
@@ -1589,8 +1543,10 @@ def _tsiolkovsky_dv(params: MissileParams) -> float:
     G0 = 9.80665
     dv, node = 0.0, params
     while node is not None:
-        if node.burn_time_s > 0 and node.mass_initial > node.mass_final > 0:
-            dv += node.isp_s * G0 * np.log(node.mass_initial / node.mass_final)
+        if node.burn_time_s > 0 and node.mass_propellant > 0:
+            m_bo = node.mass_initial - node.mass_propellant
+            if node.mass_initial > m_bo > 0:
+                dv += node.isp_s * G0 * np.log(node.mass_initial / m_bo)
         node = node.stage2
     return dv
 
@@ -1613,28 +1569,23 @@ def maximize_range(params: MissileParams,
                    launch_azimuth_deg: float = 0.0,
                    guidance: str = None,
                    loft_angle_deg: float = None,
-                   loft_angle_rate_deg_s: float = None,
                    cutoff_time_s: float = None,
                    gt_turn_start_s: float = 5.0,
                    gt_turn_stop_s: float = None,
                    reentry_query_alt_km: float = None) -> dict:
     """
-    Find the maximum range by optimising loft_angle and loft_angle_rate.
+    Find the maximum range by optimising burnout angle and turn-stop time.
 
-    If loft_angle_deg and loft_angle_rate_deg_s are both provided, the
-    trajectory is run with those fixed values (no optimisation).  Otherwise
-    a two-stage coarse/fine grid search is performed over the two parameters.
-
-    For gravity_turn guidance, gt_turn_stop_s is also optimised when it is
-    None (not user-specified).  A short turn_stop allows the vehicle to reach
-    its burnout angle early and hold it flat, which dramatically increases
-    range for multi-stage vehicles with long total burn times.
+    If loft_angle_deg is provided, the trajectory is run with that fixed
+    burnout angle (no angle optimisation).  gt_turn_stop_s is also optimised
+    when it is None (not user-specified).  A short turn_stop allows the vehicle
+    to reach its burnout angle early and hold it flat, which dramatically
+    increases range for multi-stage vehicles with long total burn times.
 
     Returns the full trajectory dict plus:
         'max_range_km'            : achieved maximum range (km)
-        'optimal_loft_angle_deg'  : best loft angle / burnout angle (°)
-        'optimal_loft_rate_deg_s' : best loft rate (°/s; placeholder for GT)
-        'optimal_gt_turn_stop_s'  : best turn-stop time (s; gravity_turn only)
+        'optimal_loft_angle_deg'  : best burnout angle (°)
+        'optimal_gt_turn_stop_s'  : best turn-stop time (s)
     """
     total_burn = total_burn_time(params)
     effective_cutoff = cutoff_time_s if cutoff_time_s is not None else total_burn
@@ -1647,22 +1598,20 @@ def maximize_range(params: MissileParams,
     _angle_lo  = max(5.0,  _gamma_opt - 10.0)
     _angle_hi  = min(80.0, _gamma_opt + 10.0)
 
-    # If both loft params are supplied, just run and return (no grid search).
-    if loft_angle_deg is not None and loft_angle_rate_deg_s is not None:
+    # If burnout angle is supplied, run with that fixed value (no angle search).
+    if loft_angle_deg is not None:
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance=guidance,
             loft_angle_deg=loft_angle_deg,
-            loft_angle_rate_deg_s=loft_angle_rate_deg_s,
             cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
         )
-        traj['max_range_km']            = traj['range_km']
-        traj['optimal_loft_angle_deg']  = loft_angle_deg
-        traj['optimal_loft_rate_deg_s'] = loft_angle_rate_deg_s
-        traj['optimal_gt_turn_stop_s']  = (gt_turn_stop_s if gt_turn_stop_s is not None
-                                           else total_burn)
+        traj['max_range_km']           = traj['range_km']
+        traj['optimal_loft_angle_deg'] = loft_angle_deg
+        traj['optimal_gt_turn_stop_s'] = (gt_turn_stop_s if gt_turn_stop_s is not None
+                                          else total_burn)
         return traj
 
     # Number of parallel workers — use all physical cores; cap at 8 so we
@@ -1674,7 +1623,7 @@ def maximize_range(params: MissileParams,
                effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0)
 
     def _run_parallel(candidates, label="coarse"):
-        """Submit a list of (la, lar, ts) triples; return (la, lar, ts, range_km) list."""
+        """Submit a list of (la, ts) pairs; return (la, ts, range_km) list."""
         jobs = [(*c, *_common) for c in candidates]
         results = []
         n_total = len(jobs)
@@ -1686,20 +1635,19 @@ def maximize_range(params: MissileParams,
         with ThreadPoolExecutor(max_workers=n_workers) as ex:
             futures = {ex.submit(_search_one, j): j for j in jobs}
             for n_done, fut in enumerate(as_completed(futures), 1):
-                la, lar, ts = futures[fut][:3]
+                la, ts = futures[fut][:2]
                 rng = fut.result()
-                results.append((la, lar, ts, rng))
+                results.append((la, ts, rng))
                 if rng > running_best:
                     running_best = rng
                     ts_str = f"ts={ts:.1f}s" if ts is not None else "ts=full"
                     print(f"  [{label}] {n_done}/{n_total}  "
-                          f"new best {rng:.1f} km @ {la:.1f}° lar={lar:.2f} {ts_str}")
+                          f"new best {rng:.1f} km @ {la:.1f}° {ts_str}")
         print(f"  [{label}] done — best {running_best:.1f} km")
         return results
 
     best_range = -1.0
     best_la    = params.loft_angle_deg
-    best_lar   = params.loft_angle_rate_deg_s
     best_ts    = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
 
     if effective_guidance == "gravity_turn":
@@ -1719,10 +1667,10 @@ def maximize_range(params: MissileParams,
             ts_candidates = [gt_turn_stop_s]
 
         # ── Phase 1: parallel coarse 2-D grid over (burnout_angle, turn_stop) ──
-        coarse_grid = [(float(ba), 1.0, ts)
+        coarse_grid = [(float(ba), ts)
                        for ba in np.arange(_angle_lo, _angle_hi + 1.0, 2.0)
                        for ts in ts_candidates]
-        for la, lar, ts, rng in _run_parallel(coarse_grid):
+        for la, ts, rng in _run_parallel(coarse_grid):
             if rng > best_range:
                 best_range, best_la, best_ts = rng, la, ts
 
@@ -1731,7 +1679,7 @@ def maximize_range(params: MissileParams,
         # over every ts candidate (the old approach) adds ~400 serial calls.
         # One bounded 1-D search at best_ts converges in ~10–15 evaluations.
         def _neg_range_gt(ba, _ts=best_ts):
-            r = _search_one((float(ba), 1.0, _ts, *_common))
+            r = _search_one((float(ba), _ts, *_common))
             return -r if r > 0 else 0.0
 
         lo = max(1.0,  best_la - 8.0)
@@ -1742,8 +1690,6 @@ def maximize_range(params: MissileParams,
         if -res.fun > best_range:
             best_range, best_la = -res.fun, float(res.x)
 
-        best_lar = 1.0   # placeholder — not used by gravity-turn pitch program
-
     if best_range < 0.0:
         # Every candidate was orbital or failed; return as-is so the caller
         # can display a sensible "in orbit" message.
@@ -1751,16 +1697,14 @@ def maximize_range(params: MissileParams,
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance=guidance,
             loft_angle_deg=params.loft_angle_deg,
-            loft_angle_rate_deg_s=params.loft_angle_rate_deg_s,
             cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
             reentry_query_alt_km=reentry_query_alt_km,
         )
-        traj['max_range_km']            = None
-        traj['optimal_loft_angle_deg']  = None
-        traj['optimal_loft_rate_deg_s'] = None
-        traj['optimal_gt_turn_stop_s']  = None
+        traj['max_range_km']           = None
+        traj['optimal_loft_angle_deg'] = None
+        traj['optimal_gt_turn_stop_s'] = None
         return traj
 
     # Final full-fidelity integration at the optimal parameters.
@@ -1768,14 +1712,12 @@ def maximize_range(params: MissileParams,
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         guidance=guidance,
         loft_angle_deg=best_la,
-        loft_angle_rate_deg_s=best_lar,
         cutoff_time_s=effective_cutoff,
         gt_turn_start_s=gt_turn_start_s,
         gt_turn_stop_s=best_ts,
         reentry_query_alt_km=reentry_query_alt_km,
     )
-    traj['max_range_km']            = traj['range_km']
-    traj['optimal_loft_angle_deg']  = best_la
-    traj['optimal_loft_rate_deg_s'] = best_lar
-    traj['optimal_gt_turn_stop_s']  = best_ts
+    traj['max_range_km']           = traj['range_km']
+    traj['optimal_loft_angle_deg'] = best_la
+    traj['optimal_gt_turn_stop_s'] = best_ts
     return traj
