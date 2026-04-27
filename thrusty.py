@@ -3009,7 +3009,20 @@ class MissileFlyoutApp(tk.Tk):
             gf, text="Reset trajectory to defaults",
             command=self._reset_traj_profile)
         self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
-                                  sticky=tk.EW, padx=8, pady=(4, 6))
+                                  sticky=tk.EW, padx=8, pady=(4, 2))
+
+        # Row 12: Export / Import guidance program
+        _gp_frame = ttk.Frame(gf)
+        _gp_frame.grid(row=12, column=0, columnspan=2,
+                       sticky=tk.EW, padx=8, pady=(0, 6))
+        _gp_frame.columnconfigure(0, weight=1)
+        _gp_frame.columnconfigure(1, weight=1)
+        ttk.Button(_gp_frame, text="Export guidance…",
+                   command=self._export_guidance).grid(
+            row=0, column=0, sticky=tk.EW, padx=(0, 2))
+        ttk.Button(_gp_frame, text="Import guidance…",
+                   command=self._import_guidance).grid(
+            row=0, column=1, sticky=tk.EW, padx=(2, 0))
 
         # Initialise guidance-specific row visibility for the default mode.
         self._orbit_alt_lbl.grid_forget()
@@ -3834,6 +3847,54 @@ class MissileFlyoutApp(tk.Tk):
         self._gt_turn_stop_var.set("")
         self._update_guidance_labels(p.guidance)
         self._status_var.set(f"Trajectory reset to '{name}' defaults.")
+
+    # Guidance-program fields that belong in an export file.
+    _GUIDANCE_KEYS = frozenset({
+        'guidance', 'loft_angle_deg', 'launch_elevation_deg',
+        'gt_turn_start_s', 'gt_turn_stop_s', 'cutoff_s',
+        'adv_pitch', 'stage_overrides', 'adv_yaw', 'yaw_maneuvers',
+    })
+
+    def _export_guidance(self):
+        """Save the current guidance program to a JSON file."""
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            title="Export guidance program",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        meta = self._trajectory_metadata()
+        data = {k: v for k, v in meta.items() if k in self._GUIDANCE_KEYS}
+        data['_type'] = 'guidance_program'
+        try:
+            with open(path, 'w') as fh:
+                json.dump(data, fh, indent=2)
+            self._status_var.set(
+                f"Guidance exported: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Export error", str(exc), parent=self)
+
+    def _import_guidance(self):
+        """Load a guidance program from a JSON file."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Import guidance program",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            with open(path) as fh:
+                data = json.load(fh)
+            self._apply_trajectory_metadata(data)
+            self._status_var.set(
+                f"Guidance imported: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Import error", str(exc), parent=self)
 
     def _update_params_display(self, p=None):
         """Rebuild the Missile Parameters tab with structured label rows."""
