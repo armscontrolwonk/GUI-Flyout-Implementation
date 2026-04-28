@@ -2712,6 +2712,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Export Trajectory…",     command=self._save_trajectory)
         file_menu.add_command(label="Export Trajectory KML…", command=self._export_kml)
         file_menu.add_command(label="Export Missile…",        command=self._export_missile)
+        file_menu.add_command(label="Export Missile to XLSX…",command=self._export_missile_xlsx)
+        file_menu.add_command(label="Import Missile from XLSX…",command=self._import_missile_xlsx)
+        file_menu.add_command(label="New Missile XLSX Template…",command=self._new_missile_template)
         file_menu.add_command(label="Export Launch Site…",    command=self._export_site)
         file_menu.add_separator()
         file_menu.add_command(label="Open Folium Map…",       command=self._export_folium)
@@ -6427,6 +6430,92 @@ class MissileFlyoutApp(tk.Tk):
         data = missile_to_dict(MISSILE_DB[name]())
         Path(path).write_text(json.dumps(data, indent=2))
         self._status_var.set(f"Missile exported: {path}")
+
+    def _export_missile_xlsx(self):
+        """Export current missile to a filled-in XLSX template."""
+        name = self._missile_var.get()
+        if not name or name not in MISSILE_DB:
+            messagebox.showinfo("No missile", "Select a missile first.", parent=self)
+            return
+        try:
+            from missile_xlsx import export_missile_xlsx
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import asksaveasfilename
+        safe = name.replace(" ", "_").replace("/", "-")
+        path = asksaveasfilename(
+            title="Export Missile to XLSX",
+            defaultextension=".xlsx",
+            initialfile=f"{safe}.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            export_missile_xlsx(path, MISSILE_DB[name]())
+            self._status_var.set(f"Missile exported: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Export error", str(exc), parent=self)
+
+    def _import_missile_xlsx(self):
+        """Import a missile from a filled XLSX template."""
+        try:
+            from missile_xlsx import import_missile_xlsx
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            title="Import Missile from XLSX",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            params = import_missile_xlsx(path)
+        except Exception as exc:
+            messagebox.showerror("Import error", str(exc), parent=self)
+            return
+        if not params.name:
+            messagebox.showwarning("Import warning",
+                                   "Missile name is blank — please fill in "
+                                   "the Name field in the XLSX and re-import.",
+                                   parent=self)
+            return
+        if params.name in MISSILE_DB and not messagebox.askyesno(
+                "Overwrite?", f"'{params.name}' already exists. Overwrite?",
+                parent=self):
+            return
+        MISSILE_DB[params.name] = lambda p=params: p
+        _save_custom_missiles()
+        self._refresh_missile_list(select_name=params.name)
+        self._status_var.set(f"Missile imported: {params.name}")
+
+    def _new_missile_template(self):
+        """Save a blank XLSX template the user fills in from scratch."""
+        try:
+            from missile_xlsx import make_blank_template
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            title="Save Blank Missile Template",
+            defaultextension=".xlsx",
+            initialfile="missile_template.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            make_blank_template(path)
+            self._status_var.set(f"Template saved: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Template error", str(exc), parent=self)
 
     def _load_missile(self):
         """Import a .missile.json file into the custom missile library."""
