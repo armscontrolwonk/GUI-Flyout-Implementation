@@ -548,7 +548,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         elif params.guidance == "orbital_insertion":
             thrust_dir = _orbital_insertion_thrust_dir(
                 lat, lon, azimuth_rad,
-                params.loft_angle_deg,
+                params.burnout_angle_deg,
                 gt_turn_start_s,
                 gt_turn_stop_s,
                 t_final_ignition,
@@ -556,7 +556,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         else:
             thrust_dir = _gravity_turn_thrust_dir(
                 lat, lon, azimuth_rad,
-                params.loft_angle_deg,
+                params.burnout_angle_deg,
                 gt_turn_start_s,
                 gt_turn_stop_s,
                 t,
@@ -703,7 +703,7 @@ def integrate_trajectory(params: MissileParams,
                          launch_lon_deg: float,
                          launch_azimuth_deg: float,
                          guidance: str = None,
-                         loft_angle_deg: float = None,
+                         burnout_angle_deg: float = None,
                          cutoff_time_s: float = None,
                          dt_output: float = 1.0,
                          max_time_s: float = 3600.0,
@@ -723,8 +723,8 @@ def integrate_trajectory(params: MissileParams,
     launch_lat_deg        : geodetic launch latitude (degrees)
     launch_lon_deg        : launch longitude (degrees)
     launch_azimuth_deg    : launch azimuth clockwise from North (degrees)
-    loft_angle_deg        : burnout elevation above horizontal (°); defaults to
-                            params.loft_angle_deg
+    burnout_angle_deg        : burnout elevation above horizontal (°); defaults to
+                            params.burnout_angle_deg
     cutoff_time_s         : engine cutoff time (s); defaults to full burn
     dt_output             : output time step (s)
     max_time_s            : maximum flight time (s)
@@ -747,14 +747,14 @@ def integrate_trajectory(params: MissileParams,
     """
     import copy
     # Apply session-level overrides non-destructively.  guidance and
-    # loft_angle_deg are flight parameters (like launch site) that the caller
+    # burnout_angle_deg are flight parameters (like launch site) that the caller
     # may override independently of the stored missile definition.
-    if guidance is not None or loft_angle_deg is not None or launch_elevation_deg is not None:
+    if guidance is not None or burnout_angle_deg is not None or launch_elevation_deg is not None:
         params = copy.copy(params)
         if guidance is not None:
             params.guidance = guidance
-        if loft_angle_deg is not None:
-            params.loft_angle_deg = loft_angle_deg
+        if burnout_angle_deg is not None:
+            params.burnout_angle_deg = burnout_angle_deg
         if launch_elevation_deg is not None:
             params.launch_elevation_deg = launch_elevation_deg
 
@@ -1278,7 +1278,7 @@ def integrate_trajectory(params: MissileParams,
             _gp_angle = (_gp_stage.stage_burnout_angle_deg
                          if _gp_stage is not None
                          and _gp_stage.stage_burnout_angle_deg is not None
-                         else params.loft_angle_deg)
+                         else params.burnout_angle_deg)
             _gp_ts = (_gp_stage.stage_turn_start_s
                       if _gp_stage is not None
                       and _gp_stage.stage_turn_start_s is not None
@@ -1344,7 +1344,7 @@ def aim_missile(params: MissileParams,
                 launch_azimuth_deg: float,
                 target_range_km: float,
                 guidance: str = None,
-                loft_angle_deg: float = None,
+                burnout_angle_deg: float = None,
                 gt_turn_start_s: float = 5.0,
                 gt_turn_stop_s: float = None) -> float:
     """
@@ -1354,13 +1354,13 @@ def aim_missile(params: MissileParams,
     """
     from scipy.optimize import brentq
 
-    la = loft_angle_deg if loft_angle_deg is not None else params.loft_angle_deg
+    la = burnout_angle_deg if burnout_angle_deg is not None else params.burnout_angle_deg
 
     def range_error(cutoff):
         r = integrate_trajectory(params, launch_lat_deg, launch_lon_deg,
                                  launch_azimuth_deg,
                                  guidance=guidance,
-                                 loft_angle_deg=la,
+                                 burnout_angle_deg=la,
                                  cutoff_time_s=cutoff,
                                  gt_turn_start_s=gt_turn_start_s,
                                  gt_turn_stop_s=gt_turn_stop_s)
@@ -1379,12 +1379,12 @@ def find_range(params: MissileParams,
                launch_lat_deg: float,
                launch_lon_deg: float,
                launch_azimuth_deg: float,
-               loft_angle_deg: float = None,
+               burnout_angle_deg: float = None,
                cutoff_time_s: float = None) -> float:
     """Return the range (km) for the given burnout angle and cutoff time."""
     result = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-        loft_angle_deg=loft_angle_deg,
+        burnout_angle_deg=burnout_angle_deg,
         cutoff_time_s=cutoff_time_s,
     )
     return result['range_km']
@@ -1453,7 +1453,7 @@ def plan_orbital_insertion(params: MissileParams,
         r = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance="orbital_insertion",
-            loft_angle_deg=float(boost_angle),
+            burnout_angle_deg=float(boost_angle),
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=turn_stop_s,
             target_orbit_alt_km=target_orbit_alt_km,
@@ -1531,7 +1531,7 @@ def _search_one(args):
         r = integrate_trajectory(
             params, lat, lon, az,
             guidance=guidance,
-            loft_angle_deg=la,
+            burnout_angle_deg=la,
             cutoff_time_s=cutoff,
             gt_turn_start_s=gt_start,
             gt_turn_stop_s=ts,
@@ -1578,7 +1578,7 @@ def maximize_range(params: MissileParams,
                    launch_lon_deg: float,
                    launch_azimuth_deg: float = 0.0,
                    guidance: str = None,
-                   loft_angle_deg: float = None,
+                   burnout_angle_deg: float = None,
                    cutoff_time_s: float = None,
                    gt_turn_start_s: float = 5.0,
                    gt_turn_stop_s: float = None,
@@ -1586,7 +1586,7 @@ def maximize_range(params: MissileParams,
     """
     Find the maximum range by optimising burnout angle and turn-stop time.
 
-    If loft_angle_deg is provided, the trajectory is run with that fixed
+    If burnout_angle_deg is provided, the trajectory is run with that fixed
     burnout angle (no angle optimisation).  gt_turn_stop_s is also optimised
     when it is None (not user-specified).  A short turn_stop allows the vehicle
     to reach its burnout angle early and hold it flat, which dramatically
@@ -1594,7 +1594,7 @@ def maximize_range(params: MissileParams,
 
     Returns the full trajectory dict plus:
         'max_range_km'            : achieved maximum range (km)
-        'optimal_loft_angle_deg'  : best burnout angle (°)
+        'optimal_burnout_angle_deg'  : best burnout angle (°)
         'optimal_gt_turn_stop_s'  : best turn-stop time (s)
     """
     total_burn = total_burn_time(params)
@@ -1609,17 +1609,17 @@ def maximize_range(params: MissileParams,
     _angle_hi  = min(80.0, _gamma_opt + 10.0)
 
     # If burnout angle is supplied, run with that fixed value (no angle search).
-    if loft_angle_deg is not None:
+    if burnout_angle_deg is not None:
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance=guidance,
-            loft_angle_deg=loft_angle_deg,
+            burnout_angle_deg=burnout_angle_deg,
             cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
         )
         traj['max_range_km']           = traj['range_km']
-        traj['optimal_loft_angle_deg'] = loft_angle_deg
+        traj['optimal_burnout_angle_deg'] = burnout_angle_deg
         traj['optimal_gt_turn_stop_s'] = (gt_turn_stop_s if gt_turn_stop_s is not None
                                           else total_burn)
         return traj
@@ -1657,7 +1657,7 @@ def maximize_range(params: MissileParams,
         return results
 
     best_range = -1.0
-    best_la    = params.loft_angle_deg
+    best_la    = params.burnout_angle_deg
     best_ts    = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
 
     if effective_guidance == "gravity_turn":
@@ -1706,14 +1706,14 @@ def maximize_range(params: MissileParams,
         traj = integrate_trajectory(
             params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
             guidance=guidance,
-            loft_angle_deg=params.loft_angle_deg,
+            burnout_angle_deg=params.burnout_angle_deg,
             cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
             reentry_query_alt_km=reentry_query_alt_km,
         )
         traj['max_range_km']           = None
-        traj['optimal_loft_angle_deg'] = None
+        traj['optimal_burnout_angle_deg'] = None
         traj['optimal_gt_turn_stop_s'] = None
         return traj
 
@@ -1721,13 +1721,13 @@ def maximize_range(params: MissileParams,
     traj = integrate_trajectory(
         params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
         guidance=guidance,
-        loft_angle_deg=best_la,
+        burnout_angle_deg=best_la,
         cutoff_time_s=effective_cutoff,
         gt_turn_start_s=gt_turn_start_s,
         gt_turn_stop_s=best_ts,
         reentry_query_alt_km=reentry_query_alt_km,
     )
     traj['max_range_km']           = traj['range_km']
-    traj['optimal_loft_angle_deg'] = best_la
+    traj['optimal_burnout_angle_deg'] = best_la
     traj['optimal_gt_turn_stop_s'] = best_ts
     return traj
