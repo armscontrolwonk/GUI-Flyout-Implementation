@@ -76,11 +76,6 @@ _R: dict[str, int] = {
     'nose_shape':  68,
     'nose_len':    69,
     'pay_diam':    70,
-    # GUIDANCE
-    'guid_mode':   73,
-    'loft_ang':    74,
-    'pitch_rate':  75,
-    'launch_elev': 76,
 }
 
 # Computed-section anchor rows (writer only)
@@ -488,22 +483,6 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
            '0 = use body diameter')
     _inputs(ws, r['pay_diam'], [4], [top.get('payload_diameter_m', 0.0)])
 
-    # ── GUIDANCE ─────────────────────────────────────────────────────────────
-    _section(ws, r['guid_mode'] - 1, 'GUIDANCE')
-    _label(ws, r['guid_mode'], 'Guidance mode', '—',
-           'Gravity Turn = IRBM/ICBM;  Loft = SRBM/MRBM')
-    _inputs(ws, r['guid_mode'], [4],
-            [_guid_label(top.get('guidance', 'gravity_turn'))])
-    _dropdown(ws, r['guid_mode'], 4, _GUID_OPTS)
-    _label(ws, r['loft_ang'], 'Loft / kick angle', '°',
-           'GT: kick elevation from horizontal (e.g. 85°);  Loft: final pitch angle')
-    _inputs(ws, r['loft_ang'], [4], [top.get('loft_angle_deg', 45.0)])
-    _label(ws, r['pitch_rate'], 'Pitch rate', '°/s',
-           'Rate at which missile pitches to loft/kick angle')
-    _inputs(ws, r['pitch_rate'], [4], [top.get('loft_angle_rate_deg_s', 2.0)])
-    _label(ws, r['launch_elev'], 'Launch elevation', '°',
-           '90 = vertical;  <90 = pre-tilted at liftoff')
-    _inputs(ws, r['launch_elev'], [4], [top.get('launch_elevation_deg', 90.0)])
 
 def _build_cd_sheet(ws, mach: list, cd: list) -> None:
     ws.column_dimensions['A'].width = 14
@@ -744,11 +723,6 @@ def import_missile_xlsx(path: str):
     top_stage.nose_shape  = _NOSE_KEY.get(_rstr(ws, r['nose_shape'], 4), '')
     top_stage.nose_length_m       = _rnum(ws, r['nose_len'],  4)
     top_stage.payload_diameter_m  = _rnum(ws, r['pay_diam'],  4)
-    top_stage.guidance    = _GUID_KEY.get(
-                              _rstr(ws, r['guid_mode'], 4), 'gravity_turn')
-    top_stage.loft_angle_deg      = _rnum(ws, r['loft_ang'],    4, 45.0)
-    top_stage.loft_angle_rate_deg_s = _rnum(ws, r['pitch_rate'],4, 2.0)
-    top_stage.launch_elevation_deg= _rnum(ws, r['launch_elev'], 4, 90.0)
     top_stage.n_boosters          = _rint(ws, r['b_n'],     4)
     top_stage.booster_thrust_n    = _rnum(ws, r['b_thr'],   4)
     top_stage.booster_burn_time_s = _rnum(ws, r['b_burn'],  4)
