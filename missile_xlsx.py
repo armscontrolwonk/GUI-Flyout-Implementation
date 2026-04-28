@@ -38,55 +38,54 @@ _R: dict[str, int] = {
     'burn':        13,
     'isp':         14,
     'nozzle':      15,
-    'coast':       16,
-    'solid':       17,
-    'grain':       18,
-    'peak_thr':    19,
+    'solid':       16,
+    'grain':       17,
+    'peak_thr':    18,
     # BOOSTERS (single-value; column D only)
-    'b_n':         30,
-    'b_thr':       31,
-    'b_burn':      32,
-    'b_inert':     33,
-    'b_prop':      34,
-    'b_isp':       35,
-    'b_nozzle':    36,
-    'b_diam':      37,
-    'b_len':       38,
-    'b_cd':        39,
-    'b_delay':     40,
+    'b_n':         29,
+    'b_thr':       30,
+    'b_burn':      31,
+    'b_inert':     32,
+    'b_prop':      33,
+    'b_isp':       34,
+    'b_nozzle':    35,
+    'b_diam':      36,
+    'b_len':       37,
+    'b_cd':        38,
+    'b_delay':     39,
     # PAYLOAD & RV
-    'payload':     48,
-    'bus_mass':    49,
-    'n_rvs':       50,
-    'rv_mass':     51,
-    'rv_sep':      52,
-    'rv_beta':     53,
-    'rv_shape':    54,
-    'rv_diam':     55,
-    'rv_len':      56,
-    'pbv_diam':    57,
-    'pbv_len':     58,
+    'payload':     47,
+    'bus_mass':    48,
+    'n_rvs':       49,
+    'rv_mass':     50,
+    'rv_sep':      51,
+    'rv_beta':     52,
+    'rv_shape':    53,
+    'rv_diam':     54,
+    'rv_len':      55,
+    'pbv_diam':    56,
+    'pbv_len':     57,
     # SHROUD / FAIRING
-    'shr_mass':    61,
-    'shr_alt':     62,
-    'shr_len':     63,
-    'shr_diam':    64,
-    'shr_shape':   65,
-    'shr_noselen': 66,
+    'shr_mass':    60,
+    'shr_alt':     61,
+    'shr_len':     62,
+    'shr_diam':    63,
+    'shr_shape':   64,
+    'shr_noselen': 65,
     # AERODYNAMICS
-    'nose_shape':  69,
-    'nose_len':    70,
-    'pay_diam':    71,
+    'nose_shape':  68,
+    'nose_len':    69,
+    'pay_diam':    70,
     # GUIDANCE
-    'guid_mode':   74,
-    'loft_ang':    75,
-    'pitch_rate':  76,
-    'launch_elev': 77,
+    'guid_mode':   73,
+    'loft_ang':    74,
+    'pitch_rate':  75,
+    'launch_elev': 76,
 }
 
 # Computed-section anchor rows (writer only)
-_RC_STAGES  = 21   # section header; data rows 22-26 (prop chk, frac, dV, T/W, derived thrust)
-_RC_BOOSTERS= 42   # section header; data rows 43-45
+_RC_STAGES  = 20   # section header; data rows 21-25 (prop chk, frac, dV, T/W, derived thrust)
+_RC_BOOSTERS= 41   # section header; data rows 42-44
 
 # Stage column indices (openpyxl 1-based) and letters
 _SCOLS  = [4, 5, 6, 7]          # D E F G
@@ -329,8 +328,6 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
          notes='Solid: 230–290  Storable liq: 280–310  Cryo: 420–450')
     srow('nozzle',     'Nozzle exit area',           'm²', 'nozzle_exit_area_m2',
          notes='0 = legacy 2% back-pressure approx')
-    srow('coast',      'Coast time to next stage',   's',  'coast_time_s',
-         notes='0 for last/only stage')
     srow('peak_thr',   'Peak thrust (solid only)',   'N',  'thrust_peak_N',
          notes='0 = derive from thrust × fill factor')
 
@@ -698,7 +695,6 @@ def import_missile_xlsx(path: str):
             'burn_time_s':        _rnum(ws, r['burn'],     col),
             'isp_s':              _rnum(ws, r['isp'],      col),
             'nozzle_exit_area_m2':_rnum(ws, r['nozzle'],  col),
-            'coast_time_s':       _rnum(ws, r['coast'],    col),
             'solid_motor':        _rbool(ws, r['solid'],   col),
             'grain_type':   _GRAIN_KEY.get(_rstr(ws, r['grain'],   col), ''),
             'thrust_peak_N':      _rnum(ws, r['peak_thr'],col),
