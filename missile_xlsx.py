@@ -43,50 +43,50 @@ _R: dict[str, int] = {
     'grain':       18,
     'peak_thr':    19,
     # BOOSTERS (single-value; column D only)
-    'b_n':         29,
-    'b_thr':       30,
-    'b_burn':      31,
-    'b_inert':     32,
-    'b_prop':      33,
-    'b_isp':       34,
-    'b_nozzle':    35,
-    'b_diam':      36,
-    'b_len':       37,
-    'b_cd':        38,
-    'b_delay':     39,
+    'b_n':         30,
+    'b_thr':       31,
+    'b_burn':      32,
+    'b_inert':     33,
+    'b_prop':      34,
+    'b_isp':       35,
+    'b_nozzle':    36,
+    'b_diam':      37,
+    'b_len':       38,
+    'b_cd':        39,
+    'b_delay':     40,
     # PAYLOAD & RV
-    'payload':     47,
-    'bus_mass':    48,
-    'n_rvs':       49,
-    'rv_mass':     50,
-    'rv_sep':      51,
-    'rv_beta':     52,
-    'rv_shape':    53,
-    'rv_diam':     54,
-    'rv_len':      55,
-    'pbv_diam':    56,
-    'pbv_len':     57,
+    'payload':     48,
+    'bus_mass':    49,
+    'n_rvs':       50,
+    'rv_mass':     51,
+    'rv_sep':      52,
+    'rv_beta':     53,
+    'rv_shape':    54,
+    'rv_diam':     55,
+    'rv_len':      56,
+    'pbv_diam':    57,
+    'pbv_len':     58,
     # SHROUD / FAIRING
-    'shr_mass':    60,
-    'shr_alt':     61,
-    'shr_len':     62,
-    'shr_diam':    63,
-    'shr_shape':   64,
-    'shr_noselen': 65,
+    'shr_mass':    61,
+    'shr_alt':     62,
+    'shr_len':     63,
+    'shr_diam':    64,
+    'shr_shape':   65,
+    'shr_noselen': 66,
     # AERODYNAMICS
-    'nose_shape':  68,
-    'nose_len':    69,
-    'pay_diam':    70,
+    'nose_shape':  69,
+    'nose_len':    70,
+    'pay_diam':    71,
     # GUIDANCE
-    'guid_mode':   73,
-    'loft_ang':    74,
-    'pitch_rate':  75,
-    'launch_elev': 76,
+    'guid_mode':   74,
+    'loft_ang':    75,
+    'pitch_rate':  76,
+    'launch_elev': 77,
 }
 
 # Computed-section anchor rows (writer only)
-_RC_STAGES  = 21   # section header; data rows 22-25
-_RC_BOOSTERS= 41   # section header; data rows 42-44
+_RC_STAGES  = 21   # section header; data rows 22-26 (prop chk, frac, dV, T/W, derived thrust)
+_RC_BOOSTERS= 42   # section header; data rows 43-45
 
 # Stage column indices (openpyxl 1-based) and letters
 _SCOLS  = [4, 5, 6, 7]          # D E F G
@@ -215,16 +215,21 @@ def _computed(ws, row: int, col: int, formula: str,
     c.alignment     = _align('right')
     c.number_format = fmt
 
-def _dropdown(ws, row: int, col: int, options: list) -> None:
+def _dropdowns(ws, row: int, cols: list, options: list) -> None:
+    """Add a single DataValidation object covering all cols at row."""
     from openpyxl.worksheet.datavalidation import DataValidation
     formula = '"' + ','.join(str(o) for o in options) + '"'
     dv = DataValidation(type='list', formula1=formula,
                         showDropDown=False, allow_blank=True)
     ws.add_data_validation(dv)
-    ref = ws.cell(row=row, column=col).coordinate
-    dv.add(ref)
-    ws.cell(row=row, column=col).fill = _fill(_CIN)
-    ws.cell(row=row, column=col).font = _font()
+    for col in cols:
+        ref = ws.cell(row=row, column=col).coordinate
+        dv.add(ref)
+        ws.cell(row=row, column=col).fill = _fill(_CIN)
+        ws.cell(row=row, column=col).font = _font()
+
+def _dropdown(ws, row: int, col: int, options: list) -> None:
+    _dropdowns(ws, row, [col], options)
 
 
 # ---------------------------------------------------------------------------
@@ -247,11 +252,15 @@ def _yn(val: bool) -> str:
 # Stage-chain flattener
 # ---------------------------------------------------------------------------
 def _stage_dicts(params) -> list:
-    """Return list of up to 4 missile_to_dict dicts, one per stage."""
+    """Return list of up to 4 missile_to_dict dicts, one per stage.
+    thrust_N is injected directly from the params object because
+    missile_to_dict derives (and discards) it from Isp."""
     from missile_models import missile_to_dict
     out, node = [], params
     while node is not None and len(out) < 4:
-        out.append(missile_to_dict(node))
+        d = missile_to_dict(node)
+        d['thrust_N'] = node.thrust_N
+        out.append(d)
         node = node.stage2
     return out
 
@@ -314,7 +323,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     srow('diam',       'Diameter',                   'm',  'diameter_m')
     srow('length',     'Length',                     'm',  'length_m')
     srow('thrust',     'Vacuum thrust',              'N',  'thrust_N',
-         notes='Derived from Isp when 0')
+         notes='Reference only — model always derives thrust from Isp (see Derived thrust below)')
     srow('burn',       'Burn time',                  's',  'burn_time_s')
     srow('isp',        'Isp (specific impulse)',     's',  'isp_s',
          notes='Solid: 230–290  Storable liq: 280–310  Cryo: 420–450')
@@ -330,7 +339,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     solid_vals = [_yn(s.get('solid_motor', False)) for s in stages]
     while len(solid_vals) < 4: solid_vals.append('NO')
     _inputs(ws, r['solid'], _SCOLS, solid_vals)
-    for col in _SCOLS: _dropdown(ws, r['solid'], col, _YESNO_OPTS)
+    _dropdowns(ws, r['solid'], _SCOLS, _YESNO_OPTS)
 
     # Grain type dropdown
     _label(ws, r['grain'], 'Grain type', '—',
@@ -338,7 +347,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     grain_vals = [_grain_label(s.get('grain_type', '')) for s in stages]
     while len(grain_vals) < 4: grain_vals.append('')
     _inputs(ws, r['grain'], _SCOLS, grain_vals)
-    for col in _SCOLS: _dropdown(ws, r['grain'], col, _GRAIN_OPTS)
+    _dropdowns(ws, r['grain'], _SCOLS, _GRAIN_OPTS)
 
     # ── COMPUTED — STAGES ────────────────────────────────────────────────────
     _section(ws, _RC_STAGES, 'COMPUTED — STAGES  (do not edit)',
@@ -349,6 +358,8 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
         (_RC_STAGES+2, 'Mass fraction',         '—',  'Propellant / Initial'),
         (_RC_STAGES+3, 'ΔV  (Tsiolkovsky)',     'm/s','Isp × g₀ × ln(m₀/m_f)'),
         (_RC_STAGES+4, 'T/W at ignition',       '—',  'Thrust / (Initial × g₀)'),
+        (_RC_STAGES+5, 'Derived thrust',        'N',
+         'Isp × 9.80665 × Propellant / Burn time  (cross-check for Vacuum thrust above)'),
     ]
     for row, lbl, unit, note in comp_labels:
         _label(ws, row, lbl, unit, note)
@@ -359,6 +370,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
         mp  = f'{col}{r["mass_prop"]}'
         isp = f'{col}{r["isp"]}'
         th  = f'{col}{r["thrust"]}'
+        bn  = f'{col}{r["burn"]}'
         ci  = _SCOLS[i]
         _computed(ws, _RC_STAGES+1, ci,
                   f'=IF({mi}>0,{mi}-{mf},"—")', '#,##0')
@@ -369,6 +381,9 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
                   '#,##0')
         _computed(ws, _RC_STAGES+4, ci,
                   f'=IF({mi}>0,{th}/({mi}*9.80665),"—")', '0.00')
+        _computed(ws, _RC_STAGES+5, ci,
+                  f'=IF(AND({isp}>0,{bn}>0),{isp}*9.80665*{mp}/{bn},"—")',
+                  '#,##0')
 
     # ── BOOSTERS ─────────────────────────────────────────────────────────────
     _section(ws, r['b_n'] - 2, 'BOOSTERS  (strap-on, parallel to Stage 1)')
@@ -401,21 +416,21 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     # ── COMPUTED — BOOSTERS ──────────────────────────────────────────────────
     _section(ws, _RC_BOOSTERS, 'COMPUTED — BOOSTERS  (do not edit)',
              computed=True)
-    bn  = f'D{r["b_n"]}';   bpr = f'D{r["b_prop"]}'
+    bn_  = f'D{r["b_n"]}';    bpr = f'D{r["b_prop"]}'
     bin_ = f'D{r["b_inert"]}'; bth = f'D{r["b_thr"]}'
-    mi1 = f'D{r["mass_init"]}'; th1 = f'D{r["thrust"]}'
+    mi1  = f'D{r["mass_init"]}'; th1 = f'D{r["thrust"]}'
 
     _label(ws, _RC_BOOSTERS+1, 'Total booster propellant', 'kg')
     _computed(ws, _RC_BOOSTERS+1, 4,
-              f'=IF({bn}>0,{bn}*{bpr},"—")', '#,##0')
+              f'=IF({bn_}>0,{bn_}*{bpr},"—")', '#,##0')
     _label(ws, _RC_BOOSTERS+2, 'Total booster inert mass', 'kg')
     _computed(ws, _RC_BOOSTERS+2, 4,
-              f'=IF({bn}>0,{bn}*{bin_},"—")', '#,##0')
+              f'=IF({bn_}>0,{bn_}*{bin_},"—")', '#,##0')
     _label(ws, _RC_BOOSTERS+3,
            'Liftoff T/W  (all boosters + Stage 1)', '—',
            'Combined booster + Stage 1 thrust vs full launch mass')
     _computed(ws, _RC_BOOSTERS+3, 4,
-              f'=IF({mi1}>0,({bn}*{bth}+{th1})/({mi1}*9.80665),"—")', '0.00')
+              f'=IF({mi1}>0,({bn_}*{bth}+{th1})/({mi1}*9.80665),"—")', '0.00')
 
     # ── PAYLOAD & RV ─────────────────────────────────────────────────────────
     _section(ws, r['payload'] - 1, 'PAYLOAD & REENTRY VEHICLE')
