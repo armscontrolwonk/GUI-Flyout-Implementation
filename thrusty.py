@@ -2135,7 +2135,7 @@ class RangeRingDialog(tk.Toplevel):
                 result = maximize_range(
                     missile, lat, lon, az,
                     guidance=guidance,
-                    loft_angle_deg=la,
+                    burnout_angle_deg=la,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
                 )
@@ -2281,7 +2281,7 @@ class ParametricSweepDialog(tk.Toplevel):
 
     Reproduces the analyses Forden performs in all three worked examples:
       • Table 2  — Range vs azimuth (vary azimuth, fixed loft / cutoff)
-      • Figure 7 — Range vs loft angle (vary loft_angle_deg)
+      • Figure 7 — Range vs loft angle (vary burnout_angle_deg)
       • Ad hoc   — Range vs cutoff time (vary engine cutoff)
 
     The user picks which parameter to vary plus a start/stop/step range;
@@ -2485,7 +2485,7 @@ class ParametricSweepDialog(tk.Toplevel):
                 r = integrate_trajectory(
                     missile, lat, lon, run_az,
                     guidance=guidance,
-                    loft_angle_deg=run_la,
+                    burnout_angle_deg=run_la,
                     cutoff_time_s=run_cut,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=run_gt_stop,
@@ -3451,7 +3451,7 @@ class MissileFlyoutApp(tk.Tk):
         prof = _load_traj_profiles().get(name)
         if prof:
             self._guidance_var.set(prof.get('guidance', p.guidance))
-            self._loft_angle_var.set(str(prof.get('loft_angle_deg', p.loft_angle_deg)))
+            self._loft_angle_var.set(str(prof.get('burnout_angle_deg', p.burnout_angle_deg)))
             self._launch_el_var.set(str(prof.get('launch_elevation_deg', p.launch_elevation_deg)))
             gt_start = prof.get('gt_turn_start_s', 5.0)
             self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
@@ -3462,7 +3462,7 @@ class MissileFlyoutApp(tk.Tk):
                                  else str(int(total_burn_time(p))))
         else:
             self._cutoff_var.set(str(int(total_burn_time(p))))
-            self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
+            self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
             self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
             self._guidance_var.set(p.guidance)
 
@@ -3822,7 +3822,7 @@ class MissileFlyoutApp(tk.Tk):
             launch_el = 90.0
         prof = {
             'guidance':             self._guidance_var.get(),
-            'loft_angle_deg':       loft_angle,
+            'burnout_angle_deg':       loft_angle,
             'launch_elevation_deg': launch_el,
             'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
             'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
@@ -3843,7 +3843,7 @@ class MissileFlyoutApp(tk.Tk):
             _save_traj_profiles(profiles)
         p = get_missile(name)
         self._cutoff_var.set(str(int(total_burn_time(p))))
-        self._loft_angle_var.set(f"{p.loft_angle_deg:.4f}")
+        self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
         self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
         self._guidance_var.set(p.guidance)
         self._gt_turn_start_var.set("5.0")
@@ -3853,7 +3853,7 @@ class MissileFlyoutApp(tk.Tk):
 
     # Guidance-program fields that belong in an export file.
     _GUIDANCE_KEYS = frozenset({
-        'guidance', 'loft_angle_deg', 'launch_elevation_deg',
+        'guidance', 'burnout_angle_deg', 'launch_elevation_deg',
         'gt_turn_start_s', 'gt_turn_stop_s', 'cutoff_s',
         'adv_pitch', 'stage_overrides', 'adv_yaw', 'yaw_maneuvers',
     })
@@ -4210,7 +4210,7 @@ class MissileFlyoutApp(tk.Tk):
         try:
             cutoff = aim_missile(missile, lat, lon, az, rng_km,
                                  guidance=guidance,
-                                 loft_angle_deg=la,
+                                 burnout_angle_deg=la,
                                  gt_turn_start_s=gt_start_s,
                                  gt_turn_stop_s=gt_stop_s)
             self.after(0, lambda: self._cutoff_var.set(f"{cutoff:.1f}"))
@@ -4475,7 +4475,7 @@ class MissileFlyoutApp(tk.Tk):
                 result = integrate_trajectory(
                     missile, lat, lon, az,
                     guidance=guidance,
-                    loft_angle_deg=la,
+                    burnout_angle_deg=la,
                     cutoff_time_s=cutoff,
                     gt_turn_start_s=gt_start_s,
                     gt_turn_stop_s=gt_stop_s,
@@ -4514,8 +4514,8 @@ class MissileFlyoutApp(tk.Tk):
         # If this was a Max Range run, update guidance fields now — all GUI
         # mutations happen here in one batch so nothing fires between the field
         # updates and the canvas redraw.
-        if r.get('optimal_loft_angle_deg') is not None:
-            self._loft_angle_var.set(f"{r['optimal_loft_angle_deg']:.4f}")
+        if r.get('optimal_burnout_angle_deg') is not None:
+            self._loft_angle_var.set(f"{r['optimal_burnout_angle_deg']:.4f}")
         if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "gravity_turn":
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
@@ -4896,7 +4896,7 @@ class MissileFlyoutApp(tk.Tk):
             'launch_lon':           self._launch_lon.get(),
             'azimuth_deg':          self._azimuth_var.get(),
             'guidance':        self._guidance_var.get(),
-            'loft_angle_deg': self._loft_angle_var.get(),
+            'burnout_angle_deg': self._loft_angle_var.get(),
             'gt_turn_start_s': self._gt_turn_start_var.get(),
             'gt_turn_stop_s':       self._gt_turn_stop_var.get(),
             'cutoff_s':             self._cutoff_var.get(),
@@ -4936,7 +4936,7 @@ class MissileFlyoutApp(tk.Tk):
         guidance = meta.get('guidance', 'gravity_turn')
         self._guidance_var.set(guidance)
         self._update_guidance_labels(guidance)
-        self._loft_angle_var.set(meta.get('loft_angle_deg', '45.0'))
+        self._loft_angle_var.set(meta.get('burnout_angle_deg', '45.0'))
         self._gt_turn_start_var.set(meta.get('gt_turn_start_s', '5.0'))
         self._gt_turn_stop_var.set(meta.get('gt_turn_stop_s', ''))
         self._cutoff_var.set(meta.get('cutoff_s', ''))
