@@ -19,6 +19,46 @@ import os
 import json
 from pathlib import Path
 
+# ──────────────────────────────────────────────────────────────────────────
+# Override Tk's per-widget report_callback_exception with a logger that
+# walks the traceback manually instead of calling traceback.print_exception.
+# On Python 3.11 macOS, traceback.print_exception can recurse infinitely on
+# certain exception types raised from Tk callbacks; the recursion fails up
+# through CallWrapper.__call__'s except block, where Python 3.11's
+# fine-grained error locator then misreports it as
+#   "UnboundLocalError: cannot access local variable 'self'" at line `try:`.
+# Installing this on tk.Misc covers the root window AND all child widgets
+# (comboboxes, menus, etc.) which inherit from Misc.
+# ──────────────────────────────────────────────────────────────────────────
+_THRUSTY_ERROR_LOG = os.path.join(os.path.expanduser("~"), "thrusty_error.log")
+
+def _safe_report_callback_exception(self, exc_type, exc_value, exc_tb):
+    try:
+        parts = [f"Exception in Tk callback: {exc_type.__name__}: {exc_value}\n"]
+        tb = exc_tb
+        while tb is not None:
+            f = tb.tb_frame
+            parts.append(
+                f"  File \"{f.f_code.co_filename}\", "
+                f"line {tb.tb_lineno}, in {f.f_code.co_name}\n"
+            )
+            tb = tb.tb_next
+        msg = "".join(parts)
+        try:
+            sys.stderr.write(msg)
+            sys.stderr.flush()
+        except Exception:
+            pass
+        try:
+            with open(_THRUSTY_ERROR_LOG, "a") as _f:
+                _f.write(msg + "\n---\n")
+        except Exception:
+            pass
+    except BaseException:
+        pass
+
+tk.Misc.report_callback_exception = _safe_report_callback_exception
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
