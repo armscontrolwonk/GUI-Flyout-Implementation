@@ -19,64 +19,26 @@ import os
 import json
 from pathlib import Path
 
-# ──────────────────────────────────────────────────────────────────────────
-# Override Tk's per-widget report_callback_exception with a logger that
-# walks the traceback manually instead of calling traceback.print_exception.
-# On Python 3.11 macOS, traceback.print_exception can recurse infinitely on
-# certain exception types raised from Tk callbacks; the recursion fails up
-# through CallWrapper.__call__'s except block, where Python 3.11's
-# fine-grained error locator then misreports it as
-#   "UnboundLocalError: cannot access local variable 'self'" at line `try:`.
-# Installing this on tk.Misc covers the root window AND all child widgets
-# (comboboxes, menus, etc.) which inherit from Misc.
-# ──────────────────────────────────────────────────────────────────────────
+# Dead-simple tracer: bare open/write/close, no imports, no exception handling.
+# Appends one line per call to ~/thrusty_trace.log so we can see exactly
+# which function ran last before a crash, without touching Tk internals at all.
+_THRUSTY_TRACE_LOG = os.path.join(os.path.expanduser("~"), "thrusty_trace.log")
+
+def _trace(msg):
+    f = open(_THRUSTY_TRACE_LOG, "a")
+    f.write(msg + "\n")
+    f.close()
+
+# Separate file for caught exceptions — also bare I/O, no traceback module.
 _THRUSTY_ERROR_LOG = os.path.join(os.path.expanduser("~"), "thrusty_error.log")
 
-def _fmt_exc_safe(exc_type=None, exc_value=None, exc_tb=None):
-    """Format an exception to a string without ever importing the traceback module.
-
-    The traceback module can itself recurse (and hit RecursionError) when
-    formatting a deep stack, which masks the original error. This function
-    walks tb.tb_next iteratively and caps the frame count at 60.
-    """
+def _log_exc(where, exc):
     try:
-        if exc_type is None:
-            exc_type, exc_value, exc_tb = sys.exc_info()
-        parts = [f"{getattr(exc_type, '__name__', repr(exc_type))}: {exc_value}\n"]
-        tb = exc_tb
-        limit = 60
-        while tb is not None and limit > 0:
-            fr = tb.tb_frame
-            parts.append(
-                f'  File "{fr.f_code.co_filename}",'
-                f' line {tb.tb_lineno}, in {fr.f_code.co_name}\n'
-            )
-            tb = tb.tb_next
-            limit -= 1
-        if limit == 0 and tb is not None:
-            parts.append("  ... (traceback truncated)\n")
-        return "".join(parts)
-    except BaseException:
-        return f"[could not format exception: {exc_type}]\n"
-
-def _log_to_file_safe(text, where=""):
-    """Write text to ~/thrusty_error.log without using any stdlib that could recurse."""
-    try:
-        prefix = f"[{where}]\n" if where else ""
-        with open(_THRUSTY_ERROR_LOG, "a") as _f:
-            _f.write(prefix + text + "\n---\n")
-    except BaseException:
+        f = open(_THRUSTY_ERROR_LOG, "a")
+        f.write("[" + where + "] " + type(exc).__name__ + ": " + str(exc) + "\n")
+        f.close()
+    except Exception:
         pass
-    try:
-        sys.stderr.write((f"[{where}] " if where else "") + text + "\n")
-        sys.stderr.flush()
-    except BaseException:
-        pass
-
-def _safe_report_callback_exception(self, exc_type, exc_value, exc_tb):
-    _log_to_file_safe(_fmt_exc_safe(exc_type, exc_value, exc_tb), "Tk callback")
-
-tk.Misc.report_callback_exception = _safe_report_callback_exception
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -2729,12 +2691,15 @@ class MissileFlyoutApp(tk.Tk):
         self._on_missile_changed()   # populate params tab with default missile
 
     def report_callback_exception(self, exc_type, exc_value, exc_tb):
-        """Log callback exceptions to stderr and file; never raise or show a dialog."""
-        _log_to_file_safe(_fmt_exc_safe(exc_type, exc_value, exc_tb), "Tk callback")
+        """Log callback exceptions; never raise or show a dialog."""
+        _log_exc("Tk callback", exc_value)
 
     def _log_exception(self, where):
-        """Write the current exception to stderr and ~/thrusty_error.log."""
-        _log_to_file_safe(_fmt_exc_safe(), where)
+        """Write the current exception to ~/thrusty_error.log."""
+        import sys as _sys
+        ei = _sys.exc_info()
+        if ei[1] is not None:
+            _log_exc(where, ei[1])
 
     # ------------------------------------------------------------------
     # Utility
@@ -4508,6 +4473,7 @@ class MissileFlyoutApp(tk.Tk):
     def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la,
                     gt_start_s, gt_stop_s, target_orbit_km,
                     yaw_maneuvers, launch_elevation_deg, maximise):
+        _trace("_run_thread: entered")
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
@@ -4546,12 +4512,14 @@ class MissileFlyoutApp(tk.Tk):
     # Display results
     # ------------------------------------------------------------------
     def _on_result_ready(self):
+        _trace("_on_result_ready: entered")
         try:
             self._on_result_ready_impl()
-        except BaseException:
-            _log_to_file_safe(_fmt_exc_safe(), "_on_result_ready")
+        except BaseException as _e:
+            _log_exc("_on_result_ready", _e)
 
     def _on_result_ready_impl(self):
+        _trace("_on_result_ready_impl: entered")
         r = self._result
         self._autosave_trajectory()
 
@@ -4608,6 +4576,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _populate_timeline(self, r):
         """Fill the Flight Timeline tab from the milestones list."""
+        _trace("_populate_timeline: entered")
         # Clear existing rows
         self._tl_tree.delete(*self._tl_tree.get_children())
 
@@ -4673,6 +4642,7 @@ class MissileFlyoutApp(tk.Tk):
             ))
 
     def _plot_results(self, r, scale, ulbl):
+        _trace("_plot_results: entered")
         t   = np.asarray(r['t'])
         alt = np.asarray(r['alt']) / 1000.0 * scale
         spd = np.asarray(r['speed']) / 1000.0   # always km/s
@@ -4970,6 +4940,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _apply_trajectory_metadata(self, meta):
         """Restore GUI fields from a metadata dict loaded from a CSV header."""
+        _trace("_apply_trajectory_metadata: entered")
         name = meta.get('missile', '')
         if name in MISSILE_DB or name in [m for m in MISSILE_DB]:
             self._missile_var.set(name)
@@ -5025,6 +4996,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _load_trajectory_impl(self):
         """Load a previously saved trajectory CSV, restore guidance params and plots."""
+        _trace("_load_trajectory_impl: entered")
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -5159,6 +5131,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _autosave_trajectory(self):
         """Silently write a timestamped CSV to the autosave folder after every run."""
+        _trace("_autosave_trajectory: entered")
         r = self._result
         if r is None:
             return
@@ -5205,6 +5178,7 @@ class MissileFlyoutApp(tk.Tk):
                 pass
 
     def _save_trajectory_impl(self):
+        _trace("_save_trajectory_impl: entered")
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
             return
