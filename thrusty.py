@@ -32,30 +32,49 @@ from pathlib import Path
 # ──────────────────────────────────────────────────────────────────────────
 _THRUSTY_ERROR_LOG = os.path.join(os.path.expanduser("~"), "thrusty_error.log")
 
-def _safe_report_callback_exception(self, exc_type, exc_value, exc_tb):
+def _fmt_exc_safe(exc_type=None, exc_value=None, exc_tb=None):
+    """Format an exception to a string without ever importing the traceback module.
+
+    The traceback module can itself recurse (and hit RecursionError) when
+    formatting a deep stack, which masks the original error. This function
+    walks tb.tb_next iteratively and caps the frame count at 60.
+    """
     try:
-        parts = [f"Exception in Tk callback: {exc_type.__name__}: {exc_value}\n"]
+        if exc_type is None:
+            exc_type, exc_value, exc_tb = sys.exc_info()
+        parts = [f"{getattr(exc_type, '__name__', repr(exc_type))}: {exc_value}\n"]
         tb = exc_tb
-        while tb is not None:
-            f = tb.tb_frame
+        limit = 60
+        while tb is not None and limit > 0:
+            fr = tb.tb_frame
             parts.append(
-                f"  File \"{f.f_code.co_filename}\", "
-                f"line {tb.tb_lineno}, in {f.f_code.co_name}\n"
+                f'  File "{fr.f_code.co_filename}",'
+                f' line {tb.tb_lineno}, in {fr.f_code.co_name}\n'
             )
             tb = tb.tb_next
-        msg = "".join(parts)
-        try:
-            sys.stderr.write(msg)
-            sys.stderr.flush()
-        except Exception:
-            pass
-        try:
-            with open(_THRUSTY_ERROR_LOG, "a") as _f:
-                _f.write(msg + "\n---\n")
-        except Exception:
-            pass
+            limit -= 1
+        if limit == 0 and tb is not None:
+            parts.append("  ... (traceback truncated)\n")
+        return "".join(parts)
+    except BaseException:
+        return f"[could not format exception: {exc_type}]\n"
+
+def _log_to_file_safe(text, where=""):
+    """Write text to ~/thrusty_error.log without using any stdlib that could recurse."""
+    try:
+        prefix = f"[{where}]\n" if where else ""
+        with open(_THRUSTY_ERROR_LOG, "a") as _f:
+            _f.write(prefix + text + "\n---\n")
     except BaseException:
         pass
+    try:
+        sys.stderr.write((f"[{where}] " if where else "") + text + "\n")
+        sys.stderr.flush()
+    except BaseException:
+        pass
+
+def _safe_report_callback_exception(self, exc_type, exc_value, exc_tb):
+    _log_to_file_safe(_fmt_exc_safe(exc_type, exc_value, exc_tb), "Tk callback")
 
 tk.Misc.report_callback_exception = _safe_report_callback_exception
 
@@ -2710,42 +2729,12 @@ class MissileFlyoutApp(tk.Tk):
         self._on_missile_changed()   # populate params tab with default missile
 
     def report_callback_exception(self, exc_type, exc_value, exc_tb):
-        """Log callback exceptions to stderr and file; never raise or show a dialog.
-
-        Showing a dialog here creates a re-entrant Tk event loop, which can
-        trigger further callbacks, further exceptions, and ultimately a
-        RecursionError that Python 3.11 misreports as an UnboundLocalError.
-        The real traceback is always visible in the terminal and ~/thrusty_error.log.
-        High-level callers (e.g. _on_result_ready) show their own dialogs.
-        """
-        try:
-            import traceback as _tb, os as _os, sys as _sys
-            detail = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
-            print(detail, file=_sys.stderr, flush=True)
-            _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
-            with open(_log, "a") as _f:
-                _f.write(detail + "\n---\n")
-        except Exception:
-            pass
+        """Log callback exceptions to stderr and file; never raise or show a dialog."""
+        _log_to_file_safe(_fmt_exc_safe(exc_type, exc_value, exc_tb), "Tk callback")
 
     def _log_exception(self, where):
-        """Write the current exception to stderr and ~/thrusty_error.log.
-
-        Intended for use inside `except Exception:` blocks at the top of menu
-        handlers (Load Missile, Load Trajectory, Export Trajectory) so the
-        first, real traceback is captured before any downstream Tk/RecursionError
-        masking can occur. Returns silently — caller decides whether to also
-        show a messagebox.
-        """
-        try:
-            import traceback as _tb, os as _os, sys as _sys
-            detail = f"[{where}]\n" + _tb.format_exc()
-            print(detail, file=_sys.stderr, flush=True)
-            _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
-            with open(_log, "a") as _f:
-                _f.write(detail + "\n---\n")
-        except Exception:
-            pass
+        """Write the current exception to stderr and ~/thrusty_error.log."""
+        _log_to_file_safe(_fmt_exc_safe(), where)
 
     # ------------------------------------------------------------------
     # Utility
@@ -4559,15 +4548,8 @@ class MissileFlyoutApp(tk.Tk):
     def _on_result_ready(self):
         try:
             self._on_result_ready_impl()
-        except Exception:
-            import traceback as _tb, os as _os
-            detail = _tb.format_exc()
-            try:
-                _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
-                with open(_log, "a") as _f:
-                    _f.write(detail + "\n---\n")
-            except Exception:
-                pass
+        except BaseException:
+            _log_to_file_safe(_fmt_exc_safe(), "_on_result_ready")
 
     def _on_result_ready_impl(self):
         r = self._result
