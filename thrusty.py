@@ -2221,10 +2221,10 @@ class RangeRingDialog(tk.Toplevel):
                                  f"Cartopy not installed.\n{_e}", parent=self)
             return
 
-        # Reuse the projection picker from the main app.
+        # Reuse the full export-options dialog (projection + map extent).
         mid_lon = float(np.mean([p[1] for p in self._ring]))
         mid_lat = float(np.mean([p[2] for p in self._ring]))
-        proj = self._app._pick_cartopy_projection(mid_lon, mid_lat)
+        proj, extent_spec = self._app._pick_cartopy_export_options(mid_lon, mid_lat)
         if proj is None:
             return
 
@@ -2243,7 +2243,24 @@ class RangeRingDialog(tk.Toplevel):
         fig    = Figure(figsize=(10, 8), dpi=300)
         canvas = FigureCanvasAgg(fig)
         ax     = fig.add_subplot(1, 1, 1, projection=proj)
-        ax.set_global()
+
+        # ── Map extent ────────────────────────────────────────────────
+        if extent_spec is None:
+            ax.set_global()
+        elif extent_spec[0] == 'auto':
+            pad_frac = extent_spec[1] / 100.0
+            ring_lats = [p[2] for p in self._ring] + [self._launch_lat]
+            ring_lons = [p[1] for p in self._ring] + [self._launch_lon]
+            lat_span = max(float(max(ring_lats) - min(ring_lats)), 2.0)
+            lon_span = max(float(max(ring_lons) - min(ring_lons)), 2.0)
+            ax.set_extent([
+                max(-180.0, min(ring_lons) - lon_span * pad_frac),
+                min(+180.0, max(ring_lons) + lon_span * pad_frac),
+                max( -90.0, min(ring_lats) - lat_span * pad_frac),
+                min( +90.0, max(ring_lats) + lat_span * pad_frac),
+            ], crs=ccrs.PlateCarree())
+        else:
+            ax.set_extent(list(extent_spec), crs=ccrs.PlateCarree())
 
         ax.add_feature(cfeature.OCEAN,     facecolor="#d6e8f5", zorder=0)
         ax.add_feature(cfeature.LAND,      facecolor="#e8e4d8", zorder=1)
