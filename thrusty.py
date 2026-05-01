@@ -19,6 +19,40 @@ import os
 import json
 from pathlib import Path
 
+# ──────────────────────────────────────────────────────────────────────────
+# Diagnostic: capture EVERY Tk callback's exception to ~/thrusty_error.log
+# *before* Tk's CallWrapper exception block runs, because on Python 3.11
+# macOS the original except block can hit a misreport that masks the real
+# error as "UnboundLocalError: cannot access local variable 'self'".
+# We wrap each func via CallWrapper.__init__ so __call__ itself is untouched.
+# ──────────────────────────────────────────────────────────────────────────
+_THRUSTY_ERROR_LOG = os.path.join(os.path.expanduser("~"), "thrusty_error.log")
+_orig_cw_init = tk.CallWrapper.__init__
+
+def _patched_cw_init(self, func, subst, widget):
+    name = getattr(func, '__qualname__', None) or repr(func)
+    def _wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except BaseException:
+            import traceback as _tb
+            detail = f"[Tk callback: {name}]\n" + _tb.format_exc()
+            try:
+                sys.stderr.write(detail + "\n")
+                sys.stderr.flush()
+            except Exception:
+                pass
+            try:
+                with open(_THRUSTY_ERROR_LOG, "a") as _f:
+                    _f.write(detail + "\n---\n")
+            except Exception:
+                pass
+            raise
+    _wrapped.__qualname__ = name
+    _orig_cw_init(self, _wrapped, subst, widget)
+
+tk.CallWrapper.__init__ = _patched_cw_init
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
