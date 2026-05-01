@@ -19,22 +19,6 @@ import os
 import json
 from pathlib import Path
 
-# Python 3.11 + macOS Tkinter has a CPython bug: when any callback raises,
-# the except handler in CallWrapper.__call__ misreports `self` as unbound,
-# producing UnboundLocalError instead of routing the original exception to
-# report_callback_exception. Replacing the method with a free function
-# (parameter name `_cw` instead of `self`) sidesteps the compiler bug.
-def _cw_safe_call(_cw, *args):
-    try:
-        if _cw.subst:
-            args = _cw.subst(*args)
-        return _cw.func(*args)
-    except SystemExit as exc:
-        raise SystemExit(exc.code) from None
-    except Exception:
-        _cw.widget.report_callback_exception(*sys.exc_info())
-tk.CallWrapper.__call__ = _cw_safe_call
-
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
@@ -2704,6 +2688,25 @@ class MissileFlyoutApp(tk.Tk):
         except Exception:
             pass
 
+    def _log_exception(self, where):
+        """Write the current exception to stderr and ~/thrusty_error.log.
+
+        Intended for use inside `except Exception:` blocks at the top of menu
+        handlers (Load Missile, Load Trajectory, Export Trajectory) so the
+        first, real traceback is captured before any downstream Tk/RecursionError
+        masking can occur. Returns silently — caller decides whether to also
+        show a messagebox.
+        """
+        try:
+            import traceback as _tb, os as _os, sys as _sys
+            detail = f"[{where}]\n" + _tb.format_exc()
+            print(detail, file=_sys.stderr, flush=True)
+            _log = _os.path.join(_os.path.expanduser("~"), "thrusty_error.log")
+            with open(_log, "a") as _f:
+                _f.write(detail + "\n---\n")
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
@@ -4987,6 +4990,18 @@ class MissileFlyoutApp(tk.Tk):
                     row['coast'].set(ov.get('coast', ''))
 
     def _load_trajectory(self):
+        """Wrapper that captures any uncaught exception in _load_trajectory_impl."""
+        try:
+            self._load_trajectory_impl()
+        except Exception as _e:
+            self._log_exception("_load_trajectory")
+            try:
+                messagebox.showerror("Load Trajectory failed",
+                                     f"{type(_e).__name__}: {_e}\n\nSee ~/thrusty_error.log for full traceback.")
+            except Exception:
+                pass
+
+    def _load_trajectory_impl(self):
         """Load a previously saved trajectory CSV, restore guidance params and plots."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
@@ -5156,6 +5171,18 @@ class MissileFlyoutApp(tk.Tk):
 
     # ------------------------------------------------------------------
     def _save_trajectory(self):
+        """Wrapper that captures any uncaught exception in _save_trajectory_impl."""
+        try:
+            self._save_trajectory_impl()
+        except Exception as _e:
+            self._log_exception("_save_trajectory")
+            try:
+                messagebox.showerror("Export Trajectory failed",
+                                     f"{type(_e).__name__}: {_e}\n\nSee ~/thrusty_error.log for full traceback.")
+            except Exception:
+                pass
+
+    def _save_trajectory_impl(self):
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
             return
@@ -6538,32 +6565,40 @@ class MissileFlyoutApp(tk.Tk):
 
     def _load_missile(self):
         """Import a .missile.json file into the custom missile library."""
-        from tkinter.filedialog import askopenfilename
-        path = askopenfilename(
-            initialdir=str(_EXPORT_MISS_DIR) if _EXPORT_MISS_DIR.exists() else str(Path.home()),
-            filetypes=[("Missile definition", "*.missile.json"),
-                       ("JSON files", "*.json"), ("All files", "*.*")],
-            title="Load Missile",
-        )
-        if not path:
-            return
         try:
-            data = json.loads(Path(path).read_text())
-            p    = missile_from_dict(data)
-        except Exception as e:
-            messagebox.showerror("Load error", f"Could not parse missile file:\n{e}")
-            return
-        name = data.get('name') or Path(path).stem.replace('.missile', '')
-        if not name:
-            messagebox.showerror("Load error", "Missile file has no name field.")
-            return
-        if name in MISSILE_DB and not messagebox.askyesno(
-                "Overwrite?", f"'{name}' already exists. Overwrite?"):
-            return
-        MISSILE_DB[name] = lambda p=p: p
-        _save_custom_missiles()
-        self._refresh_missile_list(select_name=name)
-        self._status_var.set(f"Missile '{name}' loaded from {Path(path).name}")
+            from tkinter.filedialog import askopenfilename
+            path = askopenfilename(
+                initialdir=str(_EXPORT_MISS_DIR) if _EXPORT_MISS_DIR.exists() else str(Path.home()),
+                filetypes=[("Missile definition", "*.missile.json"),
+                           ("JSON files", "*.json"), ("All files", "*.*")],
+                title="Load Missile",
+            )
+            if not path:
+                return
+            try:
+                data = json.loads(Path(path).read_text())
+                p    = missile_from_dict(data)
+            except Exception as e:
+                messagebox.showerror("Load error", f"Could not parse missile file:\n{e}")
+                return
+            name = data.get('name') or Path(path).stem.replace('.missile', '')
+            if not name:
+                messagebox.showerror("Load error", "Missile file has no name field.")
+                return
+            if name in MISSILE_DB and not messagebox.askyesno(
+                    "Overwrite?", f"'{name}' already exists. Overwrite?"):
+                return
+            MISSILE_DB[name] = lambda p=p: p
+            _save_custom_missiles()
+            self._refresh_missile_list(select_name=name)
+            self._status_var.set(f"Missile '{name}' loaded from {Path(path).name}")
+        except Exception as _e:
+            self._log_exception("_load_missile")
+            try:
+                messagebox.showerror("Load Missile failed",
+                                     f"{type(_e).__name__}: {_e}\n\nSee ~/thrusty_error.log for full traceback.")
+            except Exception:
+                pass
 
     def _export_site(self):
         """Export the current launch site to a .site.json file."""
