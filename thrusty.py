@@ -19,6 +19,22 @@ import os
 import json
 from pathlib import Path
 
+# Python 3.11 + macOS Tkinter has a CPython bug: when any callback raises,
+# the except handler in CallWrapper.__call__ misreports `self` as unbound,
+# producing UnboundLocalError instead of routing the original exception to
+# report_callback_exception. Replacing the method with a free function
+# (parameter name `_cw` instead of `self`) sidesteps the compiler bug.
+def _cw_safe_call(_cw, *args):
+    try:
+        if _cw.subst:
+            args = _cw.subst(*args)
+        return _cw.func(*args)
+    except SystemExit as exc:
+        raise SystemExit(exc.code) from None
+    except Exception:
+        _cw.widget.report_callback_exception(*sys.exc_info())
+tk.CallWrapper.__call__ = _cw_safe_call
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
@@ -3946,7 +3962,8 @@ class MissileFlyoutApp(tk.Tk):
         if p.shroud_length_m > 0:
             _total_len += p.shroud_length_m
 
-        liftoff_tw = p.thrust_N / (p.mass_initial * _G0)
+        liftoff_tw = (p.thrust_N / (p.mass_initial * _G0)
+                      if p.mass_initial > 0 else 0.0)
 
         # ── Summary (4-col, 2 pairs per row) ──────────────────────────
         sf = ttk.LabelFrame(self._params_inner, text="Summary")
@@ -3979,7 +3996,8 @@ class MissileFlyoutApp(tk.Tk):
             lf.pack(fill=tk.X, **pad)
 
             prop = node.mass_propellant
-            tw   = node.thrust_N / (node.mass_initial * _G0)
+            tw   = (node.thrust_N / (node.mass_initial * _G0)
+                    if node.mass_initial > 0 else 0.0)
 
             # Recover this stage's own fueled mass (payload excluded).
             # For non-last stages mass_final is the jettisoned dry mass only,
@@ -4030,7 +4048,8 @@ class MissileFlyoutApp(tk.Tk):
                     _row(left, r, "Empty β (kg/m²):", f"{beta:,.0f}");            r += 1
 
             # ── Right: Engine Performance ─────────────────────────────
-            mdot = node.thrust_N / (node.isp_s * _G0)
+            mdot = (node.thrust_N / (node.isp_s * _G0)
+                    if node.isp_s > 0 else 0.0)
             r = 0
             _row(right, r, "Thrust (kN):",       f"{node.thrust_N/1000:,.0f}");  r += 1
             _row(right, r, "ISP (s):",            f"{node.isp_s:.0f}");           r += 1
