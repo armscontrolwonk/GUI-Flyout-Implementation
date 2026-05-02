@@ -2181,16 +2181,22 @@ class RangeRingDialog(tk.Toplevel):
         self.after(0, self._on_done, points, lat, lon)
 
     def _on_progress(self, done, n_ok):
+        if not self.winfo_exists():
+            return
         self._pbar["value"] = done
         self._prog_var.set(
             f"Computing {done} / {self._N_AZ}… ({n_ok} points OK)")
 
     def _on_cancelled(self):
+        if not self.winfo_exists():
+            return
         self._prog_var.set("Cancelled.")
         self._compute_btn.config(state=tk.NORMAL)
         self._cancel_btn.config(state=tk.DISABLED)
 
     def _on_done(self, points, launch_lat, launch_lon):
+        if not self.winfo_exists():
+            return
         self._cancel_btn.config(state=tk.DISABLED)
         self._compute_btn.config(state=tk.NORMAL)
         if len(points) < 3:
