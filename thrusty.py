@@ -4982,7 +4982,6 @@ class MissileFlyoutApp(tk.Tk):
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".traj.csv",
-            initialdir=str(_EXPORT_TRAJ_DIR),
             initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
             filetypes=[("Trajectory CSV", "*.traj.csv"), ("All files", "*.*")],
             title="Export Trajectory",
@@ -6442,7 +6441,6 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .missile.json file into the custom missile library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            initialdir=str(_EXPORT_MISS_DIR) if _EXPORT_MISS_DIR.exists() else str(Path.home()),
             filetypes=[("Missile definition", "*.missile.json"),
                        ("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Missile",
