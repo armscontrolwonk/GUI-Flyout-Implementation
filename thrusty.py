@@ -4982,9 +4982,9 @@ class MissileFlyoutApp(tk.Tk):
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
-            defaultextension=".traj.csv",
+            defaultextension=".csv",
             initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
-            filetypes=[("Trajectory CSV", "*.traj.csv"), ("All files", "*.*")],
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             title="Export Trajectory",
         )
         if not path:
@@ -6339,10 +6339,9 @@ class MissileFlyoutApp(tk.Tk):
         _EXPORT_MISS_DIR.mkdir(parents=True, exist_ok=True)
         safe = name.replace(" ", "_").replace("/", "-")
         path = asksaveasfilename(
-            defaultextension=".missile.json",
+            defaultextension=".json",
             initialfile=f"{safe}.missile.json",
-            filetypes=[("Missile definition", "*.missile.json"),
-                       ("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Export Missile",
         )
         if not path:
@@ -6441,8 +6440,7 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .missile.json file into the custom missile library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            filetypes=[("Missile definition", "*.missile.json"),
-                       ("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Missile",
         )
         if not path:
@@ -6477,10 +6475,9 @@ class MissileFlyoutApp(tk.Tk):
         _EXPORT_SITE_DIR.mkdir(parents=True, exist_ok=True)
         safe = (name or "site").replace(" ", "_").replace("/", "-")
         path = asksaveasfilename(
-            defaultextension=".site.json",
+            defaultextension=".json",
             initialfile=f"{safe}.site.json",
-            filetypes=[("Launch site", "*.site.json"),
-                       ("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Export Launch Site",
         )
         if not path:
@@ -6493,8 +6490,7 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .site.json file into the custom launch-site library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            filetypes=[("Launch site", "*.site.json"),
-                       ("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Launch Site",
         )
         if not path:
