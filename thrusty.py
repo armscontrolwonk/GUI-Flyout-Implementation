@@ -174,9 +174,30 @@ _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
 _CUSTOM_PATH      = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
-_EXPORT_TRAJ_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "trajectories"
-_EXPORT_MISS_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "missiles"
-_EXPORT_SITE_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "sites"
+# ── Export folder layout (visible under ~/Documents for Finder access) ───
+_THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
+_DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
+_DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
+_DIR_SITES        = _THRUSTY_ROOT / "sites"
+_DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
+_DIR_EVENTS       = _THRUSTY_ROOT / "events"
+_DIR_MAPS         = _THRUSTY_ROOT / "maps"
+
+
+def _safe_name(s: str, maxlen: int = 40) -> str:
+    """Sanitize a string for use as a filename component.
+    Collapses whitespace, strips characters that confuse file pickers
+    or extension parsing, and truncates to a readable length."""
+    import re as _re
+    s = _re.sub(r'\s+', '_', (s or '').strip())
+    s = _re.sub(r'[^\w\-]', '-', s)
+    return s[:maxlen] or "untitled"
+
+
+def _ensure_dir(d: Path) -> Path:
+    """Create directory if missing; return the path."""
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _load_traj_profiles() -> dict:
@@ -2212,9 +2233,14 @@ class RangeRingDialog(tk.Toplevel):
         if proj is None:
             return
 
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._app._missile_var.get())
         path = asksaveasfilename(
             defaultextension=".png",
+            initialdir=str(_ensure_dir(_DIR_MAPS)),
+            initialfile=f"{ts}_{missile}_rangering.cartopy.png",
             filetypes=[("PNG image",    "*.png"), ("PDF document", "*.pdf"),
                        ("SVG image",    "*.svg"), ("All files",    "*.*")],
             title="Save range-ring map",
@@ -3862,9 +3888,14 @@ class MissileFlyoutApp(tk.Tk):
     def _export_guidance(self):
         """Save the current guidance program to a JSON file."""
         from tkinter import filedialog
+        import datetime as _dt
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
         path = filedialog.asksaveasfilename(
             title="Export guidance program",
             defaultextension=".json",
+            initialdir=str(_ensure_dir(_DIR_GUIDANCE)),
+            initialfile=f"{ts}_{missile}.guidance.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             parent=self,
         )
@@ -3886,6 +3917,7 @@ class MissileFlyoutApp(tk.Tk):
         from tkinter import filedialog
         path = filedialog.askopenfilename(
             title="Import guidance program",
+            initialdir=str(_ensure_dir(_DIR_GUIDANCE)),
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             parent=self,
         )
@@ -4861,9 +4893,16 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _export_figures(self):
         """Save the trajectory plots to PNG, PDF, or SVG."""
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = self._result.get('range_km') if self._result else None
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".png",
+            initialdir=str(_ensure_dir(_DIR_MAPS)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.figures.png",
             filetypes=[
                 ("PNG image",    "*.png"),
                 ("PDF document", "*.pdf"),
@@ -4961,15 +5000,15 @@ class MissileFlyoutApp(tk.Tk):
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
             return
-        import re as _re, datetime as _dt
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
-        _EXPORT_TRAJ_DIR.mkdir(parents=True, exist_ok=True)
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
+        missile = _safe_name(self._missile_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".csv",
+            initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
             initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             title="Export Trajectory",
@@ -5001,14 +5040,15 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Missing dependency",
                                  f"openpyxl is required:\n{exc}")
             return
-        import re as _re, datetime as _dt
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
+        missile = _safe_name(self._missile_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".xlsx",
+            initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
             initialfile=f"{ts}_{missile}{rng_sfx}.traj.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             title="Export Trajectory XLSX",
@@ -5040,9 +5080,16 @@ class MissileFlyoutApp(tk.Tk):
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
             return
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".kml",
+            initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.traj.kml",
             filetypes=[("KML files", "*.kml"), ("All files", "*.*")],
             title="Export trajectory KML",
         )
@@ -5474,9 +5521,16 @@ class MissileFlyoutApp(tk.Tk):
         if proj is None:
             return   # user cancelled
 
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = r.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".png",
+            initialdir=str(_ensure_dir(_DIR_MAPS)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.cartopy.png",
             filetypes=[("PNG image", "*.png"), ("PDF document", "*.pdf"),
                        ("SVG image", "*.svg"), ("All files", "*.*")],
             title="Save Cartopy map",
@@ -5656,9 +5710,16 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("No data", "Run a simulation first.")
             return
 
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".html",
+            initialdir=str(_ensure_dir(_DIR_MAPS)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.folium.html",
             filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
             title="Save Folium map",
         )
@@ -6247,11 +6308,18 @@ class MissileFlyoutApp(tk.Tk):
         if not milestones:
             messagebox.showinfo("No data", "No timeline events in last result.")
             return
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".csv",
+            initialdir=str(_ensure_dir(_DIR_EVENTS)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.events.csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            title="Export flight timeline",
+            title="Export flight events",
         )
         if not path:
             return
@@ -6286,11 +6354,18 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Missing dependency",
                                  f"openpyxl is required:\n{exc}")
             return
+        import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".xlsx",
+            initialdir=str(_ensure_dir(_DIR_EVENTS)),
+            initialfile=f"{ts}_{missile}{rng_sfx}.events.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
-            title="Export flight timeline XLSX",
+            title="Export flight events XLSX",
         )
         if not path:
             return
@@ -6323,10 +6398,10 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("No missile", "Select a missile first.")
             return
         from tkinter.filedialog import asksaveasfilename
-        _EXPORT_MISS_DIR.mkdir(parents=True, exist_ok=True)
-        safe = name.replace(" ", "_").replace("/", "-")
+        safe = _safe_name(name)
         path = asksaveasfilename(
             defaultextension=".json",
+            initialdir=str(_ensure_dir(_DIR_MISSILES)),
             initialfile=f"{safe}.missile.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Export Missile",
@@ -6349,11 +6424,12 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
         from tkinter.filedialog import asksaveasfilename
-        safe = name.replace(" ", "_").replace("/", "-")
+        safe = _safe_name(name)
         path = asksaveasfilename(
             title="Export Missile to XLSX",
             defaultextension=".xlsx",
-            initialfile=f"{safe}.xlsx",
+            initialdir=str(_ensure_dir(_DIR_MISSILES)),
+            initialfile=f"{safe}.missile.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
         )
@@ -6375,6 +6451,7 @@ class MissileFlyoutApp(tk.Tk):
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
             title="Import Missile from XLSX",
+            initialdir=str(_ensure_dir(_DIR_MISSILES)),
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
         )
@@ -6411,6 +6488,7 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             title="Save Blank Missile Template",
             defaultextension=".xlsx",
+            initialdir=str(_ensure_dir(_DIR_MISSILES)),
             initialfile="missile_template.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
@@ -6427,6 +6505,7 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .missile.json file into the custom missile library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
+            initialdir=str(_ensure_dir(_DIR_MISSILES)),
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Missile",
         )
@@ -6459,10 +6538,10 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("No site", "Enter a launch site location first.")
             return
         from tkinter.filedialog import asksaveasfilename
-        _EXPORT_SITE_DIR.mkdir(parents=True, exist_ok=True)
-        safe = (name or "site").replace(" ", "_").replace("/", "-")
+        safe = _safe_name(name or "site")
         path = asksaveasfilename(
             defaultextension=".json",
+            initialdir=str(_ensure_dir(_DIR_SITES)),
             initialfile=f"{safe}.site.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Export Launch Site",
@@ -6477,6 +6556,7 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .site.json file into the custom launch-site library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
+            initialdir=str(_ensure_dir(_DIR_SITES)),
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Launch Site",
         )
