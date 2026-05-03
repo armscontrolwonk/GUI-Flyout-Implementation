@@ -1203,6 +1203,26 @@ class MissileDialog(tk.Toplevel):
         self._payload_length_var, self._payload_length_entry = _fe_entry(
             self._payload_shape_frame, "Payload length (m):", 2, "0", "m", pady=(2, 4))
 
+        # ── Aerospike (drag-reduction probe) ───────────────────────────────
+        self._aerospike_var = tk.BooleanVar(value=False)
+        self._aerospike_check = ttk.Checkbutton(
+            self._payload_shape_frame, text="Aerospike",
+            variable=self._aerospike_var,
+            command=self._update_aerospike_state)
+        self._aerospike_check.grid(row=3, column=0, columnspan=2,
+                                   sticky=tk.W, padx=(6, 2), pady=(4, 0))
+
+        self._aerospike_section = ttk.Frame(self._payload_shape_frame)
+        self._aerospike_section.grid(row=4, column=0, columnspan=2,
+                                     sticky=tk.EW, padx=(16, 0))
+        self._aerospike_section.columnconfigure(1, weight=1)
+        self._aerospike_section.grid_remove()
+        self._aerospike_LD_var, self._aerospike_LD_entry = _fe_entry(
+            self._aerospike_section, "Spike length (L/D):", 0, "1.5", "")
+        self._aerospike_dD_var, self._aerospike_dD_entry = _fe_entry(
+            self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
+            pady=(2, 4))
+
         # Keep legacy aliases so _calc_rv_beta pre-fill still resolves
         self._nose_shape_var    = self._payload_shape_var
         self._nose_length_var   = self._payload_length_var
@@ -1496,6 +1516,13 @@ class MissileDialog(tk.Toplevel):
         else:
             self._shroud_section.grid_remove()
 
+    def _update_aerospike_state(self):
+        """Show/hide the aerospike L/D and d/D entries."""
+        if self._aerospike_var.get():
+            self._aerospike_section.grid()
+        else:
+            self._aerospike_section.grid_remove()
+
     # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
         """Show or hide the booster parameter panel based on booster count."""
@@ -1610,6 +1637,14 @@ class MissileDialog(tk.Toplevel):
             f"{getattr(p, 'payload_diameter_m', 0.0):.2f}")
         self._payload_length_var.set(f"{p.nose_length_m:.2f}")
 
+        # Aerospike
+        _aero_LD = float(getattr(p, 'aerospike_LD', 0.0) or 0.0)
+        _aero_dD = float(getattr(p, 'aerospike_dD', 0.0) or 0.0)
+        self._aerospike_var.set(_aero_LD > 0.0)
+        self._aerospike_LD_var.set(f"{_aero_LD:.2f}" if _aero_LD > 0 else "1.5")
+        self._aerospike_dD_var.set(f"{_aero_dD:.2f}")
+        self._update_aerospike_state()
+
         # Shroud
         has_shroud = shroud_mass > 0
         self._shroud_var.set(has_shroud)
@@ -1695,6 +1730,17 @@ class MissileDialog(tk.Toplevel):
             nose_length_m      = float(self._payload_length_var.get())
         except ValueError:
             raise ValueError("Payload diameter and length must be numbers.")
+
+        # Aerospike (drag-reduction probe)
+        if self._aerospike_var.get():
+            try:
+                aerospike_LD = max(0.0, float(self._aerospike_LD_var.get()))
+                aerospike_dD = max(0.0, float(self._aerospike_dD_var.get()))
+            except ValueError:
+                raise ValueError("Aerospike L/D and d/D must be numbers.")
+        else:
+            aerospike_LD = 0.0
+            aerospike_dD = 0.0
 
         # RV geometry (round-trips the Estimate β dialog)
         _rv_shape_lbl = self._rv_shape_var.get()
@@ -1813,6 +1859,8 @@ class MissileDialog(tk.Toplevel):
         node.shroud_diameter_m      = shroud_diameter_m
         node.shroud_nose_shape      = shroud_nose_shape
         node.shroud_nose_length_m   = shroud_nose_length_m
+        node.aerospike_LD           = aerospike_LD
+        node.aerospike_dD           = aerospike_dD
 
         # Strap-on boosters
         try:
@@ -4094,6 +4142,13 @@ class MissileFlyoutApp(tk.Tk):
             _ref_d = _pd_m if _pd_m > 0 else p.diameter_m
             _ld_str = f"  (L/D {_pl_m / _ref_d:.2f})" if _ref_d > 0 else ""
             _row2(af, r, "Payload length:", f"{_pl_m:.2f} m{_ld_str}"); r += 1
+
+        _aero_LD = float(getattr(p, 'aerospike_LD', 0.0) or 0.0)
+        _aero_dD = float(getattr(p, 'aerospike_dD', 0.0) or 0.0)
+        if _aero_LD > 0:
+            _row2(af, r, "Aerospike L/D:", f"{_aero_LD:.2f}",
+                  "Aerodisk d/D:",
+                  f"{_aero_dD:.2f}" if _aero_dD > 0 else "— (pointed)"); r += 1
 
         if p.rv_separates:
             _row2(af, r, "No. of RVs:", str(p.num_rvs),
