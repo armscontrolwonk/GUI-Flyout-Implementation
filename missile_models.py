@@ -1483,9 +1483,9 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
             _length = top_params.nose_length_m
         _ld = (_length / _diam if _length > 0 and _diam > 0 else 3.0)
         _ld_body = (params.length_m / _diam if params.length_m > 0 and _diam > 0 else None)
-        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
-                            aerospike_LD=top_params.aerospike_LD,
-                            aerospike_dD=top_params.aerospike_dD)
+        # Aerospike is attached to the shroud, so it stops working once
+        # the shroud is jettisoned — no aerospike effect on this branch.
+        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
     else:
         cd = drag_coefficient(params, mach)
 
