@@ -2302,8 +2302,8 @@ class ParametricSweepDialog(tk.Toplevel):
     """Non-modal dialog for 1-D parametric trajectory sweep.
 
     Reproduces the analyses Forden performs in all three worked examples:
-      • Table 2  — Range vs azimuth (vary azimuth, fixed loft / cutoff)
-      • Figure 7 — Range vs loft angle (vary burnout_angle_deg)
+      • Table 2  — Range vs azimuth (vary azimuth, fixed burnout / cutoff)
+      • Figure 7 — Range vs burnout angle (vary burnout_angle_deg)
       • Ad hoc   — Range vs cutoff time (vary engine cutoff)
 
     The user picks which parameter to vary plus a start/stop/step range;
@@ -2315,7 +2315,7 @@ class ParametricSweepDialog(tk.Toplevel):
 
     _PARAM_INFO = {
         "Azimuth":     dict(key="azimuth",    lo=0.0,  hi=360.0, step=5.0,  unit="°"),
-        "Loft Angle":  dict(key="loft_angle", lo=10.0, hi=80.0,  step=5.0,  unit="°"),
+        "Burnout Angle": dict(key="burnout_angle", lo=10.0, hi=80.0, step=5.0, unit="°"),
         "Cutoff Time": dict(key="cutoff",     lo=None, hi=None,  step=5.0,  unit="s"),
         "Turn Stop":   dict(key="turn_stop",  lo=None, hi=None,  step=10.0, unit="s"),
     }
@@ -2500,7 +2500,7 @@ class ParametricSweepDialog(tk.Toplevel):
             if self._stop_evt.is_set():
                 break
             run_az      = val if param_key == "azimuth"    else az
-            run_la      = val if param_key == "loft_angle" else la
+            run_la      = val if param_key == "burnout_angle" else la
             run_cut     = val if param_key == "cutoff"     else cutoff
             run_gt_stop = val if param_key == "turn_stop"  else gt_stop_s
             try:
@@ -2906,7 +2906,7 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
         ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
 
-        # ── Guidance — mode radio + loft angle / pitch-over ───────────
+        # ── Guidance — mode radio + burnout angle / pitch-over ───────
         gf = ttk.LabelFrame(parent, text="Guidance")
         gf.pack(fill=tk.X, padx=6, pady=3)
         self._guidance_frame = gf          # saved for dynamic grid management
@@ -2931,7 +2931,7 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(le_frame, textvariable=self._launch_el_var, width=8).pack(side=tk.LEFT)
         ttk.Label(le_frame, text="°  (90 = vertical)").pack(side=tk.LEFT, padx=2)
 
-        self._loft_angle_lbl = ttk.Label(gf, text="Loft Angle:")
+        self._loft_angle_lbl = ttk.Label(gf, text="Burnout Angle:")
         self._loft_angle_lbl.grid(row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         la_frame = ttk.Frame(gf)
         la_frame.grid(row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
