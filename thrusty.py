@@ -3869,6 +3869,7 @@ class MissileFlyoutApp(tk.Tk):
         'guidance', 'burnout_angle_deg', 'launch_elevation_deg',
         'gt_turn_start_s', 'gt_turn_stop_s', 'cutoff_s',
         'adv_pitch', 'stage_overrides', 'adv_yaw', 'yaw_maneuvers',
+        'azimuth_deg', 'launch_lat', 'launch_lon',
     })
 
     def _export_guidance(self):
@@ -6339,7 +6340,6 @@ class MissileFlyoutApp(tk.Tk):
         safe = name.replace(" ", "_").replace("/", "-")
         path = asksaveasfilename(
             defaultextension=".missile.json",
-            initialdir=str(_EXPORT_MISS_DIR),
             initialfile=f"{safe}.missile.json",
             filetypes=[("Missile definition", "*.missile.json"),
                        ("JSON files", "*.json"), ("All files", "*.*")],
@@ -6478,7 +6478,6 @@ class MissileFlyoutApp(tk.Tk):
         safe = (name or "site").replace(" ", "_").replace("/", "-")
         path = asksaveasfilename(
             defaultextension=".site.json",
-            initialdir=str(_EXPORT_SITE_DIR),
             initialfile=f"{safe}.site.json",
             filetypes=[("Launch site", "*.site.json"),
                        ("JSON files", "*.json"), ("All files", "*.*")],
@@ -6494,7 +6493,6 @@ class MissileFlyoutApp(tk.Tk):
         """Import a .site.json file into the custom launch-site library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            initialdir=str(_EXPORT_SITE_DIR) if _EXPORT_SITE_DIR.exists() else str(Path.home()),
             filetypes=[("Launch site", "*.site.json"),
                        ("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Launch Site",
