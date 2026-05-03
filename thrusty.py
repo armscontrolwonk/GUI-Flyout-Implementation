@@ -174,7 +174,6 @@ _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created missiles are saved
 _CUSTOM_PATH      = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
-_AUTOSAVE_DIR     = Path.home() / ".gui_missile_flyout" / "autosave"
 _EXPORT_TRAJ_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "trajectories"
 _EXPORT_MISS_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "missiles"
 _EXPORT_SITE_DIR  = Path.home() / ".gui_missile_flyout" / "exports" / "sites"
@@ -2709,21 +2708,31 @@ class MissileFlyoutApp(tk.Tk):
         menubar = tk.Menu(self)
 
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Load Trajectory…",       command=self._load_trajectory)
-        file_menu.add_command(label="Load Missile…",          command=self._load_missile)
-        file_menu.add_command(label="Load Launch Site…",      command=self._load_site)
+        # ── Modeling inputs (load/save) ───────────────────────────────
+        file_menu.add_command(label="Load Missile…",            command=self._load_missile)
+        file_menu.add_command(label="Save Missile…",            command=self._export_missile)
+        file_menu.add_command(label="Load Missile from XLSX…",  command=self._import_missile_xlsx)
+        file_menu.add_command(label="Save Missile to XLSX…",    command=self._export_missile_xlsx)
+        file_menu.add_command(label="New Missile XLSX Template…", command=self._new_missile_template)
         file_menu.add_separator()
-        file_menu.add_command(label="Export Trajectory…",     command=self._save_trajectory)
-        file_menu.add_command(label="Export Trajectory KML…", command=self._export_kml)
-        file_menu.add_command(label="Export Missile…",        command=self._export_missile)
-        file_menu.add_command(label="Export Missile to XLSX…",command=self._export_missile_xlsx)
-        file_menu.add_command(label="Import Missile from XLSX…",command=self._import_missile_xlsx)
-        file_menu.add_command(label="New Missile XLSX Template…",command=self._new_missile_template)
-        file_menu.add_command(label="Export Launch Site…",    command=self._export_site)
+        file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
+        file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
         file_menu.add_separator()
+        file_menu.add_command(label="Load Launch Site…",        command=self._load_site)
+        file_menu.add_command(label="Save Launch Site…",        command=self._export_site)
+        file_menu.add_separator()
+        # ── Trajectory outcomes (export only) ─────────────────────────
+        file_menu.add_command(label="Export Trajectory CSV…",   command=self._save_trajectory)
+        file_menu.add_command(label="Export Trajectory XLSX…",  command=self._export_trajectory_xlsx)
+        file_menu.add_command(label="Export Trajectory KML…",   command=self._export_kml)
+        file_menu.add_separator()
+        # ── Flight events (export only) ───────────────────────────────
+        file_menu.add_command(label="Export Flight Events CSV…",  command=self._export_timeline)
+        file_menu.add_command(label="Export Flight Events XLSX…", command=self._export_timeline_xlsx)
+        file_menu.add_separator()
+        # ── Cartographic (export only) ────────────────────────────────
         file_menu.add_command(label="Open Folium Map…",       command=self._export_folium)
         file_menu.add_command(label="Export Cartopy Map…",    command=self._export_cartopy)
-        file_menu.add_command(label="Export Timeline CSV…",   command=self._export_timeline)
         file_menu.add_command(label="Export Figures…",        command=self._export_figures)
         file_menu.add_separator()
         file_menu.add_command(label="Load NOTAM overlay…",    command=self._load_notam_overlay)
@@ -4503,7 +4512,6 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _on_result_ready(self):
         r = self._result
-        self._autosave_trajectory()
 
         # If this was a Max Range run, update guidance fields now — all GUI
         # mutations happen here in one batch so nothing fires between the field
@@ -4961,175 +4969,6 @@ class MissileFlyoutApp(tk.Tk):
                 if 'coast' in row:
                     row['coast'].set(ov.get('coast', ''))
 
-    def _load_trajectory(self):
-        """Load a previously saved trajectory CSV, restore guidance params and plots."""
-        from tkinter.filedialog import askopenfilename
-        path = askopenfilename(
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            title="Load trajectory CSV",
-        )
-        if not path:
-            return
-        try:
-            with open(path, encoding="utf-8") as fh:
-                lines = fh.readlines()
-        except Exception as e:
-            messagebox.showerror("Load error", str(e))
-            return
-
-        # Parse optional JSON metadata from first comment line
-        meta = {}
-        data_lines = lines
-        if lines and lines[0].startswith('#'):
-            try:
-                meta = json.loads(lines[0][1:].strip())
-            except Exception:
-                pass
-            data_lines = lines[1:]
-
-        # Parse CSV rows
-        vehicle_t, vehicle_lat, vehicle_lon, vehicle_alt, vehicle_spd, vehicle_rng = \
-            [], [], [], [], [], []
-        debris = {}  # label -> lists
-
-        header_skipped = False
-        for line in data_lines:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if not header_skipped and line.startswith('piece'):
-                header_skipped = True
-                continue
-            parts = line.split(',')
-            if len(parts) < 5:
-                continue
-            piece = parts[0]
-            try:
-                t_s   = float(parts[1])
-                lat   = float(parts[2])
-                lon   = float(parts[3])
-                alt   = float(parts[4])
-                spd   = float(parts[5]) if len(parts) > 5 and parts[5] else float('nan')
-                rng   = float(parts[6]) * 1000.0 if len(parts) > 6 and parts[6] else float('nan')
-            except (ValueError, IndexError):
-                continue
-            if piece == 'vehicle':
-                vehicle_t.append(t_s);   vehicle_lat.append(lat)
-                vehicle_lon.append(lon); vehicle_alt.append(alt)
-                vehicle_spd.append(spd); vehicle_rng.append(rng)
-            else:
-                if piece not in debris:
-                    debris[piece] = {'t': [], 'lat': [], 'lon': [], 'alt': [],
-                                     'label': piece}
-                debris[piece]['t'].append(t_s)
-                debris[piece]['lat'].append(lat)
-                debris[piece]['lon'].append(lon)
-                debris[piece]['alt'].append(alt)
-
-        if not vehicle_t:
-            messagebox.showerror("Load error", "No vehicle trajectory data found.")
-            return
-
-        vt  = np.asarray(vehicle_t)
-        vla = np.asarray(vehicle_lat)
-        vlo = np.asarray(vehicle_lon)
-        va  = np.asarray(vehicle_alt)
-        vs  = np.asarray(vehicle_spd)
-        vr  = np.asarray(vehicle_rng)
-
-        nan_arr = np.full(len(vt), float('nan'))
-        result = {
-            't':                  vt,
-            'lat':                vla,
-            'lon':                vlo,
-            'alt':                va,
-            'speed':              vs,
-            'inertial_speed':     nan_arr.copy(),
-            'accel':              nan_arr.copy(),
-            'mass':               nan_arr.copy(),
-            'range':              vr,
-            'pos_ecef':           None,
-            'vel_ecef':           None,
-            'orbital':            False,
-            'impact_lat':         float(vla[-1]),
-            'impact_lon':         float(vlo[-1]),
-            'range_km':           float(vr[-1]) / 1000.0 if not np.isnan(vr[-1]) else None,
-            'apogee_km':          float(np.nanmax(va)) / 1000.0,
-            'time_of_flight_s':   float(vt[-1]),
-            'impact_speed_ms':    float(vs[-1]) if not np.isnan(vs[-1]) else None,
-            'milestones':         [],
-            'debris_trajectories': [
-                {k: np.asarray(v) if isinstance(v, list) else v
-                 for k, v in d.items()}
-                for d in debris.values()
-            ],
-            'pitch_cmd':          nan_arr.copy(),
-        }
-
-        self._result = result
-
-        # Restore guidance settings before redrawing
-        if meta:
-            try:
-                self._apply_trajectory_metadata(meta)
-            except Exception:
-                pass
-
-        # Redraw plots and timeline
-        units = self._units_var.get() if hasattr(self, '_units_var') else 'km'
-        scale = 1.0 if units == 'km' else (1/1.852 if units == 'nmi' else 1/1.60934)
-        ulbl  = units
-        self._plot_results(result, scale, ulbl)
-        self._populate_timeline(result)
-
-        rng_km = result['range_km']
-        apo_km = result['apogee_km']
-        tof    = result['time_of_flight_s']
-        ispd   = result['impact_speed_ms']
-        _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
-                  f"Apogee: {apo_km*scale:.1f} {ulbl}  |  "
-                  f"ToF: {tof:.0f} s  |  "
-                  f"Impact: {result['impact_lat']:.2f}°N, {result['impact_lon']:.2f}°E  |  "
-                  f"Impact spd: {ispd/1000.0:.2f} km/s") if ispd else ""
-        self._results_strip_var.set(_strip)
-        self._status_var.set(f"Loaded: {path}")
-
-    # ------------------------------------------------------------------
-    def _autosave_trajectory(self):
-        """Silently write a timestamped CSV to the autosave folder after every run."""
-        r = self._result
-        if r is None:
-            return
-        try:
-            import datetime, re
-            _AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
-            # Purge autosaves older than the 20 most recent
-            existing = sorted(_AUTOSAVE_DIR.glob("*.traj.csv"))
-            for old in existing[:-19]:
-                old.unlink(missing_ok=True)
-            ts      = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            missile = re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
-            rng_km  = r.get('range_km')
-            rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
-            path    = _AUTOSAVE_DIR / f"{ts}_{missile}{rng_sfx}.traj.csv"
-            meta_json = json.dumps(self._trajectory_metadata())
-            rows = [f"# {meta_json}",
-                    "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
-            for i, ti in enumerate(r['t']):
-                rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
-                            f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
-            for d in r.get('debris_trajectories', []):
-                label = d['label'].replace(',', ' ')
-                for i, ti in enumerate(d['t']):
-                    rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
-                                f"{d['alt'][i]:.1f},,")
-            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-            self._status_var.set(
-                self._status_var.get() + f"  |  autosaved → {path.name}")
-        except Exception:
-            pass   # autosave is best-effort; never interrupt the user
-
-    # ------------------------------------------------------------------
     def _save_trajectory(self):
         if self._result is None:
             messagebox.showinfo("No data", "Run a simulation first.")
@@ -5151,9 +4990,7 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         r = self._result
-        meta_json = json.dumps(self._trajectory_metadata())
-        rows = [f"# {meta_json}",
-                "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
+        rows = ["piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
         for i, ti in enumerate(r['t']):
             rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
                         f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
@@ -5165,6 +5002,51 @@ class MissileFlyoutApp(tk.Tk):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("\n".join(rows) + "\n")
         self._status_var.set(f"Trajectory CSV exported: {path}")
+
+    def _export_trajectory_xlsx(self):
+        """Export the trajectory time-series to an XLSX workbook."""
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency",
+                                 f"openpyxl is required:\n{exc}")
+            return
+        import re as _re, datetime as _dt
+        from tkinter.filedialog import asksaveasfilename
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _re.sub(r'[^\w\-]', '_', self._missile_var.get())[:32]
+        rng_km  = self._result.get('range_km')
+        rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
+        path = asksaveasfilename(
+            defaultextension=".xlsx",
+            initialfile=f"{ts}_{missile}{rng_sfx}.traj.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
+            title="Export Trajectory XLSX",
+        )
+        if not path:
+            return
+        r = self._result
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Trajectory"
+        ws.append(["piece", "time_s", "lat_deg", "lon_deg",
+                   "alt_m", "speed_ms", "range_km"])
+        for i, ti in enumerate(r['t']):
+            ws.append(["vehicle", float(ti),
+                       float(r['lat'][i]), float(r['lon'][i]),
+                       float(r['alt'][i]), float(r['speed'][i]),
+                       float(r['range'][i]) / 1000.0])
+        for d in r.get('debris_trajectories', []):
+            label = d['label']
+            for i, ti in enumerate(d['t']):
+                ws.append([label, float(ti),
+                           float(d['lat'][i]), float(d['lon'][i]),
+                           float(d['alt'][i]), None, None])
+        wb.save(path)
+        self._status_var.set(f"Trajectory XLSX exported: {path}")
 
     def _export_kml(self):
         """Export the ground track and 3-D trajectory path as a KML file."""
@@ -6401,6 +6283,51 @@ class MissileFlyoutApp(tk.Tk):
             ]))
         Path(path).write_text(header + "\n" + "\n".join(rows))
         self._status_var.set(f"Timeline exported: {path}")
+
+    def _export_timeline_xlsx(self):
+        """Export the flight event timeline to an XLSX workbook."""
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+        milestones = self._result.get("milestones", [])
+        if not milestones:
+            messagebox.showinfo("No data", "No timeline events in last result.")
+            return
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency",
+                                 f"openpyxl is required:\n{exc}")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
+            title="Export flight timeline XLSX",
+        )
+        if not path:
+            return
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Timeline"
+        ws.append(["event", "time_s", "alt_km", "range_km",
+                   "gnd_speed_kms", "inrtl_speed_kms",
+                   "accel_ms2", "mass_t"])
+        def _num(v):
+            return float(v) if isinstance(v, (int, float)) else None
+        for m in milestones:
+            ws.append([
+                m.get("event", ""),
+                _num(m.get("t_s")),
+                _num(m.get("alt_km")),
+                _num(m.get("range_km")),
+                _num(m.get("speed_kms")),
+                _num(m.get("inertial_speed_kms")),
+                _num(m.get("accel_ms2")),
+                _num(m.get("mass_t")),
+            ])
+        wb.save(path)
+        self._status_var.set(f"Timeline XLSX exported: {path}")
 
     def _export_missile(self):
         """Export the current missile definition to a .missile.json file."""
