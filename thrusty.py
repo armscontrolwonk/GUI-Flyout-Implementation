@@ -3027,19 +3027,6 @@ class MissileFlyoutApp(tk.Tk):
         self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
                                   sticky=tk.EW, padx=8, pady=(4, 2))
 
-        # Row 12: Export / Import guidance program
-        _gp_frame = ttk.Frame(gf)
-        _gp_frame.grid(row=12, column=0, columnspan=2,
-                       sticky=tk.EW, padx=8, pady=(0, 6))
-        _gp_frame.columnconfigure(0, weight=1)
-        _gp_frame.columnconfigure(1, weight=1)
-        ttk.Button(_gp_frame, text="Export guidance…",
-                   command=self._export_guidance).grid(
-            row=0, column=0, sticky=tk.EW, padx=(0, 2))
-        ttk.Button(_gp_frame, text="Import guidance…",
-                   command=self._import_guidance).grid(
-            row=0, column=1, sticky=tk.EW, padx=(2, 0))
-
         # Initialise guidance-specific row visibility for the default mode.
         self._orbit_alt_lbl.grid_forget()
         self._orbit_alt_frame.grid_forget()
