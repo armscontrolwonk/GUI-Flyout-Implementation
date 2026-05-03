@@ -1203,26 +1203,6 @@ class MissileDialog(tk.Toplevel):
         self._payload_length_var, self._payload_length_entry = _fe_entry(
             self._payload_shape_frame, "Payload length (m):", 2, "0", "m", pady=(2, 4))
 
-        # ── Aerospike (drag-reduction probe) ───────────────────────────────
-        self._aerospike_var = tk.BooleanVar(value=False)
-        self._aerospike_check = ttk.Checkbutton(
-            self._payload_shape_frame, text="Aerospike",
-            variable=self._aerospike_var,
-            command=self._update_aerospike_state)
-        self._aerospike_check.grid(row=3, column=0, columnspan=2,
-                                   sticky=tk.W, padx=(6, 2), pady=(4, 0))
-
-        self._aerospike_section = ttk.Frame(self._payload_shape_frame)
-        self._aerospike_section.grid(row=4, column=0, columnspan=2,
-                                     sticky=tk.EW, padx=(16, 0))
-        self._aerospike_section.columnconfigure(1, weight=1)
-        self._aerospike_section.grid_remove()
-        self._aerospike_LD_var, self._aerospike_LD_entry = _fe_entry(
-            self._aerospike_section, "Spike length (L/D):", 0, "1.5", "")
-        self._aerospike_dD_var, self._aerospike_dD_entry = _fe_entry(
-            self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
-            pady=(2, 4))
-
         # Keep legacy aliases so _calc_rv_beta pre-fill still resolves
         self._nose_shape_var    = self._payload_shape_var
         self._nose_length_var   = self._payload_length_var
@@ -1351,6 +1331,27 @@ class MissileDialog(tk.Toplevel):
             self._shroud_section, "Nose segment length (m):", 4, "0", "m")
         self._shroud_alt_var, self._shroud_alt_entry = _fe_entry(
             self._shroud_section, "Jettison alt (km):", 5, "80", "km", pady=(2, 4))
+
+        # ── Aerospike (drag-reduction probe attached to shroud) ─────────────
+        # Effect applies only while shroud is attached; it stops at jettison.
+        self._aerospike_var = tk.BooleanVar(value=False)
+        self._aerospike_check = ttk.Checkbutton(
+            self._shroud_section, text="Aerospike",
+            variable=self._aerospike_var,
+            command=self._update_aerospike_state)
+        self._aerospike_check.grid(row=6, column=0, columnspan=2,
+                                   sticky=tk.W, padx=(6, 2), pady=(4, 0))
+
+        self._aerospike_section = ttk.Frame(self._shroud_section)
+        self._aerospike_section.grid(row=7, column=0, columnspan=2,
+                                     sticky=tk.EW, padx=(16, 0))
+        self._aerospike_section.columnconfigure(1, weight=1)
+        self._aerospike_section.grid_remove()
+        self._aerospike_LD_var, self._aerospike_LD_entry = _fe_entry(
+            self._aerospike_section, "Spike length (L/D):", 0, "1.5", "")
+        self._aerospike_dD_var, self._aerospike_dD_entry = _fe_entry(
+            self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
+            pady=(2, 4))
 
         # Live throw-weight update when RV fields change
         for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
