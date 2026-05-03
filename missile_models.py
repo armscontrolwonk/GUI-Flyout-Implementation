@@ -143,6 +143,18 @@ class MissileParams:
     shroud_nose_shape:      str   = ""
     shroud_nose_length_m:   float = 0.0    # physical shroud nose-cone length (m)
 
+    # Aerospike (drag-reduction probe protruding from the forebody).
+    # When aerospike_LD > 0, the forebody wave drag is computed from an
+    # "effective body" cone whose fineness ratio is derived from the
+    # dividing-streamline geometry measured by Ahmed & Qin (2011) Fig. 5:
+    #     L/D_eff = 1.0 + (2/3)·spike_LD + 2.0·spike_dD
+    # The model takes whichever wave-drag is lower (actual nose vs. effective
+    # body), so a spike never makes a slender body worse.
+    # spike_LD = spike length / body diameter (typical 1.0–3.0)
+    # spike_dD = aerodisk diameter / body diameter (0 = pointed tip; 0.05–0.4)
+    aerospike_LD:           float = 0.0
+    aerospike_dD:           float = 0.0
+
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
@@ -443,18 +455,42 @@ def _cd_base(mach: float, base_area_ratio: float = 1.0) -> float:
     return -cpb * base_area_ratio   # Cpb < 0 → Cd_base > 0
 
 
+def _aerospike_effective_LD(spike_LD: float, spike_dD: float) -> float:
+    """
+    Effective-body fineness ratio for an aerospiked forebody.
+    Derived from Ahmed & Qin (2011) Fig. 5 dividing-streamline angles for
+    sharp pointed spikes on hemisphere-cylinder models:
+        spike L/D = 1.5 → θ ≈ 14°  → L/D_eff ≈ 2.0
+        spike L/D = 2.0 → θ ≈ 12.5° → L/D_eff ≈ 2.3
+        spike L/D = 2.5 → θ ≈ 11°  → L/D_eff ≈ 2.6
+    Linear fit:  L/D_eff = 1.0 + (2/3)·spike_LD
+    Aerodisk contribution from §3.2.1 / Fig. 6:  + 2.0·spike_dD
+    """
+    if spike_LD <= 0.0:
+        return 0.0
+    return 1.0 + (2.0 / 3.0) * spike_LD + 2.0 * spike_dD
+
+
 def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
-                   re_l: float = 5e6, ld_body: float = None) -> float:
+                   re_l: float = 5e6, ld_body: float = None,
+                   aerospike_LD: float = 0.0,
+                   aerospike_dD: float = 0.0) -> float:
     """
     Total zero-lift drag coefficient (Cd_wave + Cd_friction + Cd_base).
     Source: Chin (1961) *Missile Configuration Design*; NACA TN 4201; Crowell (1996).
 
-    nose_shape : key from NOSE_SHAPES
-    ld         : nose fineness ratio = nose_length / body_diameter (clamped 0.5–10)
-    mach       : free-stream Mach number
-    re_l       : Reynolds number based on body length (default 5×10^6)
-    ld_body    : full-body fineness ratio = body_length / body_diameter;
-                 drives cylinder friction term.  None → 2×ld estimate.
+    nose_shape   : key from NOSE_SHAPES
+    ld           : nose fineness ratio = nose_length / body_diameter (clamped 0.5–10)
+    mach         : free-stream Mach number
+    re_l         : Reynolds number based on body length (default 5×10^6)
+    ld_body      : full-body fineness ratio = body_length / body_diameter;
+                   drives cylinder friction term.  None → 2×ld estimate.
+    aerospike_LD : spike length / body diameter (0 = no aerospike)
+    aerospike_dD : aerodisk diameter / body diameter (0 = pointed tip)
+                   When aerospike_LD > 0, wave drag is replaced by the
+                   minimum of (actual nose, effective-body cone) — see
+                   _aerospike_effective_LD docstring.  Active only above
+                   Mach 0.8 since a spike requires a bow shock to replace.
     """
     nose_shape = _SHAPE_ALIAS.get(nose_shape, nose_shape)
     ld   = max(0.5, min(float(ld), 10.0))
@@ -462,9 +498,15 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
 
     # ── Blunt Cylinder ────────────────────────────────────────────────────────
     if nose_shape == 'blunt_cylinder':
-        if mach <= 0.8:   return 0.9
-        if mach <= 1.5:   return 0.9 + (mach - 0.8) / 0.7 * 1.3
-        return 2.2
+        if mach <= 0.8:   cd_blunt = 0.9
+        elif mach <= 1.5: cd_blunt = 0.9 + (mach - 0.8) / 0.7 * 1.3
+        else:             cd_blunt = 2.2
+        if aerospike_LD > 0.0 and mach > 0.8:
+            # Spike replaces the blunt shock with an effective slender cone.
+            ld_eff = _aerospike_effective_LD(aerospike_LD, aerospike_dD)
+            # Friction (~0.05) + base (~0.06) typical for hemisphere-cylinder.
+            return _cd_wave_cone(ld_eff, mach) + 0.11
+        return cd_blunt
 
     # ── Forden fallback (legacy) ──────────────────────────────────────────────
     if nose_shape in ('forden', '', None):
@@ -483,6 +525,11 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
         cd_wave = _cd_wave_table(_WAVE_PARA, ld, mach)
     else:
         cd_wave = _cd_wave_cone(ld, mach)
+
+    # ── Aerospike: replace wave drag with effective-body cone if smaller ──────
+    if aerospike_LD > 0.0 and mach > 0.8:
+        ld_eff = _aerospike_effective_LD(aerospike_LD, aerospike_dD)
+        cd_wave = min(cd_wave, _cd_wave_cone(ld_eff, mach))
 
     # ── Friction drag (nose wetted area + cylindrical body section) ───────────
     nose_swet = _s_wet_ratio(nose_shape, ld)
@@ -1103,6 +1150,8 @@ def missile_to_dict(p: MissileParams) -> dict:
         'nose_length_m':          p.nose_length_m,
         'shroud_nose_shape':      p.shroud_nose_shape,
         'shroud_nose_length_m':   p.shroud_nose_length_m,
+        'aerospike_LD':           p.aerospike_LD,
+        'aerospike_dD':           p.aerospike_dD,
         'payload_diameter_m':     p.payload_diameter_m,
         'rv_shape':               p.rv_shape,
         'rv_diameter_m':          p.rv_diameter_m,
@@ -1184,6 +1233,8 @@ def missile_from_dict(d: dict) -> MissileParams:
         shroud_nose_shape=d.get('shroud_nose_shape', ''),
         shroud_nose_length_m=float(d.get('shroud_nose_length_m',
                             float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
+        aerospike_LD=float(d.get('aerospike_LD', 0.0)),
+        aerospike_dD=float(d.get('aerospike_dD', 0.0)),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
@@ -1411,7 +1462,9 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
         _ld_body = (top_params.shroud_length_m / _sd
                     if top_params.shroud_length_m > 0 and _sd > 0 else None)
         cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach,
-                            re_l=re_l, ld_body=_ld_body)
+                            re_l=re_l, ld_body=_ld_body,
+                            aerospike_LD=top_params.aerospike_LD,
+                            aerospike_dD=top_params.aerospike_dD)
     elif top_params is not None and (
             (top_params.rv_separates
              and top_params.rv_shape not in ('', 'forden')
@@ -1430,7 +1483,9 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
             _length = top_params.nose_length_m
         _ld = (_length / _diam if _length > 0 and _diam > 0 else 3.0)
         _ld_body = (params.length_m / _diam if params.length_m > 0 and _diam > 0 else None)
-        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
+        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
+                            aerospike_LD=top_params.aerospike_LD,
+                            aerospike_dD=top_params.aerospike_dD)
     else:
         cd = drag_coefficient(params, mach)
 
