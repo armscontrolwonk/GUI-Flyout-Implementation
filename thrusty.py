@@ -1251,33 +1251,23 @@ class MissileDialog(tk.Toplevel):
         self._rv_section.columnconfigure(1, weight=1)
         self._rv_section.grid_remove()
 
-        # Per-RV mass
-        ttk.Label(self._rv_section, text="Per-RV mass (kg):").grid(
-            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_mass_var = tk.StringVar(value="1000")
-        _rvm_inner = ttk.Frame(self._rv_section)
-        _rvm_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._rv_mass_entry = ttk.Entry(_rvm_inner, textvariable=self._rv_mass_var, width=10)
-        self._rv_mass_entry.pack(side=tk.LEFT)
-        ttk.Label(_rvm_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
-
-        # No. of RVs
+        # No. of RVs (per-RV mass is a property of the loaded RV)
         ttk.Label(self._rv_section, text="No. of RVs:").grid(
-            row=1, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._num_rvs_var = tk.StringVar(value="1")
         _rvn_inner = ttk.Frame(self._rv_section)
-        _rvn_inner.grid(row=1, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        _rvn_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         self._num_rvs_spinbox = ttk.Spinbox(
             _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
         self._num_rvs_spinbox.pack(side=tk.LEFT)
 
-        # RV type: summary label + action buttons (rows 2-3)
+        # RV type: summary label + action buttons (rows 1-2)
         self._rv_summary_var = tk.StringVar(value="No RV loaded")
         ttk.Label(self._rv_section, textvariable=self._rv_summary_var,
                   wraplength=320, foreground="navy").grid(
-            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 2))
+            row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 2))
         _rv_btn_row = ttk.Frame(self._rv_section)
-        _rv_btn_row.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
+        _rv_btn_row.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
         self._rv_load_btn = ttk.Button(_rv_btn_row, text="Load RV…", command=self._load_rv)
         self._rv_load_btn.pack(side=tk.LEFT)
         self._rv_edit_btn = ttk.Button(_rv_btn_row, text="Edit RV…", command=self._edit_rv)
@@ -1292,11 +1282,11 @@ class MissileDialog(tk.Toplevel):
             variable=self._has_pbv_var,
             command=self._update_pbv_state)
         self._has_pbv_check.grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+            row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
         # PBV sub-section
         self._pbv_section = ttk.Frame(self._rv_section)
-        self._pbv_section.grid(row=5, column=0, columnspan=2,
+        self._pbv_section.grid(row=4, column=0, columnspan=2,
                                sticky=tk.EW, padx=(16, 0))
         self._pbv_section.columnconfigure(1, weight=1)
         self._pbv_section.grid_remove()
@@ -1366,8 +1356,10 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
 
-        # Live throw-weight update when RV fields change
-        for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
+        # Live throw-weight update when RV fields change.  The per-RV mass now
+        # comes from self._rv.mass_kg and is refreshed by _load_rv / _edit_rv /
+        # _new_rv, which call _update_throw_weight directly.
+        for _v in (self._num_rvs_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
 
         # ── Guidance mode ────────────────────────────────────────────────
@@ -1452,7 +1444,6 @@ class MissileDialog(tk.Toplevel):
         self._payload_length_entry.config(state="disabled")
         # RV section
         self._rv_separates_check.config(state="disabled")
-        self._rv_mass_entry.config(state="disabled")
         self._num_rvs_spinbox.config(state="disabled")
         self._rv_load_btn.config(state="disabled")
         self._rv_edit_btn.config(state="disabled")
@@ -1488,12 +1479,14 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _update_throw_weight(self, *_):
-        """Recompute throw weight from RV fields when RV separates is active."""
+        """Recompute throw weight = N × RV.mass_kg + PBV when RV separates is active."""
         if not self._rv_separates_var.get():
             return
+        if self._rv is None:
+            return  # No RV loaded yet; leave throw weight untouched.
         try:
             n   = max(1, int(self._num_rvs_var.get()))
-            rv  = float(self._rv_mass_var.get())
+            rv  = float(self._rv.mass_kg)
             bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
             total = n * rv + bus
             self._throw_weight_entry.config(state="normal")
@@ -1543,8 +1536,9 @@ class MissileDialog(tk.Toplevel):
         if rv is None:
             self._rv_summary_var.set("No RV loaded")
             return
-        parts = [rv.name]
-        parts.append(f"β {rv.beta_kg_m2:,.0f} kg/m²")
+        parts = [rv.name,
+                 f"{rv.mass_kg:,.0f} kg",
+                 f"β {rv.beta_kg_m2:,.0f} kg/m²"]
         if rv.glider_enabled and rv.glider_LD > 0:
             guid = "EG" if rv.glider_guidance == "equilibrium_glide" else "skip"
             parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
@@ -1562,41 +1556,32 @@ class MissileDialog(tk.Toplevel):
             return
         try:
             d = json.loads(Path(path).read_text())
-            rv = rv_from_dict(d)
+            self._rv = rv_from_dict(d)
         except Exception as exc:
             messagebox.showerror("Load RV", f"Could not read RV file:\n{exc}", parent=self)
             return
-        try:
-            mass = float(self._rv_mass_var.get())
-        except ValueError:
-            mass = rv.mass_kg
-        import dataclasses
-        self._rv = dataclasses.replace(rv, mass_kg=mass)
         self._update_rv_summary()
+        self._update_throw_weight()
 
     def _edit_rv(self):
         """Open RVEditorDialog to edit self._rv; update on OK."""
-        try:
-            mass = float(self._rv_mass_var.get())
-        except ValueError:
-            mass = 500.0
+        mass = self._rv.mass_kg if self._rv is not None else 500.0
         dlg = RVEditorDialog(self, rv=self._rv, mass_kg=mass)
         self.wait_window(dlg)
         if dlg.result is not None:
             self._rv = dlg.result
             self._update_rv_summary()
+            self._update_throw_weight()
 
     def _new_rv(self):
         """Open RVEditorDialog with blank/default values."""
-        try:
-            mass = float(self._rv_mass_var.get())
-        except ValueError:
-            mass = 500.0
+        mass = self._rv.mass_kg if self._rv is not None else 500.0
         dlg = RVEditorDialog(self, rv=None, mass_kg=mass)
         self.wait_window(dlg)
         if dlg.result is not None:
             self._rv = dlg.result
             self._update_rv_summary()
+            self._update_throw_weight()
 
     # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
@@ -1684,7 +1669,6 @@ class MissileDialog(tk.Toplevel):
         self._rv_separates_var.set(p.rv_separates)
         self._throw_weight_var.set(f"{payload:.0f}")
         if p.rv_separates and p.rv_mass_kg > 0:
-            self._rv_mass_var.set(f"{p.rv_mass_kg:.0f}")
             self._num_rvs_var.set(str(p.num_rvs))
             has_pbv = p.bus_mass_kg > 0
             self._has_pbv_var.set(has_pbv)
@@ -1692,7 +1676,6 @@ class MissileDialog(tk.Toplevel):
             self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
             self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
         else:
-            self._rv_mass_var.set(f"{payload:.0f}")
             self._num_rvs_var.set("1")
             self._has_pbv_var.set(False)
             self._pbv_mass_var.set("0")
@@ -1773,12 +1756,14 @@ class MissileDialog(tk.Toplevel):
         # Throw weight / payload decomposition
         rv_separates = self._rv_separates_var.get()
         if rv_separates:
+            if self._rv is None:
+                raise ValueError("Please load or create an RV (use 'Load RV…' or 'New RV…') before saving.")
             try:
                 num_rvs  = max(1, int(self._num_rvs_var.get()))
-                rv_mass  = float(self._rv_mass_var.get())
                 bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
             except ValueError:
-                raise ValueError("Per-RV mass and No. of RVs must be numbers.")
+                raise ValueError("No. of RVs and PBV mass must be numbers.")
+            rv_mass = float(self._rv.mass_kg)
             payload = num_rvs * rv_mass + bus_mass
         else:
             try:
@@ -1788,10 +1773,6 @@ class MissileDialog(tk.Toplevel):
             num_rvs = 1
             rv_mass = payload
             bus_mass = 0.0
-
-        # RV — validate that one is loaded when rv_separates is on
-        if rv_separates and self._rv is None:
-            raise ValueError("Please load or create an RV (use 'Load RV…' or 'New RV…') before saving.")
 
         # Payload shape / diameter / length
         _ps_label = self._payload_shape_var.get()
