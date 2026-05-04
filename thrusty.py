@@ -1551,7 +1551,7 @@ class MissileDialog(tk.Toplevel):
             parent=self,
             title="Load RV",
             initialdir=str(_RV_LIBRARY_PATH) if _RV_LIBRARY_PATH.exists() else ".",
-            filetypes=[("RV JSON files", "*.rv.json"), ("JSON files", "*.json")])
+            filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
         if not path:
             return
         try:
@@ -2309,8 +2309,8 @@ class RVEditorDialog(tk.Toplevel):
             title="Save RV to Library",
             initialdir=init_dir,
             initialfile=f"{_safe_name}.rv.json",
-            defaultextension=".rv.json",
-            filetypes=[("RV JSON files", "*.rv.json"), ("JSON files", "*.json")])
+            defaultextension=".json",
+            filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
         if not path:
             return
         try:
