@@ -6269,6 +6269,9 @@ class MissileFlyoutApp(tk.Tk):
                     ('ignition' in e and 'stage' in e) or
                     'jettison'  in e)
 
+        def _is_major(e, is_debris):
+            return not is_debris
+
         import re as _re_ev, json as _json
 
         def _name_only(raw):
@@ -6337,10 +6340,9 @@ class MissileFlyoutApp(tk.Tk):
                     fill=True, fill_color="black", fill_opacity=1.0,
                     popup=popup, tooltip=display_name,
                 ).add_to(fmap)
-                _label_data.append({'lat':  mk_lat, 'lon':  mk_lon,
-                                    'text': display_name, 't_s': ms['t_s'],
-                                    'prefer_above': _prefer_above(
-                                        ms, e, is_debris, mk_lat, mk_lon)})
+                _label_data.append({'lat':   mk_lat, 'lon':  mk_lon,
+                                    'text':  display_name, 't_s': ms['t_s'],
+                                    'major': _is_major(e, is_debris)})
             elif _show_tick(e, is_debris):
                 display_name = _name_only(label)
                 popup_html = (
@@ -6390,19 +6392,24 @@ class MissileFlyoutApp(tk.Tk):
         # Labels are name-only; full detail is in the click popup.
         # Tick marks are drawn perpendicular to the trajectory skeleton.
         map_var    = fmap.get_name()
+        _apo_ms    = next((m for m in r.get('milestones', [])
+                           if 'apogee' in m.get('event', '').lower()), None)
+        apogee_t_s = float(_apo_ms['t_s']) if _apo_ms else 1e9
         label_json = _json.dumps(_label_data)
         leader_js  = f"""
         <script>
         (function() {{
             var LABELS    = {label_json};
+            var APOGEE_T  = {apogee_t_s};
             var TICKS     = {tick_json};
             var TRAJ      = {traj_json};
             var ALL_TRAJ  = {all_traj_json};
-            var H_GAP     = 10;   // px right of the dot centre
+            var H_GAP     = 10;   // px between dot centre and label edge
             var V_ABOVE   = 4;    // px between dot and nearest edge of label
             var STACK_GAP = 3;    // px between stacked labels
             var PAD       = 2;    // extra padding around each label box
             var TICK_HALF = 8;    // px: half-length of tick mark
+            var CLUSTER_R = 60;   // px: dot-distance threshold for new stack group
 
             var _svg = null, _con = null, _divs = [], _labelsLayer = null;
 
@@ -6571,6 +6578,9 @@ class MissileFlyoutApp(tk.Tk):
                 }}
 
                 // ── Label placement ───────────────────────────────────────
+                // Pre-apogee labels go LEFT (stack downward from dot).
+                // Post-apogee labels go RIGHT (stack upward from dot).
+                // Within each side: major events nearest the dot, minor further.
                 _divs.forEach(function(d){{d.style.display='none';}});
 
                 var order=pts.map(function(_,i){{return i;}}).filter(function(i){{
@@ -6578,88 +6588,96 @@ class MissileFlyoutApp(tk.Tk):
                     return p.x>=-EDGE&&p.x<=mapW+EDGE&&p.y>=-EDGE&&p.y<=mapH+EDGE;
                 }});
 
-                // Latest event placed first → sits nearest its dot.
-                // Earlier events are pushed outward by the collision loop.
-                // Reading order: chronological top-to-bottom (above) or
-                //                bottom-to-top (below).
-                order.sort(function(a,b){{return LABELS[b].t_s-LABELS[a].t_s;}});
+                var topY={{}}, left={{}}, lw_cache={{}};
 
-                var topY={{}},lxMap={{}},goLeft={{}},goAbove={{}},lwCache={{}};
-                var placed=[];   // already-positioned label rects
-
-                // Horizontal side — proven safe from trajectory crossing:
-                //   Label ABOVE dot: go RIGHT when slope ≥ 0, LEFT when < 0.
-                //   Label BELOW dot: opposite.
-                function sideFor(pt,above){{
-                    var tan=trajTan(pt);
-                    var slopePos=(tan.dx*tan.dy)>=0;
-                    var lRight=above?slopePos:!slopePos;
-                    var lx=lRight?pt.x+H_GAP:pt.x-H_GAP-lwCache[0]||80;
-                    return {{lRight:lRight}};
+                // Split into left-side (pre-apogee) and right-side (post-apogee).
+                // Within each side: major events first (nearest dot), minor second.
+                var leftIdx=[], rightIdx=[];
+                order.forEach(function(i){{
+                    (LABELS[i].t_s < APOGEE_T ? leftIdx : rightIdx).push(i);
+                }});
+                function byMajorFirst(a,b){{
+                    if(LABELS[b].major !== LABELS[a].major)
+                        return LABELS[b].major ? 1 : -1;
+                    return LABELS[a].t_s - LABELS[b].t_s;
                 }}
+                leftIdx.sort(byMajorFirst);
+                rightIdx.sort(byMajorFirst);
 
-                // Try to place a label on one vertical side (above=true/false).
-                // Returns {{lx,ly,ok}} after up to 40 outward pushes.
-                function tryPlace(pt,lw,lh,above){{
-                    var tan=trajTan(pt);
-                    var slopePos=(tan.dx*tan.dy)>=0;
-                    var lRight=above?slopePos:!slopePos;
-                    var lx=lRight?pt.x+H_GAP:pt.x-H_GAP-lw;
-                    var ly=above?pt.y-lh-V_ABOVE:pt.y+V_ABOVE;
-                    var dir=above?-1:1;
-                    var step=lh+STACK_GAP;
-                    for(var attempt=0;attempt<40;attempt++){{
-                        // Check the label rect AND the gap corridor between dot
-                        // and label — any trajectory in either region is a violation.
-                        var bad=labelHitsTraj(lx,ly,lw,lh)||
-                                corridorHitsTraj(pt,lx,ly,lw,lh,lRight,above);
-                        for(var j=0;j<placed.length&&!bad;j++){{
-                            bad=rectsOverlap(lx,ly,lw,lh,
-                                placed[j].lx,placed[j].ly,
-                                placed[j].lw,placed[j].lh);
-                        }}
-                        if(!bad)return{{lx:lx,ly:ly,lRight:lRight,ok:true}};
-                        ly+=dir*step;
+                // Left-side: stack downward from dot.
+                var prevBottomLeft=null, prevPtLeft=null;
+                leftIdx.forEach(function(idx){{
+                    var pt=pts[idx];
+                    _divs[idx].style.display='block';
+                    var lw=(_divs[idx].offsetWidth ||80)+PAD*2;
+                    var lh=(_divs[idx].offsetHeight||14)+PAD*2;
+                    lw_cache[idx]=lw;
+
+                    if(prevPtLeft){{
+                        var dx=pt.x-prevPtLeft.x, dy=pt.y-prevPtLeft.y;
+                        if(Math.sqrt(dx*dx+dy*dy)>CLUSTER_R) prevBottomLeft=null;
                     }}
-                    return{{lx:lx,ly:ly,lRight:lRight,ok:false}};
-                }}
 
-                order.forEach(function(idx){{
+                    var idealTop=pt.y-lh/2;
+                    var candidate=(prevBottomLeft===null)
+                        ? idealTop
+                        : prevBottomLeft+STACK_GAP;
+                    if(candidate+lh>mapH-EDGE) candidate=mapH-EDGE-lh;
+
+                    topY[idx]=candidate;
+                    left[idx]=true;
+                    prevBottomLeft=candidate+lh;
+                    prevPtLeft=pt;
+                }});
+
+                // Right-side: stack upward from dot.
+                var prevTopRight=null, prevPtRight=null;
+                rightIdx.forEach(function(idx){{
                     var pt=pts[idx];
                     _divs[idx].style.display='block';
                     var lh=(_divs[idx].offsetHeight||14)+PAD*2;
                     var lw=(_divs[idx].offsetWidth ||80)+PAD*2;
-                    lwCache[idx]=lw;
+                    lw_cache[idx]=lw;
 
-                    // prefer_above from Python (ascending/impact → true, descending → false).
-                    // Falls back to counting trajectory points if not set.
-                    var prefAbove=(LABELS[idx].prefer_above!==undefined)
-                        ?LABELS[idx].prefer_above
-                        :goAbovePt(pt);
-
-                    // Try preferred side first; if exhausted, try the other side.
-                    // This naturally splits two nearby debris impacts: the second
-                    // one finds its preferred side blocked and flips, landing on
-                    // the opposite edge of the dot cluster.
-                    var r1=tryPlace(pt,lw,lh,prefAbove);
-                    var best=r1;
-                    if(!r1.ok){{
-                        var r2=tryPlace(pt,lw,lh,!prefAbove);
-                        if(r2.ok)best=r2;
-                        // If both exhausted, keep preferred side's final position.
+                    if(prevPtRight){{
+                        var dx=pt.x-prevPtRight.x, dy=pt.y-prevPtRight.y;
+                        if(Math.sqrt(dx*dx+dy*dy)>CLUSTER_R) prevTopRight=null;
                     }}
 
-                    topY[idx]=best.ly;
-                    lxMap[idx]=best.lx;
-                    goAbove[idx]=prefAbove;
-                    goLeft[idx]=!best.lRight;
-                    placed.push({{lx:best.lx,ly:best.ly,lw:lw,lh:lh}});
+                    var idealTop=pt.y-lh-V_ABOVE;
+                    var candidate=(prevTopRight===null)
+                        ? idealTop
+                        : Math.min(idealTop, prevTopRight-lh-STACK_GAP);
+                    if(candidate<EDGE){{ candidate=pt.y+V_ABOVE; prevTopRight=null; }}
+
+                    topY[idx]=candidate;
+                    left[idx]=false;
+                    prevTopRight=candidate;
+                    prevPtRight=pt;
                 }});
 
-                // Render.
+                // Render: position each label div and draw a leader line.
                 order.forEach(function(idx){{
-                    _divs[idx].style.left=lxMap[idx]+'px';
-                    _divs[idx].style.top =topY[idx]+'px';
+                    var pt =pts[idx];
+                    var lh =(_divs[idx].offsetHeight||14)+PAD*2;
+                    var lw =lw_cache[idx]||(_divs[idx].offsetWidth||80)+PAD*2;
+                    var ly =topY[idx];
+                    var lx =left[idx]
+                        ? pt.x-H_GAP-lw
+                        : pt.x+H_GAP;
+                    _divs[idx].style.left=lx+'px';
+                    _divs[idx].style.top =ly+'px';
+
+                    var line=document.createElementNS(
+                        'http://www.w3.org/2000/svg','line');
+                    line.setAttribute('x1',pt.x);
+                    line.setAttribute('y1',pt.y);
+                    line.setAttribute('x2',left[idx]?lx+lw:lx);
+                    line.setAttribute('y2',ly+lh/2);
+                    line.setAttribute('stroke','black');
+                    line.setAttribute('stroke-width','0.7');
+                    line.setAttribute('opacity','0.5');
+                    _svg.appendChild(line);
                 }});
             }}
 
