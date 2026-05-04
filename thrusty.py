@@ -3624,8 +3624,33 @@ class MissileFlyoutApp(tk.Tk):
         self._update_guidance_labels(self._guidance_var.get())
         self._update_params_display(p)
         self._del_btn.config(state=tk.NORMAL)
-        if self._adv_pitch_var.get():
+
+        # Restore Advanced Pitch Program checkbox + per-stage rows.
+        if prof and 'adv_pitch_on' in prof:
+            self._adv_pitch_var.set(bool(prof['adv_pitch_on']))
+            self._on_adv_pitch_toggled()
+            stage_data = prof.get('stage_rows') or []
+            if self._adv_pitch_var.get() and stage_data:
+                # _on_adv_pitch_toggled already called _rebuild_stage_rows;
+                # overwrite the seeded values with the snapshot.
+                for row, saved in zip(self._stage_rows, stage_data):
+                    if 'start' in saved: row['start'].set(saved['start'])
+                    if 'stop'  in saved: row['stop'].set(saved['stop'])
+                    if 'angle' in saved: row['angle'].set(saved['angle'])
+                    if 'coast' in saved: row['coast'].set(saved['coast'])
+        elif self._adv_pitch_var.get():
             self._rebuild_stage_rows()
+
+        # Restore Yaw / dogleg program checkbox + entries.
+        if prof and 'adv_yaw_on' in prof:
+            self._adv_yaw_var.set(bool(prof['adv_yaw_on']))
+            self._on_adv_yaw_toggled()
+            yaw_data = prof.get('yaw_rows') or []
+            if self._adv_yaw_var.get() and yaw_data:
+                for yv, saved in zip(self._yaw_vars, yaw_data):
+                    if 'start'    in saved: yv['start'].set(saved['start'])
+                    if 'stop'     in saved: yv['stop'].set(saved['stop'])
+                    if 'final_az' in saved: yv['final_az'].set(saved['final_az'])
 
     # ------------------------------------------------------------------
     # Advanced per-stage pitch program
@@ -3963,7 +3988,15 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Missile '{name}' deleted.")
 
     def _snapshot_traj_profile(self, missile_name: str) -> None:
-        """Save current trajectory panel fields as a profile for missile_name."""
+        """Save current trajectory panel fields as a profile for missile_name.
+
+        Captures everything the user can change in the Guidance panel —
+        global pitch / cutoff fields, the Advanced Pitch Program rows
+        (per stage), and the Yaw / dogleg program — so the next time this
+        missile is loaded the panel can be restored exactly.  This is
+        called after Save Missile so the editor dialog cannot wipe out
+        the user's trajectory work just by re-saving the missile.
+        """
         cutoff_str   = self._cutoff_var.get().strip()
         gt_start_str = self._gt_turn_start_var.get().strip()
         gt_stop_str  = self._gt_turn_stop_var.get().strip()
@@ -3975,6 +4008,30 @@ class MissileFlyoutApp(tk.Tk):
             launch_el = float(self._launch_el_var.get())
         except (ValueError, AttributeError):
             launch_el = 90.0
+
+        # Per-stage Advanced Pitch Program rows.
+        adv_pitch_on = bool(getattr(self, '_adv_pitch_var', tk.BooleanVar()).get())
+        stage_rows_data = []
+        if adv_pitch_on and getattr(self, '_stage_rows', None):
+            for row in self._stage_rows:
+                stage_rows_data.append({
+                    'start': row['start'].get().strip(),
+                    'stop':  row['stop'].get().strip(),
+                    'angle': row['angle'].get().strip(),
+                    'coast': row['coast'].get().strip(),
+                })
+
+        # Yaw / dogleg program.
+        adv_yaw_on = bool(getattr(self, '_adv_yaw_var', tk.BooleanVar()).get())
+        yaw_rows_data = []
+        if adv_yaw_on and getattr(self, '_yaw_vars', None):
+            for yv in self._yaw_vars:
+                yaw_rows_data.append({
+                    'start':    yv['start'].get().strip(),
+                    'stop':     yv['stop'].get().strip(),
+                    'final_az': yv['final_az'].get().strip(),
+                })
+
         prof = {
             'guidance':             self._guidance_var.get(),
             'burnout_angle_deg':       loft_angle,
@@ -3982,6 +4039,10 @@ class MissileFlyoutApp(tk.Tk):
             'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
             'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
             'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
+            'adv_pitch_on':          adv_pitch_on,
+            'stage_rows':            stage_rows_data,
+            'adv_yaw_on':            adv_yaw_on,
+            'yaw_rows':              yaw_rows_data,
         }
         profiles = _load_traj_profiles()
         profiles[missile_name] = prof
