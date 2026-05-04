@@ -1253,18 +1253,14 @@ def integrate_trajectory(params: MissileParams,
                         if pus_count == 1:
                             _row['event'] = (f"Pull-up start "
                                              f"({alts[full_idx]/1000:.0f} km)")
-                        else:
-                            _row['event'] = (f"Skip {pus_count} pull-up "
-                                             f"({alts[full_idx]/1000:.0f} km)")
+                            _insert_chrono(_row)
                     else:
                         apx_count += 1
                         if apx_count == 1:
                             _row['event'] = (f"Glide start "
                                              f"({alts[full_idx]/1000:.0f} km)")
-                        else:
-                            _row['event'] = (f"Skip {apx_count} apex "
-                                             f"({alts[full_idx]/1000:.0f} km)")
-                    _insert_chrono(_row)
+                            _insert_chrono(_row)
+                            break  # only emit the primary pull-up/glide pair
 
                 # Peak heating: Sutton-Graves stagnation-point rate using a
                 # conventional 5 cm nose radius.  The peak time is independent

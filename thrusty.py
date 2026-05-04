@@ -178,7 +178,7 @@ _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.j
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
-_RV_LIBRARY_PATH  = Path(__file__).parent / "rv_library"
+_RV_LIBRARY_PATH  = _THRUSTY_ROOT / "rv_library"
 _DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
 _DIR_SITES        = _THRUSTY_ROOT / "sites"
 _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
@@ -6046,8 +6046,7 @@ class MissileFlyoutApp(tk.Tk):
             if is_debris:
                 return False
             return ('apogee' in e or 're-entry' in e or 'burnout' in e or
-                    ('ignition' in e and 'stage' in e) or 'jettison' in e or
-                    e.startswith('skip '))
+                    ('ignition' in e and 'stage' in e) or 'jettison' in e)
 
         def _mk_pos(ms):
             if ms.get('is_debris') and 'impact_lat' in ms:
@@ -6278,8 +6277,7 @@ class MissileFlyoutApp(tk.Tk):
                     're-entry' in e or
                     'burnout'  in e or
                     ('ignition' in e and 'stage' in e) or
-                    'jettison'  in e or
-                    e.startswith('skip '))
+                    'jettison'  in e)
 
         def _is_major(e, is_debris):
             return not is_debris
