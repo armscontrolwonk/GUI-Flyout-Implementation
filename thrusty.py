@@ -5032,6 +5032,13 @@ class MissileFlyoutApp(tk.Tk):
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
 
+        # cla() resets twinx positioning — restore right-side y-axis on all twin axes.
+        # Also suppress their redundant gridlines (primary axes already provide them).
+        for _twin in (self._ax_spd_twin, self._ax_guid_twin, self._ax_qmach_twin):
+            _twin.yaxis.tick_right()
+            _twin.yaxis.set_label_position('right')
+            _twin.grid(False)
+
         # ── Find key event times for orbital trajectories ────────────
         _ins_t = _apo_t = _peri_t = None
         if orbital:
@@ -5085,6 +5092,7 @@ class MissileFlyoutApp(tk.Tk):
         _ax_m.plot(t, _mach_s, color='steelblue', linewidth=1.2, ls='--', label='Mach')
         _ax_m.set_ylabel("Mach", fontsize=8, color='steelblue')
         _ax_m.tick_params(labelsize=7, colors='steelblue')
+        _ax_m.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 
         # ── Altitude vs Range (truncate at insertion for orbital) ─────
         self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
