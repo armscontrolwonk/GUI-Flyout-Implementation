@@ -1375,16 +1375,38 @@ class MissileDialog(tk.Toplevel):
             self._glider_section, "Lift/drag (L/D):", 0, "2.5", "")
         self._glider_g_var, self._glider_g_entry = _fe_entry(
             self._glider_section, "Pull-up g-limit:", 1, "10", "g")
+
+        # Guidance-law dropdown.  "constant_bank" holds the user-specified
+        # bank for the whole flight (produces phugoid skip-glide if lift is
+        # strong); "equilibrium_glide" computes the bank needed every step
+        # to balance gravity (Apollo / Tracy law -> flat altitude profile,
+        # heading hold to launch azimuth).
+        ttk.Label(self._glider_section, text="Guidance:").grid(
+            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._GLIDER_GUIDANCE_LABELS = {
+            "constant_bank":     "Constant bank",
+            "equilibrium_glide": "Equilibrium glide (heading hold)",
+        }
+        self._glider_guidance_var = tk.StringVar(
+            value=self._GLIDER_GUIDANCE_LABELS["constant_bank"])
+        self._glider_guidance_cb = ttk.Combobox(
+            self._glider_section, textvariable=self._glider_guidance_var,
+            values=list(self._GLIDER_GUIDANCE_LABELS.values()),
+            state="readonly", width=30)
+        self._glider_guidance_cb.grid(
+            row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+
         self._glider_bank_var, self._glider_bank_entry = _fe_entry(
-            self._glider_section, "Bank angle:", 2, "0", "° (0 = level)")
+            self._glider_section, "Bank angle:", 3, "0",
+            "° (constant-bank mode only)")
         self._glider_terminal_var = tk.BooleanVar(value=False)
         self._glider_terminal_check = ttk.Checkbutton(
             self._glider_section, text="Terminal dive (invert lift below)",
             variable=self._glider_terminal_var)
         self._glider_terminal_check.grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
         self._glider_dive_alt_var, self._glider_dive_alt_entry = _fe_entry(
-            self._glider_section, "Dive altitude:", 4, "30", "km", pady=(2, 4))
+            self._glider_section, "Dive altitude:", 5, "30", "km", pady=(2, 4))
 
         # Live throw-weight update when RV fields change
         for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
@@ -1694,12 +1716,17 @@ class MissileDialog(tk.Toplevel):
         _gl_bank = float(getattr(p, 'glider_bank_deg', 0.0) or 0.0)
         _gl_td   = bool(getattr(p, 'glider_terminal_dive', False))
         _gl_ta   = float(getattr(p, 'glider_terminal_alt_km', 30.0) or 30.0)
+        _gl_guid = str(getattr(p, 'glider_guidance', 'constant_bank')
+                       or 'constant_bank')
         self._glider_var.set(_gl_on)
         self._glider_LD_var.set(f"{_gl_LD:.2f}" if _gl_LD > 0 else "2.5")
         self._glider_g_var.set(f"{_gl_g:.0f}")
         self._glider_bank_var.set(f"{_gl_bank:.0f}")
         self._glider_terminal_var.set(_gl_td)
         self._glider_dive_alt_var.set(f"{_gl_ta:.0f}")
+        self._glider_guidance_var.set(
+            self._GLIDER_GUIDANCE_LABELS.get(_gl_guid,
+                self._GLIDER_GUIDANCE_LABELS["constant_bank"]))
         self._update_glider_state()
 
         # Shroud
@@ -1810,12 +1837,16 @@ class MissileDialog(tk.Toplevel):
             except ValueError:
                 raise ValueError("Maneuvering inputs must be numbers.")
             glider_terminal = bool(self._glider_terminal_var.get())
+            _glabel = self._glider_guidance_var.get()
+            glider_guidance = next((k for k, v in self._GLIDER_GUIDANCE_LABELS.items()
+                                    if v == _glabel), "constant_bank")
         else:
             glider_LD       = 0.0
             glider_g_max    = 10.0
             glider_bank_deg = 0.0
             glider_terminal = False
             glider_dive_alt = 30.0
+            glider_guidance = "constant_bank"
 
         # RV geometry (round-trips the Estimate β dialog)
         _rv_shape_lbl = self._rv_shape_var.get()
@@ -1942,6 +1973,7 @@ class MissileDialog(tk.Toplevel):
         node.glider_bank_deg        = glider_bank_deg
         node.glider_terminal_dive   = glider_terminal
         node.glider_terminal_alt_km = glider_dive_alt
+        node.glider_guidance        = glider_guidance
 
         # Strap-on boosters
         try:

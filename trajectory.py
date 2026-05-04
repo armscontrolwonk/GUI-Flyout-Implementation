@@ -491,16 +491,57 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_up = n_up / n_up_mag
                         # Cross-track lift direction (right-handed: v × up).
                         n_side = np.cross(v_hat, n_up)
-                        # Bank: 0 = wings level (lift up); 180° = inverted (lift down).
-                        bank_rad = np.deg2rad(params.glider_bank_deg)
+                        # Determine bank angle.  Two guidance laws:
+                        #   constant_bank      — user-specified σ for whole flight
+                        #   equilibrium_glide  — Apollo: cos(σ) computed every
+                        #                        step to balance gravity, sign
+                        #                        from heading-hold to launch az
+                        guidance = getattr(params, 'glider_guidance', 'constant_bank')
+                        lift_mag = drag_mag * params.glider_LD
+                        g_mag    = np.linalg.norm(g)
+                        if guidance == 'equilibrium_glide':
+                            # Required vertical lift to hold altitude.
+                            #   L·cos(σ) = m·(g − V²/r)
+                            v_mag = speed
+                            r_mag2 = np.linalg.norm(pos)
+                            req_lift = rv_mass * (g_mag - v_mag**2 / r_mag2)
+                            if lift_mag > 1e-6:
+                                cos_sig = req_lift / lift_mag
+                                cos_sig = max(-1.0, min(1.0, cos_sig))
+                            else:
+                                cos_sig = 1.0
+                            mag_bank = np.arccos(cos_sig)
+                            # Heading sign: bank toward the launch azimuth.
+                            # Compute current ground-track heading from v_horiz.
+                            r_hat2 = pos / r_mag2
+                            lon_rad = np.arctan2(pos[1], pos[0])
+                            e_hat = np.array([-np.sin(lon_rad),
+                                              np.cos(lon_rad), 0.0])
+                            n_hat_local = np.cross(r_hat2, e_hat)
+                            _nm = np.linalg.norm(n_hat_local)
+                            if _nm > 1e-9:
+                                n_hat_local = n_hat_local / _nm
+                                v_horiz = vel - np.dot(vel, r_hat2) * r_hat2
+                                cur_az = np.arctan2(np.dot(v_horiz, e_hat),
+                                                    np.dot(v_horiz, n_hat_local))
+                                # Wrap heading error to (−π, π].  Bank toward
+                                # the launch azimuth: positive d_az (drifted
+                                # right of course) -> bank left.  Magnitude
+                                # is always mag_bank — equilibrium law always
+                                # wants this bank to bleed surplus lift; only
+                                # the sign is free for heading control.
+                                d_az = (cur_az - azimuth_rad + np.pi) % (2*np.pi) - np.pi
+                                bank_rad = -mag_bank if d_az >= 0 else +mag_bank
+                            else:
+                                bank_rad = mag_bank
+                        else:
+                            bank_rad = np.deg2rad(params.glider_bank_deg)
                         # Terminal-dive override flips lift downward inside the
-                        # specified altitude band.
+                        # specified altitude band (overrides any guidance law).
                         if (params.glider_terminal_dive
                                 and alt < params.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
-                        lift_mag = drag_mag * params.glider_LD
                         # Cap by structural g-limit (lift accel ≤ n_max·g).
-                        g_mag = np.linalg.norm(g)
                         lift_cap = params.glider_pullup_g_max * g_mag * rv_mass
                         if lift_mag > lift_cap:
                             lift_mag = lift_cap

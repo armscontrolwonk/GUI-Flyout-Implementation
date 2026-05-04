@@ -171,6 +171,16 @@ class MissileParams:
     glider_bank_deg:        float = 0.0
     glider_terminal_dive:   bool  = False
     glider_terminal_alt_km: float = 30.0
+    # Guidance law for the glide phase.
+    #   "constant_bank"     — bank held at glider_bank_deg for the whole flight
+    #                         (default; produces phugoid skip-glide if lift is
+    #                         strong relative to gravity).
+    #   "equilibrium_glide" — Apollo / Tracy-style: bank magnitude is computed
+    #                         every step to satisfy L·cos(σ) = m·(g − V²/r),
+    #                         producing a flat altitude profile. Sign of σ is
+    #                         set by heading-hold to launch azimuth (with a
+    #                         dead-band) so the vehicle flies straight.
+    glider_guidance:        str   = "constant_bank"
 
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
@@ -1192,6 +1202,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'glider_bank_deg':        p.glider_bank_deg,
         'glider_terminal_dive':   p.glider_terminal_dive,
         'glider_terminal_alt_km': p.glider_terminal_alt_km,
+        'glider_guidance':        p.glider_guidance,
         'payload_diameter_m':     p.payload_diameter_m,
         'rv_shape':               p.rv_shape,
         'rv_diameter_m':          p.rv_diameter_m,
@@ -1281,6 +1292,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         glider_bank_deg=float(d.get('glider_bank_deg', 0.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
+        glider_guidance=str(d.get('glider_guidance', 'constant_bank')),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
