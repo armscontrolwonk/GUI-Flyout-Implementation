@@ -3619,8 +3619,8 @@ class MissileFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
-        self._ax_spd_twin.set_ylabel('Mach', fontsize=8)
-        self._ax_spd_twin.tick_params(labelsize=7)
+        self._ax_spd_twin.set_ylabel('Mach', fontsize=8, color='steelblue')
+        self._ax_spd_twin.tick_params(labelsize=7, colors='steelblue')
         self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
         self._ax_guid_twin.tick_params(labelsize=7, colors='darkorange')
         self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color='darkorange')
@@ -5045,17 +5045,23 @@ class MissileFlyoutApp(tk.Tk):
                                   alpha=0.12, color='royalblue')
 
         # ── Speed vs Time ─────────────────────────────────────────────
-        self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5)
+        from atmosphere import atmosphere as _atm_fn
+        self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5, label='Speed')
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
-        # Mach right axis — linear rescaling of km/s using sea-level a₀
-        _A0 = 0.34029   # km/s  (ISA sea level)
-        _ylo, _yhi = self._ax_spd.get_ylim()
+        # Altitude-corrected Mach on twin axis
+        _alt_m_s = np.asarray(r.get('alt', []))
+        _spd_ms  = np.asarray(r['speed'])
+        _mach_s  = np.full(len(_alt_m_s), np.nan)
+        for _i, _h in enumerate(_alt_m_s):
+            _, _, _, _snd = _atm_fn(float(_h))
+            if _snd > 10.0:          # NaN above ~86 km where atmosphere model → 0
+                _mach_s[_i] = _spd_ms[_i] / _snd
         _ax_m = self._ax_spd_twin
-        _ax_m.set_ylim(_ylo / _A0, _yhi / _A0)
-        _ax_m.set_ylabel("Mach", fontsize=8)
-        _ax_m.tick_params(labelsize=7)
+        _ax_m.plot(t, _mach_s, color='steelblue', linewidth=1.2, ls='--', label='Mach')
+        _ax_m.set_ylabel("Mach", fontsize=8, color='steelblue')
+        _ax_m.tick_params(labelsize=7, colors='steelblue')
 
         # ── Altitude vs Range (truncate at insertion for orbital) ─────
         self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
