@@ -487,7 +487,16 @@ class _StageFrame(ttk.LabelFrame):
         if self._stage_num == 1:
             ttk.Button(_thr_inner, text="Estimate…",
                        command=self._suggest_thrust).pack(side=tk.LEFT)
-        self._isp         = _entry_row(self, "Isp (vacuum, s):",      5, d["isp"],         "s")
+        # Isp (row 5) — user-entered for liquid; computed (readonly) for solid.
+        ttk.Label(self, text="Isp (vacuum, s):").grid(
+            row=5, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        self._isp = tk.StringVar(value=d["isp"])
+        _isp_inner = ttk.Frame(self)
+        _isp_inner.grid(row=5, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._isp_entry = ttk.Entry(_isp_inner, textvariable=self._isp, width=10)
+        self._isp_entry.pack(side=tk.LEFT)
+        self._isp_hint_lbl = ttk.Label(_isp_inner, text="s", foreground="gray50")
+        self._isp_hint_lbl.pack(side=tk.LEFT, padx=(2, 0))
         # Nozzle exit area — entry + Suggest button (row 6)
         ttk.Label(self, text="Nozzle exit area (m²):").grid(
             row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
@@ -616,18 +625,26 @@ class _StageFrame(ttk.LabelFrame):
             self._burn_var.set("—")
 
     def _on_solid_toggled(self):
-        """Show/hide grain frame; switch burn field between computed and user-entered."""
+        """Show/hide grain frame; switch burn/Isp fields between computed and user-entered."""
         is_solid = self._solid_motor_var.get()
         if is_solid:
             self._solid_frame.grid()
-            # Burn time becomes user-entered
             self._burn_entry.config(state="normal")
             self._burn_hint_lbl.config(text="s  (enter value)")
+            self._isp_entry.config(state="readonly")
+            self._isp_hint_lbl.config(text="s  (computed)")
             self._thrust_lbl.config(text=self._thrust_label_text())
+            # Track burn_time changes so ISP stays in sync
+            self._burn_trace_id = self._burn_var.trace_add("write", self._recompute_solid)
         else:
+            if hasattr(self, '_burn_trace_id'):
+                self._burn_var.trace_remove("write", self._burn_trace_id)
+                del self._burn_trace_id
             self._solid_frame.grid_remove()
             self._burn_entry.config(state="readonly")
             self._burn_hint_lbl.config(text="s  (computed)")
+            self._isp_entry.config(state="normal")
+            self._isp_hint_lbl.config(text="s")
             self._thrust_lbl.config(text="Thrust (kN):")
             self._recompute_burn()
 
@@ -660,7 +677,9 @@ class _StageFrame(ttk.LabelFrame):
         return ""
 
     def _recompute_solid(self, *_):
-        """Compute the alternate thrust and update the fill-factor warning."""
+        """Compute alternate thrust display and derive Isp from thrust × burn / (prop × g₀)."""
+        if getattr(self, '_solid_isp_updating', False):
+            return
         if not (hasattr(self, '_grain_cb') and self._solid_motor_var.get()):
             return
         key = self._get_grain_key()
@@ -692,6 +711,20 @@ class _StageFrame(ttk.LabelFrame):
                 self._fill_warn_lbl.config(text="")
         else:
             self._fill_warn_lbl.config(text="")
+        # Isp = thrust × burn_time / (prop_mass × g₀)
+        try:
+            prop_kg  = float(self._fueled.get()) - float(self._dry.get())
+            thrust_n = float(self._thrust_kn.get()) * 1000.0
+            burn_s   = float(self._burn_var.get())
+            if prop_kg > 0 and burn_s > 0 and thrust_n > 0:
+                isp_s = thrust_n * burn_s / (prop_kg * self._G0)
+                self._solid_isp_updating = True
+                try:
+                    self._isp.set(f"{isp_s:.1f}")
+                finally:
+                    self._solid_isp_updating = False
+        except (ValueError, ZeroDivisionError):
+            pass
 
     def _browse_profile(self):
         """Let user pick a CSV thrust-profile file; show preview plot."""
