@@ -485,56 +485,13 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        if _erv.glider_guidance == 'equilibrium_glide':
-                            # Phase 0 (wings-level): dip + first ascending bounce.
-                            # Phase 1 (EG law): after bounce crosses eq-altitude.
-                            r_mag2    = r_mag
-                            r_hat2    = r_hat
-                            sin_gamma = np.dot(vel, r_hat2) / speed
-                            sin_gamma = max(-1.0, min(1.0, sin_gamma))
-                            gamma_rad = np.arcsin(sin_gamma)
-
-                            # cos(σ) = m(g−V²/r)/lift, clamped to [0,1].
-                            req_lift = rv_mass * (g_mag - speed**2 / r_mag2)
-                            cos_sig  = (max(0.0, min(1.0, req_lift / lift_mag))
-                                        if lift_mag > 1e-6 else 1.0)
-
-                            _has_desc = getattr(params, '_glider_has_descended', True)
-                            _phase    = getattr(params, '_glider_phase', 1)
-                            if not _has_desc and gamma_rad < 0.0:
-                                params._glider_has_descended = True
-                                _has_desc = True
-                            if (_phase == 0 and _has_desc
-                                    and gamma_rad >= 0.0 and cos_sig >= 1.0):
-                                params._glider_phase = 1
-                                _phase = 1
-
-                            if _phase == 0:
-                                bank_rad = 0.0
-                            else:
-                                if gamma_rad < 0.0:
-                                    cos_sig = min(1.0, cos_sig
-                                                  + _erv.glider_gamma_k * (-sin_gamma))
-                                mag_bank = np.arccos(cos_sig)
-                                lon_rad  = np.arctan2(pos[1], pos[0])
-                                e_hat    = np.array([-np.sin(lon_rad),
-                                                     np.cos(lon_rad), 0.0])
-                                n_hat_local = np.cross(r_hat2, e_hat)
-                                _nm = np.linalg.norm(n_hat_local)
-                                if _nm > 1e-9:
-                                    n_hat_local = n_hat_local / _nm
-                                    v_horiz = vel - np.dot(vel, r_hat2) * r_hat2
-                                    cur_az  = np.arctan2(
-                                        np.dot(v_horiz, e_hat),
-                                        np.dot(v_horiz, n_hat_local))
-                                    d_az = ((cur_az - azimuth_rad + np.pi)
-                                            % (2*np.pi)) - np.pi
-                                    bank_rad = (-mag_bank if d_az >= 0
-                                                else +mag_bank)
-                                else:
-                                    bank_rad = mag_bank
-                        else:
-                            bank_rad = np.deg2rad(_erv.glider_bank_deg)
+                        # Acton (2021) pull-up: hold bank=0 while γ<0 (still
+                        # descending), then switch to the user's open-loop bank
+                        # schedule once γ≥0.  Tracy & Wright (2020) Eqs. 1–3
+                        # take bank angle as a direct input, not a feedback law.
+                        sin_gamma = np.dot(v_hat, r_hat)
+                        bank_rad  = (0.0 if sin_gamma < 0.0
+                                     else np.deg2rad(_erv.glider_bank_deg))
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
@@ -870,18 +827,6 @@ def integrate_trajectory(params: MissileParams,
     eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
                  gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition,
                  _yaw_maneuvers)
-
-    # Glider pull-up state — three-phase machine:
-    #   phase 0: wings-level from entry through the initial dip and the
-    #            entire first ascending bounce (below the equilibrium altitude)
-    #   phase 1: EG law permanently once the vehicle first climbs *above*
-    #            the equilibrium altitude after the bounce
-    # _glider_has_descended: arms the machine once γ goes negative post-apogee
-    #   so boost/coast positive-γ phases do not prematurely trigger phase 1.
-    _erv_init = effective_rv(params)
-    if _erv_init is not None and _erv_init.glider_enabled:
-        params._glider_has_descended = False
-        params._glider_phase         = 0
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.

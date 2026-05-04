@@ -168,7 +168,6 @@ class MissileParams:
     glider_terminal_dive:   bool  = False   # → rv.glider_terminal_dive
     glider_terminal_alt_km: float = 30.0    # → rv.glider_terminal_alt_km
     glider_guidance:        str   = "constant_bank"  # → rv.glider_guidance
-    glider_gamma_k:         float = 2.0     # → rv.glider_gamma_k
     rv_shape:               str   = ""      # → rv.shape
     rv_diameter_m:          float = 0.0     # → rv.diameter_m
     rv_length_m:            float = 0.0     # → rv.length_m
@@ -225,7 +224,6 @@ class RVParams:
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "constant_bank"
-    glider_gamma_k:         float = 2.0
     glider_bank_deg:        float = 0.0
     glider_pullup_g_max:    float = 10.0
     glider_terminal_dive:   bool  = False
@@ -243,7 +241,6 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_enabled':        rv.glider_enabled,
         'glider_LD':             rv.glider_LD,
         'glider_guidance':       rv.glider_guidance,
-        'glider_gamma_k':        rv.glider_gamma_k,
         'glider_bank_deg':       rv.glider_bank_deg,
         'glider_pullup_g_max':   rv.glider_pullup_g_max,
         'glider_terminal_dive':  rv.glider_terminal_dive,
@@ -262,7 +259,6 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_guidance=str(d.get('glider_guidance', 'constant_bank')),
-        glider_gamma_k=float(d.get('glider_gamma_k', 2.0)),
         glider_bank_deg=float(d.get('glider_bank_deg', 0.0)),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
@@ -292,7 +288,6 @@ def effective_rv(params: 'MissileParams') -> Optional[RVParams]:
             glider_enabled=bool(getattr(params, 'glider_enabled', False)),
             glider_LD=float(getattr(params, 'glider_LD', 0.0)),
             glider_guidance=str(getattr(params, 'glider_guidance', 'constant_bank')),
-            glider_gamma_k=float(getattr(params, 'glider_gamma_k', 2.0)),
             glider_bank_deg=float(getattr(params, 'glider_bank_deg', 0.0)),
             glider_pullup_g_max=float(getattr(params, 'glider_pullup_g_max', 10.0)),
             glider_terminal_dive=bool(getattr(params, 'glider_terminal_dive', False)),
@@ -1316,7 +1311,6 @@ def missile_to_dict(p: MissileParams) -> dict:
             'glider_terminal_dive':   p.glider_terminal_dive,
             'glider_terminal_alt_km': p.glider_terminal_alt_km,
             'glider_guidance':        p.glider_guidance,
-            'glider_gamma_k':         p.glider_gamma_k,
         })
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
@@ -1392,7 +1386,6 @@ def missile_from_dict(d: dict) -> MissileParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_guidance=str(d.get('glider_guidance', 'constant_bank')),
-        glider_gamma_k=float(d.get('glider_gamma_k', 2.0)),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
