@@ -609,44 +609,51 @@ class _StageFrame(ttk.LabelFrame):
         self._recompute_burn()
 
     def _recompute_burn(self, *_):
-        """Liquid: compute burn = Isp×g₀×prop/thrust.  Solid: update alt-thrust display."""
-        if getattr(self, '_solid_motor_var', None) and self._solid_motor_var.get():
-            # Solid motor: burn time is user-entered; update computed alternate thrust.
-            self._recompute_solid()
-            return
+        """Compute burn = Isp × g₀ × prop / avg_thrust.
+
+        For liquids, avg_thrust = entered thrust.  For solids, avg_thrust is
+        peak_thrust × fill_factor when peak is specified, or the entered
+        value directly when average is specified.
+        """
+        # Solid-only display side effects (alt-thrust label, fill warning)
+        self._update_solid_display()
         try:
-            prop     = float(self._fueled.get()) - float(self._dry.get())
-            thrust_n = float(self._thrust_kn.get()) * 1000.0
-            isp      = float(self._isp.get())
-            if thrust_n <= 0 or isp <= 0 or prop <= 0:
+            prop      = float(self._fueled.get()) - float(self._dry.get())
+            thrust_kn = float(self._thrust_kn.get())
+            isp       = float(self._isp.get())
+            if prop <= 0 or thrust_kn <= 0 or isp <= 0:
+                raise ValueError
+            if getattr(self, '_solid_motor_var', None) and self._solid_motor_var.get():
+                key  = self._get_grain_key()
+                fill = grain_fill_factor(key) if key else 1.0
+                thrust_avg_kn = (thrust_kn * fill
+                                 if self._thrust_mode_var.get() == "peak"
+                                 else thrust_kn)
+            else:
+                thrust_avg_kn = thrust_kn
+            thrust_n = thrust_avg_kn * 1000.0
+            if thrust_n <= 0:
                 raise ValueError
             self._burn_var.set(f"{isp * self._G0 * prop / thrust_n:.1f}")
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
 
     def _on_solid_toggled(self):
-        """Show/hide grain frame; switch burn/Isp fields between computed and user-entered."""
+        """Show/hide grain frame; relabel thrust field for peak/avg context."""
         is_solid = self._solid_motor_var.get()
         if is_solid:
             self._solid_frame.grid()
-            self._burn_entry.config(state="normal")
-            self._burn_hint_lbl.config(text="s  (enter value)")
-            self._isp_entry.config(state="readonly")
-            self._isp_hint_lbl.config(text="s  (computed)")
             self._thrust_lbl.config(text=self._thrust_label_text())
-            # Track burn_time changes so ISP stays in sync
-            self._burn_trace_id = self._burn_var.trace_add("write", self._recompute_solid)
         else:
-            if hasattr(self, '_burn_trace_id'):
-                self._burn_var.trace_remove("write", self._burn_trace_id)
-                del self._burn_trace_id
             self._solid_frame.grid_remove()
-            self._burn_entry.config(state="readonly")
-            self._burn_hint_lbl.config(text="s  (computed)")
-            self._isp_entry.config(state="normal")
-            self._isp_hint_lbl.config(text="s")
             self._thrust_lbl.config(text="Thrust (kN):")
-            self._recompute_burn()
+        # burn_time and Isp behaviour is identical for liquid and solid:
+        # burn_time is always computed (readonly), Isp is always user-input.
+        self._burn_entry.config(state="readonly")
+        self._burn_hint_lbl.config(text="s  (computed)")
+        self._isp_entry.config(state="normal")
+        self._isp_hint_lbl.config(text="s")
+        self._recompute_burn()
 
     def _thrust_label_text(self):
         mode = getattr(self, '_thrust_mode_var', None)
@@ -656,7 +663,7 @@ class _StageFrame(ttk.LabelFrame):
 
     def _on_thrust_mode_changed(self):
         self._thrust_lbl.config(text=self._thrust_label_text())
-        self._recompute_solid()
+        self._recompute_burn()
 
     def _on_grain_changed(self, *_):
         key = self._get_grain_key()
@@ -667,7 +674,7 @@ class _StageFrame(ttk.LabelFrame):
         else:
             self._boost_frac_lbl.grid_remove()
             self._boost_frac_inner.grid_remove()
-        self._recompute_solid()
+        self._recompute_burn()
 
     def _get_grain_key(self):
         label = self._grain_var.get()
@@ -676,10 +683,8 @@ class _StageFrame(ttk.LabelFrame):
                 return k
         return ""
 
-    def _recompute_solid(self, *_):
-        """Compute alternate thrust display and derive Isp from thrust × burn / (prop × g₀)."""
-        if getattr(self, '_solid_isp_updating', False):
-            return
+    def _update_solid_display(self, *_):
+        """Update the alternate-thrust label and fill-factor warning (solid mode only)."""
         if not (hasattr(self, '_grain_cb') and self._solid_motor_var.get()):
             return
         key = self._get_grain_key()
@@ -711,20 +716,6 @@ class _StageFrame(ttk.LabelFrame):
                 self._fill_warn_lbl.config(text="")
         else:
             self._fill_warn_lbl.config(text="")
-        # Isp = thrust × burn_time / (prop_mass × g₀)
-        try:
-            prop_kg  = float(self._fueled.get()) - float(self._dry.get())
-            thrust_n = float(self._thrust_kn.get()) * 1000.0
-            burn_s   = float(self._burn_var.get())
-            if prop_kg > 0 and burn_s > 0 and thrust_n > 0:
-                isp_s = thrust_n * burn_s / (prop_kg * self._G0)
-                self._solid_isp_updating = True
-                try:
-                    self._isp.set(f"{isp_s:.1f}")
-                finally:
-                    self._solid_isp_updating = False
-        except (ValueError, ZeroDivisionError):
-            pass
 
     def _browse_profile(self):
         """Let user pick a CSV thrust-profile file; show preview plot."""
@@ -1049,7 +1040,7 @@ class _StageFrame(ttk.LabelFrame):
         self._thrust_kn   .set(f"{thrust_kn:.1f}")
         self._isp         .set(str(d["isp"]))
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
-        # _burn_var is updated automatically by the trace (liquid) or set directly (solid)
+        # _burn_var is updated automatically by traces on Isp/thrust/masses
         self._solid_motor_var.set(bool(d.get("solid_motor", False)))
 
         # Grain profile fields
@@ -1074,13 +1065,12 @@ class _StageFrame(ttk.LabelFrame):
         else:
             self._profile_path_var.set("")
 
-        # Trigger UI state update
+        # Trigger UI state update — burn time will be recomputed from
+        # Isp / prop / (peak × fill_factor or average) thrust by _recompute_burn.
         if self._solid_motor_var.get():
             self._on_solid_toggled()
             self._on_grain_changed()
             self._on_thrust_mode_changed()
-            # For solid, burn time was saved as-is — restore directly
-            self._burn_var.set(f"{d['burn']:.1f}")
 
 
 # ---------------------------------------------------------------------------
