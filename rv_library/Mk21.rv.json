@@ -1,0 +1,16 @@
+{
+  "name": "Mk21 MIRV",
+  "mass_kg": 335,
+  "beta_kg_m2": 75000,
+  "shape": "cone",
+  "diameter_m": 0.55,
+  "length_m": 1.75,
+  "glider_enabled": false,
+  "glider_LD": 0,
+  "glider_guidance": "constant_bank",
+  "glider_gamma_k": 2.0,
+  "glider_bank_deg": 0,
+  "glider_pullup_g_max": 10,
+  "glider_terminal_dive": false,
+  "glider_terminal_alt_km": 30
+}

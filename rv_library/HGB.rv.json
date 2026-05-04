@@ -1,0 +1,16 @@
+{
+  "name": "HGB",
+  "mass_kg": 450,
+  "beta_kg_m2": 15000,
+  "shape": "cone",
+  "diameter_m": 0.5,
+  "length_m": 2.0,
+  "glider_enabled": true,
+  "glider_LD": 1.8,
+  "glider_guidance": "equilibrium_glide",
+  "glider_gamma_k": 2.0,
+  "glider_bank_deg": 0,
+  "glider_pullup_g_max": 10,
+  "glider_terminal_dive": false,
+  "glider_terminal_alt_km": 30
+}

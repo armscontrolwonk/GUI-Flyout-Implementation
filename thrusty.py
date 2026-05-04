@@ -32,7 +32,8 @@ from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
-                           GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE)
+                           GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
+                           RVParams, rv_from_dict, rv_to_dict, effective_rv)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion)
 from coordinates import range_between
@@ -177,6 +178,7 @@ _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.j
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
+_RV_LIBRARY_PATH  = Path(__file__).parent / "rv_library"
 _DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
 _DIR_SITES        = _THRUSTY_ROOT / "sites"
 _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
@@ -1083,6 +1085,7 @@ class MissileDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _build(self, existing_name):
         pad = dict(padx=8, pady=4)
+        self._rv = None   # RVParams, set by Load/Edit/New buttons
 
         # Name row
         nf = ttk.Frame(self)
@@ -1245,20 +1248,19 @@ class MissileDialog(tk.Toplevel):
             _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
         self._num_rvs_spinbox.pack(side=tk.LEFT)
 
-        # RV shape
-        ttk.Label(self._rv_section, text="RV shape:").grid(
-            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
-        self._rv_shape_cb = ttk.Combobox(
-            self._rv_section, textvariable=self._rv_shape_var,
-            values=_ns_labels, state="readonly", width=18)
-        self._rv_shape_cb.grid(row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-
-        # RV diameter / length
-        self._rv_diameter_var, self._rv_diameter_entry = _fe_entry(
-            self._rv_section, "RV diameter (m):", 3, "0", "m")
-        self._rv_length_var, self._rv_length_entry = _fe_entry(
-            self._rv_section, "RV length (m):", 4, "0", "m")
+        # RV type: summary label + action buttons (rows 2-3)
+        self._rv_summary_var = tk.StringVar(value="No RV loaded")
+        ttk.Label(self._rv_section, textvariable=self._rv_summary_var,
+                  wraplength=320, foreground="navy").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 2))
+        _rv_btn_row = ttk.Frame(self._rv_section)
+        _rv_btn_row.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
+        self._rv_load_btn = ttk.Button(_rv_btn_row, text="Load RV…", command=self._load_rv)
+        self._rv_load_btn.pack(side=tk.LEFT)
+        self._rv_edit_btn = ttk.Button(_rv_btn_row, text="Edit RV…", command=self._edit_rv)
+        self._rv_edit_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._rv_new_btn  = ttk.Button(_rv_btn_row, text="New RV…",  command=self._new_rv)
+        self._rv_new_btn.pack(side=tk.LEFT, padx=(4, 0))
 
         # Has PBV toggle
         self._has_pbv_var = tk.BooleanVar(value=False)
@@ -1267,11 +1269,11 @@ class MissileDialog(tk.Toplevel):
             variable=self._has_pbv_var,
             command=self._update_pbv_state)
         self._has_pbv_check.grid(
-            row=5, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
         # PBV sub-section
         self._pbv_section = ttk.Frame(self._rv_section)
-        self._pbv_section.grid(row=6, column=0, columnspan=2,
+        self._pbv_section.grid(row=5, column=0, columnspan=2,
                                sticky=tk.EW, padx=(16, 0))
         self._pbv_section.columnconfigure(1, weight=1)
         self._pbv_section.grid_remove()
@@ -1285,18 +1287,6 @@ class MissileDialog(tk.Toplevel):
 
         # Legacy alias: bus_var → pbv_mass_var
         self._bus_var = self._pbv_mass_var
-
-        # RV β + Estimate button
-        ttk.Label(self._rv_section, text="RV β (kg/m²):").grid(
-            row=7, column=0, sticky=tk.W, padx=(6, 2), pady=(4, 2))
-        self._rv_beta_var = tk.StringVar(value="0")
-        _beta_inner = ttk.Frame(self._rv_section)
-        _beta_inner.grid(row=7, column=1, sticky=tk.W, padx=(0, 6), pady=(4, 2))
-        self._rv_beta_entry = ttk.Entry(_beta_inner, textvariable=self._rv_beta_var, width=10)
-        self._rv_beta_entry.pack(side=tk.LEFT)
-        ttk.Label(_beta_inner, text="kg/m²").pack(side=tk.LEFT, padx=(2, 6))
-        ttk.Button(_beta_inner, text="Estimate…",
-                   command=self._calc_rv_beta).pack(side=tk.LEFT)
 
         # ── Row 6: Has Shroud toggle ─────────────────────────────────────────
         self._shroud_var = tk.BooleanVar(value=False)
@@ -1352,61 +1342,6 @@ class MissileDialog(tk.Toplevel):
         self._aerospike_dD_var, self._aerospike_dD_entry = _fe_entry(
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
-
-        # ── Row 8: Maneuvering (glider / HGV) toggle ─────────────────────────
-        # Adds Tracy/Wright lift to the post-burnout RV/payload arc.  Off by
-        # default; the input controls live in a sub-section that only appears
-        # when ticked, so this stays out of the way for ballistic missions.
-        self._glider_var = tk.BooleanVar(value=False)
-        self._glider_check = ttk.Checkbutton(
-            pl, text="Maneuvering (glider / HGV)",
-            variable=self._glider_var,
-            command=self._update_glider_state)
-        self._glider_check.grid(
-            row=8, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
-
-        self._glider_section = ttk.Frame(pl)
-        self._glider_section.grid(row=9, column=0, columnspan=2,
-                                  sticky=tk.EW, padx=(16, 0), pady=(0, 4))
-        self._glider_section.columnconfigure(1, weight=1)
-        self._glider_section.grid_remove()
-
-        self._glider_LD_var, self._glider_LD_entry = _fe_entry(
-            self._glider_section, "Lift/drag (L/D):", 0, "2.5", "")
-        self._glider_g_var, self._glider_g_entry = _fe_entry(
-            self._glider_section, "Pull-up g-limit:", 1, "10", "g")
-
-        # Guidance-law dropdown.  "constant_bank" holds the user-specified
-        # bank for the whole flight (produces phugoid skip-glide if lift is
-        # strong); "equilibrium_glide" computes the bank needed every step
-        # to balance gravity (Apollo / Tracy law -> flat altitude profile,
-        # heading hold to launch azimuth).
-        ttk.Label(self._glider_section, text="Guidance:").grid(
-            row=2, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._GLIDER_GUIDANCE_LABELS = {
-            "constant_bank":     "Constant bank",
-            "equilibrium_glide": "Equilibrium glide (heading hold)",
-        }
-        self._glider_guidance_var = tk.StringVar(
-            value=self._GLIDER_GUIDANCE_LABELS["constant_bank"])
-        self._glider_guidance_cb = ttk.Combobox(
-            self._glider_section, textvariable=self._glider_guidance_var,
-            values=list(self._GLIDER_GUIDANCE_LABELS.values()),
-            state="readonly", width=30)
-        self._glider_guidance_cb.grid(
-            row=2, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-
-        self._glider_bank_var, self._glider_bank_entry = _fe_entry(
-            self._glider_section, "Bank angle:", 3, "0",
-            "° (constant-bank mode only)")
-        self._glider_terminal_var = tk.BooleanVar(value=False)
-        self._glider_terminal_check = ttk.Checkbutton(
-            self._glider_section, text="Terminal dive (invert lift below)",
-            variable=self._glider_terminal_var)
-        self._glider_terminal_check.grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
-        self._glider_dive_alt_var, self._glider_dive_alt_entry = _fe_entry(
-            self._glider_section, "Dive altitude:", 5, "30", "km", pady=(2, 4))
 
         # Live throw-weight update when RV fields change
         for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
@@ -1496,14 +1431,13 @@ class MissileDialog(tk.Toplevel):
         self._rv_separates_check.config(state="disabled")
         self._rv_mass_entry.config(state="disabled")
         self._num_rvs_spinbox.config(state="disabled")
-        self._rv_shape_cb.config(state="disabled")
-        self._rv_diameter_entry.config(state="disabled")
-        self._rv_length_entry.config(state="disabled")
+        self._rv_load_btn.config(state="disabled")
+        self._rv_edit_btn.config(state="disabled")
+        self._rv_new_btn.config(state="disabled")
         self._has_pbv_check.config(state="disabled")
         self._pbv_mass_entry.config(state="disabled")
         self._pbv_diameter_entry.config(state="disabled")
         self._pbv_length_entry.config(state="disabled")
-        self._rv_beta_entry.config(state="disabled")
         # Shroud section
         self._shroud_check.config(state="disabled")
         self._shroud_mass_entry.config(state="disabled")
@@ -1580,12 +1514,66 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section.grid_remove()
 
     # ------------------------------------------------------------------
-    def _update_glider_state(self):
-        """Show/hide the maneuvering (glider/HGV) input fields."""
-        if self._glider_var.get():
-            self._glider_section.grid()
-        else:
-            self._glider_section.grid_remove()
+    def _update_rv_summary(self):
+        """Refresh the summary label from self._rv."""
+        rv = self._rv
+        if rv is None:
+            self._rv_summary_var.set("No RV loaded")
+            return
+        parts = [rv.name]
+        parts.append(f"β {rv.beta_kg_m2:,.0f} kg/m²")
+        if rv.glider_enabled and rv.glider_LD > 0:
+            guid = "EG" if rv.glider_guidance == "equilibrium_glide" else "CB"
+            parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
+        self._rv_summary_var.set(" — ".join(parts))
+
+    def _load_rv(self):
+        """Browse for an .rv.json file and load it into self._rv."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Load RV",
+            initialdir=str(_RV_LIBRARY_PATH) if _RV_LIBRARY_PATH.exists() else ".",
+            filetypes=[("RV JSON files", "*.rv.json"), ("JSON files", "*.json")])
+        if not path:
+            return
+        try:
+            d = json.loads(Path(path).read_text())
+            rv = rv_from_dict(d)
+        except Exception as exc:
+            messagebox.showerror("Load RV", f"Could not read RV file:\n{exc}", parent=self)
+            return
+        try:
+            mass = float(self._rv_mass_var.get())
+        except ValueError:
+            mass = rv.mass_kg
+        import dataclasses
+        self._rv = dataclasses.replace(rv, mass_kg=mass)
+        self._update_rv_summary()
+
+    def _edit_rv(self):
+        """Open RVEditorDialog to edit self._rv; update on OK."""
+        try:
+            mass = float(self._rv_mass_var.get())
+        except ValueError:
+            mass = 500.0
+        dlg = RVEditorDialog(self, rv=self._rv, mass_kg=mass)
+        self.wait_window(dlg)
+        if dlg.result is not None:
+            self._rv = dlg.result
+            self._update_rv_summary()
+
+    def _new_rv(self):
+        """Open RVEditorDialog with blank/default values."""
+        try:
+            mass = float(self._rv_mass_var.get())
+        except ValueError:
+            mass = 500.0
+        dlg = RVEditorDialog(self, rv=None, mass_kg=mass)
+        self.wait_window(dlg)
+        if dlg.result is not None:
+            self._rv = dlg.result
+            self._update_rv_summary()
 
     # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
@@ -1687,12 +1675,9 @@ class MissileDialog(tk.Toplevel):
             self._pbv_mass_var.set("0")
             self._pbv_diameter_var.set("0")
             self._pbv_length_var.set("0")
-        self._rv_beta_var.set(f"{p.rv_beta_kg_m2:.0f}")
-        self._rv_shape_var.set(
-            NOSE_SHAPE_LABELS.get(getattr(p, 'rv_shape', ''),
-                                  NOSE_SHAPE_LABELS["cone"]))
-        self._rv_diameter_var.set(f"{getattr(p, 'rv_diameter_m', 0.0):.2f}")
-        self._rv_length_var.set(f"{getattr(p, 'rv_length_m', 0.0):.2f}")
+        # RV — resolve from either new rv field or deprecated inline fields
+        self._rv = effective_rv(p)
+        self._update_rv_summary()
 
         # Payload shape / diameter / length
         self._payload_shape_var.set(
@@ -1708,26 +1693,6 @@ class MissileDialog(tk.Toplevel):
         self._aerospike_LD_var.set(f"{_aero_LD:.2f}" if _aero_LD > 0 else "1.5")
         self._aerospike_dD_var.set(f"{_aero_dD:.2f}")
         self._update_aerospike_state()
-
-        # Maneuvering (glider / HGV)
-        _gl_on   = bool(getattr(p, 'glider_enabled', False))
-        _gl_LD   = float(getattr(p, 'glider_LD', 0.0) or 0.0)
-        _gl_g    = float(getattr(p, 'glider_pullup_g_max', 10.0) or 10.0)
-        _gl_bank = float(getattr(p, 'glider_bank_deg', 0.0) or 0.0)
-        _gl_td   = bool(getattr(p, 'glider_terminal_dive', False))
-        _gl_ta   = float(getattr(p, 'glider_terminal_alt_km', 30.0) or 30.0)
-        _gl_guid = str(getattr(p, 'glider_guidance', 'constant_bank')
-                       or 'constant_bank')
-        self._glider_var.set(_gl_on)
-        self._glider_LD_var.set(f"{_gl_LD:.2f}" if _gl_LD > 0 else "2.5")
-        self._glider_g_var.set(f"{_gl_g:.0f}")
-        self._glider_bank_var.set(f"{_gl_bank:.0f}")
-        self._glider_terminal_var.set(_gl_td)
-        self._glider_dive_alt_var.set(f"{_gl_ta:.0f}")
-        self._glider_guidance_var.set(
-            self._GLIDER_GUIDANCE_LABELS.get(_gl_guid,
-                self._GLIDER_GUIDANCE_LABELS["constant_bank"]))
-        self._update_glider_state()
 
         # Shroud
         has_shroud = shroud_mass > 0
@@ -1800,10 +1765,10 @@ class MissileDialog(tk.Toplevel):
             num_rvs = 1
             rv_mass = payload
             bus_mass = 0.0
-        try:
-            rv_beta = float(self._rv_beta_var.get()) if rv_separates else 0.0
-        except ValueError:
-            rv_beta = 0.0
+
+        # RV — validate that one is loaded when rv_separates is on
+        if rv_separates and self._rv is None:
+            raise ValueError("Please load or create an RV (use 'Load RV…' or 'New RV…') before saving.")
 
         # Payload shape / diameter / length
         _ps_label = self._payload_shape_var.get()
@@ -1825,38 +1790,6 @@ class MissileDialog(tk.Toplevel):
         else:
             aerospike_LD = 0.0
             aerospike_dD = 0.0
-
-        # Maneuvering (glider / HGV)
-        glider_enabled = bool(self._glider_var.get())
-        if glider_enabled:
-            try:
-                glider_LD       = max(0.0, float(self._glider_LD_var.get()))
-                glider_g_max    = max(0.0, float(self._glider_g_var.get()))
-                glider_bank_deg = float(self._glider_bank_var.get())
-                glider_dive_alt = max(0.0, float(self._glider_dive_alt_var.get()))
-            except ValueError:
-                raise ValueError("Maneuvering inputs must be numbers.")
-            glider_terminal = bool(self._glider_terminal_var.get())
-            _glabel = self._glider_guidance_var.get()
-            glider_guidance = next((k for k, v in self._GLIDER_GUIDANCE_LABELS.items()
-                                    if v == _glabel), "constant_bank")
-        else:
-            glider_LD       = 0.0
-            glider_g_max    = 10.0
-            glider_bank_deg = 0.0
-            glider_terminal = False
-            glider_dive_alt = 30.0
-            glider_guidance = "constant_bank"
-
-        # RV geometry (round-trips the Estimate β dialog)
-        _rv_shape_lbl = self._rv_shape_var.get()
-        rv_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _rv_shape_lbl),
-                        "")
-        try:
-            rv_diameter_m = float(self._rv_diameter_var.get()) if rv_separates else 0.0
-            rv_length_m   = float(self._rv_length_var.get())   if rv_separates else 0.0
-        except ValueError:
-            raise ValueError("RV diameter and length must be numbers.")
 
         # PBV geometry
         try:
@@ -1943,10 +1876,16 @@ class MissileDialog(tk.Toplevel):
                 thrust_profile=list(sd.get("thrust_profile", [])),
             )
 
+        # Sync per-RV mass into the RVParams object so the trajectory gets
+        # the mass entered in the missile editor rather than the library default.
+        import dataclasses
+        _rv_for_node = (dataclasses.replace(self._rv, mass_kg=rv_mass)
+                        if self._rv is not None else None)
+
         node.name                   = name
         node.guidance               = self._guidance_var.get()
         node.payload_kg             = payload
-        node.rv_beta_kg_m2          = rv_beta
+        node.rv                     = _rv_for_node
         node.bus_mass_kg            = bus_mass
         node.num_rvs                = num_rvs
         node.rv_mass_kg             = rv_mass
@@ -1954,9 +1893,6 @@ class MissileDialog(tk.Toplevel):
         node.nose_shape             = nose_shape
         node.nose_length_m          = nose_length_m
         node.payload_diameter_m     = payload_diameter_m
-        node.rv_shape               = rv_shape
-        node.rv_diameter_m          = rv_diameter_m
-        node.rv_length_m            = rv_length_m
         node.pbv_diameter_m         = pbv_diameter_m
         node.pbv_length_m           = pbv_length_m
         node.shroud_mass_kg         = shroud_mass
@@ -1967,13 +1903,6 @@ class MissileDialog(tk.Toplevel):
         node.shroud_nose_length_m   = shroud_nose_length_m
         node.aerospike_LD           = aerospike_LD
         node.aerospike_dD           = aerospike_dD
-        node.glider_enabled         = glider_enabled
-        node.glider_LD              = glider_LD
-        node.glider_pullup_g_max    = glider_g_max
-        node.glider_bank_deg        = glider_bank_deg
-        node.glider_terminal_dive   = glider_terminal
-        node.glider_terminal_alt_km = glider_dive_alt
-        node.glider_guidance        = glider_guidance
 
         # Strap-on boosters
         try:
@@ -2046,42 +1975,182 @@ class MissileDialog(tk.Toplevel):
         self._on_save(p)
         self.destroy()
 
+
+# ---------------------------------------------------------------------------
+# RV editor dialog
+# ---------------------------------------------------------------------------
+
+class RVEditorDialog(tk.Toplevel):
+    """Modal dialog for creating or editing an RVParams object.
+
+    Usage::
+        dlg = RVEditorDialog(parent, rv=existing_rv, mass_kg=rv_mass)
+        parent.wait_window(dlg)
+        if dlg.result is not None:
+            self._rv = dlg.result
+    """
+
+    _GUIDANCE_LABELS = {
+        "constant_bank":     "Constant bank",
+        "equilibrium_glide": "Equilibrium glide (heading hold)",
+    }
+
+    def __init__(self, parent, rv=None, mass_kg=500.0):
+        super().__init__(parent)
+        self.title("Edit RV" if rv is not None else "New RV")
+        self.resizable(False, True)
+        self.grab_set()
+        self._result = None
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill=tk.X)
+        frm.columnconfigure(1, weight=1)
+
+        def _lbl(row, text, parent=frm):
+            ttk.Label(parent, text=text).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+
+        def _entry(row, var, width=14, parent=frm):
+            e = ttk.Entry(parent, textvariable=var, width=width)
+            e.grid(row=row, column=1, sticky=tk.W, pady=3)
+            return e
+
+        # Name
+        _lbl(0, "Name:")
+        self._name_var = tk.StringVar(value=rv.name if rv else "")
+        _entry(0, self._name_var)
+
+        # Mass
+        _lbl(1, "Mass (kg):")
+        self._mass_var = tk.StringVar(
+            value=f"{rv.mass_kg:.0f}" if rv else f"{mass_kg:.0f}")
+        _entry(1, self._mass_var, width=10)
+
+        # β with Estimate button
+        _lbl(2, "β (kg/m²):")
+        self._beta_var = tk.StringVar(
+            value=f"{rv.beta_kg_m2:.0f}" if rv else "10000")
+        _beta_row = ttk.Frame(frm)
+        _beta_row.grid(row=2, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_beta_row, textvariable=self._beta_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_beta_row, text=" kg/m²").pack(side=tk.LEFT)
+        ttk.Button(_beta_row, text="Estimate…",
+                   command=self._calc_beta).pack(side=tk.LEFT, padx=(6, 0))
+
+        # Shape
+        _lbl(3, "Shape:")
+        self._shape_var = tk.StringVar(
+            value=NOSE_SHAPE_LABELS.get(rv.shape if rv else "cone",
+                                        NOSE_SHAPE_LABELS["cone"]))
+        _ns_labels = list(NOSE_SHAPE_LABELS.values())
+        ttk.Combobox(frm, textvariable=self._shape_var,
+                     values=_ns_labels, state="readonly", width=18).grid(
+            row=3, column=1, sticky=tk.W, pady=3)
+
+        # Diameter + length
+        _lbl(4, "Diameter (m):")
+        self._dia_var = tk.StringVar(
+            value=f"{rv.diameter_m:.2f}" if rv else "0.5")
+        _entry(4, self._dia_var, width=10)
+
+        _lbl(5, "Length (m):")
+        self._len_var = tk.StringVar(
+            value=f"{rv.length_m:.2f}" if rv else "2.0")
+        _entry(5, self._len_var, width=10)
+
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
+
+        # Maneuvering / glider toggle
+        self._glider_var = tk.BooleanVar(value=rv.glider_enabled if rv else False)
+        ttk.Checkbutton(self, text="Maneuvering (glider / HGV)",
+                        variable=self._glider_var,
+                        command=self._update_glider_state).pack(
+            anchor=tk.W, padx=12, pady=(8, 0))
+
+        self._glider_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        self._glider_frm.pack(fill=tk.X)
+        self._glider_frm.columnconfigure(1, weight=1)
+
+        def _gfe(row, label, default, unit=""):
+            ttk.Label(self._glider_frm, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            var = tk.StringVar(value=default)
+            inner = ttk.Frame(self._glider_frm)
+            inner.grid(row=row, column=1, sticky=tk.W, pady=2)
+            ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
+            if unit:
+                ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
+            return var
+
+        _LD       = f"{rv.glider_LD:.2f}"       if (rv and rv.glider_LD > 0) else "2.5"
+        _g        = f"{rv.glider_pullup_g_max:.0f}" if rv else "10"
+        _gamma_k  = f"{rv.glider_gamma_k:.1f}"  if rv else "2.0"
+        _bank     = f"{rv.glider_bank_deg:.0f}" if rv else "0"
+        _dive_alt = f"{rv.glider_terminal_alt_km:.0f}" if rv else "30"
+        _guid_key = rv.glider_guidance if rv else "constant_bank"
+
+        self._LD_var      = _gfe(0, "Lift/drag (L/D):", _LD)
+        self._g_var       = _gfe(1, "Pull-up g-limit:", _g, "g")
+
+        ttk.Label(self._glider_frm, text="Guidance:").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        self._guidance_var = tk.StringVar(
+            value=self._GUIDANCE_LABELS.get(_guid_key,
+                  self._GUIDANCE_LABELS["constant_bank"]))
+        ttk.Combobox(self._glider_frm, textvariable=self._guidance_var,
+                     values=list(self._GUIDANCE_LABELS.values()),
+                     state="readonly", width=30).grid(
+            row=2, column=1, sticky=tk.W, pady=2)
+
+        self._gamma_k_var = _gfe(3, "γ-feedback gain (k):", _gamma_k)
+        self._bank_var    = _gfe(4, "Bank angle:", _bank, "° (constant-bank only)")
+
+        self._terminal_var = tk.BooleanVar(
+            value=rv.glider_terminal_dive if rv else False)
+        ttk.Checkbutton(self._glider_frm,
+                        text="Terminal dive (invert lift below)",
+                        variable=self._terminal_var).grid(
+            row=5, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+        self._dive_alt_var = _gfe(6, "Dive altitude:", _dive_alt, "km")
+
+        self._update_glider_state()
+
+        # OK / Cancel
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
+        btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btn_frm.pack(fill=tk.X)
+        ttk.Button(btn_frm, text="OK",     command=self._ok).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Cancel", command=self.destroy).pack(
+            side=tk.LEFT, padx=6)
+
     # ------------------------------------------------------------------
-    def _calc_rv_beta(self):
-        """Open the Calculate β dialog (Newtonian hypersonic model)."""
+    def _update_glider_state(self):
+        if self._glider_var.get():
+            self._glider_frm.pack(fill=tk.X)
+        else:
+            self._glider_frm.pack_forget()
+
+    # ------------------------------------------------------------------
+    def _calc_beta(self):
+        """Open the Newtonian-cone β estimator sub-dialog."""
         import math
         dlg = tk.Toplevel(self)
-        dlg.title("Calculate RV β")
+        dlg.title("Estimate RV β")
         dlg.resizable(False, False)
         dlg.grab_set()
 
-        # ── Pre-fill from RV geometry fields; fall back to Stage 1 body ─
+        # Pre-fill from current diameter / length
         try:
-            _rv_d = float(self._rv_diameter_var.get())
-            _rv_l = float(self._rv_length_var.get())
-            if _rv_d > 0 and _rv_l > 0:
-                _ld0    = _rv_l / _rv_d
-                _theta0 = f"{math.degrees(math.atan(1.0 / (2.0 * _ld0))):.1f}"
-                _dia_default = self._rv_diameter_var.get()
+            _d = float(self._dia_var.get())
+            _l = float(self._len_var.get())
+            if _d > 0 and _l > 0:
+                _theta0   = f"{math.degrees(math.atan(1.0 / (2.0 * _l / _d))):.1f}"
+                _dia_dflt = self._dia_var.get()
             else:
                 raise ValueError
         except Exception:
-            try:
-                _nose_len = float(self._payload_length_var.get())
-                _dia0     = float(self._stage_frames[0]._dia.get())
-                if _nose_len > 0 and _dia0 > 0:
-                    _ld0    = _nose_len / _dia0
-                    _theta0 = f"{math.degrees(math.atan(1.0 / (2.0 * _ld0))):.1f}"
-                else:
-                    _theta0 = "10.0"
-            except Exception:
-                _theta0 = "10.0"
-            try:
-                _dia_default = self._stage_frames[0]._dia.get()
-            except Exception:
-                _dia_default = "0"
+            _theta0 = "10.0"; _dia_dflt = "0"
 
-        # ── Input fields ──────────────────────────────────────────────
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill=tk.X)
         frm.columnconfigure(1, weight=1)
@@ -2091,99 +2160,137 @@ class MissileDialog(tk.Toplevel):
                 row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
 
         _lbl(0, "RV mass (kg):")
-        mass_var = tk.StringVar(value=self._rv_mass_var.get())
-        ttk.Entry(frm, textvariable=mass_var, width=10).grid(
-            row=0, column=1, sticky=tk.W)
+        mass_var = tk.StringVar(value=self._mass_var.get())
+        ttk.Entry(frm, textvariable=mass_var, width=10).grid(row=0, column=1, sticky=tk.W)
 
         _lbl(1, "RV base diameter (m):")
-        dia_var = tk.StringVar(value=_dia_default)
-        ttk.Entry(frm, textvariable=dia_var, width=10).grid(
-            row=1, column=1, sticky=tk.W)
+        dia_var = tk.StringVar(value=_dia_dflt)
+        ttk.Entry(frm, textvariable=dia_var, width=10).grid(row=1, column=1, sticky=tk.W)
 
         _lbl(2, "Cone half-angle (°):")
         theta_var = tk.StringVar(value=_theta0)
-        ttk.Entry(frm, textvariable=theta_var, width=10).grid(
-            row=2, column=1, sticky=tk.W)
+        ttk.Entry(frm, textvariable=theta_var, width=10).grid(row=2, column=1, sticky=tk.W)
 
         _lbl(3, "Nose radius / base radius:")
-        eps_var = tk.StringVar(value="0.0")
-        eps_inner = ttk.Frame(frm)
-        eps_inner.grid(row=3, column=1, sticky=tk.W)
-        ttk.Entry(eps_inner, textvariable=eps_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(eps_inner,
-                  text="  (0 = sharp tip,  1 = hemisphere)",
+        eps_var  = tk.StringVar(value="0.0")
+        eps_row  = ttk.Frame(frm)
+        eps_row.grid(row=3, column=1, sticky=tk.W)
+        ttk.Entry(eps_row, textvariable=eps_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(eps_row, text="  (0 = sharp tip,  1 = hemisphere)",
                   foreground="gray50").pack(side=tk.LEFT)
 
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
-        # ── Result display ────────────────────────────────────────────
-        res_frm = ttk.Frame(dlg, padding=(12, 8))
-        res_frm.pack(fill=tk.X)
-        res_frm.columnconfigure(1, weight=1)
+        res = ttk.Frame(dlg, padding=(12, 8))
+        res.pack(fill=tk.X)
+        res.columnconfigure(1, weight=1)
 
         def _res_row(row, label):
-            ttk.Label(res_frm, text=label).grid(
+            ttk.Label(res, text=label).grid(
                 row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-            lbl = ttk.Label(res_frm, text="—", foreground="gray40")
+            lbl = ttk.Label(res, text="—", foreground="gray40")
             lbl.grid(row=row, column=1, sticky=tk.W)
             return lbl
 
         cd_lbl   = _res_row(0, "Cd (Newtonian):")
         area_lbl = _res_row(1, "Reference area (m²):")
-        beta_lbl = ttk.Label(res_frm, text="—",
-                             font=("", 11, "bold"), foreground="navy")
-        ttk.Label(res_frm, text="β = m / (Cd · A):").grid(
+        beta_lbl = ttk.Label(res, text="—", font=("", 11, "bold"), foreground="navy")
+        ttk.Label(res, text="β = m / (Cd · A):").grid(
             row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         beta_lbl.grid(row=2, column=1, sticky=tk.W)
-        ttk.Label(res_frm,
-                  text="Hypersonic Newtonian flow (Mach > 8).  Chart: Ref (4) Ch. 5.",
+        ttk.Label(res,
+                  text="Hypersonic Newtonian flow (Mach > 8).  Ref (4) Ch. 5.",
                   foreground="gray50").grid(
             row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 
-        _beta_result = [None]
+        _result = [None]
 
         def _compute(*_):
             try:
-                mass  = float(mass_var.get())
-                dia   = float(dia_var.get())
-                theta = float(theta_var.get())
-                eps   = float(eps_var.get())
-                if dia <= 0 or mass <= 0 or theta <= 0:
+                m = float(mass_var.get()); d = float(dia_var.get())
+                th = float(theta_var.get()); ep = float(eps_var.get())
+                if d <= 0 or m <= 0 or th <= 0:
                     raise ValueError
             except ValueError:
-                cd_lbl.config(text="—")
-                area_lbl.config(text="—")
-                beta_lbl.config(text="invalid input")
-                _beta_result[0] = None
+                cd_lbl.config(text="—"); area_lbl.config(text="—")
+                beta_lbl.config(text="invalid input"); _result[0] = None
                 return
-
-            cd   = _cd_blunted_cone_newtonian(theta, eps)
-            area = math.pi * (dia / 2.0) ** 2
-            beta = mass / (cd * area) if cd > 0 else float('inf')
-
-            cd_lbl.config(  text=f"{cd:.4f}")
+            cd   = _cd_blunted_cone_newtonian(th, ep)
+            area = math.pi * (d / 2.0) ** 2
+            beta = m / (cd * area) if cd > 0 else float('inf')
+            cd_lbl.config(text=f"{cd:.4f}")
             area_lbl.config(text=f"{area:.4f} m²")
             beta_lbl.config(text=f"{beta:,.0f} kg/m²")
-            _beta_result[0] = beta
+            _result[0] = beta
 
         for _v in (mass_var, dia_var, theta_var, eps_var):
             _v.trace_add("write", _compute)
         _compute()
 
-        # ── Buttons ───────────────────────────────────────────────────
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
-        btn_frm = ttk.Frame(dlg, padding=(12, 8))
-        btn_frm.pack(fill=tk.X)
+        bf = ttk.Frame(dlg, padding=(12, 8))
+        bf.pack(fill=tk.X)
 
         def _use():
-            if _beta_result[0] is not None and _beta_result[0] != float('inf'):
-                self._rv_beta_var.set(f"{_beta_result[0]:.0f}")
+            if _result[0] is not None and _result[0] != float('inf'):
+                self._beta_var.set(f"{_result[0]:.0f}")
             dlg.destroy()
 
-        ttk.Button(btn_frm, text="Use this value",
-                   command=_use).pack(side=tk.LEFT)
-        ttk.Button(btn_frm, text="Cancel",
-                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+        ttk.Button(bf, text="Use this value", command=_use).pack(side=tk.LEFT)
+        ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+
+    # ------------------------------------------------------------------
+    def _ok(self):
+        try:
+            name    = self._name_var.get().strip() or "(unnamed)"
+            mass_kg = float(self._mass_var.get())
+            beta    = float(self._beta_var.get())
+            _sl     = self._shape_var.get()
+            shape   = next((k for k, v in NOSE_SHAPE_LABELS.items()
+                            if v == _sl), "cone")
+            dia     = float(self._dia_var.get())
+            length  = float(self._len_var.get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input",
+                "Mass, β, diameter, and length must be numbers.",
+                parent=self)
+            return
+
+        glider_on = bool(self._glider_var.get())
+        if glider_on:
+            try:
+                LD       = max(0.0, float(self._LD_var.get()))
+                g_max    = max(0.0, float(self._g_var.get()))
+                gamma_k  = max(0.0, float(self._gamma_k_var.get()))
+                bank_deg = float(self._bank_var.get())
+                dive_alt = max(0.0, float(self._dive_alt_var.get()))
+            except ValueError:
+                messagebox.showerror("Invalid input",
+                                     "Glider fields must be numbers.", parent=self)
+                return
+            terminal = bool(self._terminal_var.get())
+            _glabel  = self._guidance_var.get()
+            guidance = next((k for k, v in self._GUIDANCE_LABELS.items()
+                             if v == _glabel), "constant_bank")
+        else:
+            LD = 0.0; g_max = 10.0; gamma_k = 2.0
+            bank_deg = 0.0; dive_alt = 30.0
+            terminal = False; guidance = "constant_bank"
+
+        self._result = RVParams(
+            name=name, mass_kg=mass_kg, beta_kg_m2=beta,
+            shape=shape, diameter_m=dia, length_m=length,
+            glider_enabled=glider_on, glider_LD=LD,
+            glider_guidance=guidance, glider_gamma_k=gamma_k,
+            glider_bank_deg=bank_deg, glider_pullup_g_max=g_max,
+            glider_terminal_dive=terminal, glider_terminal_alt_km=dive_alt,
+        )
+        self.destroy()
+
+    @property
+    def result(self):
+        return self._result
 
 
 # ---------------------------------------------------------------------------
@@ -4327,21 +4434,32 @@ class MissileFlyoutApp(tk.Tk):
         if p.rv_separates:
             _row2(af, r, "No. of RVs:", str(p.num_rvs),
                   "Per-RV mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
-            _rv_beta = p.rv_beta_kg_m2
+            _erv     = effective_rv(p)
+            _rv_beta = _erv.beta_kg_m2 if _erv else p.rv_beta_kg_m2
             _pbv_m   = p.bus_mass_kg
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
                       "RV β:", f"{_rv_beta:,.0f} kg/m²" if _rv_beta > 0 else "—"); r += 1
             elif _rv_beta > 0:
                 _row2(af, r, "RV β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
-            _rv_shape_s = NOSE_SHAPE_LABELS.get(
-                getattr(p, 'rv_shape', ''), NOSE_SHAPE_LABELS['cone'])
-            _rv_d = getattr(p, 'rv_diameter_m', 0.0)
-            _rv_l = getattr(p, 'rv_length_m', 0.0)
+            if _erv:
+                _rv_shape_s = NOSE_SHAPE_LABELS.get(_erv.shape, NOSE_SHAPE_LABELS['cone'])
+                _rv_d = _erv.diameter_m
+                _rv_l = _erv.length_m
+            else:
+                _rv_shape_s = NOSE_SHAPE_LABELS.get(
+                    getattr(p, 'rv_shape', ''), NOSE_SHAPE_LABELS['cone'])
+                _rv_d = getattr(p, 'rv_diameter_m', 0.0)
+                _rv_l = getattr(p, 'rv_length_m', 0.0)
             _row2(af, r, "RV shape:", _rv_shape_s,
                   "RV diameter:", f"{_rv_d:.2f} m" if _rv_d > 0 else "—"); r += 1
             if _rv_l > 0:
                 _row2(af, r, "RV length:", f"{_rv_l:.2f} m"); r += 1
+            if _erv and _erv.glider_enabled:
+                _guid_lbl = ("Equilibrium glide" if _erv.glider_guidance == "equilibrium_glide"
+                             else "Constant bank")
+                _row2(af, r, "Glider L/D:", f"{_erv.glider_LD:.2f}",
+                      "Guidance:", _guid_lbl); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:

@@ -75,7 +75,7 @@ from coordinates import (
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
-    booster_drag_vector,
+    booster_drag_vector, effective_rv,
 )
 
 
@@ -463,111 +463,68 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # so we zero it rather than apply a physically wrong value.
     if alt > 120_000:
         f_drag = np.zeros(3)
-    elif (params.rv_beta_kg_m2 > 0 and params.payload_kg > 0
-            and t > total_burn_time(params)):
-        # After final-stage burnout, if an RV ballistic coefficient is supplied,
-        # use β-based drag for the separating warhead: F = q * m_rv / β.
-        # rv_mass_kg (single RV mass) is used when specified; otherwise fall back
-        # to payload_kg (old behaviour, treats whole payload as one object).
-        # When glider mode is enabled, additional lift L = D · L/D acts
-        # perpendicular to velocity in the local vertical plane (Tracy/Wright).
+    elif (_erv := effective_rv(params)) is not None and t > total_burn_time(params):
+        # After final-stage burnout, RV is flying: use β-based drag + optional lift.
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
             _, _, rho, _ = atmosphere(alt)
-            q = 0.5 * rho * speed ** 2
-            rv_mass = params.rv_mass_kg if params.rv_mass_kg > 0 else params.payload_kg
-            drag_mag = q * rv_mass / params.rv_beta_kg_m2
-            v_hat = vel / speed
-            f_drag = -drag_mag * v_hat
-            if params.glider_enabled and params.glider_LD > 0:
+            q        = 0.5 * rho * speed ** 2
+            rv_mass  = _erv.mass_kg
+            drag_mag = q * rv_mass / _erv.beta_kg_m2
+            v_hat    = vel / speed
+            f_drag   = -drag_mag * v_hat
+            if _erv.glider_enabled and _erv.glider_LD > 0:
                 # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
                 r_mag = np.linalg.norm(pos)
                 if r_mag > 1e-3:
                     r_hat = pos / r_mag
-                    # Project radial-up onto plane perpendicular to velocity.
                     n_up = r_hat - np.dot(r_hat, v_hat) * v_hat
                     n_up_mag = np.linalg.norm(n_up)
                     if n_up_mag > 1e-9:
-                        n_up = n_up / n_up_mag
-                        # Cross-track lift direction (right-handed: v × up).
+                        n_up   = n_up / n_up_mag
                         n_side = np.cross(v_hat, n_up)
-                        # Determine bank angle.  Two guidance laws:
-                        #   constant_bank      — user-specified σ for whole flight
-                        #   equilibrium_glide  — Apollo: cos(σ) computed every
-                        #                        step to balance gravity, sign
-                        #                        from heading-hold to launch az
-                        guidance = getattr(params, 'glider_guidance', 'constant_bank')
-                        lift_mag = drag_mag * params.glider_LD
+                        lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        if guidance == 'equilibrium_glide':
-                            # Phase 0 (wings-level): from entry through the
-                            # dip and the first ascending bounce.  Phase 1
-                            # (EG law): once the vehicle re-crosses the
-                            # equilibrium altitude on the way up (one bounce
-                            # visible), damps all further oscillations.
-                            r_mag2 = np.linalg.norm(pos)
-                            r_hat2 = pos / r_mag2
+                        if _erv.glider_guidance == 'equilibrium_glide':
+                            # Phase 0 (wings-level): dip + first ascending bounce.
+                            # Phase 1 (EG law): after bounce crosses eq-altitude.
+                            r_mag2    = r_mag
+                            r_hat2    = r_hat
                             sin_gamma = np.dot(vel, r_hat2) / speed
                             sin_gamma = max(-1.0, min(1.0, sin_gamma))
                             gamma_rad = np.arcsin(sin_gamma)
 
-                            # Equilibrium law: cos(σ) = m(g−V²/r)/lift.
-                            # Clamped to [0,1] — never invert lift.
+                            # cos(σ) = m(g−V²/r)/lift, clamped to [0,1].
                             req_lift = rv_mass * (g_mag - speed**2 / r_mag2)
-                            if lift_mag > 1e-6:
-                                cos_sig = max(0.0, min(1.0,
-                                              req_lift / lift_mag))
-                            else:
-                                cos_sig = 1.0
-                            # Three-phase state machine (stored on params):
-                            #   Phase 0: wings-level during the dip AND the
-                            #     first ascending bounce until the vehicle
-                            #     re-crosses the equilibrium altitude (cos_sig
-                            #     clamped to 1, i.e., lift < req at this alt).
-                            #     This produces one visible dip-and-pop.
-                            #   Phase 1: EG law permanently after the bounce.
-                            # _glider_has_descended guards against the
-                            # boost/coast positive-γ prematurely ending phase 0.
-                            _has_desc = getattr(
-                                params, '_glider_has_descended', True)
-                            _phase = getattr(params, '_glider_phase', 1)
+                            cos_sig  = (max(0.0, min(1.0, req_lift / lift_mag))
+                                        if lift_mag > 1e-6 else 1.0)
+
+                            _has_desc = getattr(params, '_glider_has_descended', True)
+                            _phase    = getattr(params, '_glider_phase', 1)
                             if not _has_desc and gamma_rad < 0.0:
                                 params._glider_has_descended = True
                                 _has_desc = True
-                            # Transition 0→1: climbing (γ≥0) AND above the
-                            # equilibrium altitude for current speed (cos_sig=1
-                            # because lift < req, vehicle needs gravity's help).
                             if (_phase == 0 and _has_desc
                                     and gamma_rad >= 0.0 and cos_sig >= 1.0):
                                 params._glider_phase = 1
                                 _phase = 1
 
                             if _phase == 0:
-                                # Still in pull-up phase: wings level.
                                 bank_rad = 0.0
                             else:
-                                # EG law — cos_sig already computed above.
-                                # γ-feedback: when the vehicle is descending
-                                # below the equilibrium altitude (cos_sig < 1),
-                                # add extra upward lift to drive γ back to 0.
-                                # Without this the EG pull-up rate is ~0.0003°/s
-                                # — far too slow to recover from post-bounce γ.
                                 if gamma_rad < 0.0:
-                                    k_gam = getattr(params,
-                                                    'glider_gamma_k', 2.0)
                                     cos_sig = min(1.0, cos_sig
-                                                  + k_gam * (-sin_gamma))
+                                                  + _erv.glider_gamma_k * (-sin_gamma))
                                 mag_bank = np.arccos(cos_sig)
-                                # Heading sign: bank toward launch azimuth.
-                                lon_rad = np.arctan2(pos[1], pos[0])
-                                e_hat = np.array([-np.sin(lon_rad),
-                                                  np.cos(lon_rad), 0.0])
+                                lon_rad  = np.arctan2(pos[1], pos[0])
+                                e_hat    = np.array([-np.sin(lon_rad),
+                                                     np.cos(lon_rad), 0.0])
                                 n_hat_local = np.cross(r_hat2, e_hat)
                                 _nm = np.linalg.norm(n_hat_local)
                                 if _nm > 1e-9:
                                     n_hat_local = n_hat_local / _nm
                                     v_horiz = vel - np.dot(vel, r_hat2) * r_hat2
-                                    cur_az = np.arctan2(
+                                    cur_az  = np.arctan2(
                                         np.dot(v_horiz, e_hat),
                                         np.dot(v_horiz, n_hat_local))
                                     d_az = ((cur_az - azimuth_rad + np.pi)
@@ -577,14 +534,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 else:
                                     bank_rad = mag_bank
                         else:
-                            bank_rad = np.deg2rad(params.glider_bank_deg)
-                        # Terminal-dive override flips lift downward inside the
-                        # specified altitude band (overrides any guidance law).
-                        if (params.glider_terminal_dive
-                                and alt < params.glider_terminal_alt_km * 1000.0):
+                            bank_rad = np.deg2rad(_erv.glider_bank_deg)
+                        if (_erv.glider_terminal_dive
+                                and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
-                        # Cap by structural g-limit (lift accel ≤ n_max·g).
-                        lift_cap = params.glider_pullup_g_max * g_mag * rv_mass
+                        lift_cap = _erv.glider_pullup_g_max * g_mag * rv_mass
                         if lift_mag > lift_cap:
                             lift_mag = lift_cap
                         f_lift = lift_mag * (np.cos(bank_rad) * n_up
@@ -924,7 +878,8 @@ def integrate_trajectory(params: MissileParams,
     #            the equilibrium altitude after the bounce
     # _glider_has_descended: arms the machine once γ goes negative post-apogee
     #   so boost/coast positive-γ phases do not prematurely trigger phase 1.
-    if getattr(params, 'glider_enabled', False):
+    _erv_init = effective_rv(params)
+    if _erv_init is not None and _erv_init.glider_enabled:
         params._glider_has_descended = False
         params._glider_phase         = 0
 
@@ -973,7 +928,8 @@ def integrate_trajectory(params: MissileParams,
     # Loosen them: a Tracy/Wright glide is already an idealisation; sub-metre
     # altitude precision over a 10 km skip is meaningless.
     t_eval = np.arange(0.0, max_time_s, dt_output)
-    if getattr(params, 'glider_enabled', False) and getattr(params, 'glider_LD', 0.0) > 0:
+    _erv_full = effective_rv(params)
+    if _erv_full is not None and _erv_full.glider_enabled and _erv_full.glider_LD > 0:
         _rtol, _atol, _maxstep = 1e-5, 1e-2, 20.0
     else:
         _rtol, _atol, _maxstep = 1e-8, 1e-6, 5.0
@@ -1307,7 +1263,8 @@ def integrate_trajectory(params: MissileParams,
     # the deepest altitude reached after re-entry but before the trajectory
     # heads to impact; for a successful pull-up it is the inflection where
     # γ rotates from negative back to ≥0.
-    if (params.glider_enabled and params.glider_LD > 0
+    _erv_ms = effective_rv(params)
+    if (_erv_ms is not None and _erv_ms.glider_enabled and _erv_ms.glider_LD > 0
             and np.max(alts) > REENTRY_ALT_M):
         _re_t = _alt_crossing(REENTRY_ALT_M, ascending=False)
         if _re_t is not None:
@@ -1315,22 +1272,19 @@ def integrate_trajectory(params: MissileParams,
             if _re_idx < len(alts) - 2:
                 _post = alts[_re_idx:]
                 _local_min_off = int(np.argmin(_post))
-                # Only treat as a pull-up if the minimum is interior (not the
-                # final impact sample) — i.e. altitude rises again afterwards.
                 if 0 < _local_min_off < len(_post) - 1:
                     _idx = _re_idx + _local_min_off
                     _row = _milestone(t_arr[_idx])
                     _row['event'] = f"Pull-up bottom ({alts[_idx]/1000:.0f} km)"
                     _insert_chrono(_row)
-        if (params.glider_terminal_dive
-                and params.glider_terminal_alt_km > 0):
-            _td_m = params.glider_terminal_alt_km * 1000.0
+        if (_erv_ms.glider_terminal_dive and _erv_ms.glider_terminal_alt_km > 0):
+            _td_m = _erv_ms.glider_terminal_alt_km * 1000.0
             if np.max(alts) > _td_m:
                 _td_t = _alt_crossing(_td_m, ascending=False)
                 if _td_t is not None and _td_t > t_arr[apo_idx]:
                     _row = _milestone(_td_t)
                     _row['event'] = (f"Terminal dive "
-                                     f"({params.glider_terminal_alt_km:.0f} km)")
+                                     f"({_erv_ms.glider_terminal_alt_km:.0f} km)")
                     _insert_chrono(_row)
 
     # Optional user-specified re-entry query altitude (e.g. 50 km for
