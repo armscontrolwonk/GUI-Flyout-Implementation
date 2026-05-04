@@ -873,7 +873,16 @@ def integrate_trajectory(params: MissileParams,
                 'perigee_km': None, 'apogee_km': None}
 
     # Full-fidelity integration for display/export.
+    # When glider mode is on, the post-burnout phase develops phugoid
+    # skip-glide oscillations that the default 1e-8 / max_step=5 s tolerances
+    # try to resolve to absurd precision (taking minutes per skip cycle).
+    # Loosen them: a Tracy/Wright glide is already an idealisation; sub-metre
+    # altitude precision over a 10 km skip is meaningless.
     t_eval = np.arange(0.0, max_time_s, dt_output)
+    if getattr(params, 'glider_enabled', False) and getattr(params, 'glider_LD', 0.0) > 0:
+        _rtol, _atol, _maxstep = 1e-5, 1e-2, 20.0
+    else:
+        _rtol, _atol, _maxstep = 1e-8, 1e-6, 5.0
     sol = solve_ivp(
         fun=_eom,
         t_span=t_span,
@@ -882,10 +891,10 @@ def integrate_trajectory(params: MissileParams,
         t_eval=t_eval,
         events=_hit_ground,
         args=eom_args,
-        rtol=1e-8,
-        atol=1e-6,
+        rtol=_rtol,
+        atol=_atol,
         dense_output=False,
-        max_step=5.0,
+        max_step=_maxstep,
     )
 
     t_arr    = sol.t
