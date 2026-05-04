@@ -181,6 +181,11 @@ class MissileParams:
     #                         set by heading-hold to launch azimuth (with a
     #                         dead-band) so the vehicle flies straight.
     glider_guidance:        str   = "constant_bank"
+    # γ-feedback gain for equilibrium_glide law (phase 1).  When the vehicle
+    # is descending (γ < 0) in the EG phase, cos(σ) is incremented by
+    # k * |sin(γ)| to actively pull up.  k=0 is pure EG; k≈2 gives ~200 s
+    # pull-up from −5°.  Only used when glider_guidance='equilibrium_glide'.
+    glider_gamma_k:         float = 2.0
 
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
@@ -1203,6 +1208,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'glider_terminal_dive':   p.glider_terminal_dive,
         'glider_terminal_alt_km': p.glider_terminal_alt_km,
         'glider_guidance':        p.glider_guidance,
+        'glider_gamma_k':         p.glider_gamma_k,
         'payload_diameter_m':     p.payload_diameter_m,
         'rv_shape':               p.rv_shape,
         'rv_diameter_m':          p.rv_diameter_m,
@@ -1293,6 +1299,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_guidance=str(d.get('glider_guidance', 'constant_bank')),
+        glider_gamma_k=float(d.get('glider_gamma_k', 2.0)),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
@@ -1478,8 +1485,10 @@ def missile_area(params: MissileParams, altitude_m: float = None,
 
 
 def drag_coefficient(params: MissileParams, mach: float) -> float:
-    """Cd interpolated from Mach table."""
-    return float(np.interp(mach, params.mach_table, params.cd_table))
+    """Cd interpolated from Mach table; falls back to Forden table if empty."""
+    if params.mach_table:
+        return float(np.interp(mach, params.mach_table, params.cd_table))
+    return float(_lin_interp(mach, _FORDEN_MACH, _FORDEN_CD))
 
 
 def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
