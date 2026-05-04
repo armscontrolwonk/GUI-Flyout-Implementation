@@ -547,6 +547,16 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 bank_rad = 0.0
                             else:
                                 # EG law — cos_sig already computed above.
+                                # γ-feedback: when the vehicle is descending
+                                # below the equilibrium altitude (cos_sig < 1),
+                                # add extra upward lift to drive γ back to 0.
+                                # Without this the EG pull-up rate is ~0.0003°/s
+                                # — far too slow to recover from post-bounce γ.
+                                if gamma_rad < 0.0:
+                                    k_gam = getattr(params,
+                                                    'glider_gamma_k', 2.0)
+                                    cos_sig = min(1.0, cos_sig
+                                                  + k_gam * (-sin_gamma))
                                 mag_bank = np.arccos(cos_sig)
                                 # Heading sign: bank toward launch azimuth.
                                 lon_rad = np.arctan2(pos[1], pos[0])
