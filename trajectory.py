@@ -500,34 +500,53 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         lift_mag = drag_mag * params.glider_LD
                         g_mag    = np.linalg.norm(g)
                         if guidance == 'equilibrium_glide':
-                            # Pull-up phase guard: when the velocity vector is
-                            # significantly below horizontal (γ < −2°) the
-                            # vehicle is still in its initial dive from apogee
-                            # and needs every newton of upward lift to arrest
-                            # the descent. The strict equilibrium law would
-                            # invert lift the moment the vehicle dropped below
-                            # equilibrium altitude — exactly when it most
-                            # needs lift up. Bypass the law in that regime
-                            # and command wings level. Once γ ≥ −2° (pull-up
-                            # complete or near-equilibrium glide established)
-                            # the law re-engages and damps subsequent skips.
+                            # Phase 0 (wings-level): from entry through the
+                            # dip and the first ascending bounce.  Phase 1
+                            # (EG law): once the vehicle re-crosses the
+                            # equilibrium altitude on the way up (one bounce
+                            # visible), damps all further oscillations.
                             r_mag2 = np.linalg.norm(pos)
                             r_hat2 = pos / r_mag2
                             sin_gamma = np.dot(vel, r_hat2) / speed
                             sin_gamma = max(-1.0, min(1.0, sin_gamma))
                             gamma_rad = np.arcsin(sin_gamma)
-                            if gamma_rad < np.deg2rad(-2.0):
-                                # Steep descent: wings level, all lift up.
+
+                            # Equilibrium law: cos(σ) = m(g−V²/r)/lift.
+                            # Clamped to [0,1] — never invert lift.
+                            req_lift = rv_mass * (g_mag - speed**2 / r_mag2)
+                            if lift_mag > 1e-6:
+                                cos_sig = max(0.0, min(1.0,
+                                              req_lift / lift_mag))
+                            else:
+                                cos_sig = 1.0
+                            # Three-phase state machine (stored on params):
+                            #   Phase 0: wings-level during the dip AND the
+                            #     first ascending bounce until the vehicle
+                            #     re-crosses the equilibrium altitude (cos_sig
+                            #     clamped to 1, i.e., lift < req at this alt).
+                            #     This produces one visible dip-and-pop.
+                            #   Phase 1: EG law permanently after the bounce.
+                            # _glider_has_descended guards against the
+                            # boost/coast positive-γ prematurely ending phase 0.
+                            _has_desc = getattr(
+                                params, '_glider_has_descended', True)
+                            _phase = getattr(params, '_glider_phase', 1)
+                            if not _has_desc and gamma_rad < 0.0:
+                                params._glider_has_descended = True
+                                _has_desc = True
+                            # Transition 0→1: climbing (γ≥0) AND above the
+                            # equilibrium altitude for current speed (cos_sig=1
+                            # because lift < req, vehicle needs gravity's help).
+                            if (_phase == 0 and _has_desc
+                                    and gamma_rad >= 0.0 and cos_sig >= 1.0):
+                                params._glider_phase = 1
+                                _phase = 1
+
+                            if _phase == 0:
+                                # Still in pull-up phase: wings level.
                                 bank_rad = 0.0
                             else:
-                                # Required vertical lift to hold altitude.
-                                #   L·cos(σ) = m·(g − V²/r)
-                                req_lift = rv_mass * (g_mag - speed**2 / r_mag2)
-                                if lift_mag > 1e-6:
-                                    cos_sig = req_lift / lift_mag
-                                    cos_sig = max(-1.0, min(1.0, cos_sig))
-                                else:
-                                    cos_sig = 1.0
+                                # EG law — cos_sig already computed above.
                                 mag_bank = np.arccos(cos_sig)
                                 # Heading sign: bank toward launch azimuth.
                                 lon_rad = np.arctan2(pos[1], pos[0])
@@ -541,9 +560,6 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     cur_az = np.arctan2(
                                         np.dot(v_horiz, e_hat),
                                         np.dot(v_horiz, n_hat_local))
-                                    # Heading error wrapped to (−π, π].
-                                    # Magnitude is always mag_bank; only
-                                    # sign is free for heading hold.
                                     d_az = ((cur_az - azimuth_rad + np.pi)
                                             % (2*np.pi)) - np.pi
                                     bank_rad = (-mag_bank if d_az >= 0
@@ -890,6 +906,17 @@ def integrate_trajectory(params: MissileParams,
     eom_args  = (params, cutoff_time_s, az, gt_turn_start_s,
                  gt_turn_stop_s, _target_orbit_alt_m, _t_final_ignition,
                  _yaw_maneuvers)
+
+    # Glider pull-up state — three-phase machine:
+    #   phase 0: wings-level from entry through the initial dip and the
+    #            entire first ascending bounce (below the equilibrium altitude)
+    #   phase 1: EG law permanently once the vehicle first climbs *above*
+    #            the equilibrium altitude after the bounce
+    # _glider_has_descended: arms the machine once γ goes negative post-apogee
+    #   so boost/coast positive-γ phases do not prematurely trigger phase 1.
+    if getattr(params, 'glider_enabled', False):
+        params._glider_has_descended = False
+        params._glider_phase         = 0
 
     if _search_mode:
         # Loose tolerances — we only need range_km, not a smooth trajectory.
