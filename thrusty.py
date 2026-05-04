@@ -1523,8 +1523,7 @@ class MissileDialog(tk.Toplevel):
         parts = [rv.name]
         parts.append(f"β {rv.beta_kg_m2:,.0f} kg/m²")
         if rv.glider_enabled and rv.glider_LD > 0:
-            guid = "EG" if rv.glider_guidance == "equilibrium_glide" else "CB"
-            parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
+            parts.append(f"L/D {rv.glider_LD:.2f}")
         self._rv_summary_var.set(" — ".join(parts))
 
     def _load_rv(self):
@@ -1991,8 +1990,7 @@ class RVEditorDialog(tk.Toplevel):
     """
 
     _GUIDANCE_LABELS = {
-        "constant_bank":     "Constant bank",
-        "equilibrium_glide": "Equilibrium glide (heading hold)",
+        "constant_bank": "Constant bank (open-loop roll schedule)",
     }
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
@@ -2082,36 +2080,22 @@ class RVEditorDialog(tk.Toplevel):
                 ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
             return var
 
-        _LD       = f"{rv.glider_LD:.2f}"       if (rv and rv.glider_LD > 0) else "2.5"
+        _LD       = f"{rv.glider_LD:.2f}"          if (rv and rv.glider_LD > 0) else "2.5"
         _g        = f"{rv.glider_pullup_g_max:.0f}" if rv else "10"
-        _gamma_k  = f"{rv.glider_gamma_k:.1f}"  if rv else "2.0"
-        _bank     = f"{rv.glider_bank_deg:.0f}" if rv else "0"
+        _bank     = f"{rv.glider_bank_deg:.0f}"     if rv else "0"
         _dive_alt = f"{rv.glider_terminal_alt_km:.0f}" if rv else "30"
-        _guid_key = rv.glider_guidance if rv else "constant_bank"
 
-        self._LD_var      = _gfe(0, "Lift/drag (L/D):", _LD)
-        self._g_var       = _gfe(1, "Pull-up g-limit:", _g, "g")
-
-        ttk.Label(self._glider_frm, text="Guidance:").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        self._guidance_var = tk.StringVar(
-            value=self._GUIDANCE_LABELS.get(_guid_key,
-                  self._GUIDANCE_LABELS["constant_bank"]))
-        ttk.Combobox(self._glider_frm, textvariable=self._guidance_var,
-                     values=list(self._GUIDANCE_LABELS.values()),
-                     state="readonly", width=30).grid(
-            row=2, column=1, sticky=tk.W, pady=2)
-
-        self._gamma_k_var = _gfe(3, "γ-feedback gain (k):", _gamma_k)
-        self._bank_var    = _gfe(4, "Bank angle:", _bank, "° (constant-bank only)")
+        self._LD_var   = _gfe(0, "Lift/drag (L/D):", _LD)
+        self._g_var    = _gfe(1, "Pull-up g-limit:", _g, "g")
+        self._bank_var = _gfe(2, "Bank angle:", _bank, "° (0 = skip-glide)")
 
         self._terminal_var = tk.BooleanVar(
             value=rv.glider_terminal_dive if rv else False)
         ttk.Checkbutton(self._glider_frm,
                         text="Terminal dive (invert lift below)",
                         variable=self._terminal_var).grid(
-            row=5, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
-        self._dive_alt_var = _gfe(6, "Dive altitude:", _dive_alt, "km")
+            row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+        self._dive_alt_var = _gfe(4, "Dive altitude:", _dive_alt, "km")
 
         self._update_glider_state()
 
@@ -2262,7 +2246,6 @@ class RVEditorDialog(tk.Toplevel):
             try:
                 LD       = max(0.0, float(self._LD_var.get()))
                 g_max    = max(0.0, float(self._g_var.get()))
-                gamma_k  = max(0.0, float(self._gamma_k_var.get()))
                 bank_deg = float(self._bank_var.get())
                 dive_alt = max(0.0, float(self._dive_alt_var.get()))
             except ValueError:
@@ -2270,19 +2253,16 @@ class RVEditorDialog(tk.Toplevel):
                                      "Glider fields must be numbers.", parent=self)
                 return
             terminal = bool(self._terminal_var.get())
-            _glabel  = self._guidance_var.get()
-            guidance = next((k for k, v in self._GUIDANCE_LABELS.items()
-                             if v == _glabel), "constant_bank")
         else:
-            LD = 0.0; g_max = 10.0; gamma_k = 2.0
+            LD = 0.0; g_max = 10.0
             bank_deg = 0.0; dive_alt = 30.0
-            terminal = False; guidance = "constant_bank"
+            terminal = False
 
         self._result = RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             glider_enabled=glider_on, glider_LD=LD,
-            glider_guidance=guidance, glider_gamma_k=gamma_k,
+            glider_guidance="constant_bank",
             glider_bank_deg=bank_deg, glider_pullup_g_max=g_max,
             glider_terminal_dive=terminal, glider_terminal_alt_km=dive_alt,
         )
@@ -4456,10 +4436,10 @@ class MissileFlyoutApp(tk.Tk):
             if _rv_l > 0:
                 _row2(af, r, "RV length:", f"{_rv_l:.2f} m"); r += 1
             if _erv and _erv.glider_enabled:
-                _guid_lbl = ("Equilibrium glide" if _erv.glider_guidance == "equilibrium_glide"
-                             else "Constant bank")
+                _bank_s = (f"{_erv.glider_bank_deg:.0f}° bank"
+                           if _erv.glider_bank_deg != 0.0 else "skip-glide (0° bank)")
                 _row2(af, r, "Glider L/D:", f"{_erv.glider_LD:.2f}",
-                      "Guidance:", _guid_lbl); r += 1
+                      "Roll schedule:", _bank_s); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
