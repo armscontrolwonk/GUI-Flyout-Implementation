@@ -155,6 +155,23 @@ class MissileParams:
     aerospike_LD:           float = 0.0
     aerospike_dD:           float = 0.0
 
+    # Lifting / glider mode (Tracy/Wright).  When glider_enabled is True the
+    # post-burnout coast is propagated with lift L = D · L/D in addition to
+    # drag D = q·m/β.  The lift acts perpendicular to velocity in the local
+    # vertical plane, rolled by glider_bank_deg about the velocity axis.
+    # Lift acceleration is capped at glider_pullup_g_max·g to model the
+    # vehicle's structural / payload load-factor limit during pull-up.
+    # When glider_terminal_dive is True, the bank flips to 180° (lift points
+    # earthward) once altitude falls below glider_terminal_alt_km, producing
+    # a steep terminal descent.  These fields are only meaningful on the
+    # top-level node (same convention as payload_kg / rv_beta_kg_m2).
+    glider_enabled:         bool  = False
+    glider_LD:              float = 0.0
+    glider_pullup_g_max:    float = 10.0
+    glider_bank_deg:        float = 0.0
+    glider_terminal_dive:   bool  = False
+    glider_terminal_alt_km: float = 30.0
+
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
@@ -1152,6 +1169,12 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_nose_length_m':   p.shroud_nose_length_m,
         'aerospike_LD':           p.aerospike_LD,
         'aerospike_dD':           p.aerospike_dD,
+        'glider_enabled':         p.glider_enabled,
+        'glider_LD':              p.glider_LD,
+        'glider_pullup_g_max':    p.glider_pullup_g_max,
+        'glider_bank_deg':        p.glider_bank_deg,
+        'glider_terminal_dive':   p.glider_terminal_dive,
+        'glider_terminal_alt_km': p.glider_terminal_alt_km,
         'payload_diameter_m':     p.payload_diameter_m,
         'rv_shape':               p.rv_shape,
         'rv_diameter_m':          p.rv_diameter_m,
@@ -1235,6 +1258,12 @@ def missile_from_dict(d: dict) -> MissileParams:
                             float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
         aerospike_LD=float(d.get('aerospike_LD', 0.0)),
         aerospike_dD=float(d.get('aerospike_dD', 0.0)),
+        glider_enabled=bool(d.get('glider_enabled', False)),
+        glider_LD=float(d.get('glider_LD', 0.0)),
+        glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
+        glider_bank_deg=float(d.get('glider_bank_deg', 0.0)),
+        glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
+        glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         rv_shape=d.get('rv_shape', ''),
         rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),

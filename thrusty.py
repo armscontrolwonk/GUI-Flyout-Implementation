@@ -1353,6 +1353,39 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
 
+        # ── Row 8: Maneuvering (glider / HGV) toggle ─────────────────────────
+        # Adds Tracy/Wright lift to the post-burnout RV/payload arc.  Off by
+        # default; the input controls live in a sub-section that only appears
+        # when ticked, so this stays out of the way for ballistic missions.
+        self._glider_var = tk.BooleanVar(value=False)
+        self._glider_check = ttk.Checkbutton(
+            pl, text="Maneuvering (glider / HGV)",
+            variable=self._glider_var,
+            command=self._update_glider_state)
+        self._glider_check.grid(
+            row=8, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+
+        self._glider_section = ttk.Frame(pl)
+        self._glider_section.grid(row=9, column=0, columnspan=2,
+                                  sticky=tk.EW, padx=(16, 0), pady=(0, 4))
+        self._glider_section.columnconfigure(1, weight=1)
+        self._glider_section.grid_remove()
+
+        self._glider_LD_var, self._glider_LD_entry = _fe_entry(
+            self._glider_section, "Lift/drag (L/D):", 0, "2.5", "")
+        self._glider_g_var, self._glider_g_entry = _fe_entry(
+            self._glider_section, "Pull-up g-limit:", 1, "10", "g")
+        self._glider_bank_var, self._glider_bank_entry = _fe_entry(
+            self._glider_section, "Bank angle:", 2, "0", "° (0 = level)")
+        self._glider_terminal_var = tk.BooleanVar(value=False)
+        self._glider_terminal_check = ttk.Checkbutton(
+            self._glider_section, text="Terminal dive (invert lift below)",
+            variable=self._glider_terminal_var)
+        self._glider_terminal_check.grid(
+            row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+        self._glider_dive_alt_var, self._glider_dive_alt_entry = _fe_entry(
+            self._glider_section, "Dive altitude:", 4, "30", "km", pady=(2, 4))
+
         # Live throw-weight update when RV fields change
         for _v in (self._rv_mass_var, self._num_rvs_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
@@ -1525,6 +1558,14 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section.grid_remove()
 
     # ------------------------------------------------------------------
+    def _update_glider_state(self):
+        """Show/hide the maneuvering (glider/HGV) input fields."""
+        if self._glider_var.get():
+            self._glider_section.grid()
+        else:
+            self._glider_section.grid_remove()
+
+    # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
         """Show or hide the booster parameter panel based on booster count."""
         try:
@@ -1646,6 +1687,21 @@ class MissileDialog(tk.Toplevel):
         self._aerospike_dD_var.set(f"{_aero_dD:.2f}")
         self._update_aerospike_state()
 
+        # Maneuvering (glider / HGV)
+        _gl_on   = bool(getattr(p, 'glider_enabled', False))
+        _gl_LD   = float(getattr(p, 'glider_LD', 0.0) or 0.0)
+        _gl_g    = float(getattr(p, 'glider_pullup_g_max', 10.0) or 10.0)
+        _gl_bank = float(getattr(p, 'glider_bank_deg', 0.0) or 0.0)
+        _gl_td   = bool(getattr(p, 'glider_terminal_dive', False))
+        _gl_ta   = float(getattr(p, 'glider_terminal_alt_km', 30.0) or 30.0)
+        self._glider_var.set(_gl_on)
+        self._glider_LD_var.set(f"{_gl_LD:.2f}" if _gl_LD > 0 else "2.5")
+        self._glider_g_var.set(f"{_gl_g:.0f}")
+        self._glider_bank_var.set(f"{_gl_bank:.0f}")
+        self._glider_terminal_var.set(_gl_td)
+        self._glider_dive_alt_var.set(f"{_gl_ta:.0f}")
+        self._update_glider_state()
+
         # Shroud
         has_shroud = shroud_mass > 0
         self._shroud_var.set(has_shroud)
@@ -1742,6 +1798,24 @@ class MissileDialog(tk.Toplevel):
         else:
             aerospike_LD = 0.0
             aerospike_dD = 0.0
+
+        # Maneuvering (glider / HGV)
+        glider_enabled = bool(self._glider_var.get())
+        if glider_enabled:
+            try:
+                glider_LD       = max(0.0, float(self._glider_LD_var.get()))
+                glider_g_max    = max(0.0, float(self._glider_g_var.get()))
+                glider_bank_deg = float(self._glider_bank_var.get())
+                glider_dive_alt = max(0.0, float(self._glider_dive_alt_var.get()))
+            except ValueError:
+                raise ValueError("Maneuvering inputs must be numbers.")
+            glider_terminal = bool(self._glider_terminal_var.get())
+        else:
+            glider_LD       = 0.0
+            glider_g_max    = 10.0
+            glider_bank_deg = 0.0
+            glider_terminal = False
+            glider_dive_alt = 30.0
 
         # RV geometry (round-trips the Estimate β dialog)
         _rv_shape_lbl = self._rv_shape_var.get()
@@ -1862,6 +1936,12 @@ class MissileDialog(tk.Toplevel):
         node.shroud_nose_length_m   = shroud_nose_length_m
         node.aerospike_LD           = aerospike_LD
         node.aerospike_dD           = aerospike_dD
+        node.glider_enabled         = glider_enabled
+        node.glider_LD              = glider_LD
+        node.glider_pullup_g_max    = glider_g_max
+        node.glider_bank_deg        = glider_bank_deg
+        node.glider_terminal_dive   = glider_terminal
+        node.glider_terminal_alt_km = glider_dive_alt
 
         # Strap-on boosters
         try:

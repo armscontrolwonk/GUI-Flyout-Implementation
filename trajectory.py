@@ -469,13 +469,44 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         # use β-based drag for the separating warhead: F = q * m_rv / β.
         # rv_mass_kg (single RV mass) is used when specified; otherwise fall back
         # to payload_kg (old behaviour, treats whole payload as one object).
+        # When glider mode is enabled, additional lift L = D · L/D acts
+        # perpendicular to velocity in the local vertical plane (Tracy/Wright).
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
             _, _, rho, _ = atmosphere(alt)
             q = 0.5 * rho * speed ** 2
             rv_mass = params.rv_mass_kg if params.rv_mass_kg > 0 else params.payload_kg
             drag_mag = q * rv_mass / params.rv_beta_kg_m2
-            f_drag = -drag_mag * (vel / speed)
+            v_hat = vel / speed
+            f_drag = -drag_mag * v_hat
+            if params.glider_enabled and params.glider_LD > 0:
+                # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
+                r_mag = np.linalg.norm(pos)
+                if r_mag > 1e-3:
+                    r_hat = pos / r_mag
+                    # Project radial-up onto plane perpendicular to velocity.
+                    n_up = r_hat - np.dot(r_hat, v_hat) * v_hat
+                    n_up_mag = np.linalg.norm(n_up)
+                    if n_up_mag > 1e-9:
+                        n_up = n_up / n_up_mag
+                        # Cross-track lift direction (right-handed: v × up).
+                        n_side = np.cross(v_hat, n_up)
+                        # Bank: 0 = wings level (lift up); 180° = inverted (lift down).
+                        bank_rad = np.deg2rad(params.glider_bank_deg)
+                        # Terminal-dive override flips lift downward inside the
+                        # specified altitude band.
+                        if (params.glider_terminal_dive
+                                and alt < params.glider_terminal_alt_km * 1000.0):
+                            bank_rad = np.pi
+                        lift_mag = drag_mag * params.glider_LD
+                        # Cap by structural g-limit (lift accel ≤ n_max·g).
+                        g_mag = np.linalg.norm(g)
+                        lift_cap = params.glider_pullup_g_max * g_mag * rv_mass
+                        if lift_mag > lift_cap:
+                            lift_mag = lift_cap
+                        f_lift = lift_mag * (np.cos(bank_rad) * n_up
+                                             + np.sin(bank_rad) * n_side)
+                        f_drag = f_drag + f_lift
         else:
             f_drag = np.zeros(3)
     else:
@@ -1167,6 +1198,37 @@ def integrate_trajectory(params: MissileParams,
             row = _milestone(t_ev)
             row['event'] = "Re-entry (100 km)"
             _insert_chrono(row)
+
+    # Glider mode — find pull-up minimum (bottom of the post-entry arc) and
+    # the start of the terminal-dive band, if either applies.  The minimum is
+    # the deepest altitude reached after re-entry but before the trajectory
+    # heads to impact; for a successful pull-up it is the inflection where
+    # γ rotates from negative back to ≥0.
+    if (params.glider_enabled and params.glider_LD > 0
+            and np.max(alts) > REENTRY_ALT_M):
+        _re_t = _alt_crossing(REENTRY_ALT_M, ascending=False)
+        if _re_t is not None:
+            _re_idx = int(np.searchsorted(t_arr, _re_t))
+            if _re_idx < len(alts) - 2:
+                _post = alts[_re_idx:]
+                _local_min_off = int(np.argmin(_post))
+                # Only treat as a pull-up if the minimum is interior (not the
+                # final impact sample) — i.e. altitude rises again afterwards.
+                if 0 < _local_min_off < len(_post) - 1:
+                    _idx = _re_idx + _local_min_off
+                    _row = _milestone(t_arr[_idx])
+                    _row['event'] = f"Pull-up bottom ({alts[_idx]/1000:.0f} km)"
+                    _insert_chrono(_row)
+        if (params.glider_terminal_dive
+                and params.glider_terminal_alt_km > 0):
+            _td_m = params.glider_terminal_alt_km * 1000.0
+            if np.max(alts) > _td_m:
+                _td_t = _alt_crossing(_td_m, ascending=False)
+                if _td_t is not None and _td_t > t_arr[apo_idx]:
+                    _row = _milestone(_td_t)
+                    _row['event'] = (f"Terminal dive "
+                                     f"({params.glider_terminal_alt_km:.0f} km)")
+                    _insert_chrono(_row)
 
     # Optional user-specified re-entry query altitude (e.g. 50 km for
     # aeroballistic / hypersonic-glider handoff conditions).
