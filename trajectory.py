@@ -485,13 +485,22 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        # Acton (2021) pull-up: hold bank=0 while γ<0 (still
-                        # descending), then switch to the user's open-loop bank
-                        # schedule once γ≥0.  Tracy & Wright (2020) Eqs. 1–3
-                        # take bank angle as a direct input, not a feedback law.
-                        sin_gamma = np.dot(v_hat, r_hat)
-                        bank_rad  = (0.0 if sin_gamma < 0.0
-                                     else np.deg2rad(_erv.glider_bank_deg))
+                        # Two glide modes (Acton 2021).  No turns yet — bank
+                        # is held at 0 in both modes.
+                        #   • skip_glide:        full lift, natural EOM →
+                        #                        phugoid oscillations.
+                        #   • equilibrium_glide: once γ reaches 0 (Phase 5),
+                        #                        cap lift at L = m(g − V²/r)
+                        #                        so the vehicle holds h_EG.
+                        #                        During pull-up (γ<0), full
+                        #                        lift is used to rotate the
+                        #                        velocity vector toward γ=0.
+                        bank_rad = 0.0
+                        if (_erv.glider_guidance == "equilibrium_glide"
+                                and np.dot(v_hat, r_hat) >= 0.0):
+                            eq_lift = rv_mass * (g_mag - speed**2 / r_mag)
+                            if eq_lift < lift_mag:
+                                lift_mag = max(0.0, eq_lift)
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
