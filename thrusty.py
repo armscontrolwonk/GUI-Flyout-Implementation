@@ -3586,7 +3586,8 @@ class MissileFlyoutApp(tk.Tk):
                                     left=0.10, right=0.95,
                                     top=0.95, bottom=0.06)
         self._ax_alt  = self._fig.add_subplot(gs[0, 0])  # alt vs time
-        self._ax_spd  = self._fig.add_subplot(gs[0, 1])  # speed vs time
+        self._ax_spd       = self._fig.add_subplot(gs[0, 1])  # speed vs time
+        self._ax_spd_twin  = self._ax_spd.twinx()             # Mach axis
         self._ax_traj = self._fig.add_subplot(gs[1, 0])  # alt vs range
         self._ax_trk  = self._fig.add_subplot(gs[1, 1])  # ground track
         self._ax_guid      = self._fig.add_subplot(gs[2, 0])  # pitch / azimuth
@@ -3618,6 +3619,8 @@ class MissileFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
+        self._ax_spd_twin.set_ylabel('Mach', fontsize=8)
+        self._ax_spd_twin.tick_params(labelsize=7)
         self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
         self._ax_guid_twin.tick_params(labelsize=7, colors='darkorange')
         self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color='darkorange')
@@ -4998,7 +5001,8 @@ class MissileFlyoutApp(tk.Tk):
         lon_arr = np.asarray(r['lon'])
         orbital = r.get('orbital', False)
 
-        for ax in (self._ax_alt, self._ax_spd, self._ax_traj, self._ax_trk,
+        for ax in (self._ax_alt, self._ax_spd, self._ax_spd_twin,
+                   self._ax_traj, self._ax_trk,
                    self._ax_guid, self._ax_guid_twin,
                    self._ax_qmach, self._ax_qmach_twin):
             ax.cla()
@@ -5045,6 +5049,13 @@ class MissileFlyoutApp(tk.Tk):
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
+        # Mach right axis — linear rescaling of km/s using sea-level a₀
+        _A0 = 0.34029   # km/s  (ISA sea level)
+        _ylo, _yhi = self._ax_spd.get_ylim()
+        _ax_m = self._ax_spd_twin
+        _ax_m.set_ylim(_ylo / _A0, _yhi / _A0)
+        _ax_m.set_ylabel("Mach", fontsize=8)
+        _ax_m.tick_params(labelsize=7)
 
         # ── Altitude vs Range (truncate at insertion for orbital) ─────
         self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
