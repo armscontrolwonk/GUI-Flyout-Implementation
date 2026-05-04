@@ -2114,11 +2114,13 @@ class RVEditorDialog(tk.Toplevel):
 
         self._update_glider_state()
 
-        # OK / Cancel
+        # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
         btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
         btn_frm.pack(fill=tk.X)
-        ttk.Button(btn_frm, text="OK",     command=self._ok).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="OK", command=self._ok).pack(side=tk.LEFT)
+        ttk.Button(btn_frm, text="Save to Library…",
+                   command=self._save_to_library).pack(side=tk.LEFT, padx=6)
         ttk.Button(btn_frm, text="Cancel", command=self.destroy).pack(
             side=tk.LEFT, padx=6)
 
@@ -2239,7 +2241,10 @@ class RVEditorDialog(tk.Toplevel):
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     # ------------------------------------------------------------------
-    def _ok(self):
+    def _build_rv(self):
+        """Validate fields and build an RVParams.  Returns None on input error
+        (after showing a messagebox).
+        """
         try:
             name    = self._name_var.get().strip() or "(unnamed)"
             mass_kg = float(self._mass_var.get())
@@ -2254,7 +2259,7 @@ class RVEditorDialog(tk.Toplevel):
                 "Invalid input",
                 "Mass, β, diameter, and length must be numbers.",
                 parent=self)
-            return
+            return None
 
         glider_on = bool(self._glider_var.get())
         if glider_on:
@@ -2265,7 +2270,7 @@ class RVEditorDialog(tk.Toplevel):
             except ValueError:
                 messagebox.showerror("Invalid input",
                                      "Glider fields must be numbers.", parent=self)
-                return
+                return None
             terminal = bool(self._terminal_var.get())
             _glabel  = self._guidance_var.get()
             guidance = next((k for k, v in self._GUIDANCE_LABELS.items()
@@ -2274,13 +2279,48 @@ class RVEditorDialog(tk.Toplevel):
             LD = 0.0; g_max = 10.0; dive_alt = 30.0
             terminal = False; guidance = "equilibrium_glide"
 
-        self._result = RVParams(
+        return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             glider_enabled=glider_on, glider_LD=LD,
             glider_guidance=guidance, glider_pullup_g_max=g_max,
             glider_terminal_dive=terminal, glider_terminal_alt_km=dive_alt,
         )
+
+    def _ok(self):
+        rv = self._build_rv()
+        if rv is None:
+            return
+        self._result = rv
+        self.destroy()
+
+    def _save_to_library(self):
+        """Validate + write to a .rv.json file in the library, then close."""
+        rv = self._build_rv()
+        if rv is None:
+            return
+        from tkinter import filedialog
+        _safe_name = "".join(c if c.isalnum() or c in "-_" else "_"
+                             for c in rv.name).strip("_") or "RV"
+        init_dir = (str(_RV_LIBRARY_PATH) if _RV_LIBRARY_PATH.exists()
+                    else str(Path.cwd()))
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save RV to Library",
+            initialdir=init_dir,
+            initialfile=f"{_safe_name}.rv.json",
+            defaultextension=".rv.json",
+            filetypes=[("RV JSON files", "*.rv.json"), ("JSON files", "*.json")])
+        if not path:
+            return
+        try:
+            Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+        except Exception as exc:
+            messagebox.showerror("Save RV",
+                                 f"Could not write RV file:\n{exc}",
+                                 parent=self)
+            return
+        self._result = rv
         self.destroy()
 
     @property
