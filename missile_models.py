@@ -1095,8 +1095,25 @@ def _aur():
     )
 
 
+def _aur_hgb():
+    # AUR+HGB — AUR booster carrying a Hypersonic Glide Body payload.
+    # Booster, mass, and stage layout are inherited from _aur(); the payload
+    # is reclassified as a lifting glider with constant L/D and a higher
+    # ballistic coefficient than a slender RV.
+    p = _aur()
+    p.name           = "AUR+HGB"
+    p.rv_beta_kg_m2  = 15_000.0   # HGB-class β (≈ 3,070 lb/ft²)
+    p.glider_enabled = True
+    p.glider_LD      = 1.8        # representative HGB lift/drag
+    # pull-up g-limit, bank, terminal-dive default to MissileParams defaults
+    return p
+
+
 MISSILE_DB = {
-    # Populated at runtime from custom_missiles.json via _load_custom_missiles()
+    # Packaged defaults — always available.
+    # Additional missiles are loaded at runtime from custom_missiles.json
+    # via _load_custom_missiles() and overlay any same-name entries.
+    "AUR+HGB": _aur_hgb,
 }
 
 
