@@ -2912,6 +2912,243 @@ def _dd_row(parent, label, row, default="0.0"):
     return var
 
 
+class FootprintDialog(tk.Toplevel):
+    """Generate an HGV maneuver footprint by sweeping glider target azimuth.
+
+    Runs N integrate_trajectory calls with the current missile/launch params
+    but varying glider_target_az_deg.  Results are written to a Folium HTML
+    map and opened in the default browser.
+    """
+
+    def __init__(self, parent_app):
+        super().__init__(parent_app)
+        self.title("HGV Footprint Sweep")
+        self.resizable(False, False)
+        self._app      = parent_app
+        self._stop_evt = threading.Event()
+        self._results  = []   # list of (target_az_deg, result_dict | None)
+        self._map_path = None
+
+        pad = dict(padx=8, pady=4)
+
+        cf = ttk.LabelFrame(self, text="Sweep Configuration")
+        cf.pack(fill=tk.X, **pad)
+
+        r0 = ttk.Frame(cf)
+        r0.pack(fill=tk.X, padx=6, pady=(4, 2))
+        ttk.Label(r0, text="Target az — From:").pack(side=tk.LEFT)
+        self._lo_var   = tk.StringVar(value="90")
+        self._hi_var   = tk.StringVar(value="270")
+        self._step_var = tk.StringVar(value="15")
+        self._bank_var = tk.StringVar(value="45")
+        for lbl, var, w in [("", self._lo_var, 6),
+                             ("To:", self._hi_var, 6),
+                             ("Step:", self._step_var, 5),
+                             ("° Max bank:", self._bank_var, 5)]:
+            if lbl:
+                ttk.Label(r0, text=lbl).pack(side=tk.LEFT, padx=(6, 1))
+            ttk.Entry(r0, textvariable=var, width=w).pack(side=tk.LEFT)
+        ttk.Label(r0, text="°").pack(side=tk.LEFT, padx=(2, 0))
+
+        bf = ttk.Frame(self)
+        bf.pack(fill=tk.X, padx=8, pady=(0, 6))
+        self._run_btn = ttk.Button(bf, text="▶  Run Footprint", command=self._run)
+        self._run_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self._cancel_btn = ttk.Button(bf, text="■  Cancel",
+                                      command=self._cancel, state=tk.DISABLED)
+        self._cancel_btn.pack(side=tk.LEFT, padx=4)
+        self._map_btn = ttk.Button(bf, text="Open Map…",
+                                   command=self._open_map, state=tk.DISABLED)
+        self._map_btn.pack(side=tk.LEFT, padx=4)
+        self._prog_lbl = tk.StringVar(value="")
+        ttk.Label(bf, textvariable=self._prog_lbl).pack(side=tk.LEFT, padx=8)
+        self._progressbar = ttk.Progressbar(bf, mode="determinate", length=160)
+        self._progressbar.pack(side=tk.RIGHT, padx=(4, 0))
+
+    # ------------------------------------------------------------------
+    def _run(self):
+        try:
+            lo   = float(self._lo_var.get())
+            hi   = float(self._hi_var.get())
+            step = float(self._step_var.get())
+            max_bank = float(self._bank_var.get())
+            if step <= 0 or lo > hi:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Input error",
+                                 "Check sweep range (lo ≤ hi, step > 0).", parent=self)
+            return
+
+        try:
+            (missile, guidance, lat, lon, az, cutoff, la,
+             gt_start, gt_stop, orb, yaw, el) = self._app._get_inputs()
+        except Exception as exc:
+            messagebox.showerror("Input error", str(exc), parent=self)
+            return
+
+        target_azs = []
+        v = lo
+        while v <= hi + 1e-9:
+            target_azs.append(round(v, 6))
+            v += step
+
+        self._results = []
+        self._map_path = None
+        self._stop_evt.clear()
+        self._run_btn.config(state=tk.DISABLED)
+        self._cancel_btn.config(state=tk.NORMAL)
+        self._map_btn.config(state=tk.DISABLED)
+        self._progressbar["maximum"] = max(len(target_azs), 1)
+        self._progressbar["value"]   = 0
+        self._prog_lbl.set(f"0 / {len(target_azs)}")
+
+        threading.Thread(
+            target=self._worker,
+            args=(missile, guidance, lat, lon, az, cutoff, la,
+                  gt_start, gt_stop, orb, yaw, el, target_azs, max_bank),
+            daemon=True,
+        ).start()
+
+    def _cancel(self):
+        self._stop_evt.set()
+
+    def _worker(self, missile, guidance, lat, lon, az, cutoff, la,
+                gt_start, gt_stop, orb, yaw, el, target_azs, max_bank):
+        import copy, dataclasses
+        from trajectory import integrate_trajectory
+        from missile_models import effective_rv
+
+        _max_t = 3600.0
+        results = []
+
+        for i, taz in enumerate(target_azs):
+            if self._stop_evt.is_set():
+                break
+
+            m = copy.deepcopy(missile)
+            _erv = effective_rv(m)
+            if _erv is not None:
+                new_rv = dataclasses.replace(
+                    _erv,
+                    glider_enabled=True,
+                    glider_guidance="azimuth_command",
+                    glider_target_az_deg=taz,
+                    glider_max_bank_deg=max_bank,
+                )
+                node = m
+                while node is not None:
+                    if node.rv is not None:
+                        node.rv = new_rv
+                        break
+                    node = node.stage2
+
+            try:
+                r = integrate_trajectory(
+                    m, lat, lon, az,
+                    guidance=guidance,
+                    burnout_angle_deg=la,
+                    cutoff_time_s=cutoff,
+                    gt_turn_start_s=gt_start,
+                    gt_turn_stop_s=gt_stop,
+                    yaw_maneuvers=yaw,
+                    launch_elevation_deg=el,
+                    max_time_s=_max_t,
+                )
+            except Exception:
+                r = None
+
+            results.append((taz, r))
+            done = i + 1
+            self.after(0, lambda d=done, tot=len(target_azs): (
+                self._prog_lbl.set(f"{d} / {tot}"),
+                self._progressbar.__setitem__("value", d),
+            ))
+
+        self._results = results
+        self.after(0, self._on_done)
+
+    def _on_done(self):
+        self._run_btn.config(state=tk.NORMAL)
+        self._cancel_btn.config(state=tk.DISABLED)
+        if self._results:
+            self._build_and_open_map()
+
+    def _build_and_open_map(self):
+        import folium, os, tempfile, webbrowser
+
+        try:
+            (_, _, lat_deg, lon_deg, *_) = self._app._get_inputs()
+        except Exception:
+            lat_deg, lon_deg = 0.0, 0.0
+
+        launch_lat = float(lat_deg)
+        launch_lon = float(lon_deg)
+
+        # Collect valid results and compute map centre
+        valid = [(taz, r) for taz, r in self._results if r is not None and r.get('lats') is not None]
+        if not valid:
+            messagebox.showinfo("No results", "All trajectories failed.", parent=self)
+            return
+
+        all_lats = [launch_lat] + [r['lats'][-1] for _, r in valid]
+        all_lons = [launch_lon] + [r['lons'][-1] for _, r in valid]
+        centre = [sum(all_lats) / len(all_lats), sum(all_lons) / len(all_lons)]
+
+        m = folium.Map(location=centre, zoom_start=4,
+                       tiles='CartoDB dark_matter')
+
+        # Rainbow spectrum
+        n = max(len(valid), 1)
+        def _hsl(i):
+            h = int(300 * i / max(n - 1, 1))   # magenta→red fan
+            return f"hsl({h},100%,60%)"
+
+        # Trajectories
+        for i, (taz, r) in enumerate(valid):
+            lats = list(r['lats'])
+            lons = list(r['lons'])
+            coords = list(zip(lats, lons))
+            col = _hsl(i)
+            folium.PolyLine(
+                coords, color=col, weight=2, opacity=0.85,
+                tooltip=f"Az {taz:.0f}°"
+            ).add_to(m)
+            # Impact marker
+            folium.CircleMarker(
+                [lats[-1], lons[-1]],
+                radius=4, color=col, fill=True, fill_opacity=1.0,
+                tooltip=f"Impact {taz:.0f}°",
+            ).add_to(m)
+
+        # Footprint envelope (impact points in order, closed)
+        if len(valid) >= 3:
+            env = [[r['lats'][-1], r['lons'][-1]] for _, r in valid]
+            env.append(env[0])
+            folium.PolyLine(env, color="white", weight=1,
+                            dash_array="4 4", opacity=0.5).add_to(m)
+
+        # Launch marker
+        folium.Marker(
+            [launch_lat, launch_lon],
+            icon=folium.Icon(color="blue", icon="map-marker"),
+            tooltip="Launch",
+        ).add_to(m)
+
+        # Save and open
+        fd, path = tempfile.mkstemp(suffix="_footprint.html")
+        os.close(fd)
+        m.save(path)
+        self._map_path = path
+        self._map_btn.config(state=tk.NORMAL)
+        webbrowser.open(f"file://{path}")
+        self._prog_lbl.set(f"Done — {len(valid)} trajectories")
+
+    def _open_map(self):
+        import webbrowser
+        if self._map_path:
+            webbrowser.open(f"file://{self._map_path}")
+
+
 # ---------------------------------------------------------------------------
 # Main application window
 # ---------------------------------------------------------------------------
@@ -2992,6 +3229,8 @@ class MissileFlyoutApp(tk.Tk):
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
+        analysis_menu.add_command(label="HGV Footprint…",
+                                  command=self._open_footprint)
         analysis_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
@@ -4862,6 +5101,9 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_sweep(self):
         ParametricSweepDialog(self)
+
+    def _open_footprint(self):
+        FootprintDialog(self)
 
     def _open_range_ring(self):
         RangeRingDialog(self)
