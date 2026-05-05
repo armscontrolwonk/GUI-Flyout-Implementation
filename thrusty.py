@@ -2062,6 +2062,36 @@ class RVEditorDialog(tk.Toplevel):
             value=f"{rv.length_m:.2f}" if rv else "2.0")
         _entry(5, self._len_var, width=10)
 
+        # ── Maneuvering (glider / HGV) — vehicle properties only ──────
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
+        self._glider_var = tk.BooleanVar(value=rv.glider_enabled if rv else False)
+        ttk.Checkbutton(self, text="Maneuvering (glider / HGV)",
+                        variable=self._glider_var,
+                        command=self._update_glider_state).pack(
+            anchor=tk.W, padx=12, pady=(8, 0))
+
+        self._glider_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        self._glider_frm.pack(fill=tk.X)
+        self._glider_frm.columnconfigure(1, weight=1)
+
+        def _gfe(row, label, default, unit=""):
+            ttk.Label(self._glider_frm, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            var = tk.StringVar(value=default)
+            inner = ttk.Frame(self._glider_frm)
+            inner.grid(row=row, column=1, sticky=tk.W, pady=2)
+            ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
+            if unit:
+                ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
+            return var
+
+        _LD = f"{rv.glider_LD:.2f}"          if (rv and rv.glider_LD > 0) else "2.5"
+        _g  = f"{rv.glider_pullup_g_max:.0f}" if rv                       else "10"
+        self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
+        self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
+
+        self._update_glider_state()
+
         # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
         btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
@@ -2202,10 +2232,33 @@ class RVEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
+        glider_on = bool(self._glider_var.get())
+        if glider_on:
+            try:
+                LD    = float(self._LD_var.get())
+                g_max = float(self._g_var.get())
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid input",
+                    "L/D and pull-up g-limit must be numbers.",
+                    parent=self)
+                return None
+        else:
+            LD = 0.0; g_max = 10.0
+
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
+            glider_enabled=glider_on,
+            glider_LD=LD,
+            glider_pullup_g_max=g_max,
         )
+
+    def _update_glider_state(self):
+        if self._glider_var.get():
+            self._glider_frm.pack(fill=tk.X)
+        else:
+            self._glider_frm.pack_forget()
 
     def _ok(self):
         rv = self._build_rv()
@@ -3522,17 +3575,7 @@ class MissileFlyoutApp(tk.Tk):
         _gmf = ttk.Frame(gf)
         self._glider_main_frame = _gmf
 
-        # L/D and pull-up g on one row
         _gmf.columnconfigure(1, weight=1)
-        _r0 = ttk.Frame(_gmf)
-        _r0.grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
-        ttk.Label(_r0, text="L/D:").pack(side=tk.LEFT)
-        self._main_LD_var = tk.StringVar(value="2.5")
-        ttk.Entry(_r0, textvariable=self._main_LD_var, width=6).pack(side=tk.LEFT, padx=(2, 10))
-        ttk.Label(_r0, text="Pull-up g:").pack(side=tk.LEFT)
-        self._main_g_var = tk.StringVar(value="10")
-        ttk.Entry(_r0, textvariable=self._main_g_var, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Label(_r0, text="g").pack(side=tk.LEFT, padx=(0, 4))
 
         # Guidance combobox
         ttk.Label(_gmf, text="Guidance:").grid(
@@ -4088,8 +4131,6 @@ class MissileFlyoutApp(tk.Tk):
         _p_erv = effective_rv(p)
         if _p_erv is not None and _p_erv.glider_enabled and hasattr(self, '_glider_main_var'):
             self._glider_main_var.set(True)
-            self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
-            self._main_g_var.set(f"{_p_erv.glider_pullup_g_max:.0f}")
             self._main_guidance_var.set(
                 "Skip-glide (natural phugoid)"
                 if _p_erv.glider_guidance == "skip_glide"
@@ -5038,14 +5079,6 @@ class MissileFlyoutApp(tk.Tk):
             _g_erv = effective_rv(missile)
             if _g_erv is not None:
                 try:
-                    _g_ld = float(self._main_LD_var.get())
-                except ValueError:
-                    _g_ld = 0.0
-                try:
-                    _g_gmax = float(self._main_g_var.get())
-                except ValueError:
-                    _g_gmax = 10.0
-                try:
                     _g_dalt = float(self._main_dive_alt_var.get())
                 except ValueError:
                     _g_dalt = 30.0
@@ -5079,9 +5112,7 @@ class MissileFlyoutApp(tk.Tk):
                 _g_new_rv = _dc.replace(
                     _g_erv,
                     glider_enabled=True,
-                    glider_LD=_g_ld,
                     glider_guidance=_g_guid_key,
-                    glider_pullup_g_max=_g_gmax,
                     glider_terminal_dive=_g_terminal,
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
@@ -5735,8 +5766,6 @@ class MissileFlyoutApp(tk.Tk):
                 for v in self._yaw_vars
             ],
             'glider_on':  getattr(self, '_glider_main_var', tk.BooleanVar()).get(),
-            'glider_LD':  getattr(self, '_main_LD_var',     tk.StringVar(value='2.5')).get(),
-            'glider_g':   getattr(self, '_main_g_var',      tk.StringVar(value='10')).get(),
             'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
             'glider_terminal': getattr(self, '_main_terminal_var', tk.BooleanVar()).get(),
             'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='30')).get(),
@@ -5805,8 +5834,6 @@ class MissileFlyoutApp(tk.Tk):
                     row['coast'].set(ov.get('coast', ''))
         if hasattr(self, '_glider_main_var'):
             self._glider_main_var.set(bool(meta.get('glider_on', False)))
-            self._main_LD_var.set(meta.get('glider_LD', '2.5'))
-            self._main_g_var.set(meta.get('glider_g', '10'))
             self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Acton)'))
             self._main_terminal_var.set(bool(meta.get('glider_terminal', False)))
             self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
