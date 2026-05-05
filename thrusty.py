@@ -3590,9 +3590,10 @@ class MissileFlyoutApp(tk.Tk):
         # Guidance combobox
         ttk.Label(_gmf, text="Guidance:").grid(
             row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-        self._main_guidance_var = tk.StringVar(value="Equilibrium glide (Acton)")
+        self._main_guidance_var = tk.StringVar(value="Equilibrium glide (Tracy)")
         _guid_cb = ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
-                     values=["Equilibrium glide (Acton)",
+                     values=["Equilibrium glide (Tracy)",
+                             "Equilibrium glide (Acton)",
                              "Skip-glide (natural phugoid)",
                              "Azimuth command (heading hold)"],
                      state="readonly", width=26)
@@ -4146,7 +4147,9 @@ class MissileFlyoutApp(tk.Tk):
                 if _p_erv.glider_guidance == "skip_glide"
                 else "Azimuth command (heading hold)"
                 if _p_erv.glider_guidance == "azimuth_command"
-                else "Equilibrium glide (Acton)")
+                else "Equilibrium glide (Acton)"
+                if _p_erv.glider_guidance == "equilibrium_glide_acton"
+                else "Equilibrium glide (Tracy)")
             self._main_terminal_var.set(_p_erv.glider_terminal_dive)
             self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
             _sched = _p_erv.glider_bank_schedule or []
@@ -5849,7 +5852,7 @@ class MissileFlyoutApp(tk.Tk):
                     row['coast'].set(ov.get('coast', ''))
         if hasattr(self, '_glider_main_var'):
             self._glider_main_var.set(bool(meta.get('glider_on', False)))
-            self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Acton)'))
+            self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Tracy)'))
             self._main_terminal_var.set(bool(meta.get('glider_terminal', False)))
             self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
             self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))

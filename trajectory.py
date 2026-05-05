@@ -1093,17 +1093,19 @@ def integrate_trajectory(params: MissileParams,
     #                                Phase-3→4 transition altitude
     #                                h_3 (t₃), where the analytical
     #                                pull-up arc starts.
-    _tracy_mode = (_erv_full is not None
-                   and _erv_full.glider_enabled
-                   and _erv_full.glider_LD > 0
-                   and _erv_full.glider_guidance == "equilibrium_glide")
-    _acton_mode = (_erv_full is not None
-                   and _erv_full.glider_enabled
-                   and _erv_full.glider_LD > 0
+    _pullup_mode = (_erv_full is not None
+                    and _erv_full.glider_enabled
+                    and _erv_full.glider_LD > 0
+                    and _erv_full.glider_guidance in
+                        ("equilibrium_glide", "equilibrium_glide_acton"))
+    # Acton three-phase requires β_S > 0; otherwise we fall back to Tracy
+    # (one-shot arc at the pierce point) so the user always gets an
+    # analytical pull-up rather than a phugoid.
+    _acton_mode = (_pullup_mode
                    and _erv_full.glider_guidance == "equilibrium_glide_acton"
                    and _erv_full.glider_beta_entry_kg_m2 > 0)
 
-    if _tracy_mode or _acton_mode:
+    if _pullup_mode:
         sol_pre = solve_ivp(
             fun=_eom,
             t_span=t_span,
