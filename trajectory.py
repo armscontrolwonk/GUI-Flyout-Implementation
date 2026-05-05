@@ -502,7 +502,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 break
                         if (_erv.glider_guidance == "equilibrium_glide"
                                 and np.dot(v_hat, r_hat) >= 0.0):
-                            eq_lift = rv_mass * (g_mag - speed**2 / r_mag)
+                            # Centripetal term requires inertial (ECI) speed,
+                            # not ECEF airspeed.
+                            _v_iner = vel + np.cross(
+                                np.array([0.0, 0.0, OMEGA_EARTH]), pos)
+                            eq_lift = rv_mass * (
+                                g_mag - np.dot(_v_iner, _v_iner) / r_mag)
                             if eq_lift < lift_mag:
                                 lift_mag = max(0.0, eq_lift)
                         if (_erv.glider_terminal_dive
@@ -1287,7 +1292,9 @@ def integrate_trajectory(params: MissileParams,
                 # of RN; the reported MW/m² scales as 1/sqrt(RN).
                 _RN = 0.05
                 _glide_a = alts[_re_idx:]
-                _glide_v = inertial_speeds[_re_idx:]
+                # Sutton-Graves uses airspeed (ECEF), not inertial speed,
+                # because the atmosphere co-rotates with Earth.
+                _glide_v = speeds[_re_idx:]
                 _rho_g   = np.array([atmosphere(a)[2] for a in _glide_a])
                 _q_dot   = 1.7415e-4 * np.sqrt(_rho_g / _RN) * _glide_v ** 3
                 if len(_q_dot) and np.max(_q_dot) > 0:
