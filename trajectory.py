@@ -90,29 +90,21 @@ _HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
                            1.18e-12, 5.21e-13, 1.14e-13, 3.07e-14, 1.14e-14,
                            5.24e-15, 2.95e-15])
 
-# Acton 2021 (pp. 197–202) two-β boost-glide model.
+# Tracy & Wright 2020 (sgs28tracy.pdf) boost-glide model.
 #
-# The glider has two ballistic coefficients depending on attitude:
-#   • β_S  — Phase 3 (direct re-entry): vehicle at high angle of attack,
-#            flat lower surface to airflow, large drag, L/D = 0.
-#   • β_L  — Phases 4–5 (pull-up + glide): vehicle rotated to high-lift
-#            orientation, smaller drag, finite L/D.
+# The pull-up is treated analytically following Acton 2021 (Eq. 11):
+# at the moment the vehicle pierces the upper atmosphere on descent,
+# the state is reset to equilibrium-glide initial conditions:
+#     v_4  = v_3 · exp(−(L/D)·θ_2)        (Acton Eq. 11)
+#     γ    = 0   (velocity rotated to local horizontal)
+#     h    = h_eq(v_4) from Acton's equilibrium-altitude formula
+# where v_3, θ_2 are the speed and (positive) descent angle at piercing.
 #
-# Phase boundaries:
-#   • Phase 2 → 3: at h_2 = 100 km (atmospheric "pierce point", Acton p. 204).
-#   • Phase 3 → 4: at h_3 such that ρ(h_3)/β_S = ρ(h_4)/β_L  (Acton Eq. 8).
-#                  Equivalently h_3 = h_eq + H·ln(β_L/β_S).  Drag is
-#                  continuous across this transition; lift jumps from 0
-#                  to the equilibrium value as the vehicle rotates.
-#   • Phase 5: equilibrium glide at h ≤ h_eq with lift = m(g − V²/r),
-#              tracking Acton's analytic h(v):
-#                ρ_eq(v) = 2β_L·(g − V²/r) / (V² · L/D)         (p. 199)
-#                h_eq    = H·ln(ρ₀ / ρ_eq)
-#
-# The Phase 4 pull-up itself is brief (Acton notes "just 12 seconds" for
-# HTV-2) and is treated as an instantaneous transition: above h_3 the
-# glider is in Phase-3 attitude (no lift, β_S drag); below h_3 the cap
-# fires bidirectionally so the vehicle locks onto Acton's h_eq profile.
+# After this one-shot reset, the glide and terminal phases are simulated
+# by direct integration of the existing equations of motion with constant
+# L/D and a single β.  No Phase-3 / β_S drag, no equilibrium-lift cap —
+# the vehicle's natural EOM keeps it near equilibrium because it starts
+# AT equilibrium (Tracy Eq. 7).  Mild phugoid oscillation is physical.
 ACTON_PIERCE_ALT_M    = 100_000.0
 # Acton's isothermal-atmosphere fit for 30 < h < 100 km (p. 197):
 ACTON_SCALE_HEIGHT_M  = 6970.0
@@ -513,21 +505,22 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        # Two glide modes (Acton 2021, pp. 197–202).
-                        #   • skip_glide:        single β, full lift always,
-                        #                        natural EOM → phugoid.
-                        #   • equilibrium_glide: full Acton three-phase model
-                        #     using both β_S (Phase 3, high-AoA, no lift) and
-                        #     β_L (Phases 4–5, gliding).  See ACTON_*
-                        #     constants above.  When β_S is unset (= 0),
-                        #     reverts to single-β bidirectional eq_lift cap.
+                        # Two glide modes:
+                        #   • skip_glide / equilibrium_glide: single β,
+                        #     constant L/D, no lift cap.  Equilibrium
+                        #     mode receives an analytical Acton pull-up
+                        #     (Tracy 2020) at atmospheric piercing as a
+                        #     one-shot state reset before glide begins;
+                        #     skip_glide does not.
+                        #   • azimuth_command: proportional heading
+                        #     controller — bank angle commanded by the
+                        #     ground-track-azimuth error.
                         if _erv.glider_guidance == "azimuth_command":
                             # Proportional heading controller.
                             # Project ECEF velocity onto local ENU to get
                             # current ground-track azimuth, then bank
                             # proportional to the heading error (capped at
-                            # max_bank).  Equilibrium-glide lift cap still
-                            # applies on top of this.
+                            # max_bank).
                             _sla = np.sin(lat); _cla = np.cos(lat)
                             _slo = np.sin(lon); _clo = np.cos(lon)
                             _ve = -_slo * vel[0] + _clo * vel[1]
@@ -545,59 +538,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 if _bt_s <= t <= _bt_e:
                                     bank_rad = np.radians(_bk_deg)
                                     break
-                        if _erv.glider_guidance == "equilibrium_glide":
-                            # Centripetal uses inertial (ECI) speed.
-                            _v_iner = vel + np.cross(
-                                np.array([0.0, 0.0, OMEGA_EARTH]), pos)
-                            v2_iner = float(np.dot(_v_iner, _v_iner))
-                            radial_acc = g_mag - v2_iner / r_mag
-                            eq_lift = rv_mass * max(0.0, radial_acc)
-                            beta_S = float(_erv.glider_beta_entry_kg_m2)
-                            beta_L = float(_erv.beta_kg_m2)
-                            if (beta_S > 0.0 and beta_L > 0.0
-                                    and radial_acc > 0.0
-                                    and v2_iner > 0.0
-                                    and _erv.glider_LD > 0.0):
-                                # Acton's Phase-5 equilibrium altitude:
-                                #   ρ_eq = 2β_L·(g − V²/r) / (V² · L/D)
-                                rho_eq = (2.0 * beta_L * radial_acc
-                                          / (v2_iner * _erv.glider_LD))
-                                # Phase-3 → 4 transition altitude h_3
-                                # (Acton Eq. 8): ρ(h_3) = ρ_eq · β_S/β_L.
-                                rho_3 = rho_eq * beta_S / beta_L
-                                if rho_3 > 0.0 and rho_eq > 0.0:
-                                    h_3 = ACTON_SCALE_HEIGHT_M * np.log(
-                                        ACTON_SEA_LEVEL_RHO / rho_3)
-                                    # sin γ > 0: ascending; < 0: descending.
-                                    sin_gamma = float(np.dot(v_hat, r_hat))
-                                    if alt > h_3:
-                                        # Phase 3 — direct re-entry: high
-                                        # AoA, β_S drag, zero lift.  Re-
-                                        # compute drag with β_S and zero
-                                        # the lift command.
-                                        drag_mag_S = q * rv_mass / beta_S
-                                        f_drag = -drag_mag_S * v_hat
-                                        lift_mag = 0.0
-                                    elif sin_gamma < -0.035:
-                                        # Phase 4 — pull-up: full L/D, no
-                                        # equilibrium cap.  Vehicle rotates
-                                        # toward level flight (γ → 0).
-                                        # ~2° threshold (sin 2° ≈ 0.035).
-                                        pass
-                                    else:
-                                        # Phase 5 — equilibrium glide: cap
-                                        # lift so vehicle tracks h_eq(V).
-                                        if lift_mag > eq_lift:
-                                            lift_mag = eq_lift
-                                else:
-                                    if lift_mag > eq_lift:
-                                        lift_mag = eq_lift
-                            else:
-                                # Single-β backward-compatible behaviour:
-                                # bidirectional eq_lift cap, no Phase-3
-                                # treatment.
-                                if lift_mag > eq_lift:
-                                    lift_mag = eq_lift
+                        # equilibrium_glide and skip_glide both run with
+                        # full L/D and constant β here.  The Acton pull-up
+                        # is applied as a one-shot state reset by
+                        # integrate_trajectory (Tracy 2020 approach), not
+                        # within the EOM.
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
@@ -718,6 +663,73 @@ def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 
 _hit_ground.terminal  = True
 _hit_ground.direction = -1
+
+
+def _glider_pierce_atmosphere(t, state, params, cutoff_time, azimuth_rad,
+                              gt_turn_start_s, gt_turn_stop_s,
+                              target_orbit_alt_m=0.0, t_final_ignition=0.0,
+                              yaw_maneuvers=None):
+    """Event: glider pierces upper atmosphere on descent (alt = ACTON_PIERCE_ALT_M)."""
+    _, _, alt = ecef_to_geodetic(state[:3])
+    return alt - ACTON_PIERCE_ALT_M
+
+_glider_pierce_atmosphere.terminal  = True
+_glider_pierce_atmosphere.direction = -1
+
+
+def _acton_pullup_reset(pos: np.ndarray, vel: np.ndarray,
+                        LD: float, beta_L: float) -> tuple:
+    """
+    Apply Acton's analytical pull-up (Acton 2021 Eq. 11) and Tracy's
+    equilibrium-glide initial condition (Tracy Eq. 7) to the state at
+    atmospheric piercing.
+
+    Returns (pos_post, vel_post) with the vehicle relocated to h_eq(v_4),
+    γ = 0, and horizontal velocity preserving the original ground-track
+    azimuth.  If the vehicle is ascending or the new equilibrium altitude
+    is unphysical, returns the input state unchanged.
+    """
+    speed = float(np.linalg.norm(vel))
+    r_mag = float(np.linalg.norm(pos))
+    if speed < 1.0 or r_mag < 1e3:
+        return pos, vel
+
+    r_hat = pos / r_mag
+    v_hat = vel / speed
+    # sin γ > 0 ascending; θ_2 (descent angle below horizontal) = −sin γ.
+    sin_gamma = float(np.dot(v_hat, r_hat))
+    if sin_gamma >= 0.0:
+        return pos, vel                       # not descending — no pull-up
+    theta_2 = float(np.arcsin(min(1.0, -sin_gamma)))
+
+    # Acton Eq. 11 — analytical velocity loss during pull-up.
+    v_4 = speed * float(np.exp(-LD * theta_2))
+
+    # Equilibrium altitude h_eq(v_4) from Acton's isothermal fit (Tracy Eq. 7).
+    g_mag = float(np.linalg.norm(gravity_ecef(pos)))
+    radial_acc = g_mag - v_4**2 / r_mag
+    if radial_acc <= 0.0:
+        return pos, vel                       # super-orbital, no equilibrium
+    rho_eq = 2.0 * beta_L * radial_acc / (v_4**2 * LD)
+    if rho_eq <= 0.0:
+        return pos, vel
+    h_eq = ACTON_SCALE_HEIGHT_M * float(np.log(ACTON_SEA_LEVEL_RHO / rho_eq))
+    if not (5_000.0 < h_eq < 80_000.0):
+        return pos, vel                       # outside Acton fit's validity
+
+    # New position: same lat/lon, altitude = h_eq.
+    lat, lon, _ = ecef_to_geodetic(pos)
+    pos_post = geodetic_to_ecef(lat, lon, h_eq)
+
+    # New velocity: horizontal (γ=0), magnitude v_4, azimuth from current
+    # ground-track.  v_horiz = v − (v·r̂)r̂ projects onto the local tangent
+    # plane.
+    v_horiz = vel - sin_gamma * speed * r_hat
+    h_mag   = float(np.linalg.norm(v_horiz))
+    if h_mag < 1e-3:
+        return pos, vel
+    vel_post = (v_4 / h_mag) * v_horiz
+    return pos_post, vel_post
 
 
 # ---------------------------------------------------------------------------
@@ -984,28 +996,94 @@ def integrate_trajectory(params: MissileParams,
         _rtol, _atol, _maxstep = 1e-5, 1e-2, 20.0
     else:
         _rtol, _atol, _maxstep = 1e-8, 1e-6, 5.0
-    sol = solve_ivp(
-        fun=_eom,
-        t_span=t_span,
-        y0=state0,
-        method='RK45',
-        t_eval=t_eval,
-        events=_hit_ground,
-        args=eom_args,
-        rtol=_rtol,
-        atol=_atol,
-        dense_output=False,
-        max_step=_maxstep,
-    )
+    # Tracy 2020 mode: when guidance is "equilibrium_glide", run a
+    # two-phase integration with an analytical Acton pull-up (Eq. 11)
+    # applied as a state reset at atmospheric piercing.  Phase 1 stops
+    # when the vehicle descends below ACTON_PIERCE_ALT_M; the state is
+    # then teleported to (h_eq, γ=0, v_4) and Phase 2 integrates from
+    # there to ground.
+    _tracy_mode = (_erv_full is not None
+                   and _erv_full.glider_enabled
+                   and _erv_full.glider_LD > 0
+                   and _erv_full.glider_guidance == "equilibrium_glide")
 
-    t_arr    = sol.t
-    pos_arr  = sol.y[:3].T   # (N, 3)
-    vel_arr  = sol.y[3:].T   # (N, 3)
+    if _tracy_mode:
+        sol_pre = solve_ivp(
+            fun=_eom,
+            t_span=t_span,
+            y0=state0,
+            method='RK45',
+            t_eval=t_eval,
+            events=[_hit_ground, _glider_pierce_atmosphere],
+            args=eom_args,
+            rtol=_rtol,
+            atol=_atol,
+            dense_output=False,
+            max_step=_maxstep,
+        )
+        # Did pierce fire (and before ground impact)?
+        _pierce_fired = (len(sol_pre.t_events[1]) > 0
+                         and (len(sol_pre.t_events[0]) == 0
+                              or sol_pre.t_events[1][0] <
+                                 sol_pre.t_events[0][0]))
+        if _pierce_fired:
+            t_pierce     = float(sol_pre.t_events[1][0])
+            state_pierce = sol_pre.y_events[1][0]
+            pos_post, vel_post = _acton_pullup_reset(
+                state_pierce[:3], state_pierce[3:],
+                _erv_full.glider_LD, _erv_full.beta_kg_m2)
+            state_post = np.concatenate([pos_post, vel_post])
+            # Phase 2: from pierce time to max_time_s, only _hit_ground.
+            t_eval_post = t_eval[t_eval > t_pierce]
+            sol_post = solve_ivp(
+                fun=_eom,
+                t_span=(t_pierce, max_time_s),
+                y0=state_post,
+                method='RK45',
+                t_eval=t_eval_post,
+                events=_hit_ground,
+                args=eom_args,
+                rtol=_rtol,
+                atol=_atol,
+                dense_output=False,
+                max_step=_maxstep,
+            )
+            # Concatenate: pre-pierce samples + post-pierce samples.
+            _pre_mask = sol_pre.t < t_pierce
+            t_arr   = np.concatenate([sol_pre.t[_pre_mask], sol_post.t])
+            _y_pre  = sol_pre.y[:, _pre_mask]
+            sol_y   = np.concatenate([_y_pre, sol_post.y], axis=1)
+            pos_arr = sol_y[:3].T
+            vel_arr = sol_y[3:].T
+            orbital = (len(sol_post.t_events[0]) == 0)
+        else:
+            t_arr   = sol_pre.t
+            pos_arr = sol_pre.y[:3].T
+            vel_arr = sol_pre.y[3:].T
+            orbital = (len(sol_pre.t_events[0]) == 0)
+    else:
+        sol = solve_ivp(
+            fun=_eom,
+            t_span=t_span,
+            y0=state0,
+            method='RK45',
+            t_eval=t_eval,
+            events=_hit_ground,
+            args=eom_args,
+            rtol=_rtol,
+            atol=_atol,
+            dense_output=False,
+            max_step=_maxstep,
+        )
 
-    # Detect whether the warhead actually reached the ground.  When the
-    # _hit_ground event never fires the vehicle is on an orbital or
-    # very-long-range sub-orbital arc that didn't return within max_time_s.
-    orbital = len(sol.t_events[0]) == 0
+        t_arr    = sol.t
+        pos_arr  = sol.y[:3].T   # (N, 3)
+        vel_arr  = sol.y[3:].T   # (N, 3)
+
+        # Detect whether the warhead actually reached the ground.  When the
+        # _hit_ground event never fires the vehicle is on an orbital or
+        # very-long-range sub-orbital arc that didn't return within max_time_s.
+        orbital = len(sol.t_events[0]) == 0
 
     # Verify the orbital flag by computing the perigee of the trajectory's
     # osculating orbit at the final state.  A long sub-orbital arc (apogee
