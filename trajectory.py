@@ -677,59 +677,131 @@ _glider_pierce_atmosphere.terminal  = True
 _glider_pierce_atmosphere.direction = -1
 
 
-def _acton_pullup_reset(pos: np.ndarray, vel: np.ndarray,
-                        LD: float, beta_L: float) -> tuple:
+def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
+                      LD: float, beta_L: float,
+                      n_samples: int = 12) -> tuple:
     """
-    Apply Acton's analytical pull-up (Acton 2021 Eq. 11) and Tracy's
-    equilibrium-glide initial condition (Tracy Eq. 7) to the state at
-    atmospheric piercing.
+    Generate samples along Acton's analytical pull-up arc (Acton 2021,
+    Eqs. 11, 13–17) plus Tracy's equilibrium-glide initial condition
+    (Tracy 2020, Eq. 7).
 
-    Returns (pos_post, vel_post) with the vehicle relocated to h_eq(v_4),
-    γ = 0, and horizontal velocity preserving the original ground-track
-    azimuth.  If the vehicle is ascending or the new equilibrium altitude
-    is unphysical, returns the input state unchanged.
+    The arc is a circular path in the local (downrange, vertical) plane
+    fitted between (h_3, γ = −θ_2) at the pierce point and (h_eq, γ = 0)
+    at the start of equilibrium glide.  The geometric radius is
+
+        R = (h_3 − h_eq) / (1 − cos θ_2)              (small-angle limit
+                                                       coincides with
+                                                       Acton's Eq. 13).
+
+    Velocity along the arc follows Acton Eq. 11:
+        V(γ) = V_3 · exp(−(L/D)·(θ_2 − θ))            with θ = −γ.
+
+    Pull-up duration uses the high-speed-limit form of Acton Eq. 15:
+        t_pullup = R · θ_2 / V_3.
+
+    Returns (samples, t_pullup, post_state) where:
+      • samples is a list of (t_offset, pos_ecef, vel_ecef) for the arc,
+        excluding the pierce point itself but including the endpoint;
+      • t_pullup is the total arc duration (s);
+      • post_state is the (pos, vel) at γ = 0 — the IC for Tracy glide.
+
+    If geometry is degenerate (ascending, super-orbital, or h_eq outside
+    fit validity) returns ([], 0.0, pos+vel) so the caller falls back to
+    the unmodified state.
     """
     speed = float(np.linalg.norm(vel))
     r_mag = float(np.linalg.norm(pos))
+    fallback = ([], 0.0, np.concatenate([pos, vel]))
     if speed < 1.0 or r_mag < 1e3:
-        return pos, vel
+        return fallback
 
     r_hat = pos / r_mag
     v_hat = vel / speed
-    # sin γ > 0 ascending; θ_2 (descent angle below horizontal) = −sin γ.
-    sin_gamma = float(np.dot(v_hat, r_hat))
+    sin_gamma = float(np.dot(v_hat, r_hat))           # >0 ascending
     if sin_gamma >= 0.0:
-        return pos, vel                       # not descending — no pull-up
+        return fallback
     theta_2 = float(np.arcsin(min(1.0, -sin_gamma)))
 
-    # Acton Eq. 11 — analytical velocity loss during pull-up.
+    # Acton Eq. 11 — velocity at end of pull-up.
     v_4 = speed * float(np.exp(-LD * theta_2))
 
-    # Equilibrium altitude h_eq(v_4) from Acton's isothermal fit (Tracy Eq. 7).
+    # Tracy Eq. 7 — equilibrium altitude h_eq(v_4).
     g_mag = float(np.linalg.norm(gravity_ecef(pos)))
     radial_acc = g_mag - v_4**2 / r_mag
     if radial_acc <= 0.0:
-        return pos, vel                       # super-orbital, no equilibrium
+        return fallback
     rho_eq = 2.0 * beta_L * radial_acc / (v_4**2 * LD)
     if rho_eq <= 0.0:
-        return pos, vel
+        return fallback
     h_eq = ACTON_SCALE_HEIGHT_M * float(np.log(ACTON_SEA_LEVEL_RHO / rho_eq))
     if not (5_000.0 < h_eq < 80_000.0):
-        return pos, vel                       # outside Acton fit's validity
+        return fallback
 
-    # New position: same lat/lon, altitude = h_eq.
-    lat, lon, _ = ecef_to_geodetic(pos)
-    pos_post = geodetic_to_ecef(lat, lon, h_eq)
+    lat, lon, h_3 = ecef_to_geodetic(pos)
+    if h_3 <= h_eq:
+        return fallback                               # already below h_eq
 
-    # New velocity: horizontal (γ=0), magnitude v_4, azimuth from current
-    # ground-track.  v_horiz = v − (v·r̂)r̂ projects onto the local tangent
-    # plane.
-    v_horiz = vel - sin_gamma * speed * r_hat
-    h_mag   = float(np.linalg.norm(v_horiz))
-    if h_mag < 1e-3:
-        return pos, vel
-    vel_post = (v_4 / h_mag) * v_horiz
-    return pos_post, vel_post
+    # Geometric arc radius fitting (h_3, −θ_2) to (h_eq, 0).
+    one_minus_cos = 1.0 - float(np.cos(theta_2))
+    if one_minus_cos < 1e-9:
+        return fallback                               # θ_2 essentially zero
+    R = (h_3 - h_eq) / one_minus_cos
+    t_pullup = R * theta_2 / speed                    # high-speed limit
+
+    # Ground-track azimuth at the pierce point — direction of horizontal
+    # velocity in the local ENU frame.
+    e_east, e_north, e_up = _enu_frame(lat, lon)
+    v_e = float(np.dot(vel, e_east))
+    v_n = float(np.dot(vel, e_north))
+    if abs(v_e) < 1e-6 and abs(v_n) < 1e-6:
+        return fallback
+    azimuth = float(np.arctan2(v_e, v_n))             # 0 = north, π/2 = east
+
+    # Spherical-Earth great-circle move helper (good enough for ~10³ km arcs).
+    R_e = 6_371_000.0
+    sin_az, cos_az = float(np.sin(azimuth)), float(np.cos(azimuth))
+    sin_lat0, cos_lat0 = float(np.sin(lat)), float(np.cos(lat))
+
+    def _move(downrange_m: float):
+        d = downrange_m / R_e                         # angular distance
+        sd, cd = float(np.sin(d)), float(np.cos(d))
+        sin_lat2 = sin_lat0 * cd + cos_lat0 * sd * cos_az
+        lat2 = float(np.arcsin(max(-1.0, min(1.0, sin_lat2))))
+        lon2 = lon + float(np.arctan2(
+            sin_az * sd * cos_lat0,
+            cd - sin_lat0 * sin_lat2))
+        # Local heading at lat2/lon2 along the great circle (azimuth here).
+        # For short arcs the bearing rotation is small; preserve original
+        # azimuth at the destination.
+        return lat2, lon2
+
+    # Generate arc samples.  i = 1 .. n_samples, sample i at fraction i/N
+    # of the arc (γ goes linearly from −θ_2 to 0).
+    samples = []
+    for i in range(1, n_samples + 1):
+        frac      = i / float(n_samples)
+        theta     = theta_2 * (1.0 - frac)            # θ from θ_2 down to 0
+        downrange = R * (float(np.sin(theta_2)) - float(np.sin(theta)))
+        alt       = h_3 - R * (float(np.cos(theta)) - float(np.cos(theta_2)))
+        v_at      = speed * float(np.exp(-LD * (theta_2 - theta)))
+        t_off     = R * (theta_2 - theta) / speed     # high-speed limit
+
+        lat_i, lon_i = _move(downrange)
+        pos_i = geodetic_to_ecef(lat_i, lon_i, alt)
+
+        # Velocity in the local ENU at sample point.
+        e_east_i, e_north_i, e_up_i = _enu_frame(lat_i, lon_i)
+        forward_i = sin_az * e_east_i + cos_az * e_north_i
+        vel_i = v_at * (float(np.cos(theta)) * forward_i
+                        - float(np.sin(theta)) * e_up_i)
+
+        samples.append((t_off, pos_i, vel_i))
+
+    # Endpoint = post-pull-up state for the equilibrium-glide integration.
+    post_pos = samples[-1][1]
+    post_vel = samples[-1][2]
+    post_state = np.concatenate([post_pos, post_vel])
+    return samples, t_pullup, post_state
 
 
 # ---------------------------------------------------------------------------
@@ -1029,15 +1101,15 @@ def integrate_trajectory(params: MissileParams,
         if _pierce_fired:
             t_pierce     = float(sol_pre.t_events[1][0])
             state_pierce = sol_pre.y_events[1][0]
-            pos_post, vel_post = _acton_pullup_reset(
+            arc_samples, t_pullup, state_post = _acton_pullup_arc(
                 state_pierce[:3], state_pierce[3:],
                 _erv_full.glider_LD, _erv_full.beta_kg_m2)
-            state_post = np.concatenate([pos_post, vel_post])
-            # Phase 2: from pierce time to max_time_s, only _hit_ground.
-            t_eval_post = t_eval[t_eval > t_pierce]
+            t_glide_start = t_pierce + t_pullup
+            # Phase 2: from end of pull-up to max_time_s, only _hit_ground.
+            t_eval_post = t_eval[t_eval > t_glide_start]
             sol_post = solve_ivp(
                 fun=_eom,
-                t_span=(t_pierce, max_time_s),
+                t_span=(t_glide_start, max_time_s),
                 y0=state_post,
                 method='RK45',
                 t_eval=t_eval_post,
@@ -1048,11 +1120,29 @@ def integrate_trajectory(params: MissileParams,
                 dense_output=False,
                 max_step=_maxstep,
             )
-            # Concatenate: pre-pierce samples + post-pierce samples.
+            # Build arc-segment arrays (pierce point + mid-pull-up samples
+            # for plotting).  Including the pierce sample anchors the arc
+            # to the descending leg of the boost so plots draw a smooth
+            # transition rather than an apparent gap at h = 100 km.
+            if arc_samples:
+                _arc_t = np.concatenate([
+                    [t_pierce],
+                    [t_pierce + s[0] for s in arc_samples]])
+                _pierce_col = np.concatenate(
+                    [state_pierce[:3], state_pierce[3:]]).reshape(6, 1)
+                _arc_y = np.concatenate([
+                    _pierce_col,
+                    np.column_stack([np.concatenate([s[1], s[2]])
+                                     for s in arc_samples])
+                ], axis=1)
+            else:
+                _arc_t = np.empty(0)
+                _arc_y = np.empty((6, 0))
+            # Concatenate: pre-pierce + arc + post-pull-up samples.
             _pre_mask = sol_pre.t < t_pierce
-            t_arr   = np.concatenate([sol_pre.t[_pre_mask], sol_post.t])
+            t_arr   = np.concatenate([sol_pre.t[_pre_mask], _arc_t, sol_post.t])
             _y_pre  = sol_pre.y[:, _pre_mask]
-            sol_y   = np.concatenate([_y_pre, sol_post.y], axis=1)
+            sol_y   = np.concatenate([_y_pre, _arc_y, sol_post.y], axis=1)
             pos_arr = sol_y[:3].T
             vel_arr = sol_y[3:].T
             orbital = (len(sol_post.t_events[0]) == 0)
