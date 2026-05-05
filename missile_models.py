@@ -222,17 +222,26 @@ class RVParams:
     # Glider / HGV properties
     #
     # glider_guidance — one of:
-    #   "equilibrium_glide": Tracy/Acton model.  Analytical Acton pull-up
-    #                        (Eq. 11) at atmospheric piercing teleports the
-    #                        vehicle to (h_eq, γ=0, v_4); thereafter natural
-    #                        EOM with constant L/D and single β.
-    #   "skip_glide":        no analytical pull-up; the vehicle simply re-
-    #                        enters with whatever flight-path angle it had
-    #                        and the EOM with constant L/D produces a
-    #                        natural phugoid.
-    #   "azimuth_command":   proportional heading controller — bank angle
-    #                        proportional to heading error, clamped at
-    #                        glider_max_bank_deg.  No pull-up reset.
+    #   "equilibrium_glide":       Tracy 2020.  Analytical Acton pull-up
+    #                              (Eq. 11) applied as a one-shot arc
+    #                              between the 100 km pierce point and
+    #                              h_eq; the schema's t₂ and t₃ coincide
+    #                              (no separate direct-re-entry phase).
+    #                              Uses one β (= β_L for glide).
+    #   "equilibrium_glide_acton": Acton 2021 three-phase model.  After
+    #                              piercing at 100 km the vehicle enters a
+    #                              direct-re-entry segment with β_S drag
+    #                              and L/D = 0 until alt = h_3 (Acton
+    #                              Eq. 8); at t_3 the analytical pull-up
+    #                              fires.  Requires β_S =
+    #                              glider_beta_entry_kg_m2 > 0.
+    #   "skip_glide":              no analytical pull-up; the vehicle re-
+    #                              enters with whatever γ it had and the
+    #                              natural EOM produces a phugoid.
+    #   "azimuth_command":         proportional heading controller — bank
+    #                              proportional to heading error, clamped
+    #                              at glider_max_bank_deg.  No pull-up
+    #                              reset.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
@@ -246,6 +255,14 @@ class RVParams:
     # Azimuth-command guidance parameters (glider_guidance == "azimuth_command")
     glider_target_az_deg:   float = 0.0    # desired final ground-track bearing (°N)
     glider_max_bank_deg:    float = 45.0   # bank angle limit (°)
+    # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
+    # During Phase 3 the glider holds a high-AoA orientation: flat lower
+    # surface to airflow, large drag, L/D = 0.  Acton's HTV-2 fit gives
+    # β_S ≈ 7 kg/m² (Table 3, p. 206).  Used only by the
+    # "equilibrium_glide_acton" guidance mode; ignored otherwise.  Set 0
+    # to disable Phase 3 (effectively reverts to Tracy when paired with
+    # Acton mode).
+    glider_beta_entry_kg_m2: float = 0.0
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -265,6 +282,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_bank_schedule':  rv.glider_bank_schedule,
         'glider_target_az_deg':  rv.glider_target_az_deg,
         'glider_max_bank_deg':   rv.glider_max_bank_deg,
+        'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
     }
 
 
@@ -289,6 +307,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
         glider_target_az_deg=float(d.get('glider_target_az_deg', 0.0)),
         glider_max_bank_deg=float(d.get('glider_max_bank_deg', 45.0)),
+        glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
     )
 
 
@@ -1352,11 +1371,14 @@ def _minotaur_4_htv2():
         rv=RVParams(
             name="HTV-2",
             mass_kg=1000.0,
-            beta_kg_m2=13_000.0,           # Acton β_L for HTV-2
+            beta_kg_m2=13_000.0,           # Acton β_L for HTV-2 (Table 3)
             shape="cone",
             glider_enabled=True,
-            glider_LD=2.6,                 # Acton L/D for HTV-2
-            glider_guidance="equilibrium_glide",   # Tracy/Acton
+            glider_LD=2.6,                 # Acton L/D for HTV-2 (Table 3)
+            glider_guidance="equilibrium_glide",   # Tracy by default
+            # Set β_S so users can switch to "Equilibrium glide (Acton)"
+            # without re-entering parameters; ignored in Tracy mode.
+            glider_beta_entry_kg_m2=7.0,   # Acton β_S for HTV-2 (Table 3)
         ),
         mach_table=[],
         cd_table=[],
