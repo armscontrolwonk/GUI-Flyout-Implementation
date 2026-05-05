@@ -3309,10 +3309,11 @@ class MissileFlyoutApp(tk.Tk):
                         variable=self._guidance_var, value="orbital_insertion",
                         command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
 
-        ttk.Label(gf, text="Launch elev.:").grid(
-            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        self._launch_el_lbl = ttk.Label(gf, text="Launch elev.:")
+        self._launch_el_lbl.grid(row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
         le_frame = ttk.Frame(gf)
         le_frame.grid(row=1, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._launch_el_frame = le_frame
         self._launch_el_var = tk.StringVar(value="90.0")
         ttk.Entry(le_frame, textvariable=self._launch_el_var, width=8).pack(side=tk.LEFT)
         ttk.Label(le_frame, text="°  (90 = vertical)").pack(side=tk.LEFT, padx=2)
@@ -3890,13 +3891,23 @@ class MissileFlyoutApp(tk.Tk):
     # Advanced per-stage pitch program
     # ------------------------------------------------------------------
     def _on_adv_pitch_toggled(self):
-        """Show or hide the per-stage pitch rows."""
+        """Show or hide the per-stage pitch rows; hide basic rows when active."""
+        _basic = [
+            self._launch_el_lbl,    self._launch_el_frame,
+            self._loft_angle_lbl,   self._loft_angle_frame,
+            self._gt_turn_start_lbl, self._gt_turn_start_frame,
+            self._gt_turn_stop_lbl,  self._gt_turn_stop_frame,
+        ]
         if self._adv_pitch_var.get():
+            for w in _basic:
+                w.grid_remove()
             self._rebuild_stage_rows()
             self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
                                         sticky=tk.EW, padx=0, pady=(0, 4))
         else:
             self._adv_pitch_frame.grid_forget()
+            for w in _basic:
+                w.grid()
 
     def _on_adv_yaw_toggled(self):
         """Show or hide the global yaw fields."""
