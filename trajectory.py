@@ -568,6 +568,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 if rho_3 > 0.0 and rho_eq > 0.0:
                                     h_3 = ACTON_SCALE_HEIGHT_M * np.log(
                                         ACTON_SEA_LEVEL_RHO / rho_3)
+                                    # sin γ > 0: ascending; < 0: descending.
+                                    sin_gamma = float(np.dot(v_hat, r_hat))
                                     if alt > h_3:
                                         # Phase 3 — direct re-entry: high
                                         # AoA, β_S drag, zero lift.  Re-
@@ -576,9 +578,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                         drag_mag_S = q * rv_mass / beta_S
                                         f_drag = -drag_mag_S * v_hat
                                         lift_mag = 0.0
+                                    elif sin_gamma < -0.035:
+                                        # Phase 4 — pull-up: full L/D, no
+                                        # equilibrium cap.  Vehicle rotates
+                                        # toward level flight (γ → 0).
+                                        # ~2° threshold (sin 2° ≈ 0.035).
+                                        pass
                                     else:
-                                        # Phase 4–5: β_L drag (already set),
-                                        # cap lift at the equilibrium value.
+                                        # Phase 5 — equilibrium glide: cap
+                                        # lift so vehicle tracks h_eq(V).
                                         if lift_mag > eq_lift:
                                             lift_mag = eq_lift
                                 else:
