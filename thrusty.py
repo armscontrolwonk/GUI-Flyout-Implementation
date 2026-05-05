@@ -2112,6 +2112,42 @@ class RVEditorDialog(tk.Toplevel):
             row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
         self._dive_alt_var = _gfe(4, "Dive altitude:", _dive_alt, "km")
 
+        ttk.Separator(self._glider_frm, orient=tk.HORIZONTAL).grid(
+            row=5, column=0, columnspan=2, sticky='ew', pady=(8, 0))
+
+        _sched = (rv.glider_bank_schedule if rv else []) or []
+        self._bank_sched_var = tk.BooleanVar(value=bool(_sched))
+        ttk.Checkbutton(self._glider_frm, text="Bank schedule",
+                        variable=self._bank_sched_var,
+                        command=self._update_bank_state).grid(
+            row=6, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+
+        _bf = ttk.Frame(self._glider_frm)
+        _bf.grid(row=7, column=0, columnspan=2, sticky=tk.W)
+        self._bank_frm  = _bf
+        self._bank_vars = [{'start': tk.StringVar(value=""),
+                            'end':   tk.StringVar(value=""),
+                            'bank':  tk.StringVar(value="")}
+                           for _ in range(3)]
+        for _i, (_bs, _be, _bk) in enumerate(_sched[:3]):
+            self._bank_vars[_i]['start'].set(f"{_bs:.0f}")
+            self._bank_vars[_i]['end'].set(f"{_be:.0f}")
+            self._bank_vars[_i]['bank'].set(f"{_bk:.0f}")
+        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
+            ttk.Label(_bf, text=_hdr, foreground="#555555").grid(
+                row=0, column=_mc, padx=4, pady=(4, 1))
+        for _yr, _lbl, _key, _unit in [
+                (1, "Bank start:", "start", "s"),
+                (2, "Bank end:",   "end",   "s"),
+                (3, "Angle:",      "bank",  "°")]:
+            ttk.Label(_bf, text=_lbl).grid(
+                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+            for _mc, _bvars in enumerate(self._bank_vars, start=1):
+                ttk.Entry(_bf, textvariable=_bvars[_key], width=6).grid(
+                    row=_yr, column=_mc, padx=3, pady=1)
+            ttk.Label(_bf, text=_unit).grid(
+                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
+
         self._update_glider_state()
 
         # OK / Save to Library / Cancel
@@ -2130,6 +2166,13 @@ class RVEditorDialog(tk.Toplevel):
             self._glider_frm.pack(fill=tk.X)
         else:
             self._glider_frm.pack_forget()
+        self._update_bank_state()
+
+    def _update_bank_state(self):
+        if self._glider_var.get() and self._bank_sched_var.get():
+            self._bank_frm.grid()
+        else:
+            self._bank_frm.grid_remove()
 
     # ------------------------------------------------------------------
     def _calc_beta(self):
@@ -2279,12 +2322,26 @@ class RVEditorDialog(tk.Toplevel):
             LD = 0.0; g_max = 10.0; dive_alt = 30.0
             terminal = False; guidance = "equilibrium_glide"
 
+        bank_schedule = []
+        if glider_on and self._bank_sched_var.get():
+            for _bv in self._bank_vars:
+                _ts = _bv['start'].get().strip()
+                _te = _bv['end'].get().strip()
+                _bk = _bv['bank'].get().strip()
+                if _ts and _te and _bk:
+                    try:
+                        bank_schedule.append(
+                            (float(_ts), float(_te), float(_bk)))
+                    except ValueError:
+                        pass
+
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             glider_enabled=glider_on, glider_LD=LD,
             glider_guidance=guidance, glider_pullup_g_max=g_max,
             glider_terminal_dive=terminal, glider_terminal_alt_km=dive_alt,
+            glider_bank_schedule=bank_schedule,
         )
 
     def _ok(self):
@@ -6046,7 +6103,8 @@ class MissileFlyoutApp(tk.Tk):
             if is_debris:
                 return False
             return ('apogee' in e or 're-entry' in e or 'burnout' in e or
-                    ('ignition' in e and 'stage' in e) or 'jettison' in e)
+                    ('ignition' in e and 'stage' in e) or 'jettison' in e or
+                    'bank' in e)
 
         def _mk_pos(ms):
             if ms.get('is_debris') and 'impact_lat' in ms:
@@ -6277,7 +6335,8 @@ class MissileFlyoutApp(tk.Tk):
                     're-entry' in e or
                     'burnout'  in e or
                     ('ignition' in e and 'stage' in e) or
-                    'jettison'  in e)
+                    'jettison'  in e or
+                    'bank' in e)
 
         def _is_major(e, is_debris):
             return not is_debris

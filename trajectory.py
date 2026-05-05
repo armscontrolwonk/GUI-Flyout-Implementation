@@ -496,6 +496,10 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         #                        lift is used to rotate the
                         #                        velocity vector toward γ=0.
                         bank_rad = 0.0
+                        for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
+                            if _bt_s <= t <= _bt_e:
+                                bank_rad = np.radians(_bk_deg)
+                                break
                         if (_erv.glider_guidance == "equilibrium_glide"
                                 and np.dot(v_hat, r_hat) >= 0.0):
                             eq_lift = rv_mass * (g_mag - speed**2 / r_mag)
@@ -1202,6 +1206,22 @@ def integrate_trajectory(params: MissileParams,
                 _ym['event'] = f"{_lbl} end ({_yf:.1f}°)"
                 _insert_chrono(_ym)
             _prev_az_deg = _yf
+
+    # Bank-turn milestones
+    _erv_bk = effective_rv(params)
+    if (_erv_bk is not None and _erv_bk.glider_enabled
+            and _erv_bk.glider_bank_schedule):
+        for _bi, (_bs, _be, _bk) in enumerate(_erv_bk.glider_bank_schedule):
+            _lbl = (f"Bank {_bi + 1}" if len(_erv_bk.glider_bank_schedule) > 1
+                    else "Bank turn")
+            if _bs is not None and float(_bs) <= t_arr[-1]:
+                _bm = _milestone(float(_bs))
+                _bm['event'] = f"{_lbl} start ({_bk:+.0f}°)"
+                _insert_chrono(_bm)
+            if _be is not None and float(_be) <= t_arr[-1]:
+                _bm = _milestone(float(_be))
+                _bm['event'] = f"{_lbl} end"
+                _insert_chrono(_bm)
 
     # Re-entry interface — first downward crossing of 100 km (after apogee)
     REENTRY_ALT_M = 100_000.0
