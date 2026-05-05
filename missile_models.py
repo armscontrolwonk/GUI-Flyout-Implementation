@@ -232,6 +232,10 @@ class RVParams:
     glider_pullup_g_max:    float = 10.0
     glider_terminal_dive:   bool  = False
     glider_terminal_alt_km: float = 30.0
+    # Bank-turn schedule: list of (t_start_s, t_end_s, bank_deg) tuples.
+    # Positive bank = right turn; negative = left.  Up to 3 entries.
+    # Bank is applied during the glide phase only; terminal dive overrides.
+    glider_bank_schedule:   list  = field(default_factory=list)
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -248,6 +252,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_pullup_g_max':   rv.glider_pullup_g_max,
         'glider_terminal_dive':  rv.glider_terminal_dive,
         'glider_terminal_alt_km':rv.glider_terminal_alt_km,
+        'glider_bank_schedule':  rv.glider_bank_schedule,
     }
 
 
@@ -269,6 +274,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
+        glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
     )
 
 
