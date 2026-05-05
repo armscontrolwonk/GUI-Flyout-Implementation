@@ -3407,11 +3407,87 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(yf, text=_unit).grid(
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
 
-        # Row 11: Reset trajectory button — always visible
+        # ── Glider / HGV guidance ────────────────────────────────────
+        self._glider_main_var = tk.BooleanVar(value=False)
+        self._glider_main_chk = ttk.Checkbutton(
+            gf, text="Glider / HGV guidance",
+            variable=self._glider_main_var,
+            command=self._on_glider_main_toggled)
+        self._glider_main_chk.grid(row=11, column=0, columnspan=2,
+                                    sticky=tk.W, padx=8, pady=(0, 2))
+
+        # Row 12: glider detail frame
+        _gmf = ttk.Frame(gf)
+        self._glider_main_frame = _gmf
+
+        # L/D and pull-up g on one row
+        _gmf.columnconfigure(1, weight=1)
+        _r0 = ttk.Frame(_gmf)
+        _r0.grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        ttk.Label(_r0, text="L/D:").pack(side=tk.LEFT)
+        self._main_LD_var = tk.StringVar(value="2.5")
+        ttk.Entry(_r0, textvariable=self._main_LD_var, width=6).pack(side=tk.LEFT, padx=(2, 10))
+        ttk.Label(_r0, text="Pull-up g:").pack(side=tk.LEFT)
+        self._main_g_var = tk.StringVar(value="10")
+        ttk.Entry(_r0, textvariable=self._main_g_var, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Label(_r0, text="g").pack(side=tk.LEFT, padx=(0, 4))
+
+        # Guidance combobox
+        ttk.Label(_gmf, text="Guidance:").grid(
+            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+        self._main_guidance_var = tk.StringVar(value="Equilibrium glide (Acton)")
+        ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
+                     values=["Equilibrium glide (Acton)", "Skip-glide (natural phugoid)"],
+                     state="readonly", width=24).grid(
+            row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
+
+        # Terminal dive
+        _r2 = ttk.Frame(_gmf)
+        _r2.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        self._main_terminal_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_r2, text="Terminal dive below",
+                        variable=self._main_terminal_var).pack(side=tk.LEFT)
+        self._main_dive_alt_var = tk.StringVar(value="30")
+        ttk.Entry(_r2, textvariable=self._main_dive_alt_var, width=5).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_r2, text="km").pack(side=tk.LEFT)
+
+        # Bank schedule
+        ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
+            row=3, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+        self._main_bank_sched_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_gmf, text="Bank schedule",
+                        variable=self._main_bank_sched_var,
+                        command=self._on_main_bank_toggled).grid(
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
+        _mbf = ttk.Frame(_gmf)
+        _mbf.grid(row=5, column=0, columnspan=2, sticky=tk.W)
+        self._main_bank_frm = _mbf
+        self._main_bank_vars = [{'start': tk.StringVar(value=""),
+                                  'end':   tk.StringVar(value=""),
+                                  'bank':  tk.StringVar(value="")}
+                                 for _ in range(3)]
+        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
+            ttk.Label(_mbf, text=_hdr, foreground="#555555").grid(
+                row=0, column=_mc, padx=4, pady=(4, 1))
+        for _yr, _lbl, _key, _unit in [
+                (1, "Bank start:", "start", "s"),
+                (2, "Bank end:",   "end",   "s"),
+                (3, "Angle:",      "bank",  "°")]:
+            ttk.Label(_mbf, text=_lbl).grid(
+                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+            for _mc, _bvars in enumerate(self._main_bank_vars, start=1):
+                ttk.Entry(_mbf, textvariable=_bvars[_key], width=6).grid(
+                    row=_yr, column=_mc, padx=3, pady=1)
+            ttk.Label(_mbf, text=_unit).grid(
+                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
+        self._on_main_bank_toggled()   # sync hidden state
+
+        # Row 13: Reset trajectory button — always visible
         self._reset_traj_btn = ttk.Button(
             gf, text="Reset trajectory to defaults",
             command=self._reset_traj_profile)
-        self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
+        self._reset_traj_btn.grid(row=13, column=0, columnspan=2,
                                   sticky=tk.EW, padx=8, pady=(4, 2))
 
         # Initialise guidance-specific row visibility for the default mode.
@@ -3420,6 +3496,7 @@ class MissileFlyoutApp(tk.Tk):
         self._plan_orbit_btn.grid_forget()
         self._adv_pitch_chk.grid_forget()
         self._adv_yaw_chk.grid_forget()
+        self._glider_main_frame.grid_remove()
         self._update_guidance_labels("gravity_turn")
 
         # ── Engine cutoff ─────────────────────────────────────────────
@@ -3916,6 +3993,19 @@ class MissileFlyoutApp(tk.Tk):
                                       sticky=tk.EW, padx=0, pady=(0, 4))
         else:
             self._adv_yaw_frame.grid_forget()
+
+    def _on_glider_main_toggled(self):
+        if self._glider_main_var.get():
+            self._glider_main_frame.grid(row=12, column=0, columnspan=2,
+                                          sticky=tk.EW, padx=0, pady=(0, 4))
+        else:
+            self._glider_main_frame.grid_forget()
+
+    def _on_main_bank_toggled(self):
+        if self._glider_main_var.get() and self._main_bank_sched_var.get():
+            self._main_bank_frm.grid()
+        else:
+            self._main_bank_frm.grid_remove()
 
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current missile."""
@@ -4778,6 +4868,55 @@ class MissileFlyoutApp(tk.Tk):
         except (ValueError, AttributeError):
             launch_elevation_deg = 90.0
         missile.launch_elevation_deg = launch_elevation_deg
+
+        # Glider / HGV guidance — override RV params from main panel
+        if getattr(self, '_glider_main_var', None) and self._glider_main_var.get():
+            import dataclasses as _dc
+            missile = copy.deepcopy(missile)
+            _g_erv = effective_rv(missile)
+            if _g_erv is not None:
+                try:
+                    _g_ld = float(self._main_LD_var.get())
+                except ValueError:
+                    _g_ld = 0.0
+                try:
+                    _g_gmax = float(self._main_g_var.get())
+                except ValueError:
+                    _g_gmax = 10.0
+                try:
+                    _g_dalt = float(self._main_dive_alt_var.get())
+                except ValueError:
+                    _g_dalt = 30.0
+                _g_guid_label = self._main_guidance_var.get()
+                _g_guid_key = ("skip_glide"
+                               if "skip" in _g_guid_label.lower()
+                               else "equilibrium_glide")
+                _g_terminal = self._main_terminal_var.get()
+                _g_bank = []
+                if self._main_bank_sched_var.get():
+                    for _bv in self._main_bank_vars:
+                        try:
+                            _g_bank.append((float(_bv['start'].get()),
+                                            float(_bv['end'].get()),
+                                            float(_bv['bank'].get())))
+                        except ValueError:
+                            pass
+                _g_new_rv = _dc.replace(
+                    _g_erv,
+                    glider_enabled=True,
+                    glider_LD=_g_ld,
+                    glider_guidance=_g_guid_key,
+                    glider_pullup_g_max=_g_gmax,
+                    glider_terminal_dive=_g_terminal,
+                    glider_terminal_alt_km=_g_dalt,
+                    glider_bank_schedule=_g_bank,
+                )
+                _g_node = missile
+                while _g_node is not None:
+                    if _g_node.rv is not None:
+                        _g_node.rv = _g_new_rv
+                        break
+                    _g_node = _g_node.stage2
 
         return (missile, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
