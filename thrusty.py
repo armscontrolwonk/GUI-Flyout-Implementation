@@ -2062,94 +2062,6 @@ class RVEditorDialog(tk.Toplevel):
             value=f"{rv.length_m:.2f}" if rv else "2.0")
         _entry(5, self._len_var, width=10)
 
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
-
-        # Maneuvering / glider toggle
-        self._glider_var = tk.BooleanVar(value=rv.glider_enabled if rv else False)
-        ttk.Checkbutton(self, text="Maneuvering (glider / HGV)",
-                        variable=self._glider_var,
-                        command=self._update_glider_state).pack(
-            anchor=tk.W, padx=12, pady=(8, 0))
-
-        self._glider_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
-        self._glider_frm.pack(fill=tk.X)
-        self._glider_frm.columnconfigure(1, weight=1)
-
-        def _gfe(row, label, default, unit=""):
-            ttk.Label(self._glider_frm, text=label).grid(
-                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-            var = tk.StringVar(value=default)
-            inner = ttk.Frame(self._glider_frm)
-            inner.grid(row=row, column=1, sticky=tk.W, pady=2)
-            ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
-            if unit:
-                ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
-            return var
-
-        _LD       = f"{rv.glider_LD:.2f}"             if (rv and rv.glider_LD > 0) else "2.5"
-        _g        = f"{rv.glider_pullup_g_max:.0f}"    if rv else "10"
-        _dive_alt = f"{rv.glider_terminal_alt_km:.0f}" if rv else "30"
-        _guid_key = (rv.glider_guidance if rv else "equilibrium_glide")
-        if _guid_key not in self._GUIDANCE_LABELS:
-            _guid_key = "equilibrium_glide"
-
-        self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
-        self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
-
-        ttk.Label(self._glider_frm, text="Guidance:").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        self._guidance_var = tk.StringVar(value=self._GUIDANCE_LABELS[_guid_key])
-        ttk.Combobox(self._glider_frm, textvariable=self._guidance_var,
-                     values=list(self._GUIDANCE_LABELS.values()),
-                     state="readonly", width=30).grid(
-            row=2, column=1, sticky=tk.W, pady=2)
-
-        self._terminal_var = tk.BooleanVar(
-            value=rv.glider_terminal_dive if rv else False)
-        ttk.Checkbutton(self._glider_frm,
-                        text="Terminal dive (invert lift below)",
-                        variable=self._terminal_var).grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
-        self._dive_alt_var = _gfe(4, "Dive altitude:", _dive_alt, "km")
-
-        ttk.Separator(self._glider_frm, orient=tk.HORIZONTAL).grid(
-            row=5, column=0, columnspan=2, sticky='ew', pady=(8, 0))
-
-        _sched = (rv.glider_bank_schedule if rv else []) or []
-        self._bank_sched_var = tk.BooleanVar(value=bool(_sched))
-        ttk.Checkbutton(self._glider_frm, text="Bank schedule",
-                        variable=self._bank_sched_var,
-                        command=self._update_bank_state).grid(
-            row=6, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
-
-        _bf = ttk.Frame(self._glider_frm)
-        _bf.grid(row=7, column=0, columnspan=2, sticky=tk.W)
-        self._bank_frm  = _bf
-        self._bank_vars = [{'start': tk.StringVar(value=""),
-                            'end':   tk.StringVar(value=""),
-                            'bank':  tk.StringVar(value="")}
-                           for _ in range(3)]
-        for _i, (_bs, _be, _bk) in enumerate(_sched[:3]):
-            self._bank_vars[_i]['start'].set(f"{_bs:.0f}")
-            self._bank_vars[_i]['end'].set(f"{_be:.0f}")
-            self._bank_vars[_i]['bank'].set(f"{_bk:.0f}")
-        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
-            ttk.Label(_bf, text=_hdr, foreground="#555555").grid(
-                row=0, column=_mc, padx=4, pady=(4, 1))
-        for _yr, _lbl, _key, _unit in [
-                (1, "Bank start:", "start", "s"),
-                (2, "Bank end:",   "end",   "s"),
-                (3, "Angle:",      "bank",  "°")]:
-            ttk.Label(_bf, text=_lbl).grid(
-                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-            for _mc, _bvars in enumerate(self._bank_vars, start=1):
-                ttk.Entry(_bf, textvariable=_bvars[_key], width=6).grid(
-                    row=_yr, column=_mc, padx=3, pady=1)
-            ttk.Label(_bf, text=_unit).grid(
-                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
-
-        self._update_glider_state()
-
         # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
         btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
@@ -2159,20 +2071,6 @@ class RVEditorDialog(tk.Toplevel):
                    command=self._save_to_library).pack(side=tk.LEFT, padx=6)
         ttk.Button(btn_frm, text="Cancel", command=self.destroy).pack(
             side=tk.LEFT, padx=6)
-
-    # ------------------------------------------------------------------
-    def _update_glider_state(self):
-        if self._glider_var.get():
-            self._glider_frm.pack(fill=tk.X)
-        else:
-            self._glider_frm.pack_forget()
-        self._update_bank_state()
-
-    def _update_bank_state(self):
-        if self._glider_var.get() and self._bank_sched_var.get():
-            self._bank_frm.grid()
-        else:
-            self._bank_frm.grid_remove()
 
     # ------------------------------------------------------------------
     def _calc_beta(self):
@@ -2304,44 +2202,9 @@ class RVEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
-        glider_on = bool(self._glider_var.get())
-        if glider_on:
-            try:
-                LD       = max(0.0, float(self._LD_var.get()))
-                g_max    = max(0.0, float(self._g_var.get()))
-                dive_alt = max(0.0, float(self._dive_alt_var.get()))
-            except ValueError:
-                messagebox.showerror("Invalid input",
-                                     "Glider fields must be numbers.", parent=self)
-                return None
-            terminal = bool(self._terminal_var.get())
-            _glabel  = self._guidance_var.get()
-            guidance = next((k for k, v in self._GUIDANCE_LABELS.items()
-                             if v == _glabel), "equilibrium_glide")
-        else:
-            LD = 0.0; g_max = 10.0; dive_alt = 30.0
-            terminal = False; guidance = "equilibrium_glide"
-
-        bank_schedule = []
-        if glider_on and self._bank_sched_var.get():
-            for _bv in self._bank_vars:
-                _ts = _bv['start'].get().strip()
-                _te = _bv['end'].get().strip()
-                _bk = _bv['bank'].get().strip()
-                if _ts and _te and _bk:
-                    try:
-                        bank_schedule.append(
-                            (float(_ts), float(_te), float(_bk)))
-                    except ValueError:
-                        pass
-
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
-            glider_enabled=glider_on, glider_LD=LD,
-            glider_guidance=guidance, glider_pullup_g_max=g_max,
-            glider_terminal_dive=terminal, glider_terminal_alt_km=dive_alt,
-            glider_bank_schedule=bank_schedule,
         )
 
     def _ok(self):
@@ -3964,6 +3827,33 @@ class MissileFlyoutApp(tk.Tk):
                     if 'stop'     in saved: yv['stop'].set(saved['stop'])
                     if 'final_az' in saved: yv['final_az'].set(saved['final_az'])
 
+        # Seed glider fields from RV if present; do not override if already set
+        _p_erv = effective_rv(p)
+        if _p_erv is not None and _p_erv.glider_enabled and hasattr(self, '_glider_main_var'):
+            self._glider_main_var.set(True)
+            self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
+            self._main_g_var.set(f"{_p_erv.glider_pullup_g_max:.0f}")
+            self._main_guidance_var.set(
+                "Skip-glide (natural phugoid)"
+                if _p_erv.glider_guidance == "skip_glide"
+                else "Equilibrium glide (Acton)")
+            self._main_terminal_var.set(_p_erv.glider_terminal_dive)
+            self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
+            _sched = _p_erv.glider_bank_schedule or []
+            self._main_bank_sched_var.set(bool(_sched))
+            for _i, _bvars in enumerate(self._main_bank_vars):
+                if _i < len(_sched):
+                    _bs, _be, _bk = _sched[_i]
+                    _bvars['start'].set(f"{_bs:.0f}")
+                    _bvars['end'].set(f"{_be:.0f}")
+                    _bvars['bank'].set(f"{_bk:.0f}")
+                else:
+                    _bvars['start'].set('')
+                    _bvars['end'].set('')
+                    _bvars['bank'].set('')
+            self._on_glider_main_toggled()
+            self._on_main_bank_toggled()
+
     # ------------------------------------------------------------------
     # Advanced per-stage pitch program
     # ------------------------------------------------------------------
@@ -5554,6 +5444,17 @@ class MissileFlyoutApp(tk.Tk):
                  'final_az': v['final_az'].get()}
                 for v in self._yaw_vars
             ],
+            'glider_on':  getattr(self, '_glider_main_var', tk.BooleanVar()).get(),
+            'glider_LD':  getattr(self, '_main_LD_var',     tk.StringVar(value='2.5')).get(),
+            'glider_g':   getattr(self, '_main_g_var',      tk.StringVar(value='10')).get(),
+            'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
+            'glider_terminal': getattr(self, '_main_terminal_var', tk.BooleanVar()).get(),
+            'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='30')).get(),
+            'glider_bank_on':  getattr(self, '_main_bank_sched_var', tk.BooleanVar()).get(),
+            'glider_banks': [
+                {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
+                for v in getattr(self, '_main_bank_vars', [])
+            ],
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -5610,6 +5511,22 @@ class MissileFlyoutApp(tk.Tk):
                 row['angle'].set(ov.get('angle', ''))
                 if 'coast' in row:
                     row['coast'].set(ov.get('coast', ''))
+        if hasattr(self, '_glider_main_var'):
+            self._glider_main_var.set(bool(meta.get('glider_on', False)))
+            self._main_LD_var.set(meta.get('glider_LD', '2.5'))
+            self._main_g_var.set(meta.get('glider_g', '10'))
+            self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Acton)'))
+            self._main_terminal_var.set(bool(meta.get('glider_terminal', False)))
+            self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
+            self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))
+            saved_banks = meta.get('glider_banks', [])
+            for _i, _bvars in enumerate(self._main_bank_vars):
+                _bd = saved_banks[_i] if _i < len(saved_banks) else {}
+                _bvars['start'].set(_bd.get('start', ''))
+                _bvars['end'].set(_bd.get('end', ''))
+                _bvars['bank'].set(_bd.get('bank', ''))
+            self._on_glider_main_toggled()
+            self._on_main_bank_toggled()
 
     def _save_trajectory(self):
         if self._result is None:
