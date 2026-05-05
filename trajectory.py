@@ -90,6 +90,23 @@ _HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
                            1.18e-12, 5.21e-13, 1.14e-13, 3.07e-14, 1.14e-14,
                            5.24e-15, 2.95e-15])
 
+# Closed-loop gains for Acton-style equilibrium glide.  In Phase 5
+# (Acton 2021 pp. 198–202) the steady glide assumes dθ/dt = 0, lift
+# cancels (g − V²/r) and the vehicle rides Acton's altitude profile
+#     ρ_eq(v) = 2β·(g − V²/r) / (V² · L/D)   (Eq. p. 199)
+# The underlying EOM however have phugoid oscillations and the
+# vehicle re-enters the atmosphere far above ρ_eq.  We command lift
+#     L_cmd = m·(g − V²/r) · (1 − K_γ·sin γ − K_h·(h − h_eq)/H)
+# where h_eq = H · ln(ρ_0 / ρ_eq) and H ≈ 7.1 km is the scale height.
+# Above the equilibrium altitude the K_h term drives the command to
+# zero (no premature lift, mimicking Acton's Phase-3 direct re-entry);
+# near h_eq the γ term takes over and holds γ → 0.  The aerodynamic
+# ceiling L_max = drag · L/D physically caps what can be produced.
+ACTON_GLIDE_GAMMA_GAIN = 5.0
+ACTON_GLIDE_ALT_GAIN   = 1.0
+ACTON_SCALE_HEIGHT_M   = 7100.0
+ACTON_SEA_LEVEL_RHO    = 1.225
+
 
 def _atm_density_high(alt_km: float) -> float:
     """
@@ -485,16 +502,21 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        # Two glide modes (Acton 2021).  No turns yet — bank
-                        # is held at 0 in both modes.
-                        #   • skip_glide:        full lift, natural EOM →
-                        #                        phugoid oscillations.
-                        #   • equilibrium_glide: once γ reaches 0 (Phase 5),
-                        #                        cap lift at L = m(g − V²/r)
-                        #                        so the vehicle holds h_EG.
-                        #                        During pull-up (γ<0), full
-                        #                        lift is used to rotate the
-                        #                        velocity vector toward γ=0.
+                        # Two glide modes (Acton 2021, pp. 198–202).  No
+                        # turns yet — bank is held at 0 in both modes.
+                        #   • skip_glide:        full lift, natural EOM
+                        #                        → phugoid oscillations.
+                        #   • equilibrium_glide: closed-loop tracking
+                        #     of Acton's altitude profile h_eq(v) plus
+                        #     γ-restoring term.  Above h_eq the K_h term
+                        #     suppresses lift (≈ Phase-3 direct re-entry);
+                        #     near h_eq the K_γ term holds γ → 0
+                        #     (Phase-5 steady glide), recovering Eq. 1's
+                        #     L/D-linear range scaling.  During Phase 4
+                        #     (γ ≈ −θ₂ near h_eq) the command exceeds
+                        #     the aerodynamic ceiling so the vehicle
+                        #     saturates at full L/D, matching Acton's
+                        #     pull-up arc R = 2β·D/(ρ·L).
                         if _erv.glider_guidance == "azimuth_command":
                             # Proportional heading controller.
                             # Project ECEF velocity onto local ENU to get
@@ -519,16 +541,43 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 if _bt_s <= t <= _bt_e:
                                     bank_rad = np.radians(_bk_deg)
                                     break
-                        if (_erv.glider_guidance == "equilibrium_glide"
-                                and np.dot(v_hat, r_hat) >= 0.0):
-                            # Centripetal term requires inertial (ECI) speed,
-                            # not ECEF airspeed.
+                        if _erv.glider_guidance == "equilibrium_glide":
+                            # Acton closed-loop guidance:  drive lift to
+                            #   m·(g−V²/r) · (1 − K_γ·sin γ − K_h·Δh/H)
+                            # so the vehicle is pulled toward Acton's
+                            # altitude profile h_eq(v) with γ → 0.
+                            # Centripetal uses inertial (ECI) speed;
+                            # aerodynamic lift_mag (= drag · L/D, ECEF
+                            # airspeed) physically caps what can be
+                            # produced, giving saturated full-L/D pull-up
+                            # and modulated steady glide from one rule.
+                            sin_gamma = float(np.dot(v_hat, r_hat))
                             _v_iner = vel + np.cross(
                                 np.array([0.0, 0.0, OMEGA_EARTH]), pos)
-                            eq_lift = rv_mass * (
-                                g_mag - np.dot(_v_iner, _v_iner) / r_mag)
-                            if eq_lift < lift_mag:
-                                lift_mag = max(0.0, eq_lift)
+                            v2_iner = float(np.dot(_v_iner, _v_iner))
+                            radial_acc = g_mag - v2_iner / r_mag
+                            eq_lift = rv_mass * max(0.0, radial_acc)
+                            # Acton's Phase-5 equilibrium altitude:
+                            # ρ_eq = 2β·(g−V²/r) / (V² · L/D)
+                            if radial_acc > 0.0 and v2_iner > 0.0:
+                                rho_eq = (2.0 * _erv.beta_kg_m2 * radial_acc
+                                          / (v2_iner * _erv.glider_LD))
+                                if rho_eq > 0.0:
+                                    h_eq = ACTON_SCALE_HEIGHT_M * np.log(
+                                        ACTON_SEA_LEVEL_RHO / rho_eq)
+                                    h_err = (alt - h_eq) / ACTON_SCALE_HEIGHT_M
+                                else:
+                                    h_err = 0.0
+                            else:
+                                # Above orbital speed: no equilibrium altitude.
+                                h_err = 0.0
+                            cmd_lift = eq_lift * (
+                                1.0
+                                - ACTON_GLIDE_GAMMA_GAIN * sin_gamma
+                                - ACTON_GLIDE_ALT_GAIN * h_err)
+                            cmd_lift = max(0.0, cmd_lift)
+                            if lift_mag > cmd_lift:
+                                lift_mag = cmd_lift
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
