@@ -495,11 +495,30 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         #                        During pull-up (γ<0), full
                         #                        lift is used to rotate the
                         #                        velocity vector toward γ=0.
-                        bank_rad = 0.0
-                        for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
-                            if _bt_s <= t <= _bt_e:
-                                bank_rad = np.radians(_bk_deg)
-                                break
+                        if _erv.glider_guidance == "azimuth_command":
+                            # Proportional heading controller.
+                            # Project ECEF velocity onto local ENU to get
+                            # current ground-track azimuth, then bank
+                            # proportional to the heading error (capped at
+                            # max_bank).  Equilibrium-glide lift cap still
+                            # applies on top of this.
+                            _sla = np.sin(lat); _cla = np.cos(lat)
+                            _slo = np.sin(lon); _clo = np.cos(lon)
+                            _ve = -_slo * vel[0] + _clo * vel[1]
+                            _vn = (-_sla * _clo * vel[0]
+                                   - _sla * _slo * vel[1]
+                                   + _cla * vel[2])
+                            _cur_az = np.arctan2(_ve, _vn)
+                            _tgt_az = np.radians(_erv.glider_target_az_deg)
+                            _err = ((_tgt_az - _cur_az) + np.pi) % (2*np.pi) - np.pi
+                            _mb  = np.radians(_erv.glider_max_bank_deg)
+                            bank_rad = float(np.clip(_err, -_mb, _mb))
+                        else:
+                            bank_rad = 0.0
+                            for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
+                                if _bt_s <= t <= _bt_e:
+                                    bank_rad = np.radians(_bk_deg)
+                                    break
                         if (_erv.glider_guidance == "equilibrium_glide"
                                 and np.dot(v_hat, r_hat) >= 0.0):
                             # Centripetal term requires inertial (ECI) speed,
