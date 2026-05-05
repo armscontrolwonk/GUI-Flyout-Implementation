@@ -1245,81 +1245,85 @@ def integrate_trajectory(params: MissileParams,
     #   • Max-G          (peak structural load factor during glide)
     #   • Terminal dive  (downward crossing of the user-set dive altitude)
     _erv_ms = effective_rv(params)
-    if (_erv_ms is not None and _erv_ms.glider_enabled and _erv_ms.glider_LD > 0
-            and np.max(alts) > REENTRY_ALT_M):
-        _re_t = _alt_crossing(REENTRY_ALT_M, ascending=False)
-        if _re_t is not None:
-            _re_idx = int(np.searchsorted(t_arr, _re_t))
-            if _re_idx < len(alts) - 2:
-                # Altitude extrema after re-entry: alternating minima
-                # (pull-ups) and maxima (apexes / glide tops).
-                _post = alts[_re_idx:]
-                _dh   = np.diff(_post)
-                _sign = np.sign(_dh)
-                _ext_locs = np.where(np.diff(_sign) != 0)[0] + 1
-                pus_count = 0
-                apx_count = 0
-                _last_alt = None
-                for ic in _ext_locs:
-                    if not (1 <= ic < len(_post) - 1):
-                        continue
-                    is_min = _post[ic-1] > _post[ic] and _post[ic] < _post[ic+1]
-                    is_max = _post[ic-1] < _post[ic] and _post[ic] > _post[ic+1]
-                    if not (is_min or is_max):
-                        continue
-                    # Suppress sub-km numerical wiggles in equilibrium glide.
-                    if _last_alt is not None and abs(_post[ic] - _last_alt) < 1000.0:
-                        continue
-                    _last_alt = _post[ic]
-                    full_idx = _re_idx + ic
-                    _row = _milestone(t_arr[full_idx])
-                    if is_min:
-                        pus_count += 1
-                        if pus_count == 1:
-                            _row['event'] = (f"Pull-up start "
-                                             f"({alts[full_idx]/1000:.0f} km)")
-                            _insert_chrono(_row)
-                    else:
-                        apx_count += 1
-                        if apx_count == 1:
-                            _row['event'] = (f"Glide start "
-                                             f"({alts[full_idx]/1000:.0f} km)")
-                            _insert_chrono(_row)
-                            break  # only emit the primary pull-up/glide pair
-
-                # Peak heating: Sutton-Graves stagnation-point rate using a
-                # conventional 5 cm nose radius.  The peak time is independent
-                # of RN; the reported MW/m² scales as 1/sqrt(RN).
-                _RN = 0.05
-                _glide_a = alts[_re_idx:]
-                # Sutton-Graves uses airspeed (ECEF), not inertial speed,
-                # because the atmosphere co-rotates with Earth.
-                _glide_v = speeds[_re_idx:]
-                _rho_g   = np.array([atmosphere(a)[2] for a in _glide_a])
-                _q_dot   = 1.7415e-4 * np.sqrt(_rho_g / _RN) * _glide_v ** 3
-                if len(_q_dot) and np.max(_q_dot) > 0:
-                    _ipk = int(np.argmax(_q_dot))
-                    _row = _milestone(t_arr[_re_idx + _ipk])
-                    _row['event'] = (f"Peak heating "
-                                     f"({_q_dot[_ipk]/1e6:.1f} MW/m²)")
-                    _insert_chrono(_row)
-
-                # Max structural load factor n = |a_proper| / g0, where
-                # a_proper = d v_inertial / d t − local gravity.  Captures
-                # both transverse (lift) and longitudinal (drag) loads.
-                _glide_pos = pos_arr[_re_idx:]
-                _glide_iv  = inertial_vel_arr[_re_idx:]
-                _glide_t   = t_arr[_re_idx:]
-                if len(_glide_t) >= 3:
-                    _iacc = np.gradient(_glide_iv, _glide_t, axis=0)
-                    _r_n  = np.linalg.norm(_glide_pos, axis=1)
-                    _g_v  = -GM * _glide_pos / _r_n[:, None]**3
-                    _n    = np.linalg.norm(_iacc - _g_v, axis=1) / 9.80665
-                    if len(_n) and np.max(_n) > 0:
-                        _img = int(np.argmax(_n))
-                        _row = _milestone(t_arr[_re_idx + _img])
-                        _row['event'] = f"Max-G ({_n[_img]:.1f} g)"
+    if _erv_ms is not None and _erv_ms.glider_enabled and _erv_ms.glider_LD > 0:
+        # For trajectories that reach space use the 100 km descent crossing;
+        # for sub-100 km HGV profiles use apogee as the glide-phase start.
+        if np.max(alts) > REENTRY_ALT_M:
+            _re_t   = _alt_crossing(REENTRY_ALT_M, ascending=False)
+            _re_idx = (int(np.searchsorted(t_arr, _re_t))
+                       if _re_t is not None else apo_idx)
+        else:
+            _re_idx = apo_idx
+        if _re_idx < len(alts) - 2:
+            # Altitude extrema after re-entry: alternating minima
+            # (pull-ups) and maxima (apexes / glide tops).
+            _post = alts[_re_idx:]
+            _dh   = np.diff(_post)
+            _sign = np.sign(_dh)
+            _ext_locs = np.where(np.diff(_sign) != 0)[0] + 1
+            pus_count = 0
+            apx_count = 0
+            _last_alt = None
+            for ic in _ext_locs:
+                if not (1 <= ic < len(_post) - 1):
+                    continue
+                is_min = _post[ic-1] > _post[ic] and _post[ic] < _post[ic+1]
+                is_max = _post[ic-1] < _post[ic] and _post[ic] > _post[ic+1]
+                if not (is_min or is_max):
+                    continue
+                # Suppress sub-km numerical wiggles in equilibrium glide.
+                if _last_alt is not None and abs(_post[ic] - _last_alt) < 1000.0:
+                    continue
+                _last_alt = _post[ic]
+                full_idx = _re_idx + ic
+                _row = _milestone(t_arr[full_idx])
+                if is_min:
+                    pus_count += 1
+                    if pus_count == 1:
+                        _row['event'] = (f"Pull-up start "
+                                         f"({alts[full_idx]/1000:.0f} km)")
                         _insert_chrono(_row)
+                else:
+                    apx_count += 1
+                    if apx_count == 1:
+                        _row['event'] = (f"Glide start "
+                                         f"({alts[full_idx]/1000:.0f} km)")
+                        _insert_chrono(_row)
+                        break  # only emit the primary pull-up/glide pair
+
+            # Peak heating: Sutton-Graves stagnation-point rate using a
+            # conventional 5 cm nose radius.  The peak time is independent
+            # of RN; the reported MW/m² scales as 1/sqrt(RN).
+            _RN = 0.05
+            _glide_a = alts[_re_idx:]
+            # Sutton-Graves uses airspeed (ECEF), not inertial speed,
+            # because the atmosphere co-rotates with Earth.
+            _glide_v = speeds[_re_idx:]
+            _rho_g   = np.array([atmosphere(a)[2] for a in _glide_a])
+            _q_dot   = 1.7415e-4 * np.sqrt(_rho_g / _RN) * _glide_v ** 3
+            if len(_q_dot) and np.max(_q_dot) > 0:
+                _ipk = int(np.argmax(_q_dot))
+                _row = _milestone(t_arr[_re_idx + _ipk])
+                _row['event'] = (f"Peak heating "
+                                 f"({_q_dot[_ipk]/1e6:.1f} MW/m²)")
+                _insert_chrono(_row)
+
+            # Max structural load factor n = |a_proper| / g0, where
+            # a_proper = d v_inertial / d t − local gravity.  Captures
+            # both transverse (lift) and longitudinal (drag) loads.
+            _glide_pos = pos_arr[_re_idx:]
+            _glide_iv  = inertial_vel_arr[_re_idx:]
+            _glide_t   = t_arr[_re_idx:]
+            if len(_glide_t) >= 3:
+                _iacc = np.gradient(_glide_iv, _glide_t, axis=0)
+                _r_n  = np.linalg.norm(_glide_pos, axis=1)
+                _g_v  = -GM * _glide_pos / _r_n[:, None]**3
+                _n    = np.linalg.norm(_iacc - _g_v, axis=1) / 9.80665
+                if len(_n) and np.max(_n) > 0:
+                    _img = int(np.argmax(_n))
+                    _row = _milestone(t_arr[_re_idx + _img])
+                    _row['event'] = f"Max-G ({_n[_img]:.1f} g)"
+                    _insert_chrono(_row)
         if (_erv_ms.glider_terminal_dive and _erv_ms.glider_terminal_alt_km > 0):
             _td_m = _erv_ms.glider_terminal_alt_km * 1000.0
             if np.max(alts) > _td_m:
