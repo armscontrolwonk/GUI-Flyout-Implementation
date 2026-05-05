@@ -1231,11 +1231,144 @@ def _aur_hgb():
     return p
 
 
+def _minotaur_4_htv2():
+    # Minotaur-IV Lite + HTV-2 hypersonic glide vehicle.
+    #
+    # Validation reference: Wright, "Analysis of the Boost Phase of the HTV-2
+    # Hypersonic Glider Tests", Science & Global Security 23 (2015): 220–229.
+    # Stage parameters from Wright Table 2 (sourced from Orbital ATK's
+    # Minotaur IV Users Guide and spacelaunchreport.com).
+    #
+    # Three solid-fuel Peacekeeper stages (SR-118 / SR-119 / SR-120) carry a
+    # 1000 kg HTV-2 glide body (mass derived in Wright p. 222 by iterative
+    # fit to the stated pierce-point conditions and stage splashdown zones).
+    #
+    # This model defaults to Trajectory B (no dogleg, full thrust): the
+    # stage 3 burn delivers the maximum-energy pierce point.  Wright's
+    # Trajectory A (dogleg consuming ~25 % of stage-3 ΔV) can be modelled by
+    # cutting stage-3 thrust to ~75 % via the RV/Stage editor.
+    #
+    # Wright reference pierce-point conditions (Table 1, 100 km altitude):
+    #     Trajectory A: t = 435 s, V = 6.00 km/s, γ = −3.00°
+    #     Trajectory B: t = 376 s, V = 7.16 km/s, γ = −5.03°
+    # Wright stage-burnout snapshots:
+    #     S1 burnout: 87° elev, 1.4 km/s, 32 km
+    #     S2 burnout: 10° elev, 3.0 km/s
+    #     S3 burnout (Traj B): 0.8° elev, 7.1 km/s, 110 km
+    #
+    # Launch site: SLC-8, Vandenberg AFB (34.5764°N, 120.6322°W).
+    G_KGF_TO_N = 9.806_65   # 1 tonne-force = 9806.65 N
+
+    # Mission timeline (mass timestamps for stage_turn_*).
+    BURN_S1 = 56.4
+    BURN_S2 = 60.7
+    BURN_S3 = 72.0
+    T_S2    = BURN_S1                 # stage-2 ignition time
+    T_S3    = BURN_S1 + BURN_S2       # stage-3 ignition time
+
+    # Stage 3 — SR-120 (vacuum performance).  Carries HTV-2 + 0.8 t of
+    # residual structural mass (interstages, GCAA, payload-adapter module,
+    # per Wright p. 224).  That structural mass is bundled with the SR-120
+    # casing as debris at HGV separation.
+    stage3 = MissileParams(
+        name="SR-120 (Stage 3)",
+        mass_initial=7710 + 800 + 1000,    # wet S3 + structural + HTV-2
+        mass_propellant=7070,
+        mass_final=640 + 800,              # SR-120 dry shell + structural debris
+        diameter_m=2.34,
+        length_m=2.4,
+        thrust_N=29.48 * 1000.0 * G_KGF_TO_N,   # 29.48 t-force ≈ 289 kN (vac)
+        burn_time_s=BURN_S3,
+        isp_s=300.0,
+        nozzle_exit_area_m2=0.0,           # vacuum stage — no atm correction
+        guidance="gravity_turn",
+        burnout_angle_deg=0.8,
+        loft_angle_rate_deg_s=0.5,
+        stage_turn_start_s=T_S3,
+        stage_turn_stop_s=T_S3 + 28.0,     # rotate from 10° to 0.8° in 28 s
+        stage_burnout_angle_deg=0.8,
+        coast_time_s=0.0,
+        solid_motor=True,
+        mach_table=[],
+        cd_table=[],
+    )
+
+    # Stage 2 — SR-119 (vacuum performance).
+    stage2 = MissileParams(
+        name="SR-119 (Stage 2)",
+        mass_initial=27670 + stage3.mass_initial,   # wet S2 + everything above
+        mass_propellant=24490,
+        mass_final=3180,                   # SR-119 dry shell, jettisoned
+        diameter_m=2.34,
+        length_m=4.0,
+        thrust_N=124.7 * 1000.0 * G_KGF_TO_N,   # 124.7 t-force ≈ 1.22 MN (vac)
+        burn_time_s=BURN_S2,
+        isp_s=309.0,
+        nozzle_exit_area_m2=0.0,
+        guidance="gravity_turn",
+        burnout_angle_deg=10.0,
+        loft_angle_rate_deg_s=1.3,
+        stage_turn_start_s=T_S2,
+        stage_turn_stop_s=T_S2 + BURN_S2,  # pitch 87° → 10° across full burn
+        stage_burnout_angle_deg=10.0,
+        coast_time_s=0.0,
+        solid_motor=True,
+        stage2=stage3,
+        mach_table=[],
+        cd_table=[],
+    )
+
+    # Stage 1 — SR-118 (sea-level → vacuum thrust correction).
+    return MissileParams(
+        name="Minotaur-IV + HTV-2",
+        mass_initial=48990 + stage2.mass_initial + 450,  # +450 kg fairing
+        mass_propellant=45370,
+        mass_final=3620,
+        diameter_m=2.34,
+        length_m=8.5,
+        # Wright Table 2 lists 209 t (sea level) and 226.8 t (vacuum); the
+        # nozzle-exit area below produces the correct altitude-thrust law.
+        thrust_N=226.8 * 1000.0 * G_KGF_TO_N,   # vacuum thrust
+        burn_time_s=BURN_S1,
+        isp_s=282.0,                       # vacuum Isp (Wright Table 2)
+        nozzle_exit_area_m2=1.7,           # Wright Eq. 3 derivation, p. 228
+        guidance="gravity_turn",
+        burnout_angle_deg=87.0,            # 3° from vertical (Wright)
+        loft_angle_rate_deg_s=0.6,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=5.0,             # 90° → 87° in 5 s, then hold
+        stage_burnout_angle_deg=87.0,
+        coast_time_s=0.0,
+        solid_motor=True,
+        # Payload fairing — jettisoned during S2 burn at 50 km (Wright p. 226).
+        shroud_mass_kg=450.0,
+        shroud_jettison_alt_km=50.0,
+        shroud_diameter_m=2.34,
+        shroud_length_m=4.0,
+        # HTV-2 glide vehicle — Acton 2021 Table 3 fit values.
+        payload_kg=1000.0,
+        rv_separates=True,
+        stage2=stage2,
+        rv=RVParams(
+            name="HTV-2",
+            mass_kg=1000.0,
+            beta_kg_m2=13_000.0,           # Acton β_L for HTV-2
+            shape="cone",
+            glider_enabled=True,
+            glider_LD=2.6,                 # Acton L/D for HTV-2
+            glider_guidance="equilibrium_glide",   # Tracy/Acton
+        ),
+        mach_table=[],
+        cd_table=[],
+    )
+
+
 MISSILE_DB = {
     # Packaged defaults — always available.
     # Additional missiles are loaded at runtime from custom_missiles.json
     # via _load_custom_missiles() and overlay any same-name entries.
-    "AUR+HGB": _aur_hgb,
+    "AUR+HGB":           _aur_hgb,
+    "Minotaur-IV + HTV-2": _minotaur_4_htv2,
 }
 
 
