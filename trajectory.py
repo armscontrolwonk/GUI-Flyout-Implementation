@@ -90,20 +90,33 @@ _HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
                            1.18e-12, 5.21e-13, 1.14e-13, 3.07e-14, 1.14e-14,
                            5.24e-15, 2.95e-15])
 
-# Acton 2021 (pp. 198–202) equilibrium-glide lift constraint:
-# Phase 5 enforces dθ/dt = 0, so lift exactly cancels gravity-centripetal:
-#     L_eq = m · (g − V²_inertial / r)
-# The vehicle passively tracks Acton's altitude profile ρ_eq(v) because:
-#   • Above h_eq: aerodynamic lift < L_eq → cap inactive, full L/D applied,
-#     vehicle descends toward h_eq (Phase-4 pull-up arc).
-#   • Below h_eq: aerodynamic lift > L_eq → cap fires, radial acceleration
-#     zeroed, flight-path angle frozen → no bounce, no skip-glide phugoid.
-# L/D enters through h_eq = H·ln(ρ₀·r_e·L/D / (2β·(g−V²/r))):
-# higher L/D ⇒ higher h_eq ⇒ thinner air ⇒ less drag ⇒ more range.
-# The cap is applied bidirectionally (not gated on the sign of γ) so the
-# vehicle cannot oscillate below h_eq.  During pull-up the centripetal
-# term uses inertial (ECI) speed; aerodynamic lift is computed from the
-# ECEF airspeed (atmosphere co-rotates with Earth).
+# Acton 2021 (pp. 197–202) two-β boost-glide model.
+#
+# The glider has two ballistic coefficients depending on attitude:
+#   • β_S  — Phase 3 (direct re-entry): vehicle at high angle of attack,
+#            flat lower surface to airflow, large drag, L/D = 0.
+#   • β_L  — Phases 4–5 (pull-up + glide): vehicle rotated to high-lift
+#            orientation, smaller drag, finite L/D.
+#
+# Phase boundaries:
+#   • Phase 2 → 3: at h_2 = 100 km (atmospheric "pierce point", Acton p. 204).
+#   • Phase 3 → 4: at h_3 such that ρ(h_3)/β_S = ρ(h_4)/β_L  (Acton Eq. 8).
+#                  Equivalently h_3 = h_eq + H·ln(β_L/β_S).  Drag is
+#                  continuous across this transition; lift jumps from 0
+#                  to the equilibrium value as the vehicle rotates.
+#   • Phase 5: equilibrium glide at h ≤ h_eq with lift = m(g − V²/r),
+#              tracking Acton's analytic h(v):
+#                ρ_eq(v) = 2β_L·(g − V²/r) / (V² · L/D)         (p. 199)
+#                h_eq    = H·ln(ρ₀ / ρ_eq)
+#
+# The Phase 4 pull-up itself is brief (Acton notes "just 12 seconds" for
+# HTV-2) and is treated as an instantaneous transition: above h_3 the
+# glider is in Phase-3 attitude (no lift, β_S drag); below h_3 the cap
+# fires bidirectionally so the vehicle locks onto Acton's h_eq profile.
+ACTON_PIERCE_ALT_M    = 100_000.0
+# Acton's isothermal-atmosphere fit for 30 < h < 100 km (p. 197):
+ACTON_SCALE_HEIGHT_M  = 6970.0
+ACTON_SEA_LEVEL_RHO   = 1.46
 
 
 def _atm_density_high(alt_km: float) -> float:
@@ -500,19 +513,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        # Two glide modes (Acton 2021, pp. 198–202).  No
-                        # turns yet — bank is held at 0 in both modes.
-                        #   • skip_glide:        full lift always, natural
-                        #                        EOM → phugoid oscillations.
-                        #   • equilibrium_glide: lift capped at L_eq =
-                        #     m(g−V²_iner/r) regardless of γ sign.
-                        #     – Phase 4 (pull-up, h > h_eq):  aero lift
-                        #       < L_eq so cap is inactive; vehicle uses
-                        #       full L/D and descends along Acton's arc.
-                        #     – Phase 5 (glide, h ≤ h_eq):  aero lift
-                        #       ≥ L_eq → cap fires, radial accel = 0,
-                        #       no bounce.  L/D enters through h_eq so
-                        #       higher L/D ⇒ higher altitude ⇒ more range.
+                        # Two glide modes (Acton 2021, pp. 197–202).
+                        #   • skip_glide:        single β, full lift always,
+                        #                        natural EOM → phugoid.
+                        #   • equilibrium_glide: full Acton three-phase model
+                        #     using both β_S (Phase 3, high-AoA, no lift) and
+                        #     β_L (Phases 4–5, gliding).  See ACTON_*
+                        #     constants above.  When β_S is unset (= 0),
+                        #     reverts to single-β bidirectional eq_lift cap.
                         if _erv.glider_guidance == "azimuth_command":
                             # Proportional heading controller.
                             # Project ECEF velocity onto local ENU to get
@@ -538,18 +546,50 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     bank_rad = np.radians(_bk_deg)
                                     break
                         if _erv.glider_guidance == "equilibrium_glide":
-                            # Acton Phase-5 constraint: cap lift at the
-                            # gravity-centripetal balance value.  Applied
-                            # bidirectionally (no γ-sign gate) so the
-                            # vehicle cannot skip-bounce below h_eq.
                             # Centripetal uses inertial (ECI) speed.
                             _v_iner = vel + np.cross(
                                 np.array([0.0, 0.0, OMEGA_EARTH]), pos)
-                            eq_lift = rv_mass * max(0.0, (
-                                g_mag
-                                - np.dot(_v_iner, _v_iner) / r_mag))
-                            if lift_mag > eq_lift:
-                                lift_mag = eq_lift
+                            v2_iner = float(np.dot(_v_iner, _v_iner))
+                            radial_acc = g_mag - v2_iner / r_mag
+                            eq_lift = rv_mass * max(0.0, radial_acc)
+                            beta_S = float(_erv.glider_beta_entry_kg_m2)
+                            beta_L = float(_erv.beta_kg_m2)
+                            if (beta_S > 0.0 and beta_L > 0.0
+                                    and radial_acc > 0.0
+                                    and v2_iner > 0.0
+                                    and _erv.glider_LD > 0.0):
+                                # Acton's Phase-5 equilibrium altitude:
+                                #   ρ_eq = 2β_L·(g − V²/r) / (V² · L/D)
+                                rho_eq = (2.0 * beta_L * radial_acc
+                                          / (v2_iner * _erv.glider_LD))
+                                # Phase-3 → 4 transition altitude h_3
+                                # (Acton Eq. 8): ρ(h_3) = ρ_eq · β_S/β_L.
+                                rho_3 = rho_eq * beta_S / beta_L
+                                if rho_3 > 0.0 and rho_eq > 0.0:
+                                    h_3 = ACTON_SCALE_HEIGHT_M * np.log(
+                                        ACTON_SEA_LEVEL_RHO / rho_3)
+                                    if alt > h_3:
+                                        # Phase 3 — direct re-entry: high
+                                        # AoA, β_S drag, zero lift.  Re-
+                                        # compute drag with β_S and zero
+                                        # the lift command.
+                                        drag_mag_S = q * rv_mass / beta_S
+                                        f_drag = -drag_mag_S * v_hat
+                                        lift_mag = 0.0
+                                    else:
+                                        # Phase 4–5: β_L drag (already set),
+                                        # cap lift at the equilibrium value.
+                                        if lift_mag > eq_lift:
+                                            lift_mag = eq_lift
+                                else:
+                                    if lift_mag > eq_lift:
+                                        lift_mag = eq_lift
+                            else:
+                                # Single-β backward-compatible behaviour:
+                                # bidirectional eq_lift cap, no Phase-3
+                                # treatment.
+                                if lift_mag > eq_lift:
+                                    lift_mag = eq_lift
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi

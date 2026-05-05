@@ -2087,8 +2087,18 @@ class RVEditorDialog(tk.Toplevel):
 
         _LD = f"{rv.glider_LD:.2f}"          if (rv and rv.glider_LD > 0) else "2.5"
         _g  = f"{rv.glider_pullup_g_max:.0f}" if rv                       else "10"
+        _bS = (f"{rv.glider_beta_entry_kg_m2:.0f}"
+               if (rv and rv.glider_beta_entry_kg_m2 > 0) else "100")
         self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
         self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
+        self._bS_var = _gfe(
+            2, "Direct-re-entry βₛ:", _bS, "kg/m²  (Acton Phase 3)")
+
+        ttk.Label(self._glider_frm,
+                  text="(βₗ above is the gliding-orientation value; "
+                       "βₛ = 0 disables Phase-3 modelling.)",
+                  foreground="gray50").grid(
+            row=3, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._update_glider_state()
 
@@ -2235,16 +2245,17 @@ class RVEditorDialog(tk.Toplevel):
         glider_on = bool(self._glider_var.get())
         if glider_on:
             try:
-                LD    = float(self._LD_var.get())
-                g_max = float(self._g_var.get())
+                LD     = float(self._LD_var.get())
+                g_max  = float(self._g_var.get())
+                beta_S = float(self._bS_var.get())
             except ValueError:
                 messagebox.showerror(
                     "Invalid input",
-                    "L/D and pull-up g-limit must be numbers.",
+                    "L/D, pull-up g-limit and βₛ must be numbers.",
                     parent=self)
                 return None
         else:
-            LD = 0.0; g_max = 10.0
+            LD = 0.0; g_max = 10.0; beta_S = 0.0
 
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
@@ -2252,6 +2263,7 @@ class RVEditorDialog(tk.Toplevel):
             glider_enabled=glider_on,
             glider_LD=LD,
             glider_pullup_g_max=g_max,
+            glider_beta_entry_kg_m2=beta_S,
         )
 
     def _update_glider_state(self):
