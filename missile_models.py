@@ -222,15 +222,17 @@ class RVParams:
     # Glider / HGV properties
     #
     # glider_guidance — one of:
-    #   "skip_glide":        bank=0, full lift, natural EOM (phugoid).
-    #   "equilibrium_glide": bank=0, lift capped at L = m(g − V²/r) once
-    #                        the vehicle has pulled up to γ=0
-    #                        (Acton 2021, Phase 5).
+    #   "equilibrium_glide": Tracy/Acton model.  Analytical Acton pull-up
+    #                        (Eq. 11) at atmospheric piercing teleports the
+    #                        vehicle to (h_eq, γ=0, v_4); thereafter natural
+    #                        EOM with constant L/D and single β.
+    #   "skip_glide":        no analytical pull-up; the vehicle simply re-
+    #                        enters with whatever flight-path angle it had
+    #                        and the EOM with constant L/D produces a
+    #                        natural phugoid.
     #   "azimuth_command":   proportional heading controller — bank angle
     #                        proportional to heading error, clamped at
-    #                        glider_max_bank_deg.  Drives heading toward
-    #                        glider_target_az_deg.  Equilibrium-glide lift
-    #                        cap still applied.
+    #                        glider_max_bank_deg.  No pull-up reset.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
@@ -244,13 +246,6 @@ class RVParams:
     # Azimuth-command guidance parameters (glider_guidance == "azimuth_command")
     glider_target_az_deg:   float = 0.0    # desired final ground-track bearing (°N)
     glider_max_bank_deg:    float = 45.0   # bank angle limit (°)
-    # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
-    # During Phase 3 the vehicle is at high angle of attack — flat lower
-    # surface to airflow, L/D = 0, large drag.  Acton's HTV-2 fit gives
-    # β_S = 7 kg/m² (Table 3, p. 206), though physically reasonable values
-    # are ~100 kg/m².  Set 0 to disable the two-β model and use beta_kg_m2
-    # (= β_L) throughout (single-β backward-compatible behaviour).
-    glider_beta_entry_kg_m2: float = 0.0
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -270,7 +265,6 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_bank_schedule':  rv.glider_bank_schedule,
         'glider_target_az_deg':  rv.glider_target_az_deg,
         'glider_max_bank_deg':   rv.glider_max_bank_deg,
-        'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
     }
 
 
@@ -295,7 +289,6 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
         glider_target_az_deg=float(d.get('glider_target_az_deg', 0.0)),
         glider_max_bank_deg=float(d.get('glider_max_bank_deg', 45.0)),
-        glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
     )
 
 
@@ -1230,14 +1223,10 @@ def _aur_hgb():
     p.rv   = RVParams(
         name       = "HGB",
         mass_kg    = p.payload_kg,       # 450 kg
-        beta_kg_m2 = 15_000.0,           # β_L: glider orientation (Acton 2021)
+        beta_kg_m2 = 15_000.0,           # gliding-orientation β (Tracy/Acton)
         shape      = "cone",
         glider_enabled = True,
         glider_LD      = 1.8,            # representative HGB lift/drag
-        # β_S: high-AoA direct-re-entry orientation (Acton's Phase 3,
-        # flat lower surface to airflow).  ~100 kg/m² is the physically
-        # reasonable estimate from his Newtonian-flow analysis (p. 207).
-        glider_beta_entry_kg_m2 = 100.0,
     )
     return p
 

@@ -1540,7 +1540,7 @@ class MissileDialog(tk.Toplevel):
                  f"{rv.mass_kg:,.0f} kg",
                  f"β {rv.beta_kg_m2:,.0f} kg/m²"]
         if rv.glider_enabled and rv.glider_LD > 0:
-            guid = "EG" if rv.glider_guidance == "equilibrium_glide" else "skip"
+            guid = "Tracy" if rv.glider_guidance == "equilibrium_glide" else "skip"
             parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
         self._rv_summary_var.set(" — ".join(parts))
 
@@ -1995,7 +1995,7 @@ class RVEditorDialog(tk.Toplevel):
     """
 
     _GUIDANCE_LABELS = {
-        "equilibrium_glide": "Equilibrium glide (Acton)",
+        "equilibrium_glide": "Boost-glide (Tracy/Acton)",
         "skip_glide":        "Skip-glide (natural phugoid)",
     }
 
@@ -2087,18 +2087,8 @@ class RVEditorDialog(tk.Toplevel):
 
         _LD = f"{rv.glider_LD:.2f}"          if (rv and rv.glider_LD > 0) else "2.5"
         _g  = f"{rv.glider_pullup_g_max:.0f}" if rv                       else "10"
-        _bS = (f"{rv.glider_beta_entry_kg_m2:.0f}"
-               if (rv and rv.glider_beta_entry_kg_m2 > 0) else "100")
         self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
         self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
-        self._bS_var = _gfe(
-            2, "Direct-re-entry βₛ:", _bS, "kg/m²  (Acton Phase 3)")
-
-        ttk.Label(self._glider_frm,
-                  text="(βₗ above is the gliding-orientation value; "
-                       "βₛ = 0 disables Phase-3 modelling.)",
-                  foreground="gray50").grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._update_glider_state()
 
@@ -2247,15 +2237,14 @@ class RVEditorDialog(tk.Toplevel):
             try:
                 LD     = float(self._LD_var.get())
                 g_max  = float(self._g_var.get())
-                beta_S = float(self._bS_var.get())
             except ValueError:
                 messagebox.showerror(
                     "Invalid input",
-                    "L/D, pull-up g-limit and βₛ must be numbers.",
+                    "L/D and pull-up g-limit must be numbers.",
                     parent=self)
                 return None
         else:
-            LD = 0.0; g_max = 10.0; beta_S = 0.0
+            LD = 0.0; g_max = 10.0
 
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
@@ -2263,7 +2252,6 @@ class RVEditorDialog(tk.Toplevel):
             glider_enabled=glider_on,
             glider_LD=LD,
             glider_pullup_g_max=g_max,
-            glider_beta_entry_kg_m2=beta_S,
         )
 
     def _update_glider_state(self):
@@ -4867,7 +4855,7 @@ class MissileFlyoutApp(tk.Tk):
             if _rv_l > 0:
                 _row2(af, r, "RV length:", f"{_rv_l:.2f} m"); r += 1
             if _erv and _erv.glider_enabled:
-                _guid_lbl = ("Equilibrium glide"
+                _guid_lbl = ("Boost-glide (Tracy/Acton)"
                              if _erv.glider_guidance == "equilibrium_glide"
                              else "Skip-glide")
                 _row2(af, r, "Glider L/D:", f"{_erv.glider_LD:.2f}",
