@@ -747,7 +747,18 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     rho_eq = 2.0 * beta_L * radial_acc / (v_4**2 * LD)
     if rho_eq <= 0.0:
         return fallback
-    h_eq = ACTON_SCALE_HEIGHT_M * float(np.log(ACTON_SEA_LEVEL_RHO / rho_eq))
+    # Binary search on the actual atmosphere model so h_eq is consistent
+    # with the density the integrator sees (avoids isothermal-fit mismatch).
+    _h_lo, _h_hi = 5_000.0, 80_000.0
+    if atmosphere(_h_lo)[2] < rho_eq or atmosphere(_h_hi)[2] > rho_eq:
+        return fallback                               # rho_eq out of range
+    for _ in range(50):
+        _h_mid = (_h_lo + _h_hi) * 0.5
+        if atmosphere(_h_mid)[2] > rho_eq:
+            _h_lo = _h_mid
+        else:
+            _h_hi = _h_mid
+    h_eq = (_h_lo + _h_hi) * 0.5
     if not (5_000.0 < h_eq < 80_000.0):
         return fallback
 
@@ -1146,10 +1157,35 @@ def integrate_trajectory(params: MissileParams,
                 radial_acc = g_mag - v4*v4 / rmag
                 if radial_acc > 0 and v4 > 0:
                     rho_eq = 2.0 * beta_L * radial_acc / (v4*v4 * LD)
-                    h_eq   = (ACTON_SCALE_HEIGHT_M
-                              * float(np.log(ACTON_SEA_LEVEL_RHO / rho_eq)))
-                    h_3    = h_eq + (ACTON_SCALE_HEIGHT_M
-                                     * float(np.log(beta_L / beta_S)))
+                    rho_3  = rho_eq * beta_L / beta_S   # ρ at h_3 (Acton Eq. 8)
+                    # Binary search on actual atmosphere for h_eq.
+                    _hlo, _hhi = 5_000.0, 80_000.0
+                    _atm_lo = atmosphere(_hlo)[2]
+                    _atm_hi = atmosphere(_hhi)[2]
+                    if _atm_lo >= rho_eq >= _atm_hi:
+                        for _ in range(50):
+                            _hmid = (_hlo + _hhi) * 0.5
+                            if atmosphere(_hmid)[2] > rho_eq:
+                                _hlo = _hmid
+                            else:
+                                _hhi = _hmid
+                        h_eq = (_hlo + _hhi) * 0.5
+                        # Binary search for h_3 (higher altitude, lower ρ).
+                        _hlo3, _hhi3 = h_eq, 120_000.0
+                        _atm_lo3 = atmosphere(_hlo3)[2]
+                        _atm_hi3 = atmosphere(_hhi3)[2]
+                        if _atm_lo3 >= rho_3 >= _atm_hi3:
+                            for _ in range(50):
+                                _hmid3 = (_hlo3 + _hhi3) * 0.5
+                                if atmosphere(_hmid3)[2] > rho_3:
+                                    _hlo3 = _hmid3
+                                else:
+                                    _hhi3 = _hmid3
+                            h_3 = (_hlo3 + _hhi3) * 0.5
+                        else:
+                            h_3 = ACTON_PIERCE_ALT_M
+                    else:
+                        h_3 = ACTON_PIERCE_ALT_M
                 else:
                     h_3 = ACTON_PIERCE_ALT_M    # no equilibrium → skip Phase 3
 
