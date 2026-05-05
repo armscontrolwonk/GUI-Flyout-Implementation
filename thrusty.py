@@ -3299,14 +3299,31 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Label(_gmf, text="Guidance:").grid(
             row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
         self._main_guidance_var = tk.StringVar(value="Equilibrium glide (Acton)")
-        ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
-                     values=["Equilibrium glide (Acton)", "Skip-glide (natural phugoid)"],
-                     state="readonly", width=24).grid(
-            row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
+        _guid_cb = ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
+                     values=["Equilibrium glide (Acton)",
+                             "Skip-glide (natural phugoid)",
+                             "Azimuth command (heading hold)"],
+                     state="readonly", width=26)
+        _guid_cb.grid(row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
+        _guid_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_glider_guidance_changed())
+
+        # Azimuth-command fields (row 2) — shown only when that mode is active
+        _azf = ttk.Frame(_gmf)
+        _azf.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        self._az_cmd_frame = _azf
+        ttk.Label(_azf, text="Target az:").pack(side=tk.LEFT)
+        self._main_target_az_var = tk.StringVar(value="0.0")
+        ttk.Entry(_azf, textvariable=self._main_target_az_var, width=6).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_azf, text="°   Max bank:").pack(side=tk.LEFT, padx=(4, 0))
+        self._main_max_bank_var = tk.StringVar(value="45")
+        ttk.Entry(_azf, textvariable=self._main_max_bank_var, width=5).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_azf, text="°").pack(side=tk.LEFT)
 
         # Terminal dive
         _r2 = ttk.Frame(_gmf)
-        _r2.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _r2.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_terminal_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(_r2, text="Terminal dive below",
                         variable=self._main_terminal_var).pack(side=tk.LEFT)
@@ -3317,14 +3334,14 @@ class MissileFlyoutApp(tk.Tk):
 
         # Bank schedule
         ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
-            row=3, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+            row=4, column=0, columnspan=2, sticky='ew', pady=(6, 0))
         self._main_bank_sched_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(_gmf, text="Bank schedule",
                         variable=self._main_bank_sched_var,
                         command=self._on_main_bank_toggled).grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
+            row=5, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
         _mbf = ttk.Frame(_gmf)
-        _mbf.grid(row=5, column=0, columnspan=2, sticky=tk.W)
+        _mbf.grid(row=6, column=0, columnspan=2, sticky=tk.W)
         self._main_bank_frm = _mbf
         self._main_bank_vars = [{'start': tk.StringVar(value=""),
                                   'end':   tk.StringVar(value=""),
@@ -3345,6 +3362,7 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(_mbf, text=_unit).grid(
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
         self._on_main_bank_toggled()   # sync hidden state
+        self._on_glider_guidance_changed()   # sync hidden state
 
         # Row 13: Reset trajectory button — always visible
         self._reset_traj_btn = ttk.Button(
@@ -3836,6 +3854,8 @@ class MissileFlyoutApp(tk.Tk):
             self._main_guidance_var.set(
                 "Skip-glide (natural phugoid)"
                 if _p_erv.glider_guidance == "skip_glide"
+                else "Azimuth command (heading hold)"
+                if _p_erv.glider_guidance == "azimuth_command"
                 else "Equilibrium glide (Acton)")
             self._main_terminal_var.set(_p_erv.glider_terminal_dive)
             self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
@@ -3851,6 +3871,10 @@ class MissileFlyoutApp(tk.Tk):
                     _bvars['start'].set('')
                     _bvars['end'].set('')
                     _bvars['bank'].set('')
+            if hasattr(self, '_main_target_az_var'):
+                self._main_target_az_var.set(f"{_p_erv.glider_target_az_deg:.1f}")
+            if hasattr(self, '_main_max_bank_var'):
+                self._main_max_bank_var.set(f"{_p_erv.glider_max_bank_deg:.0f}")
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
 
@@ -3896,6 +3920,15 @@ class MissileFlyoutApp(tk.Tk):
             self._main_bank_frm.grid()
         else:
             self._main_bank_frm.grid_remove()
+
+    def _on_glider_guidance_changed(self):
+        az_mode = "azimuth" in self._main_guidance_var.get().lower()
+        if az_mode:
+            self._az_cmd_frame.grid()
+            self._main_bank_sched_var.set(False)
+            self._on_main_bank_toggled()
+        else:
+            self._az_cmd_frame.grid_remove()
 
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current missile."""
@@ -4778,9 +4811,22 @@ class MissileFlyoutApp(tk.Tk):
                 except ValueError:
                     _g_dalt = 30.0
                 _g_guid_label = self._main_guidance_var.get()
-                _g_guid_key = ("skip_glide"
-                               if "skip" in _g_guid_label.lower()
-                               else "equilibrium_glide")
+                _g_guid_key = (
+                    "skip_glide"      if "skip"    in _g_guid_label.lower() else
+                    "azimuth_command" if "azimuth" in _g_guid_label.lower() else
+                    "equilibrium_glide"
+                )
+                _g_tgt_az   = 0.0
+                _g_max_bank = 45.0
+                if _g_guid_key == "azimuth_command":
+                    try:
+                        _g_tgt_az = float(self._main_target_az_var.get())
+                    except (ValueError, AttributeError):
+                        pass
+                    try:
+                        _g_max_bank = float(self._main_max_bank_var.get())
+                    except (ValueError, AttributeError):
+                        pass
                 _g_terminal = self._main_terminal_var.get()
                 _g_bank = []
                 if self._main_bank_sched_var.get():
@@ -4800,6 +4846,8 @@ class MissileFlyoutApp(tk.Tk):
                     glider_terminal_dive=_g_terminal,
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
+                    glider_target_az_deg=_g_tgt_az,
+                    glider_max_bank_deg=_g_max_bank,
                 )
                 _g_node = missile
                 while _g_node is not None:
@@ -5455,6 +5503,8 @@ class MissileFlyoutApp(tk.Tk):
                 {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
                 for v in getattr(self, '_main_bank_vars', [])
             ],
+            'glider_target_az': getattr(self, '_main_target_az_var', tk.StringVar(value='0.0')).get(),
+            'glider_max_bank':  getattr(self, '_main_max_bank_var',  tk.StringVar(value='45')).get(),
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -5525,8 +5575,13 @@ class MissileFlyoutApp(tk.Tk):
                 _bvars['start'].set(_bd.get('start', ''))
                 _bvars['end'].set(_bd.get('end', ''))
                 _bvars['bank'].set(_bd.get('bank', ''))
+            if hasattr(self, '_main_target_az_var'):
+                self._main_target_az_var.set(meta.get('glider_target_az', '0.0'))
+            if hasattr(self, '_main_max_bank_var'):
+                self._main_max_bank_var.set(meta.get('glider_max_bank', '45'))
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
+            self._on_glider_guidance_changed()
 
     def _save_trajectory(self):
         if self._result is None:

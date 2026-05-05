@@ -226,6 +226,11 @@ class RVParams:
     #   "equilibrium_glide": bank=0, lift capped at L = m(g − V²/r) once
     #                        the vehicle has pulled up to γ=0
     #                        (Acton 2021, Phase 5).
+    #   "azimuth_command":   proportional heading controller — bank angle
+    #                        proportional to heading error, clamped at
+    #                        glider_max_bank_deg.  Drives heading toward
+    #                        glider_target_az_deg.  Equilibrium-glide lift
+    #                        cap still applied.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
@@ -234,8 +239,11 @@ class RVParams:
     glider_terminal_alt_km: float = 30.0
     # Bank-turn schedule: list of (t_start_s, t_end_s, bank_deg) tuples.
     # Positive bank = right turn; negative = left.  Up to 3 entries.
-    # Bank is applied during the glide phase only; terminal dive overrides.
+    # Used only when glider_guidance != "azimuth_command".
     glider_bank_schedule:   list  = field(default_factory=list)
+    # Azimuth-command guidance parameters (glider_guidance == "azimuth_command")
+    glider_target_az_deg:   float = 0.0    # desired final ground-track bearing (°N)
+    glider_max_bank_deg:    float = 45.0   # bank angle limit (°)
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -253,6 +261,8 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_terminal_dive':  rv.glider_terminal_dive,
         'glider_terminal_alt_km':rv.glider_terminal_alt_km,
         'glider_bank_schedule':  rv.glider_bank_schedule,
+        'glider_target_az_deg':  rv.glider_target_az_deg,
+        'glider_max_bank_deg':   rv.glider_max_bank_deg,
     }
 
 
@@ -275,6 +285,8 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
+        glider_target_az_deg=float(d.get('glider_target_az_deg', 0.0)),
+        glider_max_bank_deg=float(d.get('glider_max_bank_deg', 45.0)),
     )
 
 
