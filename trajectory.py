@@ -727,12 +727,14 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     r_mag = float(np.linalg.norm(pos))
     fallback = ([], 0.0, np.concatenate([pos, vel]))
     if speed < 1.0 or r_mag < 1e3:
+        print(f"[pullup] FALLBACK: degenerate speed/rmag  speed={speed:.1f} r_mag={r_mag:.0f}")
         return fallback
 
     r_hat = pos / r_mag
     v_hat = vel / speed
     sin_gamma = float(np.dot(v_hat, r_hat))           # >0 ascending
     if sin_gamma >= 0.0:
+        print(f"[pullup] FALLBACK: ascending  sin_gamma={sin_gamma:.4f}")
         return fallback
     theta_2 = float(np.arcsin(min(1.0, -sin_gamma)))
 
@@ -743,14 +745,18 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     g_mag = float(np.linalg.norm(gravity_ecef(pos)))
     radial_acc = g_mag - v_4**2 / r_mag
     if radial_acc <= 0.0:
+        print(f"[pullup] FALLBACK: super-orbital  v4={v_4:.0f} radial_acc={radial_acc:.4f}")
         return fallback
     rho_eq = 2.0 * beta_L * radial_acc / (v_4**2 * LD)
     if rho_eq <= 0.0:
+        print(f"[pullup] FALLBACK: rho_eq<=0  rho_eq={rho_eq:.6g}")
         return fallback
     # Binary search on the actual atmosphere model so h_eq is consistent
     # with the density the integrator sees (avoids isothermal-fit mismatch).
     _h_lo, _h_hi = 5_000.0, 80_000.0
     if atmosphere(_h_lo)[2] < rho_eq or atmosphere(_h_hi)[2] > rho_eq:
+        print(f"[pullup] FALLBACK: rho_eq out of bracket  rho_eq={rho_eq:.4e}"
+              f"  rho(5km)={atmosphere(_h_lo)[2]:.4e}  rho(80km)={atmosphere(_h_hi)[2]:.4e}")
         return fallback                               # rho_eq out of range
     for _ in range(50):
         _h_mid = (_h_lo + _h_hi) * 0.5
@@ -760,9 +766,14 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
             _h_hi = _h_mid
     h_eq = (_h_lo + _h_hi) * 0.5
     if not (5_000.0 < h_eq < 80_000.0):
+        print(f"[pullup] FALLBACK: h_eq out of bounds  h_eq={h_eq/1e3:.1f} km")
         return fallback
 
     lat, lon, h_3 = ecef_to_geodetic(pos)
+    print(f"[pullup] theta2={float(np.degrees(theta_2)):.2f}°  v3={speed/1e3:.3f} km/s"
+          f"  v4={v_4/1e3:.3f} km/s  rho_eq={rho_eq:.4e} kg/m³"
+          f"  h_eq={h_eq/1e3:.2f} km  h_3={h_3/1e3:.2f} km"
+          f"  {'OK' if h_3 > h_eq else 'FALLBACK: h_3<=h_eq'}")
     if h_3 <= h_eq:
         return fallback                               # already below h_eq
 
