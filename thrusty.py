@@ -5345,7 +5345,10 @@ class MissileFlyoutApp(tk.Tk):
             self._result = result
             self.after(0, self._on_result_ready)
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Simulation error", str(e)))
+            _err_msg = str(e)
+            import traceback as _tb
+            _tb.print_exc()
+            self.after(0, lambda m=_err_msg: messagebox.showerror("Simulation error", m))
         finally:
             self._running = False
 
