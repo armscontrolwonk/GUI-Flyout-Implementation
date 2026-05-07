@@ -1244,8 +1244,11 @@ def _aur_hgb():
         mass_kg    = p.payload_kg,       # 450 kg
         beta_kg_m2 = 15_000.0,           # gliding-orientation β (Tracy/Acton)
         shape      = "cone",
+        diameter_m = 0.8,
+        length_m   = 2.0,
         glider_enabled = True,
         glider_LD      = 1.8,            # representative HGB lift/drag
+        glider_beta_entry_kg_m2 = 7.0,   # Acton β_S, blunt-orientation entry
     )
     return p
 
