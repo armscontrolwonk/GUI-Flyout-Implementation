@@ -1168,7 +1168,7 @@ def integrate_trajectory(params: MissileParams,
                 radial_acc = g_mag - v4*v4 / rmag
                 if radial_acc > 0 and v4 > 0:
                     rho_eq = 2.0 * beta_L * radial_acc / (v4*v4 * LD)
-                    rho_3  = rho_eq * beta_L / beta_S   # ρ at h_3 (Acton Eq. 8)
+                    rho_3  = rho_eq * beta_S / beta_L   # ρ at h_3 (Acton Eq. 8)
                     # Binary search on actual atmosphere for h_eq.
                     _hlo, _hhi = 5_000.0, 80_000.0
                     _atm_lo = atmosphere(_hlo)[2]
@@ -1199,6 +1199,15 @@ def integrate_trajectory(params: MissileParams,
                         h_3 = ACTON_PIERCE_ALT_M
                 else:
                     h_3 = ACTON_PIERCE_ALT_M    # no equilibrium → skip Phase 3
+                # If h_3 is at or above the pierce altitude, Phase 3 has no
+                # work to do (vehicle is already below h_3).  Clamp so the
+                # event won't fire and Phase 3 reduces to a pass-through.
+                if h_3 >= ACTON_PIERCE_ALT_M:
+                    h_3 = ACTON_PIERCE_ALT_M
+                _phase3_active = h_3 < ACTON_PIERCE_ALT_M
+                print(f"[acton]  beta_S={beta_S:.1f}  beta_L={beta_L:.1f}"
+                      f"  h_3={h_3/1e3:.2f} km"
+                      f"  {'(run Phase 3)' if _phase3_active else '(skip Phase 3)'}")
 
                 # Phase 3 needs β_S drag and zero lift.  Build a shadow
                 # params with the RV's β temporarily set to β_S and the
