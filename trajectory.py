@@ -1182,13 +1182,15 @@ def integrate_trajectory(params: MissileParams,
                                 _hhi = _hmid
                         h_eq = (_hlo + _hhi) * 0.5
                         # Binary search for h_3 (higher altitude, lower ρ).
-                        _hlo3, _hhi3 = h_eq, 120_000.0
-                        _atm_lo3 = atmosphere(_hlo3)[2]
-                        _atm_hi3 = atmosphere(_hhi3)[2]
+                        # Upper bound is the pierce altitude — h_3 must be
+                        # below it for Phase 3 to have any work to do.
+                        _hlo3, _hhi3 = h_eq, float(ACTON_PIERCE_ALT_M)
+                        _atm_lo3 = float(atmosphere(_hlo3)[2])
+                        _atm_hi3 = float(atmosphere(_hhi3)[2])
                         if _atm_lo3 >= rho_3 >= _atm_hi3:
                             for _ in range(50):
                                 _hmid3 = (_hlo3 + _hhi3) * 0.5
-                                if atmosphere(_hmid3)[2] > rho_3:
+                                if float(atmosphere(_hmid3)[2]) > rho_3:
                                     _hlo3 = _hmid3
                                 else:
                                     _hhi3 = _hmid3
