@@ -736,8 +736,8 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
         return fallback
     theta_2 = float(np.arcsin(min(1.0, -sin_gamma)))
 
-    # Acton Eq. 11 — velocity at end of pull-up.
-    v_4 = speed * float(np.exp(-LD * theta_2))
+    # Acton Eq. 11 — velocity at end of pull-up: dV/V = −(D/L)·dγ → exp(−θ/(L/D))
+    v_4 = speed * float(np.exp(-theta_2 / LD))
 
     # Tracy Eq. 7 — equilibrium altitude h_eq(v_4).
     g_mag = float(np.linalg.norm(gravity_ecef(pos)))
@@ -799,7 +799,7 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
         theta     = theta_2 * (1.0 - frac)            # θ from θ_2 down to 0
         downrange = R * (float(np.sin(theta_2)) - float(np.sin(theta)))
         alt       = h_3 - R * (float(np.cos(theta)) - float(np.cos(theta_2)))
-        v_at      = speed * float(np.exp(-LD * (theta_2 - theta)))
+        v_at      = speed * float(np.exp(-(theta_2 - theta) / LD))
         t_off     = R * (theta_2 - theta) / speed     # high-speed limit
 
         lat_i, lon_i = _move(downrange)
@@ -1245,7 +1245,7 @@ def integrate_trajectory(params: MissileParams,
                 V_3 = v2
                 h_3 = float(ACTON_PIERCE_ALT_M)
                 for _ in range(25):
-                    V_4t = V_3 * float(np.exp(-LD * theta_2))
+                    V_4t = V_3 * float(np.exp(-theta_2 / LD))
                     if V_4t < 100.0:
                         break
                     ra_t = g_p - V_4t**2 / rmag
