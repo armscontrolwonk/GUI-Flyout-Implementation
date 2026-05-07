@@ -3600,9 +3600,19 @@ class MissileFlyoutApp(tk.Tk):
         _guid_cb.grid(row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
         _guid_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_glider_guidance_changed())
 
-        # Azimuth-command fields (row 2) — shown only when that mode is active
+        # Acton Phase-3 βₛ entry (row 2) — shown only for Acton guidance
+        _abf = ttk.Frame(_gmf)
+        _abf.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        self._acton_beta_frame = _abf
+        ttk.Label(_abf, text="Re-entry βₛ:").pack(side=tk.LEFT)
+        self._main_beta_s_var = tk.StringVar(value="5000")
+        ttk.Entry(_abf, textvariable=self._main_beta_s_var, width=7).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_abf, text="kg/m²").pack(side=tk.LEFT)
+
+        # Azimuth-command fields (row 3) — shown only when that mode is active
         _azf = ttk.Frame(_gmf)
-        _azf.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _azf.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._az_cmd_frame = _azf
         ttk.Label(_azf, text="Target az:").pack(side=tk.LEFT)
         self._main_target_az_var = tk.StringVar(value="0.0")
@@ -3616,7 +3626,7 @@ class MissileFlyoutApp(tk.Tk):
 
         # Terminal dive
         _r2 = ttk.Frame(_gmf)
-        _r2.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _r2.grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_terminal_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(_r2, text="Terminal dive below",
                         variable=self._main_terminal_var).pack(side=tk.LEFT)
@@ -3627,14 +3637,14 @@ class MissileFlyoutApp(tk.Tk):
 
         # Bank schedule
         ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
-            row=4, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+            row=5, column=0, columnspan=2, sticky='ew', pady=(6, 0))
         self._main_bank_sched_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(_gmf, text="Bank schedule",
                         variable=self._main_bank_sched_var,
                         command=self._on_main_bank_toggled).grid(
-            row=5, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
+            row=6, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
         _mbf = ttk.Frame(_gmf)
-        _mbf.grid(row=6, column=0, columnspan=2, sticky=tk.W)
+        _mbf.grid(row=7, column=0, columnspan=2, sticky=tk.W)
         self._main_bank_frm = _mbf
         self._main_bank_vars = [{'start': tk.StringVar(value=""),
                                   'end':   tk.StringVar(value=""),
@@ -4168,8 +4178,13 @@ class MissileFlyoutApp(tk.Tk):
                 self._main_target_az_var.set(f"{_p_erv.glider_target_az_deg:.1f}")
             if hasattr(self, '_main_max_bank_var'):
                 self._main_max_bank_var.set(f"{_p_erv.glider_max_bank_deg:.0f}")
+            if hasattr(self, '_main_beta_s_var'):
+                _bs_v = _p_erv.glider_beta_entry_kg_m2
+                self._main_beta_s_var.set(
+                    f"{_bs_v:.0f}" if _bs_v > 0 else "5000")
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
+            self._on_glider_guidance_changed()
 
     # ------------------------------------------------------------------
     # Advanced per-stage pitch program
@@ -4215,13 +4230,19 @@ class MissileFlyoutApp(tk.Tk):
             self._main_bank_frm.grid_remove()
 
     def _on_glider_guidance_changed(self):
-        az_mode = "azimuth" in self._main_guidance_var.get().lower()
+        guid = self._main_guidance_var.get().lower()
+        az_mode    = "azimuth" in guid
+        acton_mode = "acton"   in guid
         if az_mode:
             self._az_cmd_frame.grid()
             self._main_bank_sched_var.set(False)
             self._on_main_bank_toggled()
         else:
             self._az_cmd_frame.grid_remove()
+        if acton_mode:
+            self._acton_beta_frame.grid()
+        else:
+            self._acton_beta_frame.grid_remove()
 
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current missile."""
@@ -5127,6 +5148,10 @@ class MissileFlyoutApp(tk.Tk):
                                             float(_bv['bank'].get())))
                         except ValueError:
                             pass
+                try:
+                    _g_beta_s = float(self._main_beta_s_var.get())
+                except (ValueError, AttributeError):
+                    _g_beta_s = 0.0
                 _g_new_rv = _dc.replace(
                     _g_erv,
                     glider_enabled=True,
@@ -5136,6 +5161,7 @@ class MissileFlyoutApp(tk.Tk):
                     glider_bank_schedule=_g_bank,
                     glider_target_az_deg=_g_tgt_az,
                     glider_max_bank_deg=_g_max_bank,
+                    glider_beta_entry_kg_m2=_g_beta_s,
                 )
                 _g_node = missile
                 while _g_node is not None:
