@@ -727,14 +727,12 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     r_mag = float(np.linalg.norm(pos))
     fallback = ([], 0.0, np.concatenate([pos, vel]))
     if speed < 1.0 or r_mag < 1e3:
-        print(f"[pullup] FALLBACK: degenerate speed/rmag  speed={speed:.1f} r_mag={r_mag:.0f}")
         return fallback
 
     r_hat = pos / r_mag
     v_hat = vel / speed
     sin_gamma = float(np.dot(v_hat, r_hat))           # >0 ascending
     if sin_gamma >= 0.0:
-        print(f"[pullup] FALLBACK: ascending  sin_gamma={sin_gamma:.4f}")
         return fallback
     theta_2 = float(np.arcsin(min(1.0, -sin_gamma)))
 
@@ -745,35 +743,17 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     g_mag = float(np.linalg.norm(gravity_ecef(pos)))
     radial_acc = g_mag - v_4**2 / r_mag
     if radial_acc <= 0.0:
-        print(f"[pullup] FALLBACK: super-orbital  v4={v_4:.0f} radial_acc={radial_acc:.4f}")
         return fallback
     rho_eq = 2.0 * beta_L * radial_acc / (v_4**2 * LD)
     if rho_eq <= 0.0:
-        print(f"[pullup] FALLBACK: rho_eq<=0  rho_eq={rho_eq:.6g}")
         return fallback
-    # Binary search on the actual atmosphere model so h_eq is consistent
-    # with the density the integrator sees (avoids isothermal-fit mismatch).
-    _h_lo, _h_hi = 5_000.0, 80_000.0
-    if atmosphere(_h_lo)[2] < rho_eq or atmosphere(_h_hi)[2] > rho_eq:
-        print(f"[pullup] FALLBACK: rho_eq out of bracket  rho_eq={rho_eq:.4e}"
-              f"  rho(5km)={atmosphere(_h_lo)[2]:.4e}  rho(80km)={atmosphere(_h_hi)[2]:.4e}")
-        return fallback                               # rho_eq out of range
-    for _ in range(50):
-        _h_mid = (_h_lo + _h_hi) * 0.5
-        if atmosphere(_h_mid)[2] > rho_eq:
-            _h_lo = _h_mid
-        else:
-            _h_hi = _h_mid
-    h_eq = (_h_lo + _h_hi) * 0.5
+    # Equilibrium altitude from Acton's isothermal exponential atmosphere
+    # (same model used by _analytical_equil_glide for the glide phase).
+    h_eq = ACTON_SCALE_HEIGHT_M * float(np.log(ACTON_SEA_LEVEL_RHO / rho_eq))
     if not (5_000.0 < h_eq < 80_000.0):
-        print(f"[pullup] FALLBACK: h_eq out of bounds  h_eq={h_eq/1e3:.1f} km")
         return fallback
 
     lat, lon, h_3 = ecef_to_geodetic(pos)
-    print(f"[pullup] theta2={float(np.degrees(theta_2)):.2f}°  v3={speed/1e3:.3f} km/s"
-          f"  v4={v_4/1e3:.3f} km/s  rho_eq={rho_eq:.4e} kg/m³"
-          f"  h_eq={h_eq/1e3:.2f} km  h_3={h_3/1e3:.2f} km"
-          f"  {'OK' if h_3 > h_eq else 'FALLBACK: h_3<=h_eq'}")
     if h_3 <= h_eq:
         return fallback                               # already below h_eq
 
@@ -838,6 +818,100 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     post_vel = samples[-1][2]
     post_state = np.concatenate([post_pos, post_vel])
     return samples, t_pullup, post_state
+
+
+def _analytical_equil_glide(
+        start_pos: np.ndarray,
+        start_vel: np.ndarray,
+        beta_L: float,
+        LD: float,
+        h_terminal_m: float = 30_000.0,
+        n_samples: int = 200,
+) -> tuple:
+    """
+    Tracy 2020 / Acton 2021 Phase-5 equilibrium glide, closed-form.
+
+    Uses the isothermal exponential atmosphere (Acton's fit, valid 30–100 km):
+        ρ(h) = ρ_0 · exp(−h / H)
+
+    Range (Tracy Eq. ~10):
+        R(V) = (L/D · r / 2) · ln[(g·r − V_4²) / (g·r − V²)]
+
+    Equilibrium altitude:
+        h(V) = H · ln(ρ_0 / ρ_eq(V)),   ρ_eq = 2β(g − V²/r) / (V²·L/D)
+
+    Glide ends when h_eq reaches h_terminal_m.  Returns (t_rel, pos_ecef,
+    vel_ecef) where t_rel are time offsets (s) from the arc endpoint, and
+    pos_ecef / vel_ecef are N×3 arrays.
+    """
+    H    = ACTON_SCALE_HEIGHT_M
+    rho0 = ACTON_SEA_LEVEL_RHO
+
+    V_4 = float(np.linalg.norm(start_vel))
+    r_s = float(np.linalg.norm(start_pos))
+    if V_4 < 100.0 or r_s < 1e3:
+        return (np.array([0.0]),
+                start_pos.reshape(1, 3),
+                start_vel.reshape(1, 3))
+
+    g = GM / r_s**2
+    r = r_s
+
+    # Terminal velocity where equilibrium altitude = h_terminal_m
+    rho_term  = rho0 * float(np.exp(-h_terminal_m / H))
+    denom_f   = rho_term * LD * r + 2.0 * beta_L
+    V_f       = float(np.sqrt(max(2.0 * beta_L * g * r / denom_f, 1.0)))
+    if V_f >= V_4:
+        return (np.array([0.0]),
+                start_pos.reshape(1, 3),
+                start_vel.reshape(1, 3))
+
+    # Heading azimuth at the glide start (γ ≈ 0, so velocity ≈ horizontal)
+    lat_s, lon_s, _ = ecef_to_geodetic(start_pos)
+    e_east_s, e_north_s, _ = _enu_frame(lat_s, lon_s)
+    v_hat = start_vel / V_4
+    azimuth  = float(np.arctan2(float(np.dot(v_hat, e_east_s)),
+                                float(np.dot(v_hat, e_north_s))))
+    sin_az   = float(np.sin(azimuth));  cos_az  = float(np.cos(azimuth))
+    sin_lat0 = float(np.sin(lat_s));    cos_lat0 = float(np.cos(lat_s))
+    R_e = 6_371_000.0
+
+    # Sample velocity grid
+    V_arr = np.linspace(V_4, V_f, n_samples)
+    V_c2  = g * r
+
+    # Cumulative downrange (Tracy range formula)
+    R_arr = (LD * r / 2.0) * np.log(
+        (V_c2 - V_4**2) / np.maximum(V_c2 - V_arr**2, 1.0))
+
+    # Equilibrium altitude h(V)
+    radial_acc = g - V_arr**2 / r
+    rho_eq_arr = 2.0 * beta_L * np.maximum(radial_acc, 1e-30) / (V_arr**2 * LD)
+    h_arr      = H * np.log(rho0 / np.maximum(rho_eq_arr, 1e-30))
+    h_arr      = np.maximum(h_arr, 0.0)
+
+    # Cumulative time: dt/dV = L/D / (g − V²/r), V decreasing
+    t_arr = np.zeros(n_samples)
+    for i in range(1, n_samples):
+        dV     = abs(V_arr[i] - V_arr[i - 1])
+        ra_avg = 0.5 * (float(radial_acc[i]) + float(radial_acc[i - 1]))
+        t_arr[i] = t_arr[i - 1] + (LD * dV / ra_avg if ra_avg > 1e-6 else 0.0)
+
+    # Project onto great circle from (lat_s, lon_s) along azimuth
+    pos_out = np.zeros((n_samples, 3))
+    vel_out = np.zeros((n_samples, 3))
+    for i in range(n_samples):
+        d   = R_arr[i] / R_e
+        sd, cd = float(np.sin(d)), float(np.cos(d))
+        sl2 = sin_lat0 * cd + cos_lat0 * sd * cos_az
+        lat_i = float(np.arcsin(max(-1.0, min(1.0, sl2))))
+        lon_i = lon_s + float(np.arctan2(sin_az * sd * cos_lat0,
+                                          cd - sin_lat0 * sl2))
+        pos_out[i] = geodetic_to_ecef(lat_i, lon_i, float(h_arr[i]))
+        e_e_i, e_n_i, _ = _enu_frame(lat_i, lon_i)
+        vel_out[i]  = V_arr[i] * (sin_az * e_e_i + cos_az * e_n_i)
+
+    return t_arr, pos_out, vel_out
 
 
 # ---------------------------------------------------------------------------
@@ -1148,133 +1222,112 @@ def integrate_trajectory(params: MissileParams,
         if _pierce_fired:
             t_pierce     = float(sol_pre.t_events[1][0])
             state_pierce = sol_pre.y_events[1][0]
-
             beta_L = float(_erv_full.beta_kg_m2)
             LD     = float(_erv_full.glider_LD)
+            H    = ACTON_SCALE_HEIGHT_M
+            rho0 = ACTON_SEA_LEVEL_RHO
 
-            # Optional Acton Phase-3 segment (direct re-entry with β_S).
+            # ---- Acton Phase 3: analytical constant-γ drag descent ----------
             if _acton_mode:
-                beta_S = float(_erv_full.glider_beta_entry_kg_m2)
-                # h_3 = h_eq + H·ln(β_L/β_S) using V at pierce as a stand-in
-                # for V_3.  h_eq is computed from V_4 = V_3·exp(−(L/D)·θ_2).
-                v3   = float(np.linalg.norm(state_pierce[3:]))
-                rmag = float(np.linalg.norm(state_pierce[:3]))
-                rh   = state_pierce[:3] / rmag
-                vh   = state_pierce[3:] / max(v3, 1e-9)
-                sin_g = float(np.dot(vh, rh))
-                theta_2 = float(np.arcsin(min(1.0, max(-1.0, -sin_g)))) if sin_g < 0 else 0.0
-                v4 = v3 * float(np.exp(-LD * theta_2))
-                g_mag = float(np.linalg.norm(gravity_ecef(state_pierce[:3])))
-                radial_acc = g_mag - v4*v4 / rmag
-                if radial_acc > 0 and v4 > 0:
-                    rho_eq = 2.0 * beta_L * radial_acc / (v4*v4 * LD)
-                    rho_3  = rho_eq * beta_S / beta_L   # ρ at h_3 (Acton Eq. 8)
-                    # Binary search on actual atmosphere for h_eq.
-                    _hlo, _hhi = 5_000.0, 80_000.0
-                    _atm_lo = atmosphere(_hlo)[2]
-                    _atm_hi = atmosphere(_hhi)[2]
-                    if _atm_lo >= rho_eq >= _atm_hi:
-                        for _ in range(50):
-                            _hmid = (_hlo + _hhi) * 0.5
-                            if atmosphere(_hmid)[2] > rho_eq:
-                                _hlo = _hmid
-                            else:
-                                _hhi = _hmid
-                        h_eq = (_hlo + _hhi) * 0.5
-                        # Binary search for h_3 (higher altitude, lower ρ).
-                        # Upper bound is the pierce altitude — h_3 must be
-                        # below it for Phase 3 to have any work to do.
-                        _hlo3, _hhi3 = h_eq, float(ACTON_PIERCE_ALT_M)
-                        _atm_lo3 = float(atmosphere(_hlo3)[2])
-                        _atm_hi3 = float(atmosphere(_hhi3)[2])
-                        if _atm_lo3 >= rho_3 >= _atm_hi3:
-                            for _ in range(50):
-                                _hmid3 = (_hlo3 + _hhi3) * 0.5
-                                if float(atmosphere(_hmid3)[2]) > rho_3:
-                                    _hlo3 = _hmid3
-                                else:
-                                    _hhi3 = _hmid3
-                            h_3 = (_hlo3 + _hhi3) * 0.5
-                        else:
-                            h_3 = ACTON_PIERCE_ALT_M
-                    else:
-                        h_3 = ACTON_PIERCE_ALT_M
-                else:
-                    h_3 = ACTON_PIERCE_ALT_M    # no equilibrium → skip Phase 3
-                # If h_3 is at or above the pierce altitude, Phase 3 has no
-                # work to do (vehicle is already below h_3).  Clamp so the
-                # event won't fire and Phase 3 reduces to a pass-through.
-                if h_3 >= ACTON_PIERCE_ALT_M:
-                    h_3 = ACTON_PIERCE_ALT_M
-                _phase3_active = h_3 < ACTON_PIERCE_ALT_M
-                print(f"[acton]  beta_S={beta_S:.1f}  beta_L={beta_L:.1f}"
-                      f"  h_3={h_3/1e3:.2f} km"
-                      f"  {'(run Phase 3)' if _phase3_active else '(skip Phase 3)'}")
+                beta_S  = float(_erv_full.glider_beta_entry_kg_m2)
+                v2      = float(np.linalg.norm(state_pierce[3:]))
+                rmag    = float(np.linalg.norm(state_pierce[:3]))
+                v_hat_p = state_pierce[3:] / max(v2, 1e-9)
+                r_hat_p = state_pierce[:3] / rmag
+                sin_g2  = float(np.dot(v_hat_p, r_hat_p))
+                theta_2 = (float(np.arcsin(min(1.0, max(-1.0, -sin_g2))))
+                           if sin_g2 < 0 else 0.0)
+                g_p     = float(np.linalg.norm(gravity_ecef(state_pierce[:3])))
 
-                # Phase 3 needs β_S drag and zero lift.  Build a shadow
-                # params with the RV's β temporarily set to β_S and the
-                # glider disabled (no lift), then integrate.
-                import copy as _copy
-                _params_p3 = _copy.copy(params)
-                _params_p3.rv = _copy.copy(params.rv) if params.rv is not None else None
-                if _params_p3.rv is not None:
-                    _params_p3.rv.beta_kg_m2 = beta_S
-                    _params_p3.rv.glider_enabled = False
-                eom_args_p3 = (_params_p3,) + eom_args[1:]
-                _phase3_end = _make_phase3_end_event(h_3)
-                t_eval_p3 = t_eval[(t_eval > t_pierce)
-                                   & (t_eval < max_time_s)]
-                sol_p3 = solve_ivp(
-                    fun=_eom,
-                    t_span=(t_pierce, max_time_s),
-                    y0=state_pierce,
-                    method='RK45',
-                    t_eval=t_eval_p3,
-                    events=[_hit_ground, _phase3_end],
-                    args=eom_args_p3,
-                    rtol=_rtol,
-                    atol=_atol,
-                    dense_output=False,
-                    max_step=_maxstep,
-                )
-                _p3_end_fired = (len(sol_p3.t_events[1]) > 0
-                                 and (len(sol_p3.t_events[0]) == 0
-                                      or sol_p3.t_events[1][0] <
-                                         sol_p3.t_events[0][0]))
-                if _p3_end_fired:
-                    t_arc_start     = float(sol_p3.t_events[1][0])
-                    state_arc_start = sol_p3.y_events[1][0]
+                # Fixed-point iteration: h_3 ↔ V_3 ↔ h_eq  (Acton Eq. 8)
+                V_3 = v2
+                h_3 = float(ACTON_PIERCE_ALT_M)
+                for _ in range(25):
+                    V_4t = V_3 * float(np.exp(-LD * theta_2))
+                    if V_4t < 100.0:
+                        break
+                    ra_t = g_p - V_4t**2 / rmag
+                    if ra_t <= 0.0:
+                        break
+                    rho_eq_t = 2.0 * beta_L * ra_t / (V_4t**2 * LD)
+                    h_eq_t   = H * float(np.log(rho0 / max(rho_eq_t, 1e-30)))
+                    h_3t     = h_eq_t + H * float(np.log(max(beta_L / beta_S, 1.0)))
+                    h_3t     = min(h_3t, float(ACTON_PIERCE_ALT_M) - 1.0)
+                    rho_h3t  = rho0 * float(np.exp(-h_3t / H))
+                    V_3n     = v2 * float(np.exp(
+                        -H * rho_h3t / (2.0 * beta_S
+                                        * max(float(np.sin(theta_2)), 1e-9))))
+                    if abs(V_3n - V_3) < 0.1:
+                        V_3 = V_3n; h_3 = h_3t; break
+                    V_3 = V_3n; h_3 = h_3t
+
+                # Build Phase 3 ECEF samples for visualisation
+                lat_p, lon_p, h_2m = ecef_to_geodetic(state_pierce[:3])
+                e_east_p, e_north_p, _ = _enu_frame(lat_p, lon_p)
+                v_horiz_p = state_pierce[3:] - sin_g2 * v2 * r_hat_p
+                v_hm_p    = float(np.linalg.norm(v_horiz_p))
+                if v_hm_p > 1.0:
+                    _vhh = v_horiz_p / v_hm_p
+                    az_p = float(np.arctan2(float(np.dot(_vhh, e_east_p)),
+                                            float(np.dot(_vhh, e_north_p))))
                 else:
-                    # Either Phase 3 ended at ground (no t_3) or never
-                    # reached h_3 — fall back to Tracy: arc starts at
-                    # the pierce point.
+                    az_p = 0.0
+                sin_az_p  = float(np.sin(az_p)); cos_az_p  = float(np.cos(az_p))
+                sin_lat_p = float(np.sin(lat_p)); cos_lat_p = float(np.cos(lat_p))
+                _sin_t2   = max(float(np.sin(theta_2)), 1e-9)
+                _cos_t2   = float(np.cos(theta_2))
+                _Re_p     = 6_371_000.0
+                _h_pts    = np.linspace(float(h_2m), float(h_3), 21)[1:]
+                p3_samps  = []
+                _pt3 = 0.0; _pV3 = v2; _ph3 = float(h_2m)
+                for _hi in _h_pts:
+                    _ri   = rho0 * float(np.exp(-_hi / H))
+                    _Vi   = v2 * float(np.exp(-H * _ri / (2.0 * beta_S * _sin_t2)))
+                    _dr_i = (float(h_2m) - _hi) * _cos_t2 / _sin_t2
+                    _ti   = _pt3 + (_ph3 - _hi) / (0.5 * (_pV3 + _Vi) * _sin_t2)
+                    _drad = _dr_i / _Re_p
+                    _sd, _cd = float(np.sin(_drad)), float(np.cos(_drad))
+                    _sl2  = sin_lat_p * _cd + cos_lat_p * _sd * cos_az_p
+                    _lai  = float(np.arcsin(max(-1.0, min(1.0, _sl2))))
+                    _loi  = lon_p + float(np.arctan2(sin_az_p * _sd * cos_lat_p,
+                                                      _cd - sin_lat_p * _sl2))
+                    _pi   = geodetic_to_ecef(_lai, _loi, _hi)
+                    _ee, _en, _eu = _enu_frame(_lai, _loi)
+                    _fwd  = sin_az_p * _ee + cos_az_p * _en
+                    _vi   = _Vi * (_cos_t2 * _fwd - _sin_t2 * _eu)
+                    p3_samps.append((_ti, _pi, _vi))
+                    _pt3 = _ti; _pV3 = _Vi; _ph3 = _hi
+
+                if p3_samps:
+                    t_arc_start     = t_pierce + p3_samps[-1][0]
+                    state_arc_start = np.concatenate([p3_samps[-1][1],
+                                                      p3_samps[-1][2]])
+                else:
                     t_arc_start     = t_pierce
                     state_arc_start = state_pierce
             else:
-                # Tracy: arc starts at the pierce point directly.
+                # Tracy mode: arc starts directly at the pierce point
+                p3_samps        = []
                 t_arc_start     = t_pierce
                 state_arc_start = state_pierce
-                sol_p3 = None
 
+            # ---- Phase 4: analytical pull-up arc ----------------------------
             arc_samples, t_pullup, state_post = _acton_pullup_arc(
                 state_arc_start[:3], state_arc_start[3:], LD, beta_L)
             t_glide_start = t_arc_start + t_pullup
-            # Glide phase: from end of pull-up to max_time_s, ground only.
-            t_eval_post = t_eval[t_eval > t_glide_start]
-            sol_post = solve_ivp(
-                fun=_eom,
-                t_span=(t_glide_start, max_time_s),
-                y0=state_post,
-                method='RK45',
-                t_eval=t_eval_post,
-                events=_hit_ground,
-                args=eom_args,
-                rtol=_rtol,
-                atol=_atol,
-                dense_output=False,
-                max_step=_maxstep,
-            )
-            # Build arc-segment arrays (anchor + 12 mid-arc samples).
+
+            # ---- Phase 5: analytical equilibrium glide (Tracy / Acton) -----
+            _h_term = (float(_erv_full.glider_terminal_alt_km) * 1e3
+                       if (_erv_full.glider_terminal_dive
+                           and _erv_full.glider_terminal_alt_km > 0)
+                       else 30_000.0)
+            _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
+                state_post[:3], state_post[3:], beta_L, LD, _h_term)
+            _t_gl_abs = _t_gl_rel + t_glide_start
+            _glide_y  = np.vstack([_pos_gl.T, _vel_gl.T])   # 6 × N
+            orbital   = False
+
+            # ---- Build Phase 4 arc arrays -----------------------------------
             if arc_samples:
                 _arc_t = np.concatenate([
                     [t_arc_start],
@@ -1291,30 +1344,22 @@ def integrate_trajectory(params: MissileParams,
                 _arc_t = np.empty(0)
                 _arc_y = np.empty((6, 0))
 
-            # Concatenate the segment arrays in mission-time order:
-            #   pre-pierce → (Phase-3 if Acton) → pull-up arc → glide.
+            # ---- Assemble full trajectory ------------------------------------
             _pre_mask = sol_pre.t < t_pierce
-            _pre_t = sol_pre.t[_pre_mask]
-            _pre_y = sol_pre.y[:, _pre_mask]
-            if _acton_mode and sol_p3 is not None:
-                _p3_t_arr = np.asarray(sol_p3.t)
-                _p3_y_arr = np.asarray(sol_p3.y)
-                if _p3_t_arr.size == 0 or _p3_y_arr.ndim < 2:
-                    _p3_t = np.empty(0)
-                    _p3_y = np.empty((6, 0))
-                else:
-                    _p3_mask = (_p3_t_arr < t_arc_start) & (_p3_t_arr > t_pierce)
-                    _p3_t = _p3_t_arr[_p3_mask]
-                    _p3_y = _p3_y_arr[:, _p3_mask]
+            _pre_t    = sol_pre.t[_pre_mask]
+            _pre_y    = sol_pre.y[:, _pre_mask]
+            if p3_samps:
+                _p3_t = np.array([t_pierce + s[0] for s in p3_samps])
+                _p3_y = np.column_stack(
+                    [np.concatenate([s[1], s[2]]) for s in p3_samps])
             else:
                 _p3_t = np.empty(0)
                 _p3_y = np.empty((6, 0))
-            t_arr = np.concatenate([_pre_t, _p3_t, _arc_t, sol_post.t])
-            sol_y = np.concatenate([_pre_y, _p3_y, _arc_y, sol_post.y],
-                                   axis=1)
+            t_arr   = np.concatenate([_pre_t, _p3_t, _arc_t, _t_gl_abs])
+            sol_y   = np.concatenate([_pre_y, _p3_y, _arc_y, _glide_y],
+                                     axis=1)
             pos_arr = sol_y[:3].T
             vel_arr = sol_y[3:].T
-            orbital = (len(sol_post.t_events[0]) == 0)
         else:
             t_arr   = sol_pre.t
             pos_arr = sol_pre.y[:3].T
