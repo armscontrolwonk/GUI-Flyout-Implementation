@@ -1286,9 +1286,11 @@ def integrate_trajectory(params: MissileParams,
             _pre_t = sol_pre.t[_pre_mask]
             _pre_y = sol_pre.y[:, _pre_mask]
             if _acton_mode and sol_p3 is not None:
-                _p3_mask = (sol_p3.t < t_arc_start) & (sol_p3.t > t_pierce)
-                _p3_t = sol_p3.t[_p3_mask]
-                _p3_y = sol_p3.y[:, _p3_mask]
+                _p3_t_arr = np.asarray(sol_p3.t)
+                _p3_y_arr = np.asarray(sol_p3.y)
+                _p3_mask = (_p3_t_arr < t_arc_start) & (_p3_t_arr > t_pierce)
+                _p3_t = _p3_t_arr[_p3_mask]
+                _p3_y = _p3_y_arr[:, _p3_mask]
             else:
                 _p3_t = np.empty(0)
                 _p3_y = np.empty((6, 0))
