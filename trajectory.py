@@ -1324,6 +1324,44 @@ def integrate_trajectory(params: MissileParams,
             _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
                 state_post[:3], state_post[3:], beta_L, LD, _h_term)
             _t_gl_abs = _t_gl_rel + t_glide_start
+
+            # ---- Terminal ballistic dive from glide endpoint to ground -------
+            _, _, _h_gl_end = ecef_to_geodetic(_pos_gl[-1])
+            if _h_gl_end > 500.0:
+                _t0_td = float(_t_gl_abs[-1])
+                _s0_td = np.concatenate([_pos_gl[-1], _vel_gl[-1]])
+
+                def _eom_td(t, s, _bL=beta_L):
+                    _p, _v = s[:3], s[3:]
+                    _, _, _alt = ecef_to_geodetic(_p)
+                    _gv  = gravity_ecef(_p)
+                    _spd = float(np.linalg.norm(_v))
+                    if _spd > 1e-6:
+                        _, _, _rho, _ = atmosphere(max(float(_alt), 0.0))
+                        _ad = -(0.5 * _rho * _spd / _bL) * _v
+                    else:
+                        _ad = np.zeros(3)
+                    return np.concatenate(
+                        [_v, _gv + _ad
+                         + coriolis_acceleration(_v)
+                         + centrifugal_acceleration(_p)])
+
+                def _td_gnd(t, s):
+                    _, _, _alt = ecef_to_geodetic(s[:3])
+                    return float(_alt)
+                _td_gnd.terminal  = True
+                _td_gnd.direction = -1
+
+                _sol_td = solve_ivp(
+                    _eom_td, (_t0_td, _t0_td + 600.0), _s0_td,
+                    method='RK45', events=_td_gnd,
+                    rtol=_rtol, atol=_atol,
+                    dense_output=False, max_step=_maxstep)
+                if _sol_td.y.shape[1] > 1:
+                    _t_gl_abs = np.concatenate([_t_gl_abs, _sol_td.t[1:]])
+                    _pos_gl   = np.vstack([_pos_gl, _sol_td.y[:3, 1:].T])
+                    _vel_gl   = np.vstack([_vel_gl, _sol_td.y[3:, 1:].T])
+
             _glide_y  = np.vstack([_pos_gl.T, _vel_gl.T])   # 6 × N
             orbital   = False
 
