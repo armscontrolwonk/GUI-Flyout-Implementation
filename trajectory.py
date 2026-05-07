@@ -835,7 +835,7 @@ def _analytical_equil_glide(
         ρ(h) = ρ_0 · exp(−h / H)
 
     Range (Tracy Eq. ~10):
-        R(V) = (L/D · r / 2) · ln[(g·r − V_4²) / (g·r − V²)]
+        R(V) = (L/D · r / 2) · ln[(g·r − V²) / (g·r − V_4²)]
 
     Equilibrium altitude:
         h(V) = H · ln(ρ_0 / ρ_eq(V)),   ρ_eq = 2β(g − V²/r) / (V²·L/D)
@@ -880,9 +880,11 @@ def _analytical_equil_glide(
     V_arr = np.linspace(V_4, V_f, n_samples)
     V_c2  = g * r
 
-    # Cumulative downrange (Tracy range formula)
+    # Cumulative downrange (Tracy range formula). For V<V_4 the numerator
+    # (g·r−V²) exceeds the denominator (g·r−V_4²), so R grows monotonically
+    # forward along the bearing as V decreases.
     R_arr = (LD * r / 2.0) * np.log(
-        (V_c2 - V_4**2) / np.maximum(V_c2 - V_arr**2, 1.0))
+        np.maximum(V_c2 - V_arr**2, 1.0) / max(V_c2 - V_4**2, 1.0))
 
     # Equilibrium altitude h(V)
     radial_acc = g - V_arr**2 / r
