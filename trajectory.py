@@ -827,6 +827,8 @@ def _analytical_equil_glide(
         LD: float,
         h_terminal_m: float = 30_000.0,
         n_samples: int = 200,
+        bank_schedule: list = None,
+        t_offset: float = 0.0,
 ) -> tuple:
     """
     Tracy 2020 / Acton 2021 Phase-5 equilibrium glide, closed-form.
@@ -899,19 +901,47 @@ def _analytical_equil_glide(
         ra_avg = 0.5 * (float(radial_acc[i]) + float(radial_acc[i - 1]))
         t_arr[i] = t_arr[i - 1] + (LD * dV / ra_avg if ra_avg > 1e-6 else 0.0)
 
-    # Project onto great circle from (lat_s, lon_s) along azimuth
+    # Heading at each sample.  Bank σ tilts the lift vector laterally; with
+    # equilibrium balance L·cos σ = m·(g − V²/r), the horizontal component
+    # gives turn rate dψ/dt = (g − V²/r)·tan σ / V.  Positive σ = right turn
+    # (matches the n_side = v_hat × n_up convention used in the numerical EOM).
+    psi_arr = np.zeros(n_samples)
+    psi_arr[0] = azimuth
+    for i in range(1, n_samples):
+        sigma_i = 0.0
+        if bank_schedule:
+            t_mid = 0.5 * (float(t_arr[i]) + float(t_arr[i - 1])) + t_offset
+            for (_bs, _be, _bk) in bank_schedule:
+                if _bs <= t_mid <= _be:
+                    sigma_i = float(np.radians(_bk))
+                    break
+        V_mid  = 0.5 * (float(V_arr[i]) + float(V_arr[i - 1]))
+        ra_mid = 0.5 * (float(radial_acc[i]) + float(radial_acc[i - 1]))
+        dt     = float(t_arr[i] - t_arr[i - 1])
+        d_psi  = ra_mid * float(np.tan(sigma_i)) / max(V_mid, 1.0) * dt
+        psi_arr[i] = psi_arr[i - 1] + d_psi
+
+    # Iterative great-circle stepping with time-varying bearing
     pos_out = np.zeros((n_samples, 3))
     vel_out = np.zeros((n_samples, 3))
-    for i in range(n_samples):
-        d   = R_arr[i] / R_e
+    cur_lat, cur_lon = lat_s, lon_s
+    pos_out[0] = geodetic_to_ecef(cur_lat, cur_lon, float(h_arr[0]))
+    e_e0, e_n0, _ = _enu_frame(cur_lat, cur_lon)
+    sa0 = float(np.sin(psi_arr[0])); ca0 = float(np.cos(psi_arr[0]))
+    vel_out[0] = V_arr[0] * (sa0 * e_e0 + ca0 * e_n0)
+    for i in range(1, n_samples):
+        d   = float(R_arr[i] - R_arr[i - 1]) / R_e
         sd, cd = float(np.sin(d)), float(np.cos(d))
-        sl2 = sin_lat0 * cd + cos_lat0 * sd * cos_az
-        lat_i = float(np.arcsin(max(-1.0, min(1.0, sl2))))
-        lon_i = lon_s + float(np.arctan2(sin_az * sd * cos_lat0,
-                                          cd - sin_lat0 * sl2))
-        pos_out[i] = geodetic_to_ecef(lat_i, lon_i, float(h_arr[i]))
-        e_e_i, e_n_i, _ = _enu_frame(lat_i, lon_i)
-        vel_out[i]  = V_arr[i] * (sin_az * e_e_i + cos_az * e_n_i)
+        sa, ca = float(np.sin(psi_arr[i])), float(np.cos(psi_arr[i]))
+        scl = float(np.sin(cur_lat)); ccl = float(np.cos(cur_lat))
+        sl2 = scl * cd + ccl * sd * ca
+        new_lat = float(np.arcsin(max(-1.0, min(1.0, sl2))))
+        new_lon = cur_lon + float(np.arctan2(sa * sd * ccl,
+                                              cd - scl * sl2))
+        pos_out[i] = geodetic_to_ecef(new_lat, new_lon, float(h_arr[i]))
+        e_e_i, e_n_i, _ = _enu_frame(new_lat, new_lon)
+        vel_out[i] = V_arr[i] * (sa * e_e_i + ca * e_n_i)
+        cur_lat, cur_lon = new_lat, new_lon
 
     return t_arr, pos_out, vel_out
 
@@ -1324,7 +1354,10 @@ def integrate_trajectory(params: MissileParams,
                            and _erv_full.glider_terminal_alt_km > 0)
                        else 30_000.0)
             _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
-                state_post[:3], state_post[3:], beta_L, LD, _h_term)
+                state_post[:3], state_post[3:], beta_L, LD, _h_term,
+                bank_schedule=getattr(_erv_full,
+                                      'glider_bank_schedule', None),
+                t_offset=t_glide_start)
             _t_gl_abs = _t_gl_rel + t_glide_start
 
             # ---- Terminal ballistic dive from glide endpoint to ground -------
