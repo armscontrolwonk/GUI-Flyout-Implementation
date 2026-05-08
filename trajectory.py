@@ -763,9 +763,16 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
         return fallback                               # already below h_eq
 
     # Geometric arc radius fitting (h_3, −θ_2) to (h_eq, 0).
+    # For very shallow entry angles the denominator (1 − cos θ₂) → 0, making
+    # R = (h₃ − h_eq)/(1 − cos θ₂) unphysically large (> Earth's radius at
+    # θ₂ < ~8°; > Earth-Moon distance at θ₂ ≈ 1°).  This happens when a
+    # missile burns nearly horizontally so apogee barely exceeds 100 km and
+    # the pierce angle is ~1°.  Below 3° the vehicle is already in near-
+    # equilibrium glide and needs no pull-up arc; return the fallback so the
+    # caller starts the analytical glide immediately from the pierce state.
     one_minus_cos = 1.0 - float(np.cos(theta_2))
-    if one_minus_cos < 1e-9:
-        return fallback                               # θ_2 essentially zero
+    if theta_2 < np.radians(3.0) or one_minus_cos < 1e-9:
+        return fallback
     R = (h_3 - h_eq) / one_minus_cos
     t_pullup = R * theta_2 / speed                    # high-speed limit
 
