@@ -3587,6 +3587,15 @@ class MissileFlyoutApp(tk.Tk):
 
         _gmf.columnconfigure(1, weight=1)
 
+        # L/D row (row 0) — always shown; blank → use RV's stored value
+        ttk.Label(_gmf, text="L/D:").grid(
+            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+        _ld_row = ttk.Frame(_gmf)
+        _ld_row.grid(row=0, column=1, sticky=tk.W, pady=1, padx=(0, 8))
+        self._main_LD_var = tk.StringVar(value="")
+        ttk.Entry(_ld_row, textvariable=self._main_LD_var, width=5).pack(side=tk.LEFT)
+        ttk.Label(_ld_row, text="  (blank = from RV)").pack(side=tk.LEFT)
+
         # Guidance combobox
         ttk.Label(_gmf, text="Guidance:").grid(
             row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
@@ -4179,6 +4188,8 @@ class MissileFlyoutApp(tk.Tk):
                 _bs_v = _p_erv.glider_beta_entry_kg_m2
                 self._main_beta_s_var.set(
                     f"{_bs_v:.0f}" if _bs_v > 0 else "5000")
+            if hasattr(self, '_main_LD_var') and _p_erv.glider_LD > 0:
+                self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
             self._on_glider_guidance_changed()
@@ -5109,8 +5120,37 @@ class MissileFlyoutApp(tk.Tk):
         # Glider / HGV guidance — override RV params from main panel
         if getattr(self, '_glider_main_var', None) and self._glider_main_var.get():
             import dataclasses as _dc
+            import math as _math
             missile = copy.deepcopy(missile)
             _g_erv = effective_rv(missile)
+
+            # Parse optional main-panel L/D override
+            try:
+                _g_ld_str = getattr(self, '_main_LD_var', tk.StringVar()).get().strip()
+                _g_main_ld = float(_g_ld_str) if _g_ld_str else None
+            except (ValueError, AttributeError):
+                _g_main_ld = None
+
+            # No RV at all (no-sep with no rv field) — synthesise one from the
+            # last stage's body geometry so lift can be applied after burnout.
+            if _g_erv is None:
+                _last = missile
+                while _last.stage2 is not None:
+                    _last = _last.stage2
+                _bm = float(_last.mass_final)
+                _bd = float(_last.diameter_m)
+                if _bd > 0 and _bm > 0:
+                    _ba = _math.pi * (_bd / 2.0) ** 2
+                    _bb = _bm / (0.20 * _ba)   # Forden Cd≈0.20 at Mach 2+
+                    _g_erv = RVParams(
+                        name='(body)',
+                        mass_kg=_bm,
+                        beta_kg_m2=_bb,
+                        glider_enabled=True,
+                        glider_LD=float(_g_main_ld) if _g_main_ld is not None else 2.0,
+                    )
+                    missile.rv = _g_erv
+
             if _g_erv is not None:
                 try:
                     _g_dalt = float(self._main_dive_alt_var.get())
@@ -5149,8 +5189,7 @@ class MissileFlyoutApp(tk.Tk):
                     _g_beta_s = float(self._main_beta_s_var.get())
                 except (ValueError, AttributeError):
                     _g_beta_s = 0.0
-                _g_new_rv = _dc.replace(
-                    _g_erv,
+                _replace_kw = dict(
                     glider_enabled=True,
                     glider_guidance=_g_guid_key,
                     glider_terminal_dive=_g_terminal,
@@ -5160,12 +5199,21 @@ class MissileFlyoutApp(tk.Tk):
                     glider_max_bank_deg=_g_max_bank,
                     glider_beta_entry_kg_m2=_g_beta_s,
                 )
+                if _g_main_ld is not None:
+                    _replace_kw['glider_LD'] = _g_main_ld
+                _g_new_rv = _dc.replace(_g_erv, **_replace_kw)
+                # Walk the stage chain to find where rv lives; fall back to
+                # missile.rv for legacy missiles where all rv fields are None.
                 _g_node = missile
+                _g_saved = False
                 while _g_node is not None:
                     if _g_node.rv is not None:
                         _g_node.rv = _g_new_rv
+                        _g_saved = True
                         break
                     _g_node = _g_node.stage2
+                if not _g_saved:
+                    missile.rv = _g_new_rv
 
         return (missile, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
