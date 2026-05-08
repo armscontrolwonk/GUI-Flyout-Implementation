@@ -3594,6 +3594,8 @@ class MissileFlyoutApp(tk.Tk):
         _ld_row.grid(row=0, column=1, sticky=tk.W, pady=1, padx=(0, 8))
         self._main_LD_var = tk.StringVar(value="")
         ttk.Entry(_ld_row, textvariable=self._main_LD_var, width=5).pack(side=tk.LEFT)
+        ttk.Button(_ld_row, text="Est.", width=4,
+                   command=self._estimate_body_LD).pack(side=tk.LEFT, padx=(3, 0))
         ttk.Label(_ld_row, text="  (blank = from RV)").pack(side=tk.LEFT)
 
         # Guidance combobox
@@ -4251,6 +4253,73 @@ class MissileFlyoutApp(tk.Tk):
             self._acton_beta_frame.grid()
         else:
             self._acton_beta_frame.grid_remove()
+
+    def _estimate_body_LD(self):
+        """Estimate body max L/D from geometry and drag model.
+
+        Uses slender-body theory (CL_α = 2 /rad, referenced to base area)
+        combined with the missile's own zero-lift Cd at the chosen Mach.
+        Parabolic polar: CD = CD₀ + CL²/2 → L/D_max = 1/√(2·CD₀)
+        at trim AoA α* = √(CD₀/2) rad.  Source: Ashley & Landahl (1965).
+        """
+        import math
+        from missile_models import (_cd_nose_shape, drag_coefficient,
+                                    _SHAPE_ALIAS)
+        try:
+            p = get_missile(self._missile_var.get())
+        except Exception:
+            return
+
+        # Walk to last stage — that is the gliding body for a no-sep missile.
+        last = p
+        while last.stage2 is not None:
+            last = last.stage2
+
+        d = float(last.diameter_m)
+        if d <= 0:
+            messagebox.showinfo("L/D Estimate", "Body diameter not set.")
+            return
+
+        mach_ref = 3.0   # representative supersonic/hypersonic glide Mach
+
+        # Choose CD₀ source to match the trajectory integrator precedence:
+        #   1. Nose-shape physics model (Chin 1961) if nose_shape is set
+        #   2. Missile's own Mach/Cd table (Forden or custom) otherwise
+        nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
+        if nose and nose not in ('', 'forden'):
+            ld_nose = (last.nose_length_m / d
+                       if last.nose_length_m > 0 else 3.0)
+            ld_body = (last.length_m / d if last.length_m > 0 else None)
+            cd0 = _cd_nose_shape(
+                nose, ld_nose, mach_ref,
+                ld_body=ld_body,
+                aerospike_LD=float(last.aerospike_LD or 0.0),
+                aerospike_dD=float(last.aerospike_dD or 0.0),
+            )
+            cd_src = f"{nose} nose (Chin 1961)"
+        else:
+            cd0 = drag_coefficient(last, mach_ref)
+            cd_src = "Forden/custom Cd table"
+
+        if cd0 <= 0:
+            messagebox.showinfo("L/D Estimate", "Cd₀ is zero — cannot estimate.")
+            return
+
+        # Slender-body parabolic polar: L/D_max = 1/√(2·CD₀)
+        ld_max   = 1.0 / math.sqrt(2.0 * cd0)
+        alpha_deg = math.degrees(math.sqrt(cd0 / 2.0))
+
+        self._main_LD_var.set(f"{ld_max:.2f}")
+        messagebox.showinfo(
+            "Body L/D Estimate",
+            f"Cd₀ = {cd0:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
+            f"CL_α = 2.0 /rad  (slender-body theory)\n"
+            f"\n"
+            f"Max L/D ≈ {ld_max:.2f}  at α ≈ {alpha_deg:.0f}°\n"
+            f"\n"
+            f"Note: body-alone estimate; fins / control surfaces\n"
+            f"will increase the actual L/D.",
+        )
 
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current missile."""
