@@ -35,7 +35,7 @@ from missile_models import (MISSILE_DB, get_missile,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
                            RVParams, rv_from_dict, rv_to_dict, effective_rv)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
-                        plan_orbital_insertion)
+                        plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
 from slv_performance import schilling_performance
 
@@ -3311,6 +3311,7 @@ class MissileFlyoutApp(tk.Tk):
 
         self._result         = None
         self._running        = False
+        self._cancel_event   = threading.Event()
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
 
         _load_custom_missiles()      # restore any user-saved missiles
@@ -3806,6 +3807,10 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Button(btn_frame, text="Max Range",
                    command=self._maximize_range).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=2, ipady=4)
+        self._cancel_max_btn = ttk.Button(btn_frame, text="■ Stop",
+                                          command=self._cancel_max_range,
+                                          state=tk.DISABLED)
+        self._cancel_max_btn.pack(side=tk.LEFT, expand=False, padx=(0, 2), ipady=4)
         ttk.Button(btn_frame, text="Sweep…",
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
@@ -5437,6 +5442,11 @@ class MissileFlyoutApp(tk.Tk):
             daemon=True,
         ).start()
 
+    def _cancel_max_range(self):
+        self._cancel_event.set()
+        self._cancel_max_btn.config(state=tk.DISABLED)
+        self._status_var.set("Cancelling…")
+
     def _maximize_range(self):
         if self._running:
             return
@@ -5447,7 +5457,9 @@ class MissileFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
+        self._cancel_event.clear()
         self._running = True
+        self._cancel_max_btn.config(state=tk.NORMAL)
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
@@ -5583,7 +5595,8 @@ class MissileFlyoutApp(tk.Tk):
                                         cutoff_time_s=cutoff,
                                         gt_turn_start_s=gt_start_s,
                                         gt_turn_stop_s=gt_stop_s,
-                                        reentry_query_alt_km=q_alt)
+                                        reentry_query_alt_km=q_alt,
+                                        cancel_event=self._cancel_event)
             else:
                 # Orbital insertion trajectories can have very long flight
                 # times: a highly elliptical transfer orbit peaks at thousands
@@ -5604,6 +5617,8 @@ class MissileFlyoutApp(tk.Tk):
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
+        except MaxRangeCancelled:
+            self.after(0, lambda: self._status_var.set("Max Range cancelled."))
         except Exception as e:
             _err_msg = str(e)
             import traceback as _tb
@@ -5611,6 +5626,7 @@ class MissileFlyoutApp(tk.Tk):
             self.after(0, lambda m=_err_msg: messagebox.showerror("Simulation error", m))
         finally:
             self._running = False
+            self.after(0, lambda: self._cancel_max_btn.config(state=tk.DISABLED))
 
     # ------------------------------------------------------------------
     # Display results
