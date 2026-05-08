@@ -63,6 +63,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import minimize_scalar
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gravity import gravity_ecef, GM, RE
@@ -77,6 +78,10 @@ from missile_models import (
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_rv,
 )
+
+
+class MaxRangeCancelled(Exception):
+    """Raised by maximize_range() when a cancel_event is set by the caller."""
 
 
 # ---------------------------------------------------------------------------
@@ -2291,7 +2296,8 @@ def maximize_range(params: MissileParams,
                    cutoff_time_s: float = None,
                    gt_turn_start_s: float = 5.0,
                    gt_turn_stop_s: float = None,
-                   reentry_query_alt_km: float = None) -> dict:
+                   reentry_query_alt_km: float = None,
+                   cancel_event: threading.Event = None) -> dict:
     """
     Find the maximum range by optimising burnout angle and turn-stop time.
 
@@ -2342,7 +2348,10 @@ def maximize_range(params: MissileParams,
                effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0)
 
     def _run_parallel(candidates, label="coarse"):
-        """Submit a list of (la, ts) pairs; return (la, ts, range_km) list."""
+        """Submit a list of (la, ts) pairs; return (la, ts, range_km) list.
+
+        Raises MaxRangeCancelled if cancel_event is set between completions.
+        """
         jobs = [(*c, *_common) for c in candidates]
         results = []
         n_total = len(jobs)
@@ -2354,6 +2363,10 @@ def maximize_range(params: MissileParams,
         with ThreadPoolExecutor(max_workers=n_workers) as ex:
             futures = {ex.submit(_search_one, j): j for j in jobs}
             for n_done, fut in enumerate(as_completed(futures), 1):
+                if cancel_event is not None and cancel_event.is_set():
+                    for f in futures:
+                        f.cancel()
+                    raise MaxRangeCancelled()
                 la, ts = futures[fut][:2]
                 rng = fut.result()
                 results.append((la, ts, rng))
@@ -2397,7 +2410,12 @@ def maximize_range(params: MissileParams,
         # The coarse grid already found the best ts; running minimize_scalar
         # over every ts candidate (the old approach) adds ~400 serial calls.
         # One bounded 1-D search at best_ts converges in ~10–15 evaluations.
+        if cancel_event is not None and cancel_event.is_set():
+            raise MaxRangeCancelled()
+
         def _neg_range_gt(ba, _ts=best_ts):
+            if cancel_event is not None and cancel_event.is_set():
+                return 0.0   # scalar must return a number; optimizer will stop at maxiter
             r = _search_one((float(ba), _ts, *_common))
             return -r if r > 0 else 0.0
 
@@ -2406,6 +2424,8 @@ def maximize_range(params: MissileParams,
         res = minimize_scalar(_neg_range_gt, bounds=(lo, hi),
                               method='bounded',
                               options={'xatol': 0.25, 'maxiter': 20})
+        if cancel_event is not None and cancel_event.is_set():
+            raise MaxRangeCancelled()
         if -res.fun > best_range:
             best_range, best_la = -res.fun, float(res.x)
 
