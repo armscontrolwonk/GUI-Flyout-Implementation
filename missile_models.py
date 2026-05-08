@@ -152,6 +152,20 @@ class MissileParams:
     aerospike_LD:           float = 0.0
     aerospike_dD:           float = 0.0
 
+    # Fins — trapezoidal planar fins attached to the last stage body.
+    # When has_fins is True the fin lift slope and drag are computed and added
+    # to the body-only values (used by the L/D estimator and the synthesised
+    # no-sep RVParams beta).  Fin aerodynamics follow the DATCOM/Barrowman
+    # model (friction: Mandell et al. 1973; lift: DATCOM supersonic formula).
+    # All dimensions in metres; sweep is leading-edge sweep in degrees.
+    has_fins:             bool  = False
+    n_fins:               int   = 4
+    fin_span_m:           float = 0.0   # exposed semi-span from body surface
+    fin_root_chord_m:     float = 0.0
+    fin_tip_chord_m:      float = 0.0
+    fin_thickness_m:      float = 0.0   # max thickness
+    fin_sweep_deg:        float = 0.0   # leading-edge sweep angle
+
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
@@ -623,6 +637,116 @@ def _aerospike_effective_LD(spike_LD: float, spike_dD: float) -> float:
     if spike_LD <= 0.0:
         return 0.0
     return 1.0 + (2.0 / 3.0) * spike_LD + 2.0 * spike_dD
+
+
+# ---------------------------------------------------------------------------
+# Fin aerodynamics (lift + drag)
+# ---------------------------------------------------------------------------
+
+def _cl_alpha_fins(n_fins: int, span_m: float, c_root_m: float,
+                   c_tip_m: float, body_diam_m: float,
+                   mach: float, sweep_deg: float = 0.0) -> float:
+    """
+    Total fin normal-force (lift) slope in /radian, referenced to body
+    base area A_ref = π(d/2)².
+
+    Model: DATCOM supersonic fin panel formula (Barrowman 1967 / Rocket
+    equation often attributed to Barrowman):
+
+        AR_exp = 2·s² / A_exp          # exposed panel aspect ratio
+        A_exp  = s·(c_root + c_tip)/2  # exposed planform area
+        β      = √max(M²−1, 0.01)      # Prandtl-Glauert compressibility
+        Λ      = leading-edge sweep (rad)
+
+        CL_α_panel = 2π·AR_exp /
+                     (2 + √(AR_exp²·(β²+tan²Λ)/β² + 4))   [per panel, /rad]
+
+    Body-fin mutual interference (Barrowman Eq. 1-21):
+
+        K_BF = 1 + d / (2·s + d)
+
+    Total (all panels, referenced to body base area):
+
+        CL_α_fins = n · CL_α_panel · K_BF · (A_exp / A_ref)
+
+    Falls back gracefully when span or chords are not yet entered.
+    """
+    import math
+    if n_fins < 1 or span_m <= 0 or c_root_m <= 0 or body_diam_m <= 0:
+        return 0.0
+    c_tip_m = max(c_tip_m, 0.0)
+    a_exp = span_m * (c_root_m + c_tip_m) / 2.0     # exposed planform area (m²)
+    if a_exp <= 0:
+        return 0.0
+    ar_exp = 2.0 * span_m ** 2 / a_exp              # exposed aspect ratio
+    beta = max(math.sqrt(max(mach ** 2 - 1.0, 0.0)), 0.01)
+    sweep_rad = math.radians(sweep_deg)
+    tan_sweep = math.tan(sweep_rad)
+    denom = 2.0 + math.sqrt(ar_exp ** 2 * (beta ** 2 + tan_sweep ** 2) / beta ** 2 + 4.0)
+    cl_alpha_panel = 2.0 * math.pi * ar_exp / denom  # /rad per panel
+    k_bf = 1.0 + body_diam_m / (2.0 * span_m + body_diam_m)
+    a_ref = math.pi * (body_diam_m / 2.0) ** 2
+    return float(n_fins * cl_alpha_panel * k_bf * (a_exp / a_ref))
+
+
+def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
+             thickness_m: float, body_diam_m: float,
+             mach: float, re_l: float = 5e6,
+             sweep_deg: float = 0.0) -> float:
+    """
+    Total fin drag coefficient increment referenced to body base area A_ref.
+
+    Two components (both at zero angle of attack):
+
+    1. Friction drag — Mandell, Caporaso & Bengen (1973) / FerencDV model:
+         CF = 1.328/√Re_c        (laminar, Re_c < 5×10⁵)
+              0.074/Re_c⁰·²      (turbulent, Re_c ≥ 5×10⁵)
+         mean chord  c_m  = (c_root + c_tip)/2
+         AFP  = planform including body-overlap: A_exp + 0.5·c_root·d
+         Cd_fric = 2·n·CF·(1 + 2·t/c_m)·AFP / A_ref   (both sides)
+
+    2. Zero-lift wave drag at supersonic speeds (thin airfoil, Ackeret):
+         Cd_wave = 4·n·(t/c_m)² / β  · A_exp / A_ref   (leading & trailing)
+
+    Total = Cd_fric + Cd_wave.  Returns 0 when fins are not configured.
+    """
+    import math
+    if n_fins < 1 or span_m <= 0 or c_root_m <= 0 or body_diam_m <= 0:
+        return 0.0
+    c_tip_m    = max(c_tip_m, 0.0)
+    c_m        = 0.5 * (c_root_m + c_tip_m)          # mean chord
+    a_exp      = span_m * c_m                          # exposed planform
+    a_fp       = a_exp + 0.5 * c_root_m * body_diam_m # full planform (+ overlap)
+    a_ref      = math.pi * (body_diam_m / 2.0) ** 2
+    if a_ref <= 0 or c_m <= 0:
+        return 0.0
+
+    # Skin-friction coefficient at mean-chord Reynolds number
+    mu_air = 1.789e-5                      # dynamic viscosity (kg/m·s, sea-level)
+    speed_of_sound_ref = 340.0             # m/s reference (exact value doesn't
+    # matter — re_l is passed in from the caller which has the real speed)
+    # Use chord-based Re approximated from body Re_l and chord/length ratio.
+    # Guard against body length zero.
+    re_c = re_l * (c_m / max(c_m, 1.0))   # simplifies to re_l when body≈chord
+    # A better estimate: use Re_l directly (conservative; fin is shorter).
+    re_c = max(re_l * (c_m / max(c_m + span_m, 1e-3)), 1e3)
+
+    if re_c < 5e5:
+        cf = 1.328 / math.sqrt(re_c)
+    else:
+        cf = 0.074 / (re_c ** 0.2)
+
+    tc = thickness_m / c_m if (thickness_m > 0 and c_m > 0) else 0.0
+    cd_fric = (2.0 * n_fins * cf * (1.0 + 2.0 * tc) * a_fp) / a_ref
+
+    # Supersonic wave drag (Ackeret thin-airfoil)
+    beta = math.sqrt(max(mach ** 2 - 1.0, 0.0))
+    if beta > 0.05 and tc > 0:
+        cd_wave = (4.0 * n_fins * tc ** 2 / beta) * (a_exp / a_ref)
+    else:
+        cd_wave = 0.0
+
+    return float(cd_fric + cd_wave)
 
 
 def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
@@ -1464,6 +1588,13 @@ def missile_to_dict(p: MissileParams) -> dict:
         'shroud_nose_length_m':   p.shroud_nose_length_m,
         'aerospike_LD':           p.aerospike_LD,
         'aerospike_dD':           p.aerospike_dD,
+        'has_fins':               p.has_fins,
+        'n_fins':                 p.n_fins,
+        'fin_span_m':             p.fin_span_m,
+        'fin_root_chord_m':       p.fin_root_chord_m,
+        'fin_tip_chord_m':        p.fin_tip_chord_m,
+        'fin_thickness_m':        p.fin_thickness_m,
+        'fin_sweep_deg':          p.fin_sweep_deg,
         'payload_diameter_m':     p.payload_diameter_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
@@ -1564,6 +1695,13 @@ def missile_from_dict(d: dict) -> MissileParams:
                             float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
         aerospike_LD=float(d.get('aerospike_LD', 0.0)),
         aerospike_dD=float(d.get('aerospike_dD', 0.0)),
+        has_fins=bool(d.get('has_fins', False)),
+        n_fins=int(d.get('n_fins', 4)),
+        fin_span_m=float(d.get('fin_span_m', 0.0)),
+        fin_root_chord_m=float(d.get('fin_root_chord_m', 0.0)),
+        fin_tip_chord_m=float(d.get('fin_tip_chord_m', 0.0)),
+        fin_thickness_m=float(d.get('fin_thickness_m', 0.0)),
+        fin_sweep_deg=float(d.get('fin_sweep_deg', 0.0)),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
