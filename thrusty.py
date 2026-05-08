@@ -1362,6 +1362,41 @@ class MissileDialog(tk.Toplevel):
         for _v in (self._num_rvs_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
 
+        # ── Fins ─────────────────────────────────────────────────────────
+        ff = ttk.LabelFrame(body, text="Fins")
+        ff.pack(fill=tk.X, padx=8, pady=4)
+        ff.columnconfigure(1, weight=1)
+
+        self._fins_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ff, text="Has fins",
+                        variable=self._fins_var,
+                        command=self._update_fins_state).grid(
+            row=0, column=0, columnspan=2, sticky=tk.W,
+            padx=(6, 2), pady=(4, 0))
+
+        self._fins_section = ttk.Frame(ff)
+        self._fins_section.grid(row=1, column=0, columnspan=2,
+                                sticky=tk.EW, padx=(16, 0))
+        self._fins_section.columnconfigure(1, weight=1)
+        self._fins_section.grid_remove()
+
+        def _ff_entry(row, label, default, unit, pady=2):
+            ttk.Label(self._fins_section, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=pady)
+            _inner = ttk.Frame(self._fins_section)
+            _inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 6), pady=pady)
+            _v = tk.StringVar(value=default)
+            ttk.Entry(_inner, textvariable=_v, width=8).pack(side=tk.LEFT)
+            ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
+            return _v
+
+        self._fin_n_var        = _ff_entry(0, "Number of fins:", "4", "")
+        self._fin_span_var     = _ff_entry(1, "Span (exposed, m):", "0", "m")
+        self._fin_root_var     = _ff_entry(2, "Root chord (m):", "0", "m")
+        self._fin_tip_var      = _ff_entry(3, "Tip chord (m):", "0", "m")
+        self._fin_thick_var    = _ff_entry(4, "Thickness (m):", "0", "m")
+        self._fin_sweep_var    = _ff_entry(5, "L.E. sweep (°):", "0", "°", pady=(2, 4))
+
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
         gf.pack(fill=tk.X, padx=8, pady=4)
@@ -1460,6 +1495,9 @@ class MissileDialog(tk.Toplevel):
         self._shroud_length_entry.config(state="disabled")
         self._shroud_nose_length_entry.config(state="disabled")
         self._shroud_alt_entry.config(state="disabled")
+        # Fins section
+        self._fins_var.set(False)
+        self._update_fins_state()
         # Booster section
         self._n_boosters_spin.config(state="disabled")
         for _bv in (self._b_thrust_var, self._b_burn_var, self._b_core_delay_var,
@@ -1528,6 +1566,13 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section.grid()
         else:
             self._aerospike_section.grid_remove()
+
+    def _update_fins_state(self):
+        """Show/hide the fin geometry entries."""
+        if self._fins_var.get():
+            self._fins_section.grid()
+        else:
+            self._fins_section.grid_remove()
 
     # ------------------------------------------------------------------
     def _update_rv_summary(self):
@@ -1703,6 +1748,17 @@ class MissileDialog(tk.Toplevel):
         self._aerospike_dD_var.set(f"{_aero_dD:.2f}")
         self._update_aerospike_state()
 
+        # Fins
+        _has_fins = bool(getattr(p, 'has_fins', False))
+        self._fins_var.set(_has_fins)
+        self._fin_n_var.set(str(int(getattr(p, 'n_fins', 4) or 4)))
+        self._fin_span_var.set(f"{float(getattr(p, 'fin_span_m', 0.0)):.3f}")
+        self._fin_root_var.set(f"{float(getattr(p, 'fin_root_chord_m', 0.0)):.3f}")
+        self._fin_tip_var.set(f"{float(getattr(p, 'fin_tip_chord_m', 0.0)):.3f}")
+        self._fin_thick_var.set(f"{float(getattr(p, 'fin_thickness_m', 0.0)):.4f}")
+        self._fin_sweep_var.set(f"{float(getattr(p, 'fin_sweep_deg', 0.0)):.1f}")
+        self._update_fins_state()
+
         # Shroud
         has_shroud = shroud_mass > 0
         self._shroud_var.set(has_shroud)
@@ -1797,6 +1853,22 @@ class MissileDialog(tk.Toplevel):
         else:
             aerospike_LD = 0.0
             aerospike_dD = 0.0
+
+        # Fins
+        has_fins = bool(self._fins_var.get())
+        if has_fins:
+            try:
+                n_fins         = max(1, int(float(self._fin_n_var.get())))
+                fin_span_m     = max(0.0, float(self._fin_span_var.get()))
+                fin_root_m     = max(0.0, float(self._fin_root_var.get()))
+                fin_tip_m      = max(0.0, float(self._fin_tip_var.get()))
+                fin_thick_m    = max(0.0, float(self._fin_thick_var.get()))
+                fin_sweep_deg  = float(self._fin_sweep_var.get())
+            except ValueError:
+                raise ValueError("Fin dimensions must be numbers.")
+        else:
+            n_fins = 4; fin_span_m = 0.0; fin_root_m = 0.0
+            fin_tip_m = 0.0; fin_thick_m = 0.0; fin_sweep_deg = 0.0
 
         # PBV geometry
         try:
@@ -1910,6 +1982,13 @@ class MissileDialog(tk.Toplevel):
         node.shroud_nose_length_m   = shroud_nose_length_m
         node.aerospike_LD           = aerospike_LD
         node.aerospike_dD           = aerospike_dD
+        node.has_fins               = has_fins
+        node.n_fins                 = n_fins
+        node.fin_span_m             = fin_span_m
+        node.fin_root_chord_m       = fin_root_m
+        node.fin_tip_chord_m        = fin_tip_m
+        node.fin_thickness_m        = fin_thick_m
+        node.fin_sweep_deg          = fin_sweep_deg
 
         # Strap-on boosters
         try:
@@ -4255,16 +4334,16 @@ class MissileFlyoutApp(tk.Tk):
             self._acton_beta_frame.grid_remove()
 
     def _estimate_body_LD(self):
-        """Estimate body max L/D from geometry and drag model.
+        """Estimate body max L/D from geometry, drag model, and fin parameters.
 
-        Uses slender-body theory (CL_α = 2 /rad, referenced to base area)
-        combined with the missile's own zero-lift Cd at the chosen Mach.
-        Parabolic polar: CD = CD₀ + CL²/2 → L/D_max = 1/√(2·CD₀)
-        at trim AoA α* = √(CD₀/2) rad.  Source: Ashley & Landahl (1965).
+        Body lift slope (slender-body, Ashley & Landahl 1965): CL_α_body = 2 /rad.
+        Fin lift slope (DATCOM supersonic, Barrowman 1967): added when has_fins.
+        Total drag: body Cd₀ + fin drag increment (friction + wave, Mandell 1973).
+        Parabolic polar: L/D_max = √(CL_α_total/CD₀_total) / 2
         """
         import math
         from missile_models import (_cd_nose_shape, drag_coefficient,
-                                    _SHAPE_ALIAS)
+                                    _SHAPE_ALIAS, _cl_alpha_fins, _cd_fins)
         try:
             p = get_missile(self._missile_var.get())
         except Exception:
@@ -4281,16 +4360,16 @@ class MissileFlyoutApp(tk.Tk):
             return
 
         mach_ref = 3.0   # representative supersonic/hypersonic glide Mach
+        L_ref    = float(last.length_m) if last.length_m > 0 else d * 5.0
+        re_l     = 1.2 * 900.0 * L_ref / 1.789e-5  # ρ·v·L/μ at ~Mach 3 SL-density
 
-        # Choose CD₀ source to match the trajectory integrator precedence:
-        #   1. Nose-shape physics model (Chin 1961) if nose_shape is set
-        #   2. Missile's own Mach/Cd table (Forden or custom) otherwise
+        # ── Body zero-lift drag (CD₀) ─────────────────────────────────────────
         nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
         if nose and nose not in ('', 'forden'):
             ld_nose = (last.nose_length_m / d
                        if last.nose_length_m > 0 else 3.0)
             ld_body = (last.length_m / d if last.length_m > 0 else None)
-            cd0 = _cd_nose_shape(
+            cd0_body = _cd_nose_shape(
                 nose, ld_nose, mach_ref,
                 ld_body=ld_body,
                 aerospike_LD=float(last.aerospike_LD or 0.0),
@@ -4298,27 +4377,50 @@ class MissileFlyoutApp(tk.Tk):
             )
             cd_src = f"{nose} nose (Chin 1961)"
         else:
-            cd0 = drag_coefficient(last, mach_ref)
+            cd0_body = drag_coefficient(last, mach_ref)
             cd_src = "Forden/custom Cd table"
 
-        if cd0 <= 0:
+        if cd0_body <= 0:
             messagebox.showinfo("L/D Estimate", "Cd₀ is zero — cannot estimate.")
             return
 
-        # Slender-body parabolic polar: L/D_max = 1/√(2·CD₀)
-        ld_max   = 1.0 / math.sqrt(2.0 * cd0)
-        alpha_deg = math.degrees(math.sqrt(cd0 / 2.0))
+        # ── Fin contributions ─────────────────────────────────────────────────
+        fin_detail = ""
+        cl_alpha_fins = 0.0
+        cd_fins_incr  = 0.0
+        if getattr(last, 'has_fins', False):
+            n   = int(last.n_fins or 4)
+            s   = float(last.fin_span_m or 0.0)
+            cr  = float(last.fin_root_chord_m or 0.0)
+            ct  = float(last.fin_tip_chord_m or 0.0)
+            tf  = float(last.fin_thickness_m or 0.0)
+            sw  = float(last.fin_sweep_deg or 0.0)
+            cl_alpha_fins = _cl_alpha_fins(n, s, cr, ct, d, mach_ref, sw)
+            cd_fins_incr  = _cd_fins(n, s, cr, ct, tf, d, mach_ref, re_l, sw)
+            fin_detail = (f"\nFin CL_α  = {cl_alpha_fins:.2f} /rad"
+                          f"  ({n} fins, DATCOM supersonic)"
+                          f"\nFin ΔCd₀  = {cd_fins_incr:.4f}"
+                          f"  (friction + wave, Mandell 1973)")
+
+        # ── Combined totals ───────────────────────────────────────────────────
+        cl_alpha_total = 2.0 + cl_alpha_fins   # body SBT + fins
+        cd0_total      = cd0_body + cd_fins_incr
+
+        # Parabolic polar optimum: L/D_max = √(CL_α / CD₀) / 2
+        ld_max    = math.sqrt(cl_alpha_total / cd0_total) / 2.0
+        alpha_deg = math.degrees(math.sqrt(cd0_total / cl_alpha_total))
 
         self._main_LD_var.set(f"{ld_max:.2f}")
         messagebox.showinfo(
             "Body L/D Estimate",
-            f"Cd₀ = {cd0:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
-            f"CL_α = 2.0 /rad  (slender-body theory)\n"
+            f"Body Cd₀  = {cd0_body:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
+            f"Body CL_α = 2.00 /rad  (slender-body theory)"
+            f"{fin_detail}\n"
             f"\n"
-            f"Max L/D ≈ {ld_max:.2f}  at α ≈ {alpha_deg:.0f}°\n"
+            f"Total CL_α = {cl_alpha_total:.2f} /rad\n"
+            f"Total Cd₀  = {cd0_total:.3f}\n"
             f"\n"
-            f"Note: body-alone estimate; fins / control surfaces\n"
-            f"will increase the actual L/D.",
+            f"Max L/D ≈ {ld_max:.2f}  at α ≈ {alpha_deg:.0f}°",
         )
 
     def _rebuild_stage_rows(self):
@@ -5203,6 +5305,7 @@ class MissileFlyoutApp(tk.Tk):
             # No RV at all (no-sep with no rv field) — synthesise one from the
             # last stage's body geometry so lift can be applied after burnout.
             if _g_erv is None:
+                from missile_models import drag_coefficient as _dc_fn, _cd_fins as _cdf_fn
                 _last = missile
                 while _last.stage2 is not None:
                     _last = _last.stage2
@@ -5210,7 +5313,24 @@ class MissileFlyoutApp(tk.Tk):
                 _bd = float(_last.diameter_m)
                 if _bd > 0 and _bm > 0:
                     _ba = _math.pi * (_bd / 2.0) ** 2
-                    _bb = _bm / (0.20 * _ba)   # Forden Cd≈0.20 at Mach 2+
+                    # Use the missile's actual Cd table at Mach 3 for body beta;
+                    # add fin drag increment when fins are configured.
+                    _cd0_body = _dc_fn(_last, 3.0)
+                    _cd_fin   = 0.0
+                    if getattr(_last, 'has_fins', False):
+                        _L_ref = float(_last.length_m) if _last.length_m > 0 else _bd * 5
+                        _re_l  = 1.2 * 900.0 * _L_ref / 1.789e-5
+                        _cd_fin = _cdf_fn(
+                            int(_last.n_fins or 4),
+                            float(_last.fin_span_m or 0.0),
+                            float(_last.fin_root_chord_m or 0.0),
+                            float(_last.fin_tip_chord_m or 0.0),
+                            float(_last.fin_thickness_m or 0.0),
+                            _bd, 3.0, _re_l,
+                            float(_last.fin_sweep_deg or 0.0),
+                        )
+                    _cd_eff = max(_cd0_body + _cd_fin, 0.01)
+                    _bb = _bm / (_cd_eff * _ba)
                     _g_erv = RVParams(
                         name='(body)',
                         mass_kg=_bm,
