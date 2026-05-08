@@ -3624,12 +3624,10 @@ class MissileFlyoutApp(tk.Tk):
             side=tk.LEFT, padx=2)
         ttk.Label(_azf, text="°").pack(side=tk.LEFT)
 
-        # Terminal dive
+        # Terminal dive altitude (always active)
         _r2 = ttk.Frame(_gmf)
         _r2.grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
-        self._main_terminal_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(_r2, text="Terminal dive below",
-                        variable=self._main_terminal_var).pack(side=tk.LEFT)
+        ttk.Label(_r2, text="Terminal dive below").pack(side=tk.LEFT)
         self._main_dive_alt_var = tk.StringVar(value="30")
         ttk.Entry(_r2, textvariable=self._main_dive_alt_var, width=5).pack(
             side=tk.LEFT, padx=2)
@@ -4160,7 +4158,6 @@ class MissileFlyoutApp(tk.Tk):
                 else "Equilibrium glide (Acton)"
                 if _p_erv.glider_guidance == "equilibrium_glide_acton"
                 else "Equilibrium glide (Tracy)")
-            self._main_terminal_var.set(_p_erv.glider_terminal_dive)
             self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
             _sched = _p_erv.glider_bank_schedule or []
             self._main_bank_sched_var.set(bool(_sched))
@@ -5138,7 +5135,7 @@ class MissileFlyoutApp(tk.Tk):
                         _g_max_bank = float(self._main_max_bank_var.get())
                     except (ValueError, AttributeError):
                         pass
-                _g_terminal = self._main_terminal_var.get()
+                _g_terminal = True
                 _g_bank = []
                 if self._main_bank_sched_var.get():
                     for _bv in self._main_bank_vars:
@@ -5814,7 +5811,6 @@ class MissileFlyoutApp(tk.Tk):
             ],
             'glider_on':  getattr(self, '_glider_main_var', tk.BooleanVar()).get(),
             'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
-            'glider_terminal': getattr(self, '_main_terminal_var', tk.BooleanVar()).get(),
             'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='30')).get(),
             'glider_bank_on':  getattr(self, '_main_bank_sched_var', tk.BooleanVar()).get(),
             'glider_banks': [
@@ -5882,7 +5878,6 @@ class MissileFlyoutApp(tk.Tk):
         if hasattr(self, '_glider_main_var'):
             self._glider_main_var.set(bool(meta.get('glider_on', False)))
             self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Tracy)'))
-            self._main_terminal_var.set(bool(meta.get('glider_terminal', False)))
             self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
             self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))
             saved_banks = meta.get('glider_banks', [])
