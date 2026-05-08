@@ -1862,6 +1862,11 @@ def integrate_trajectory(params: MissileParams,
             _glide_pos = pos_arr[_re_idx:]
             _glide_iv  = inertial_vel_arr[_re_idx:]
             _glide_t   = t_arr[_re_idx:]
+            # np.gradient requires strictly increasing spacing; drop duplicate t.
+            _uniq = np.concatenate(([True], np.diff(_glide_t) > 0))
+            _glide_pos = _glide_pos[_uniq]
+            _glide_iv  = _glide_iv[_uniq]
+            _glide_t   = _glide_t[_uniq]
             if len(_glide_t) >= 3:
                 _iacc = np.gradient(_glide_iv, _glide_t, axis=0)
                 _r_n  = np.linalg.norm(_glide_pos, axis=1)
