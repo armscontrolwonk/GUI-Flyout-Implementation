@@ -3731,6 +3731,31 @@ class MissileFlyoutApp(tk.Tk):
                              "Slender-body polar"],
                      state="readonly", width=20).pack(side=tk.LEFT, padx=2)
 
+        # Dive-at-target trigger (optional)
+        self._main_dive_target_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_gmf, text="Dive at target (lat/lon)",
+                        variable=self._main_dive_target_var,
+                        command=self._on_main_dive_target_toggled).grid(
+            row=8, column=0, columnspan=2,
+            sticky=tk.W, padx=(8, 0), pady=(4, 0))
+        _dtf = ttk.Frame(_gmf)
+        _dtf.grid(row=9, column=0, columnspan=2,
+                  sticky=tk.W, padx=(24, 0), pady=1)
+        self._main_dive_target_frm = _dtf
+        ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
+        self._main_dt_lat_var = tk.StringVar(value="0.0")
+        ttk.Entry(_dtf, textvariable=self._main_dt_lat_var, width=8).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="°  Lon:").pack(side=tk.LEFT, padx=(4, 0))
+        self._main_dt_lon_var = tk.StringVar(value="0.0")
+        ttk.Entry(_dtf, textvariable=self._main_dt_lon_var, width=8).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="°  Radius:").pack(side=tk.LEFT, padx=(4, 0))
+        self._main_dt_radius_var = tk.StringVar(value="20")
+        ttk.Entry(_dtf, textvariable=self._main_dt_radius_var, width=6).pack(
+            side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
+
         # Bank schedule
         ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
             row=5, column=0, columnspan=2, sticky='ew', pady=(6, 0))
@@ -3761,6 +3786,7 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(_mbf, text=_unit).grid(
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
         self._on_main_bank_toggled()   # sync hidden state
+        self._on_main_dive_target_toggled()   # sync hidden state
         self._on_glider_guidance_changed()   # sync hidden state
 
         # Row 13: Reset trajectory button — always visible
@@ -4280,10 +4306,20 @@ class MissileFlyoutApp(tk.Tk):
                     "Slender-body polar"
                     if getattr(_p_erv, 'glider_aero_model', 'constant_LD') == 'polar'
                     else "Constant L/D (trim)")
+            if hasattr(self, '_main_dive_target_var'):
+                _dt_r = float(getattr(_p_erv, 'glider_dive_target_radius_km', 0.0) or 0.0)
+                self._main_dive_target_var.set(_dt_r > 0.0)
+                self._main_dt_lat_var.set(
+                    f"{getattr(_p_erv, 'glider_dive_target_lat_deg', 0.0):.4f}")
+                self._main_dt_lon_var.set(
+                    f"{getattr(_p_erv, 'glider_dive_target_lon_deg', 0.0):.4f}")
+                self._main_dt_radius_var.set(
+                    f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
             if hasattr(self, '_main_LD_var') and _p_erv.glider_LD > 0:
                 self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
+            self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
 
     # ------------------------------------------------------------------
@@ -4328,6 +4364,12 @@ class MissileFlyoutApp(tk.Tk):
             self._main_bank_frm.grid()
         else:
             self._main_bank_frm.grid_remove()
+
+    def _on_main_dive_target_toggled(self):
+        if self._glider_main_var.get() and self._main_dive_target_var.get():
+            self._main_dive_target_frm.grid()
+        else:
+            self._main_dive_target_frm.grid_remove()
 
     def _on_glider_guidance_changed(self):
         guid = self._main_guidance_var.get().lower()
@@ -5373,6 +5415,18 @@ class MissileFlyoutApp(tk.Tk):
                 _g_aero_key = ("polar"
                                if "polar" in _g_aero_label.lower()
                                else "constant_LD")
+                # Dive-at-target trigger (radius = 0 ⇒ disabled)
+                _g_dt_lat = 0.0
+                _g_dt_lon = 0.0
+                _g_dt_rad = 0.0
+                if (hasattr(self, '_main_dive_target_var')
+                        and self._main_dive_target_var.get()):
+                    try:    _g_dt_lat = float(self._main_dt_lat_var.get())
+                    except (ValueError, AttributeError): pass
+                    try:    _g_dt_lon = float(self._main_dt_lon_var.get())
+                    except (ValueError, AttributeError): pass
+                    try:    _g_dt_rad = float(self._main_dt_radius_var.get())
+                    except (ValueError, AttributeError): pass
                 _replace_kw = dict(
                     glider_enabled=True,
                     glider_guidance=_g_guid_key,
@@ -5380,6 +5434,9 @@ class MissileFlyoutApp(tk.Tk):
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
                     glider_aero_model=_g_aero_key,
+                    glider_dive_target_lat_deg=_g_dt_lat,
+                    glider_dive_target_lon_deg=_g_dt_lon,
+                    glider_dive_target_radius_km=_g_dt_rad,
                     glider_beta_entry_kg_m2=_g_beta_s,
                 )
                 if _g_main_ld is not None:
@@ -6061,6 +6118,11 @@ class MissileFlyoutApp(tk.Tk):
             ],
             'glider_aero': getattr(self, '_main_aero_var',
                                     tk.StringVar(value='Constant L/D (trim)')).get(),
+            'glider_dive_target_on': getattr(self, '_main_dive_target_var',
+                                             tk.BooleanVar()).get(),
+            'glider_dt_lat':    getattr(self, '_main_dt_lat_var',    tk.StringVar(value='0.0')).get(),
+            'glider_dt_lon':    getattr(self, '_main_dt_lon_var',    tk.StringVar(value='0.0')).get(),
+            'glider_dt_radius': getattr(self, '_main_dt_radius_var', tk.StringVar(value='20')).get(),
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -6131,8 +6193,15 @@ class MissileFlyoutApp(tk.Tk):
             if hasattr(self, '_main_aero_var'):
                 self._main_aero_var.set(
                     meta.get('glider_aero', 'Constant L/D (trim)'))
+            if hasattr(self, '_main_dive_target_var'):
+                self._main_dive_target_var.set(
+                    bool(meta.get('glider_dive_target_on', False)))
+                self._main_dt_lat_var.set(meta.get('glider_dt_lat', '0.0'))
+                self._main_dt_lon_var.set(meta.get('glider_dt_lon', '0.0'))
+                self._main_dt_radius_var.set(meta.get('glider_dt_radius', '20'))
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
+            self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
 
     def _save_trajectory(self):
