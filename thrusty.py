@@ -3055,11 +3055,13 @@ def _dd_row(parent, label, row, default="0.0"):
 
 
 class FootprintDialog(tk.Toplevel):
-    """Generate an HGV maneuver footprint by sweeping glider target azimuth.
+    """Generate an HGV maneuver footprint by sweeping glider bank angle.
 
     Runs N integrate_trajectory calls with the current missile/launch params
-    but varying glider_target_az_deg.  Results are written to a Folium HTML
-    map and opened in the default browser.
+    but varying the glider bank angle (held for the full flight).  Negative
+    banks turn left, positive banks turn right; zero produces the wings-
+    level reference trajectory.  Results are written to a Folium HTML map
+    and opened in the default browser.
     """
 
     def __init__(self, parent_app):
@@ -3068,7 +3070,7 @@ class FootprintDialog(tk.Toplevel):
         self.resizable(False, False)
         self._app      = parent_app
         self._stop_evt = threading.Event()
-        self._results  = []   # list of (target_az_deg, result_dict | None)
+        self._results  = []   # list of (bank_deg, result_dict | None)
         self._map_path = None
 
         pad = dict(padx=8, pady=4)
@@ -3078,15 +3080,13 @@ class FootprintDialog(tk.Toplevel):
 
         r0 = ttk.Frame(cf)
         r0.pack(fill=tk.X, padx=6, pady=(4, 2))
-        ttk.Label(r0, text="Target az — From:").pack(side=tk.LEFT)
-        self._lo_var   = tk.StringVar(value="90")
-        self._hi_var   = tk.StringVar(value="270")
-        self._step_var = tk.StringVar(value="15")
-        self._bank_var = tk.StringVar(value="45")
+        ttk.Label(r0, text="Bank angle — From:").pack(side=tk.LEFT)
+        self._lo_var   = tk.StringVar(value="-45")
+        self._hi_var   = tk.StringVar(value="45")
+        self._step_var = tk.StringVar(value="10")
         for lbl, var, w in [("", self._lo_var, 6),
                              ("To:", self._hi_var, 6),
-                             ("Step:", self._step_var, 5),
-                             ("° Max bank:", self._bank_var, 5)]:
+                             ("Step:", self._step_var, 5)]:
             if lbl:
                 ttk.Label(r0, text=lbl).pack(side=tk.LEFT, padx=(6, 1))
             ttk.Entry(r0, textvariable=var, width=w).pack(side=tk.LEFT)
@@ -3113,7 +3113,6 @@ class FootprintDialog(tk.Toplevel):
             lo   = float(self._lo_var.get())
             hi   = float(self._hi_var.get())
             step = float(self._step_var.get())
-            max_bank = float(self._bank_var.get())
             if step <= 0 or lo > hi:
                 raise ValueError
         except ValueError:
@@ -3128,10 +3127,10 @@ class FootprintDialog(tk.Toplevel):
             messagebox.showerror("Input error", str(exc), parent=self)
             return
 
-        target_azs = []
+        bank_angles = []
         v = lo
         while v <= hi + 1e-9:
-            target_azs.append(round(v, 6))
+            bank_angles.append(round(v, 6))
             v += step
 
         self._results = []
@@ -3140,14 +3139,14 @@ class FootprintDialog(tk.Toplevel):
         self._run_btn.config(state=tk.DISABLED)
         self._cancel_btn.config(state=tk.NORMAL)
         self._map_btn.config(state=tk.DISABLED)
-        self._progressbar["maximum"] = max(len(target_azs), 1)
+        self._progressbar["maximum"] = max(len(bank_angles), 1)
         self._progressbar["value"]   = 0
-        self._prog_lbl.set(f"0 / {len(target_azs)}")
+        self._prog_lbl.set(f"0 / {len(bank_angles)}")
 
         threading.Thread(
             target=self._worker,
             args=(missile, guidance, lat, lon, az, cutoff, la,
-                  gt_start, gt_stop, orb, yaw, el, target_azs, max_bank),
+                  gt_start, gt_stop, orb, yaw, el, bank_angles),
             daemon=True,
         ).start()
 
@@ -3155,7 +3154,7 @@ class FootprintDialog(tk.Toplevel):
         self._stop_evt.set()
 
     def _worker(self, missile, guidance, lat, lon, az, cutoff, la,
-                gt_start, gt_stop, orb, yaw, el, target_azs, max_bank):
+                gt_start, gt_stop, orb, yaw, el, bank_angles):
         import copy, dataclasses
         from trajectory import integrate_trajectory
         from missile_models import effective_rv
@@ -3163,19 +3162,21 @@ class FootprintDialog(tk.Toplevel):
         _max_t = 3600.0
         results = []
 
-        for i, taz in enumerate(target_azs):
+        for i, bk in enumerate(bank_angles):
             if self._stop_evt.is_set():
                 break
 
             m = copy.deepcopy(missile)
             _erv = effective_rv(m)
             if _erv is not None:
+                # Hold the swept bank angle for the entire flight.  The bank
+                # is only applied while the glider is active (post-pierce
+                # lift block in _eom), so the [0, _max_t] window safely
+                # covers the whole glide phase regardless of when it starts.
                 new_rv = dataclasses.replace(
                     _erv,
                     glider_enabled=True,
-                    glider_guidance="azimuth_command",
-                    glider_target_az_deg=taz,
-                    glider_max_bank_deg=max_bank,
+                    glider_bank_schedule=[(0.0, _max_t, float(bk))],
                 )
                 node = m
                 while node is not None:
@@ -3199,9 +3200,9 @@ class FootprintDialog(tk.Toplevel):
             except Exception:
                 r = None
 
-            results.append((taz, r))
+            results.append((bk, r))
             done = i + 1
-            self.after(0, lambda d=done, tot=len(target_azs): (
+            self.after(0, lambda d=done, tot=len(bank_angles): (
                 self._prog_lbl.set(f"{d} / {tot}"),
                 self._progressbar.__setitem__("value", d),
             ))
@@ -3227,7 +3228,7 @@ class FootprintDialog(tk.Toplevel):
         launch_lon = float(lon_deg)
 
         # Collect valid results and compute map centre
-        valid = [(taz, r) for taz, r in self._results if r is not None and r.get('lats') is not None]
+        valid = [(bk, r) for bk, r in self._results if r is not None and r.get('lats') is not None]
         if not valid:
             messagebox.showinfo("No results", "All trajectories failed.", parent=self)
             return
@@ -3246,20 +3247,20 @@ class FootprintDialog(tk.Toplevel):
             return f"hsl({h},100%,60%)"
 
         # Trajectories
-        for i, (taz, r) in enumerate(valid):
+        for i, (bk, r) in enumerate(valid):
             lats = list(r['lats'])
             lons = list(r['lons'])
             coords = list(zip(lats, lons))
             col = _hsl(i)
             folium.PolyLine(
                 coords, color=col, weight=2, opacity=0.85,
-                tooltip=f"Az {taz:.0f}°"
+                tooltip=f"Bank {bk:+.0f}°"
             ).add_to(m)
             # Impact marker
             folium.CircleMarker(
                 [lats[-1], lons[-1]],
                 radius=4, color=col, fill=True, fill_opacity=1.0,
-                tooltip=f"Impact {taz:.0f}°",
+                tooltip=f"Impact (bank {bk:+.0f}°)",
             ).add_to(m)
 
         # Footprint envelope (impact points in order, closed)
@@ -3685,8 +3686,7 @@ class MissileFlyoutApp(tk.Tk):
         _guid_cb = ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
                      values=["Equilibrium glide (Tracy)",
                              "Equilibrium glide (Acton)",
-                             "Skip-glide (natural phugoid)",
-                             "Azimuth command (heading hold)"],
+                             "Skip-glide (natural phugoid)"],
                      state="readonly", width=26)
         _guid_cb.grid(row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
         _guid_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_glider_guidance_changed())
@@ -3700,20 +3700,6 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(_abf, textvariable=self._main_beta_s_var, width=7).pack(
             side=tk.LEFT, padx=2)
         ttk.Label(_abf, text="kg/m²").pack(side=tk.LEFT)
-
-        # Azimuth-command fields (row 3) — shown only when that mode is active
-        _azf = ttk.Frame(_gmf)
-        _azf.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
-        self._az_cmd_frame = _azf
-        ttk.Label(_azf, text="Target az:").pack(side=tk.LEFT)
-        self._main_target_az_var = tk.StringVar(value="0.0")
-        ttk.Entry(_azf, textvariable=self._main_target_az_var, width=6).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_azf, text="°   Max bank:").pack(side=tk.LEFT, padx=(4, 0))
-        self._main_max_bank_var = tk.StringVar(value="45")
-        ttk.Entry(_azf, textvariable=self._main_max_bank_var, width=5).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_azf, text="°").pack(side=tk.LEFT)
 
         # Terminal dive altitude (always active)
         _r2 = ttk.Frame(_gmf)
@@ -4247,9 +4233,7 @@ class MissileFlyoutApp(tk.Tk):
             self._glider_main_var.set(True)
             self._main_guidance_var.set(
                 "Skip-glide (natural phugoid)"
-                if _p_erv.glider_guidance == "skip_glide"
-                else "Azimuth command (heading hold)"
-                if _p_erv.glider_guidance == "azimuth_command"
+                if _p_erv.glider_guidance in ("skip_glide", "azimuth_command")
                 else "Equilibrium glide (Acton)"
                 if _p_erv.glider_guidance == "equilibrium_glide_acton"
                 else "Equilibrium glide (Tracy)")
@@ -4266,10 +4250,6 @@ class MissileFlyoutApp(tk.Tk):
                     _bvars['start'].set('')
                     _bvars['end'].set('')
                     _bvars['bank'].set('')
-            if hasattr(self, '_main_target_az_var'):
-                self._main_target_az_var.set(f"{_p_erv.glider_target_az_deg:.1f}")
-            if hasattr(self, '_main_max_bank_var'):
-                self._main_max_bank_var.set(f"{_p_erv.glider_max_bank_deg:.0f}")
             if hasattr(self, '_main_beta_s_var'):
                 _bs_v = _p_erv.glider_beta_entry_kg_m2
                 self._main_beta_s_var.set(
@@ -4325,15 +4305,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _on_glider_guidance_changed(self):
         guid = self._main_guidance_var.get().lower()
-        az_mode    = "azimuth" in guid
-        acton_mode = "acton"   in guid
-        if az_mode:
-            self._az_cmd_frame.grid()
-            self._main_bank_sched_var.set(False)
-            self._on_main_bank_toggled()
-        else:
-            self._az_cmd_frame.grid_remove()
-        if acton_mode:
+        if "acton" in guid:
             self._acton_beta_frame.grid()
         else:
             self._acton_beta_frame.grid_remove()
@@ -5353,22 +5325,10 @@ class MissileFlyoutApp(tk.Tk):
                 _g_guid_label = self._main_guidance_var.get()
                 _g_guid_lower = _g_guid_label.lower()
                 _g_guid_key = (
-                    "skip_glide"               if "skip"    in _g_guid_lower else
-                    "azimuth_command"          if "azimuth" in _g_guid_lower else
-                    "equilibrium_glide_acton"  if "acton"   in _g_guid_lower else
+                    "skip_glide"               if "skip"  in _g_guid_lower else
+                    "equilibrium_glide_acton"  if "acton" in _g_guid_lower else
                     "equilibrium_glide"
                 )
-                _g_tgt_az   = 0.0
-                _g_max_bank = 45.0
-                if _g_guid_key == "azimuth_command":
-                    try:
-                        _g_tgt_az = float(self._main_target_az_var.get())
-                    except (ValueError, AttributeError):
-                        pass
-                    try:
-                        _g_max_bank = float(self._main_max_bank_var.get())
-                    except (ValueError, AttributeError):
-                        pass
                 _g_terminal = True
                 _g_bank = []
                 if self._main_bank_sched_var.get():
@@ -5389,8 +5349,6 @@ class MissileFlyoutApp(tk.Tk):
                     glider_terminal_dive=_g_terminal,
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
-                    glider_target_az_deg=_g_tgt_az,
-                    glider_max_bank_deg=_g_max_bank,
                     glider_beta_entry_kg_m2=_g_beta_s,
                 )
                 if _g_main_ld is not None:
@@ -6070,8 +6028,6 @@ class MissileFlyoutApp(tk.Tk):
                 {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
                 for v in getattr(self, '_main_bank_vars', [])
             ],
-            'glider_target_az': getattr(self, '_main_target_az_var', tk.StringVar(value='0.0')).get(),
-            'glider_max_bank':  getattr(self, '_main_max_bank_var',  tk.StringVar(value='45')).get(),
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -6139,10 +6095,6 @@ class MissileFlyoutApp(tk.Tk):
                 _bvars['start'].set(_bd.get('start', ''))
                 _bvars['end'].set(_bd.get('end', ''))
                 _bvars['bank'].set(_bd.get('bank', ''))
-            if hasattr(self, '_main_target_az_var'):
-                self._main_target_az_var.set(meta.get('glider_target_az', '0.0'))
-            if hasattr(self, '_main_max_bank_var'):
-                self._main_max_bank_var.set(meta.get('glider_max_bank', '45'))
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
             self._on_glider_guidance_changed()

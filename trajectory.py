@@ -510,39 +510,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         n_side = np.cross(v_hat, n_up)
                         lift_mag = drag_mag * _erv.glider_LD
                         g_mag    = np.linalg.norm(g)
-                        # Two glide modes:
-                        #   • skip_glide / equilibrium_glide: single β,
-                        #     constant L/D, no lift cap.  Equilibrium
-                        #     mode receives an analytical Acton pull-up
-                        #     (Tracy 2020) at atmospheric piercing as a
-                        #     one-shot state reset before glide begins;
-                        #     skip_glide does not.
-                        #   • azimuth_command: proportional heading
-                        #     controller — bank angle commanded by the
-                        #     ground-track-azimuth error.
-                        if _erv.glider_guidance == "azimuth_command":
-                            # Proportional heading controller.
-                            # Project ECEF velocity onto local ENU to get
-                            # current ground-track azimuth, then bank
-                            # proportional to the heading error (capped at
-                            # max_bank).
-                            _sla = np.sin(lat); _cla = np.cos(lat)
-                            _slo = np.sin(lon); _clo = np.cos(lon)
-                            _ve = -_slo * vel[0] + _clo * vel[1]
-                            _vn = (-_sla * _clo * vel[0]
-                                   - _sla * _slo * vel[1]
-                                   + _cla * vel[2])
-                            _cur_az = np.arctan2(_ve, _vn)
-                            _tgt_az = np.radians(_erv.glider_target_az_deg)
-                            _err = ((_tgt_az - _cur_az) + np.pi) % (2*np.pi) - np.pi
-                            _mb  = np.radians(_erv.glider_max_bank_deg)
-                            bank_rad = float(np.clip(_err, -_mb, _mb))
-                        else:
-                            bank_rad = 0.0
-                            for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
-                                if _bt_s <= t <= _bt_e:
-                                    bank_rad = np.radians(_bk_deg)
-                                    break
+                        # Bank angle from the user's bank schedule (list of
+                        # (t_start_s, t_end_s, bank_deg) entries in mission-
+                        # elapsed seconds).  Positive bank = right turn.
+                        bank_rad = 0.0
+                        for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
+                            if _bt_s <= t <= _bt_e:
+                                bank_rad = np.radians(_bk_deg)
+                                break
                         # equilibrium_glide and skip_glide both run with
                         # full L/D and constant β here.  The Acton pull-up
                         # is applied as a one-shot state reset by
@@ -1245,6 +1220,14 @@ def integrate_trajectory(params: MissileParams,
                    and _erv_full.glider_guidance == "equilibrium_glide_acton"
                    and _erv_full.glider_beta_entry_kg_m2 > 0)
 
+    # Mission-elapsed times of the analytical pull-up arc start and the
+    # equilibrium-glide start, captured below for use by the milestone
+    # logger.  These are the only points in the analytical glide that are
+    # not detectable from altitude extrema (the post-pull-up profile is
+    # monotone), so they have to be emitted explicitly.
+    _t_ms_pullup_start = None
+    _t_ms_glide_start  = None
+
     if _pullup_mode:
         sol_pre = solve_ivp(
             fun=_eom,
@@ -1360,25 +1343,59 @@ def integrate_trajectory(params: MissileParams,
                 state_arc_start[:3], state_arc_start[3:], LD, beta_L)
             t_glide_start = t_arc_start + t_pullup
 
-            # ---- Phase 5: analytical equilibrium glide (Tracy / Acton) -----
+            # Capture the mission-elapsed times of the analytical pull-up
+            # arc start and the equilibrium-glide start for the milestone
+            # logger.  These are emitted unconditionally for analytical
+            # modes because the post-arc altitude profile is monotone
+            # (no extrema to detect).
+            _t_ms_pullup_start = float(t_arc_start)
+            _t_ms_glide_start  = float(t_glide_start)
+
+            # ---- Phase 5: equilibrium glide (Tracy / Acton) ----------------
             _h_term = (float(_erv_full.glider_terminal_alt_km) * 1e3
                        if (_erv_full.glider_terminal_dive
                            and _erv_full.glider_terminal_alt_km > 0)
                        else 30_000.0)
-            _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
-                state_post[:3], state_post[3:], beta_L, LD, _h_term,
-                bank_schedule=getattr(_erv_full,
-                                      'glider_bank_schedule', None),
-                t_offset=t_glide_start)
-            _t_gl_abs = _t_gl_rel + t_glide_start
+            _bank_sched = getattr(_erv_full, 'glider_bank_schedule', None) or []
+            _bank_active = any(
+                (s is not None and e is not None and float(s) < float(e)
+                 and float(b) != 0.0)
+                for (s, e, b) in _bank_sched)
 
-            # _analytical_equil_glide returns a single point when the pierce
-            # speed is below the equilibrium-glide terminal speed — e.g. a
-            # quasi-ballistic missile (KN-23 class) that just clipped 100 km
-            # rather than arriving at hypersonic glide conditions.  Fall back
-            # to the full EOM with lift so we get a physically correct
-            # skip-glide trajectory rather than a no-lift ballistic plunge.
-            _glide_degenerate = (len(_t_gl_rel) <= 1)
+            if _bank_active:
+                # A non-trivial bank schedule is present.  The analytical
+                # equilibrium-glide formula gives turn rate ∝ (g − V²/r),
+                # which → 0 at hypersonic speeds, so it cannot represent
+                # banked maneuvers.  Switch to numerical solve_ivp with the
+                # full lifting EOM from the post-arc state — this is the
+                # same physics as skip-glide, but starting from the
+                # equilibrium-glide initial conditions produced by the
+                # analytical pull-up arc.
+                _s0_gl = np.concatenate([state_post[:3], state_post[3:]])
+                _sol_gl = solve_ivp(
+                    _eom, (t_glide_start, max_time_s), _s0_gl,
+                    method='RK45', events=_hit_ground, args=eom_args,
+                    rtol=_rtol, atol=_atol,
+                    dense_output=False, max_step=_maxstep)
+                _t_gl_abs = _sol_gl.t
+                _pos_gl   = _sol_gl.y[:3].T
+                _vel_gl   = _sol_gl.y[3:].T
+                _glide_degenerate = False
+            else:
+                _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
+                    state_post[:3], state_post[3:], beta_L, LD, _h_term,
+                    bank_schedule=None,
+                    t_offset=t_glide_start)
+                _t_gl_abs = _t_gl_rel + t_glide_start
+
+                # _analytical_equil_glide returns a single point when the
+                # pierce speed is below the equilibrium-glide terminal speed
+                # — e.g. a quasi-ballistic missile (KN-23 class) that just
+                # clipped 100 km rather than arriving at hypersonic glide
+                # conditions.  Fall back to the full EOM with lift so we get
+                # a physically correct skip-glide trajectory rather than a
+                # no-lift ballistic plunge.
+                _glide_degenerate = (len(_t_gl_rel) <= 1)
 
             # ---- Terminal dive / fallback from glide endpoint to ground ------
             _, _, _h_gl_end = ecef_to_geodetic(_pos_gl[-1])
@@ -1828,41 +1845,67 @@ def integrate_trajectory(params: MissileParams,
         else:
             _re_idx = apo_idx
         if _re_idx < len(alts) - 2:
-            # Altitude extrema after re-entry: alternating minima
-            # (pull-ups) and maxima (apexes / glide tops).
-            _post = alts[_re_idx:]
-            _dh   = np.diff(_post)
-            _sign = np.sign(_dh)
-            _ext_locs = np.where(np.diff(_sign) != 0)[0] + 1
-            pus_count = 0
-            apx_count = 0
-            _last_alt = None
-            for ic in _ext_locs:
-                if not (1 <= ic < len(_post) - 1):
-                    continue
-                is_min = _post[ic-1] > _post[ic] and _post[ic] < _post[ic+1]
-                is_max = _post[ic-1] < _post[ic] and _post[ic] > _post[ic+1]
-                if not (is_min or is_max):
-                    continue
-                # Suppress sub-km numerical wiggles in equilibrium glide.
-                if _last_alt is not None and abs(_post[ic] - _last_alt) < 1000.0:
-                    continue
-                _last_alt = _post[ic]
-                full_idx = _re_idx + ic
-                _row = _milestone(t_arr[full_idx])
-                if is_min:
-                    pus_count += 1
-                    if pus_count == 1:
-                        _row['event'] = (f"Pull-up start "
-                                         f"({alts[full_idx]/1000:.0f} km)")
-                        _insert_chrono(_row)
-                else:
-                    apx_count += 1
-                    if apx_count == 1:
-                        _row['event'] = (f"Glide start "
-                                         f"({alts[full_idx]/1000:.0f} km)")
-                        _insert_chrono(_row)
-                        break  # only emit the primary pull-up/glide pair
+            # Pull-up start / Glide start.
+            #
+            # For analytical modes (Tracy / Acton equilibrium glide) the
+            # post-pierce altitude profile is monotone: there are no
+            # altitude extrema for the extrema-detector to find, so the
+            # arc-start and glide-start times are captured explicitly
+            # during the analytical phase and emitted here.
+            #
+            # For skip_glide and the numerical-fallback (analytical with a
+            # bank schedule) the glide oscillates, so we fall back to the
+            # generic extrema detector below.
+            _emitted_pullup_glide = False
+            if _t_ms_pullup_start is not None and _t_ms_glide_start is not None:
+                _ipu = int(np.searchsorted(t_arr, _t_ms_pullup_start))
+                _ipu = max(0, min(_ipu, len(alts) - 1))
+                _row = _milestone(float(t_arr[_ipu]))
+                _row['event'] = f"Pull-up start ({alts[_ipu]/1000:.0f} km)"
+                _insert_chrono(_row)
+                _igs = int(np.searchsorted(t_arr, _t_ms_glide_start))
+                _igs = max(0, min(_igs, len(alts) - 1))
+                _row = _milestone(float(t_arr[_igs]))
+                _row['event'] = f"Glide start ({alts[_igs]/1000:.0f} km)"
+                _insert_chrono(_row)
+                _emitted_pullup_glide = True
+
+            if not _emitted_pullup_glide:
+                # Altitude extrema after re-entry: alternating minima
+                # (pull-ups) and maxima (apexes / glide tops).
+                _post = alts[_re_idx:]
+                _dh   = np.diff(_post)
+                _sign = np.sign(_dh)
+                _ext_locs = np.where(np.diff(_sign) != 0)[0] + 1
+                pus_count = 0
+                apx_count = 0
+                _last_alt = None
+                for ic in _ext_locs:
+                    if not (1 <= ic < len(_post) - 1):
+                        continue
+                    is_min = _post[ic-1] > _post[ic] and _post[ic] < _post[ic+1]
+                    is_max = _post[ic-1] < _post[ic] and _post[ic] > _post[ic+1]
+                    if not (is_min or is_max):
+                        continue
+                    # Suppress sub-km numerical wiggles in equilibrium glide.
+                    if _last_alt is not None and abs(_post[ic] - _last_alt) < 1000.0:
+                        continue
+                    _last_alt = _post[ic]
+                    full_idx = _re_idx + ic
+                    _row = _milestone(t_arr[full_idx])
+                    if is_min:
+                        pus_count += 1
+                        if pus_count == 1:
+                            _row['event'] = (f"Pull-up start "
+                                             f"({alts[full_idx]/1000:.0f} km)")
+                            _insert_chrono(_row)
+                    else:
+                        apx_count += 1
+                        if apx_count == 1:
+                            _row['event'] = (f"Glide start "
+                                             f"({alts[full_idx]/1000:.0f} km)")
+                            _insert_chrono(_row)
+                            break  # only emit the primary pull-up/glide pair
 
             # Peak heating: Sutton-Graves stagnation-point rate using a
             # conventional 5 cm nose radius.  The peak time is independent
