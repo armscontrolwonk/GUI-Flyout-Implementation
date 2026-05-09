@@ -440,6 +440,54 @@ def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
 
 
 # ---------------------------------------------------------------------------
+# Slender-body drag polar (Munk 1924, Ashley & Landahl §6-7, §9-8)
+# ---------------------------------------------------------------------------
+
+def _aero_polar(rv) -> tuple:
+    """Return (C_D0, k, A_ref) for the slender-body drag polar.
+
+    Linear slender-body theory gives C_L = 2α (Munk 1924; Ashley & Landahl
+    Eq. 6-108) referenced to the base cross-section A_ref = π·d²/4.  The
+    drag-due-to-lift, derived from the geometric tilt of the lift vector
+    by α, is C_Di = ½·C_L², so the polar is
+
+        C_D = C_D0 + ½·C_L²
+
+    with C_D0 the zero-lift drag.  We back-solve the two coefficients
+    from inputs the user already provides:
+
+        A_ref  = π·d²/4
+        C_D0   = m / (β · A_ref)            (β at zero lift)
+        k      = 1 / (4·C_D0·(L/D)_max²)    (back-solved so that the
+                                             polar reproduces the user's
+                                             max L/D exactly at trim)
+
+    Returns (C_D0, k, A_ref).  Falls back to generic-HGV defaults if the
+    inputs are missing or non-physical.
+    """
+    d = float(getattr(rv, 'diameter_m', 0.0) or 0.0)
+    if d <= 0.0:
+        d = 0.5                                 # generic HGV fallback
+    A_ref = 0.25 * np.pi * d * d
+    m   = float(getattr(rv, 'mass_kg', 0.0) or 0.0)
+    bet = float(getattr(rv, 'beta_kg_m2', 0.0) or 0.0)
+    LD  = float(getattr(rv, 'glider_LD', 0.0) or 0.0)
+    if m > 0.0 and bet > 0.0:
+        C_D0 = m / (bet * A_ref)
+    else:
+        C_D0 = 0.08                             # generic HGV C_D0
+    if LD > 0.0:
+        k = 1.0 / (4.0 * C_D0 * LD * LD)
+    else:
+        k = 0.5                                 # slender-body theoretical
+    # Sanity floors — keep the polar well-conditioned for pathological
+    # inputs (very low β + very low L/D would otherwise give k → ∞).
+    k = max(min(k, 5.0), 0.05)
+    C_D0 = max(min(C_D0, 1.0), 0.005)
+    return C_D0, k, A_ref
+
+
+# ---------------------------------------------------------------------------
 # Equations of motion
 # ---------------------------------------------------------------------------
 
@@ -508,8 +556,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     if n_up_mag > 1e-9:
                         n_up   = n_up / n_up_mag
                         n_side = np.cross(v_hat, n_up)
-                        lift_mag = drag_mag * _erv.glider_LD
-                        g_mag    = np.linalg.norm(g)
+                        g_mag  = np.linalg.norm(g)
                         # Bank angle from the user's bank schedule (list of
                         # (t_start_s, t_end_s, bank_deg) entries in mission-
                         # elapsed seconds).  Positive bank = right turn.
@@ -518,17 +565,55 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             if _bt_s <= t <= _bt_e:
                                 bank_rad = np.radians(_bk_deg)
                                 break
-                        # equilibrium_glide and skip_glide both run with
-                        # full L/D and constant β here.  The Acton pull-up
-                        # is applied as a one-shot state reset by
-                        # integrate_trajectory (Tracy 2020 approach), not
-                        # within the EOM.
                         if (_erv.glider_terminal_dive
                                 and alt < _erv.glider_terminal_alt_km * 1000.0):
                             bank_rad = np.pi
-                        lift_cap = _erv.glider_pullup_g_max * g_mag * rv_mass
-                        if lift_mag > lift_cap:
-                            lift_mag = lift_cap
+
+                        if getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
+                            # Slender-body drag polar.  Vehicle trims its
+                            # angle of attack to produce the lift required
+                            # for equilibrium glide (vertical-balance
+                            # condition L·cos σ = m·(g − V²/r)); off-trim
+                            # banking and pull-up incur the correct C_D =
+                            # C_D0 + k·C_L² drag penalty.  At trim the
+                            # polar reproduces the constant_LD model, so
+                            # wings-level cruise is unchanged.
+                            _CD0, _kp, _Aref = _aero_polar(_erv)
+                            _g_perp = g_mag - speed * speed / r_mag
+                            if _g_perp < 0.0:
+                                _g_perp = 0.0
+                            _L_vert = rv_mass * _g_perp
+                            _cos_b  = abs(float(np.cos(bank_rad)))
+                            if _cos_b < 0.05:
+                                _cos_b = 0.05      # cap demand at σ ≈ 90°
+                            _L_total = _L_vert / _cos_b
+                            # Structural g-load cap
+                            _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
+                            if _L_total > _L_max:
+                                _L_total = _L_max
+                            if q > 1.0:
+                                _C_L = _L_total / (q * _Aref)
+                                # Slender-body validity: |α| ≲ 25° → C_L ≲ 0.87
+                                _C_L_lim = 2.0 * np.radians(25.0)
+                                if _C_L > _C_L_lim:
+                                    _C_L = _C_L_lim
+                                _C_D = _CD0 + _kp * _C_L * _C_L
+                                drag_mag = q * _Aref * _C_D
+                                lift_mag = q * _Aref * _C_L
+                            else:
+                                lift_mag = 0.0
+                            # Override drag with the polar-derived value
+                            f_drag = -drag_mag * v_hat
+                        else:
+                            # constant_LD (default): lift is a fixed multiple
+                            # of the β-derived drag.  Implicitly assumes the
+                            # vehicle is always at trim (max-L/D AoA);
+                            # matches the closed-form Tracy/Acton solution.
+                            lift_mag = drag_mag * _erv.glider_LD
+                            lift_cap = _erv.glider_pullup_g_max * g_mag * rv_mass
+                            if lift_mag > lift_cap:
+                                lift_mag = lift_cap
+
                         f_lift = lift_mag * (np.cos(bank_rad) * n_up
                                              + np.sin(bank_rad) * n_side)
                         f_drag = f_drag + f_lift
