@@ -3703,7 +3703,7 @@ class MissileFlyoutApp(tk.Tk):
             side=tk.LEFT, padx=2)
         ttk.Label(_abf, text="kg/m²").pack(side=tk.LEFT)
 
-        # Terminal dive altitude (always active)
+        # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
         _r2.grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         ttk.Label(_r2, text="Terminal dive below").pack(side=tk.LEFT)
@@ -3711,6 +3711,12 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(_r2, textvariable=self._main_dive_alt_var, width=5).pack(
             side=tk.LEFT, padx=2)
         ttk.Label(_r2, text="km").pack(side=tk.LEFT)
+        ttk.Label(_r2, text="   Aero:").pack(side=tk.LEFT, padx=(8, 0))
+        self._main_aero_var = tk.StringVar(value="Constant L/D (trim)")
+        ttk.Combobox(_r2, textvariable=self._main_aero_var,
+                     values=["Constant L/D (trim)",
+                             "Slender-body polar"],
+                     state="readonly", width=20).pack(side=tk.LEFT, padx=2)
 
         # Bank schedule
         ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
@@ -4256,6 +4262,11 @@ class MissileFlyoutApp(tk.Tk):
                 _bs_v = _p_erv.glider_beta_entry_kg_m2
                 self._main_beta_s_var.set(
                     f"{_bs_v:.0f}" if _bs_v > 0 else "5000")
+            if hasattr(self, '_main_aero_var'):
+                self._main_aero_var.set(
+                    "Slender-body polar"
+                    if getattr(_p_erv, 'glider_aero_model', 'constant_LD') == 'polar'
+                    else "Constant L/D (trim)")
             if hasattr(self, '_main_LD_var') and _p_erv.glider_LD > 0:
                 self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
             self._on_glider_main_toggled()
@@ -5345,12 +5356,17 @@ class MissileFlyoutApp(tk.Tk):
                     _g_beta_s = float(self._main_beta_s_var.get())
                 except (ValueError, AttributeError):
                     _g_beta_s = 0.0
+                _g_aero_label = self._main_aero_var.get()
+                _g_aero_key = ("polar"
+                               if "polar" in _g_aero_label.lower()
+                               else "constant_LD")
                 _replace_kw = dict(
                     glider_enabled=True,
                     glider_guidance=_g_guid_key,
                     glider_terminal_dive=_g_terminal,
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
+                    glider_aero_model=_g_aero_key,
                     glider_beta_entry_kg_m2=_g_beta_s,
                 )
                 if _g_main_ld is not None:
@@ -6030,6 +6046,8 @@ class MissileFlyoutApp(tk.Tk):
                 {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
                 for v in getattr(self, '_main_bank_vars', [])
             ],
+            'glider_aero': getattr(self, '_main_aero_var',
+                                    tk.StringVar(value='Constant L/D (trim)')).get(),
         }
         # Per-stage pitch / yaw overrides
         if self._adv_pitch_var.get() and self._stage_rows:
@@ -6097,6 +6115,9 @@ class MissileFlyoutApp(tk.Tk):
                 _bvars['start'].set(_bd.get('start', ''))
                 _bvars['end'].set(_bd.get('end', ''))
                 _bvars['bank'].set(_bd.get('bank', ''))
+            if hasattr(self, '_main_aero_var'):
+                self._main_aero_var.set(
+                    meta.get('glider_aero', 'Constant L/D (trim)'))
             self._on_glider_main_toggled()
             self._on_main_bank_toggled()
             self._on_glider_guidance_changed()

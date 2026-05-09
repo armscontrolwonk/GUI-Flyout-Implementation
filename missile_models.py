@@ -264,6 +264,23 @@ class RVParams:
     # to numerical integration during the glide phase because the analytical
     # equilibrium-glide formula cannot represent banked maneuvers.
     glider_bank_schedule:   list  = field(default_factory=list)
+    # Aerodynamic model used in the numerical EOM during glide:
+    #   "constant_LD" — lift = drag · L/D with L/D from glider_LD, β-derived
+    #                   drag.  Implicitly assumes the vehicle always flies
+    #                   at trim (max-L/D angle of attack).  Default;
+    #                   matches the closed-form Tracy/Acton solution.
+    #   "polar"       — slender-body drag polar (Munk 1924, Ashley & Landahl
+    #                   §6-7, §9-8): C_L = 2α with C_L referenced to the
+    #                   base area, C_D = C_D0 + k·C_L².  C_D0 is derived
+    #                   from the user's β (treated as zero-lift) and base
+    #                   diameter; k is back-solved from the user's
+    #                   glider_LD so (L/D)_max matches input exactly.
+    #                   Vehicle trims for the lift required to balance the
+    #                   centripetal deficit (m·(g − V²/r) / cos σ); off-
+    #                   trim banking and pull-up incur the correct drag
+    #                   penalty.  At trim the polar reproduces the
+    #                   constant_LD model exactly.
+    glider_aero_model:      str   = "constant_LD"
     # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
     # During Phase 3 the glider holds a high-AoA orientation: flat lower
     # surface to airflow, large drag, L/D = 0.  Acton's HTV-2 fit gives
@@ -289,6 +306,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_terminal_dive':  rv.glider_terminal_dive,
         'glider_terminal_alt_km':rv.glider_terminal_alt_km,
         'glider_bank_schedule':  rv.glider_bank_schedule,
+        'glider_aero_model':     rv.glider_aero_model,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
     }
 
@@ -316,6 +334,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
+        glider_aero_model=str(d.get('glider_aero_model', 'constant_LD')),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
     )
 
