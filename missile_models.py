@@ -252,23 +252,18 @@ class RVParams:
     #   "skip_glide":              no analytical pull-up; the vehicle re-
     #                              enters with whatever γ it had and the
     #                              natural EOM produces a phugoid.
-    #   "azimuth_command":         proportional heading controller — bank
-    #                              proportional to heading error, clamped
-    #                              at glider_max_bank_deg.  No pull-up
-    #                              reset.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
     glider_pullup_g_max:    float = 10.0
     glider_terminal_dive:   bool  = False
     glider_terminal_alt_km: float = 30.0
-    # Bank-turn schedule: list of (t_start_s, t_end_s, bank_deg) tuples.
-    # Positive bank = right turn; negative = left.  Up to 3 entries.
-    # Used only when glider_guidance != "azimuth_command".
+    # Bank-turn schedule: list of (t_start_s, t_end_s, bank_deg) tuples in
+    # mission-elapsed seconds.  Positive bank = right turn; negative = left.
+    # Up to 3 entries.  When non-empty, equilibrium-glide modes fall back
+    # to numerical integration during the glide phase because the analytical
+    # equilibrium-glide formula cannot represent banked maneuvers.
     glider_bank_schedule:   list  = field(default_factory=list)
-    # Azimuth-command guidance parameters (glider_guidance == "azimuth_command")
-    glider_target_az_deg:   float = 0.0    # desired final ground-track bearing (°N)
-    glider_max_bank_deg:    float = 45.0   # bank angle limit (°)
     # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
     # During Phase 3 the glider holds a high-AoA orientation: flat lower
     # surface to airflow, large drag, L/D = 0.  Acton's HTV-2 fit gives
@@ -294,16 +289,18 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_terminal_dive':  rv.glider_terminal_dive,
         'glider_terminal_alt_km':rv.glider_terminal_alt_km,
         'glider_bank_schedule':  rv.glider_bank_schedule,
-        'glider_target_az_deg':  rv.glider_target_az_deg,
-        'glider_max_bank_deg':   rv.glider_max_bank_deg,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
     }
 
 
 def rv_from_dict(d: dict) -> RVParams:
-    # Legacy "constant_bank" → "skip_glide" (the bank-angle knob is gone).
+    # Legacy mode aliases:
+    #   "constant_bank"   → "skip_glide"   (old bank-angle knob is gone)
+    #   "azimuth_command" → "skip_glide"   (proportional heading hold removed
+    #                                       — saved missiles fall back to a
+    #                                       wings-level skip-glide)
     _g = str(d.get('glider_guidance', 'equilibrium_glide'))
-    if _g == 'constant_bank':
+    if _g in ('constant_bank', 'azimuth_command'):
         _g = 'skip_glide'
     return RVParams(
         name=str(d.get('name', 'RV')),
@@ -319,8 +316,6 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
-        glider_target_az_deg=float(d.get('glider_target_az_deg', 0.0)),
-        glider_max_bank_deg=float(d.get('glider_max_bank_deg', 45.0)),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
     )
 
