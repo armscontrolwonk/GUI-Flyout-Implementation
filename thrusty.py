@@ -3265,10 +3265,23 @@ class FootprintDialog(tk.Toplevel):
                 tooltip=f"Impact (bank {bk:+.0f}°)",
             ).add_to(m)
 
-        # Footprint envelope (impact points in order, closed)
+        # Footprint envelope (convex hull of impact points).
+        # Drawing the envelope as the convex hull instead of sweep-order
+        # is robust against bank angles outside ±90°: those produce
+        # inverted-lift dive trajectories whose impacts crash short, so
+        # they fall *inside* the hull and don't distort the boundary.
         if len(valid) >= 3:
-            env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
-            env.append(env[0])
+            try:
+                from scipy.spatial import ConvexHull
+                _pts = np.array([[r['lat'][-1], r['lon'][-1]] for _, r in valid])
+                _hull = ConvexHull(_pts)
+                env = [_pts[i].tolist() for i in _hull.vertices]
+                env.append(env[0])
+            except Exception:
+                # Fallback: sweep-order polyline (degenerate hull, e.g. all
+                # impacts collinear).
+                env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
+                env.append(env[0])
             folium.PolyLine(env, color="white", weight=1,
                             dash_array="4 4", opacity=0.5).add_to(m)
 
