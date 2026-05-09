@@ -281,6 +281,18 @@ class RVParams:
     #                   penalty.  At trim the polar reproduces the
     #                   constant_LD model exactly.
     glider_aero_model:      str   = "constant_LD"
+    # Target-based dive trigger.  When glider_dive_target_radius_km > 0 the
+    # vehicle starts the terminal dive (bank = π) as soon as its great-circle
+    # distance to the target (lat/lon) drops below the radius — in addition
+    # to the altitude trigger, whichever fires first.  Disabled when radius
+    # = 0.  Detected in the EOM each step; max_step is tightened to ~2 s
+    # while the trigger is armed so the granularity is ~6–8 km at HGV
+    # speeds.  If used in equilibrium-glide modes, the analytical closed-form
+    # is bypassed in favour of the numerical EOM (the analytical glide can't
+    # see the target).
+    glider_dive_target_lat_deg:    float = 0.0
+    glider_dive_target_lon_deg:    float = 0.0
+    glider_dive_target_radius_km:  float = 0.0     # 0 = disabled
     # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
     # During Phase 3 the glider holds a high-AoA orientation: flat lower
     # surface to airflow, large drag, L/D = 0.  Acton's HTV-2 fit gives
@@ -307,6 +319,9 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_terminal_alt_km':rv.glider_terminal_alt_km,
         'glider_bank_schedule':  rv.glider_bank_schedule,
         'glider_aero_model':     rv.glider_aero_model,
+        'glider_dive_target_lat_deg':   rv.glider_dive_target_lat_deg,
+        'glider_dive_target_lon_deg':   rv.glider_dive_target_lon_deg,
+        'glider_dive_target_radius_km': rv.glider_dive_target_radius_km,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
     }
 
@@ -335,6 +350,9 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
         glider_aero_model=str(d.get('glider_aero_model', 'constant_LD')),
+        glider_dive_target_lat_deg=float(d.get('glider_dive_target_lat_deg', 0.0)),
+        glider_dive_target_lon_deg=float(d.get('glider_dive_target_lon_deg', 0.0)),
+        glider_dive_target_radius_km=float(d.get('glider_dive_target_radius_km', 0.0)),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
     )
 

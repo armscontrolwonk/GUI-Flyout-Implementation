@@ -565,9 +565,26 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             if _bt_s <= t <= _bt_e:
                                 bank_rad = np.radians(_bk_deg)
                                 break
-                        if (_erv.glider_terminal_dive
-                                and alt < _erv.glider_terminal_alt_km * 1000.0):
-                            bank_rad = np.pi
+                        if _erv.glider_terminal_dive:
+                            _dive_now = (alt < _erv.glider_terminal_alt_km * 1000.0)
+                            # Target-proximity dive trigger: bypasses the
+                            # altitude check when the vehicle gets within
+                            # the user-set radius of (target_lat, target_lon).
+                            _td_r = float(getattr(_erv, 'glider_dive_target_radius_km', 0.0) or 0.0)
+                            if not _dive_now and _td_r > 0.0:
+                                _t_lat = np.radians(float(_erv.glider_dive_target_lat_deg))
+                                _t_lon = np.radians(float(_erv.glider_dive_target_lon_deg))
+                                # Haversine distance, vehicle ↔ target
+                                _dlat = lat - _t_lat
+                                _dlon = lon - _t_lon
+                                _hav  = (np.sin(0.5*_dlat)**2
+                                         + np.cos(_t_lat) * np.cos(lat) * np.sin(0.5*_dlon)**2)
+                                _hav  = min(max(_hav, 0.0), 1.0)
+                                _dist_km = 2.0 * 6_371.0 * np.arcsin(np.sqrt(_hav))
+                                if _dist_km < _td_r:
+                                    _dive_now = True
+                            if _dive_now:
+                                bank_rad = np.pi
 
                         if getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
                             # Slender-body drag polar.  Vehicle trims its
@@ -1282,6 +1299,16 @@ def integrate_trajectory(params: MissileParams,
         _rtol, _atol, _maxstep = 1e-5, 1e-2, 20.0
     else:
         _rtol, _atol, _maxstep = 1e-8, 1e-6, 5.0
+    # Target-proximity dive trigger needs sub-step granularity because the
+    # vehicle covers ~80 km per default 20-s glider step at HGV speeds —
+    # easy to leap over a small radius.  Tighten max_step to ~2 s so the
+    # spatial granularity is ~6–8 km, which is sufficient for radii ≥ 10 km.
+    _target_trigger_active = (
+        _erv_full is not None
+        and _erv_full.glider_enabled
+        and getattr(_erv_full, 'glider_dive_target_radius_km', 0.0) > 0.0)
+    if _target_trigger_active:
+        _maxstep = min(_maxstep, 2.0)
     # Boost-glide modes with an analytical Acton pull-up arc applied at
     # the pierce point.  Two flavours:
     #   • equilibrium_glide        — Tracy 2020.  Two-phase: ballistic +
@@ -1446,8 +1473,13 @@ def integrate_trajectory(params: MissileParams,
                 (s is not None and e is not None and float(s) < float(e)
                  and float(b) != 0.0)
                 for (s, e, b) in _bank_sched)
+            # The analytical equilibrium-glide formula has no notion of a
+            # ground target, so when the target-proximity dive trigger is
+            # armed we have to drop to the numerical EOM (same fallback
+            # path as for non-trivial banking).
+            _need_numerical = _bank_active or _target_trigger_active
 
-            if _bank_active:
+            if _need_numerical:
                 # A non-trivial bank schedule is present.  The analytical
                 # equilibrium-glide formula gives turn rate ∝ (g − V²/r),
                 # which → 0 at hypersonic speeds, so it cannot represent
