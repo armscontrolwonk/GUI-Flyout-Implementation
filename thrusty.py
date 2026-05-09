@@ -3228,13 +3228,15 @@ class FootprintDialog(tk.Toplevel):
         launch_lon = float(lon_deg)
 
         # Collect valid results and compute map centre
-        valid = [(bk, r) for bk, r in self._results if r is not None and r.get('lats') is not None]
+        valid = [(bk, r) for bk, r in self._results
+                 if r is not None and r.get('lat') is not None
+                 and len(r.get('lat', [])) > 0]
         if not valid:
             messagebox.showinfo("No results", "All trajectories failed.", parent=self)
             return
 
-        all_lats = [launch_lat] + [r['lats'][-1] for _, r in valid]
-        all_lons = [launch_lon] + [r['lons'][-1] for _, r in valid]
+        all_lats = [launch_lat] + [r['lat'][-1] for _, r in valid]
+        all_lons = [launch_lon] + [r['lon'][-1] for _, r in valid]
         centre = [sum(all_lats) / len(all_lats), sum(all_lons) / len(all_lons)]
 
         m = folium.Map(location=centre, zoom_start=4,
@@ -3248,8 +3250,8 @@ class FootprintDialog(tk.Toplevel):
 
         # Trajectories
         for i, (bk, r) in enumerate(valid):
-            lats = list(r['lats'])
-            lons = list(r['lons'])
+            lats = list(r['lat'])
+            lons = list(r['lon'])
             coords = list(zip(lats, lons))
             col = _hsl(i)
             folium.PolyLine(
@@ -3265,7 +3267,7 @@ class FootprintDialog(tk.Toplevel):
 
         # Footprint envelope (impact points in order, closed)
         if len(valid) >= 3:
-            env = [[r['lats'][-1], r['lons'][-1]] for _, r in valid]
+            env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
             env.append(env[0])
             folium.PolyLine(env, color="white", weight=1,
                             dash_array="4 4", opacity=0.5).add_to(m)
