@@ -445,28 +445,64 @@ def _true_gravity_turn_thrust_dir(pos, vel, lat_rad, lon_rad,
     """Thrust direction for the true (velocity-aligned) gravity-turn mode.
 
     Returns a unit vector in ECEF.  During the initial-kick window (t < 4s
-    or |v| < 50 m/s) thrust is held along local-vertical East-of-North so
-    the rocket lifts off without a v_hat singularity.
+    or |v| < 50 m/s) thrust is held along local-vertical so the rocket
+    lifts off without a v_hat singularity.
+
+    For non-zero η, the kick direction n_perp is the unit vector in the
+    trajectory plane perpendicular to v_hat, pointing "above velocity"
+    (toward local-up).  Sign convention: η > 0 → thrust is BELOW velocity,
+    which lowers γ (matches Wright's etad).
+
+    For a near-vertical vehicle, r_hat ‖ v_hat and the local-up component
+    perpendicular to v_hat is degenerate.  Fall back to the launch-azimuth-
+    defined trajectory plane: n_perp = ((v̂ × e_az) × v̂) gives the
+    "above velocity in the (v̂, e_az) plane" direction, well-defined for
+    any v_hat that isn't parallel to e_az (which only happens for a
+    purely-horizontal vehicle along the launch heading — that case keeps
+    using the r_hat-based formula since v_hat is far from r_hat).
     """
     speed = float(np.linalg.norm(vel))
     if t < _TGT_KICK_HOLD_T_S or speed < _TGT_KICK_HOLD_V_MS:
         # Vertical kick at the configured launch azimuth.
-        e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
+        _, _, e_up = _enu_frame(lat_rad, lon_rad)
         return e_up
 
     v_hat = vel / speed
     r_mag = float(np.linalg.norm(pos))
     r_hat = pos / r_mag if r_mag > 1.0 else np.array([0.0, 0.0, 1.0])
-    # n_perp = component of local-up perpendicular to v_hat, normalised.
+
+    # Primary n_perp from local-up minus its v_hat-parallel component.
     n_perp = r_hat - np.dot(r_hat, v_hat) * v_hat
     n_mag  = float(np.linalg.norm(n_perp))
+    if n_mag < 0.1:
+        # Near-vertical vehicle (r_hat ≈ v_hat).  Fall back to the launch
+        # azimuth to define the trajectory plane.
+        e_east, e_north, _ = _enu_frame(lat_rad, lon_rad)
+        e_az = (np.sin(azimuth_rad) * e_east
+                + np.cos(azimuth_rad) * e_north)
+        n_side = np.cross(v_hat, e_az)
+        ns_mag = float(np.linalg.norm(n_side))
+        if ns_mag > 1e-6:
+            n_side = n_side / ns_mag
+            # cross(v_hat, n_side) gives the "below velocity, toward
+            # +e_az" direction in the trajectory plane — i.e., the
+            # direction we want to subtract from v_hat for η > 0.
+            n_perp = np.cross(v_hat, n_side)
+        else:
+            # v_hat ‖ e_az (purely horizontal along launch heading) —
+            # use local-up directly.
+            _, _, e_up = _enu_frame(lat_rad, lon_rad)
+            n_perp = e_up - np.dot(e_up, v_hat) * v_hat
+        n_mag = float(np.linalg.norm(n_perp))
+
     if n_mag > 1e-9:
         n_perp = n_perp / n_mag
     else:
         n_perp = np.zeros(3)
 
     eta_rad = np.radians(_tgt_eta_now(active_stage, t))
-    # Wright sign convention: positive η tilts thrust BELOW velocity (−n_perp).
+    # η > 0 tilts thrust BELOW velocity (toward −n_perp = "below velocity"),
+    # so the perpendicular thrust component lowers γ.  Wright convention.
     return np.cos(eta_rad) * v_hat - np.sin(eta_rad) * n_perp
 
 
