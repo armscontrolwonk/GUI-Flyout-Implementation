@@ -1819,10 +1819,24 @@ def integrate_trajectory(params: MissileParams,
     alts   = np.array(alts)
     speeds = np.linalg.norm(vel_arr, axis=1)
 
-    ranges = np.array([
-        range_between(lat0, lon0, np.radians(la), np.radians(lo))
-        for la, lo in zip(lats, lons)
-    ])
+    # Cumulative ground-track path length.  Using geodesic-from-origin would
+    # cause the range axis to go backward when the trajectory curves near the
+    # antipodal zone, producing a non-physical loop on the altitude-vs-range
+    # plot.  Cumulative step-to-step arc length is always monotonically
+    # increasing and gives a physically correct downrange axis.
+    _lat_r = np.radians(lats)
+    _lon_r = np.radians(lons)
+    ranges = np.zeros(len(lats))
+    for _i in range(1, len(lats)):
+        ranges[_i] = ranges[_i - 1] + float(
+            range_between(_lat_r[_i - 1], _lon_r[_i - 1],
+                          _lat_r[_i],     _lon_r[_i])
+        )
+    # Geodesic from launch to impact (operational range, used in flight events)
+    _range_km_geodesic = (
+        range_between(lat0, lon0, _lat_r[-1], _lon_r[-1]) / 1000.0
+        if len(lats) > 0 else 0.0
+    )
 
     apo_idx = int(np.argmax(alts))
 
@@ -2400,7 +2414,7 @@ def integrate_trajectory(params: MissileParams,
         'orbital':            orbital,
         'impact_lat':         None if orbital else lats[-1],
         'impact_lon':         None if orbital else lons[-1],
-        'range_km':           None if orbital else ranges[-1] / 1000.0,
+        'range_km':           None if orbital else _range_km_geodesic,
         'apogee_km':          np.max(alts) / 1000.0,
         'apogee_lat_deg':     lats[apo_idx],
         'apogee_lon_deg':     lons[apo_idx],
