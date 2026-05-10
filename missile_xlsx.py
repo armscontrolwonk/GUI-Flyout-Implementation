@@ -355,10 +355,10 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     _section(ws, _RC_STAGES, 'COMPUTED — STAGES  (do not edit)',
              computed=True)
     comp_labels = [
-        (_RC_STAGES+1, 'Propellant mass check', 'kg',
-         'Initial − Final  (should equal Propellant mass above)'),
+        (_RC_STAGES+1, 'Burnout mass', 'kg',
+         'Initial − Propellant  (mass of the stack at burnout, before separation)'),
         (_RC_STAGES+2, 'Mass fraction',         '—',  'Propellant / Initial'),
-        (_RC_STAGES+3, 'ΔV  (Tsiolkovsky)',     'm/s','Isp × g₀ × ln(m₀/m_f)'),
+        (_RC_STAGES+3, 'ΔV  (Tsiolkovsky)',     'm/s','Isp × g₀ × ln(Initial / (Initial − Propellant))'),
         (_RC_STAGES+4, 'T/W at ignition',       '—',  'Thrust / (Initial × g₀)'),
         (_RC_STAGES+5, 'Derived thrust',        'N',
          'Isp × 9.80665 × Propellant / Burn time  (cross-check for Vacuum thrust above)'),
@@ -374,12 +374,16 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
         th  = f'{col}{r["thrust"]}'
         bn  = f'{col}{r["burn"]}'
         ci  = _SCOLS[i]
+        # Burnout mass = Initial − Propellant.  The stage's mass_final
+        # field is the jettisoned dry hardware (used for debris arcs and
+        # for staging mass after separation), NOT the mass at burnout
+        # — so we cannot use it here.
         _computed(ws, _RC_STAGES+1, ci,
-                  f'=IF({mi}>0,{mi}-{mf},"—")', '#,##0')
+                  f'=IF({mi}>0,{mi}-{mp},"—")', '#,##0')
         _computed(ws, _RC_STAGES+2, ci,
                   f'=IF({mi}>0,{mp}/{mi},"—")', '0.000')
         _computed(ws, _RC_STAGES+3, ci,
-                  f'=IF(AND({mi}>0,{mf}>0),{isp}*9.80665*LN({mi}/{mf}),"—")',
+                  f'=IF(AND({mi}>0,{mi}-{mp}>0),{isp}*9.80665*LN({mi}/({mi}-{mp})),"—")',
                   '#,##0')
         _computed(ws, _RC_STAGES+4, ci,
                   f'=IF({mi}>0,{th}/({mi}*9.80665),"—")', '0.00')
