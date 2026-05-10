@@ -233,6 +233,17 @@ class RVParams:
     diameter_m: float = 0.0
     length_m:   float = 0.0
 
+    # Separation mode — does the terminal vehicle separate from the missile
+    # body, or IS the missile body the terminal vehicle?
+    #   "separating_rv" — distinct payload, mass/beta/diameter independent
+    #                     (ICBM with MIRV, Scud-style separated warhead, …)
+    #   "body"          — vehicle IS the missile body (KN-23 / Iskander,
+    #                     Pershing II MaRV, single-stage maneuvering body).
+    #                     mass/beta/diameter are inherited from the missile's
+    #                     last stage (mass_final, beta_kg_m2, diameter_m)
+    #                     by effective_rv() at runtime.
+    separation_mode: str = "separating_rv"
+
     # Glider / HGV properties
     #
     # glider_guidance — one of:
@@ -323,6 +334,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_dive_target_lon_deg':   rv.glider_dive_target_lon_deg,
         'glider_dive_target_radius_km': rv.glider_dive_target_radius_km,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
+        'separation_mode':       rv.separation_mode,
     }
 
 
@@ -354,17 +366,44 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_dive_target_lon_deg=float(d.get('glider_dive_target_lon_deg', 0.0)),
         glider_dive_target_radius_km=float(d.get('glider_dive_target_radius_km', 0.0)),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
+        separation_mode=str(d.get('separation_mode', 'separating_rv')),
     )
 
 
 def effective_rv(params: 'MissileParams') -> Optional[RVParams]:
-    """Return the active RVParams.
+    """Return the active RVParams (the "terminal vehicle").
 
     Priority: explicit params.rv → synthesise from deprecated inline fields.
     Returns None when no RV configuration is present.
+
+    When params.rv has separation_mode == "body" the terminal vehicle IS the
+    missile body itself (KN-23 / Iskander, Pershing II MaRV class), not a
+    separating warhead.  In that case mass_kg / beta_kg_m2 / diameter_m are
+    inherited from the missile's last-stage burnout state (mass_final,
+    beta_kg_m2, diameter_m) instead of being independent payload fields.
+    The user only has to set the maneuvering properties (L/D, g-limit,
+    βₛ) — the body's mass and shape come from the missile params.
     """
     if params.rv is not None:
-        return params.rv
+        rv = params.rv
+        if getattr(rv, 'separation_mode', 'separating_rv') == 'body':
+            # The vehicle IS the missile body — inherit mass and geometry
+            # from the last stage's burnout state.  β remains user-specified
+            # on the RV itself because there's no clean way to derive a
+            # single scalar β from a Mach-dependent body Cd table.
+            _last = params
+            while _last.stage2 is not None:
+                _last = _last.stage2
+            import dataclasses as _dc
+            _body_mass = (_last.mass_initial - _last.mass_propellant
+                          if _last.mass_propellant > 0 else _last.mass_final)
+            return _dc.replace(rv,
+                mass_kg=float(_body_mass) if _body_mass > 0 else rv.mass_kg,
+                diameter_m=(float(_last.diameter_m)
+                            if _last.diameter_m > 0 else rv.diameter_m),
+                length_m=(float(_last.length_m)
+                          if _last.length_m > 0 else rv.length_m))
+        return rv
     # Legacy inline fields (deprecated; kept for reading old JSON files).
     if getattr(params, 'rv_beta_kg_m2', 0.0) > 0:
         mass = (getattr(params, 'rv_mass_kg', 0.0) or

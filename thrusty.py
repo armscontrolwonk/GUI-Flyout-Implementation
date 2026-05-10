@@ -1270,7 +1270,7 @@ class MissileDialog(tk.Toplevel):
         _rv_btn_row.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
         self._rv_load_btn = ttk.Button(_rv_btn_row, text="Load RV…", command=self._load_rv)
         self._rv_load_btn.pack(side=tk.LEFT)
-        self._rv_edit_btn = ttk.Button(_rv_btn_row, text="Edit RV…", command=self._edit_rv)
+        self._rv_edit_btn = ttk.Button(_rv_btn_row, text="Edit Terminal Vehicle…", command=self._edit_rv)
         self._rv_edit_btn.pack(side=tk.LEFT, padx=(4, 0))
         self._rv_new_btn  = ttk.Button(_rv_btn_row, text="New RV…",  command=self._new_rv)
         self._rv_new_btn.pack(side=tk.LEFT, padx=(4, 0))
@@ -1580,17 +1580,21 @@ class MissileDialog(tk.Toplevel):
         rv = self._rv
         if rv is None:
             self._rv_summary_var.set("No RV loaded")
-            return
-        parts = [rv.name,
-                 f"{rv.mass_kg:,.0f} kg",
-                 f"β {rv.beta_kg_m2:,.0f} kg/m²"]
-        if rv.glider_enabled and rv.glider_LD > 0:
-            _g = rv.glider_guidance
-            guid = ("Tracy" if _g == "equilibrium_glide"
-                    else "Acton" if _g == "equilibrium_glide_acton"
-                    else "skip")
-            parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
-        self._rv_summary_var.set(" — ".join(parts))
+        else:
+            parts = [rv.name,
+                     f"{rv.mass_kg:,.0f} kg",
+                     f"β {rv.beta_kg_m2:,.0f} kg/m²"]
+            if rv.glider_enabled and rv.glider_LD > 0:
+                _g = rv.glider_guidance
+                guid = ("Tracy" if _g == "equilibrium_glide"
+                        else "Acton" if _g == "equilibrium_glide_acton"
+                        else "skip")
+                parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
+            self._rv_summary_var.set(" — ".join(parts))
+        # The glider mission-control panel auto-shows / hides based on
+        # the active terminal vehicle.  Refresh whenever the RV changes.
+        if hasattr(self, '_glider_status_var'):
+            self._refresh_glider_status_line()
 
     def _load_rv(self):
         """Browse for an .rv.json file and load it into self._rv."""
@@ -2084,7 +2088,7 @@ class RVEditorDialog(tk.Toplevel):
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
         super().__init__(parent)
-        self.title("Edit RV" if rv is not None else "New RV")
+        self.title("Edit Terminal Vehicle" if rv is not None else "New Terminal Vehicle")
         self.resizable(False, True)
         self.grab_set()
         self._result = None
@@ -2102,48 +2106,66 @@ class RVEditorDialog(tk.Toplevel):
             e.grid(row=row, column=1, sticky=tk.W, pady=3)
             return e
 
+        # Separation mode — does the vehicle separate from the missile body?
+        _lbl(-1 if False else 0, "Separation:")  # row 0
+        self._sep_var = tk.StringVar(
+            value=getattr(rv, 'separation_mode', 'separating_rv') if rv
+                  else 'separating_rv')
+        _sep_row = ttk.Frame(frm)
+        _sep_row.grid(row=0, column=1, sticky=tk.W, pady=3)
+        ttk.Radiobutton(_sep_row, text="Separating RV",
+                        variable=self._sep_var, value='separating_rv',
+                        command=self._update_separation_state).pack(side=tk.LEFT)
+        ttk.Radiobutton(_sep_row, text="Body (no separation)",
+                        variable=self._sep_var, value='body',
+                        command=self._update_separation_state).pack(side=tk.LEFT, padx=(8, 0))
+
         # Name
-        _lbl(0, "Name:")
+        _lbl(1, "Name:")
         self._name_var = tk.StringVar(value=rv.name if rv else "")
-        _entry(0, self._name_var)
+        self._name_entry = _entry(1, self._name_var)
 
         # Mass
-        _lbl(1, "Mass (kg):")
+        _lbl(2, "Mass (kg):")
         self._mass_var = tk.StringVar(
             value=f"{rv.mass_kg:.0f}" if rv else f"{mass_kg:.0f}")
-        _entry(1, self._mass_var, width=10)
+        self._mass_entry = _entry(2, self._mass_var, width=10)
 
         # β with Estimate button
-        _lbl(2, "β (kg/m²):")
+        _lbl(3, "β (kg/m²):")
         self._beta_var = tk.StringVar(
             value=f"{rv.beta_kg_m2:.0f}" if rv else "10000")
         _beta_row = ttk.Frame(frm)
-        _beta_row.grid(row=2, column=1, sticky=tk.W, pady=3)
-        ttk.Entry(_beta_row, textvariable=self._beta_var, width=10).pack(side=tk.LEFT)
+        _beta_row.grid(row=3, column=1, sticky=tk.W, pady=3)
+        self._beta_entry = ttk.Entry(_beta_row, textvariable=self._beta_var, width=10)
+        self._beta_entry.pack(side=tk.LEFT)
         ttk.Label(_beta_row, text=" kg/m²").pack(side=tk.LEFT)
         ttk.Button(_beta_row, text="Estimate…",
                    command=self._calc_beta).pack(side=tk.LEFT, padx=(6, 0))
 
         # Shape
-        _lbl(3, "Shape:")
+        _lbl(4, "Shape:")
         self._shape_var = tk.StringVar(
             value=NOSE_SHAPE_LABELS.get(rv.shape if rv else "cone",
                                         NOSE_SHAPE_LABELS["cone"]))
         _ns_labels = list(NOSE_SHAPE_LABELS.values())
-        ttk.Combobox(frm, textvariable=self._shape_var,
-                     values=_ns_labels, state="readonly", width=18).grid(
-            row=3, column=1, sticky=tk.W, pady=3)
+        self._shape_combo = ttk.Combobox(frm, textvariable=self._shape_var,
+                                          values=_ns_labels, state="readonly", width=18)
+        self._shape_combo.grid(row=4, column=1, sticky=tk.W, pady=3)
 
         # Diameter + length
-        _lbl(4, "Diameter (m):")
+        _lbl(5, "Diameter (m):")
         self._dia_var = tk.StringVar(
             value=f"{rv.diameter_m:.2f}" if rv else "0.5")
-        _entry(4, self._dia_var, width=10)
+        self._dia_entry = _entry(5, self._dia_var, width=10)
 
-        _lbl(5, "Length (m):")
+        _lbl(6, "Length (m):")
         self._len_var = tk.StringVar(
             value=f"{rv.length_m:.2f}" if rv else "2.0")
-        _entry(5, self._len_var, width=10)
+        self._len_entry = _entry(6, self._len_var, width=10)
+
+        # Sync the read-only state of mass/diameter/length to separation mode
+        self._update_separation_state()
 
         # ── Maneuvering (glider / HGV) — vehicle properties only ──────
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
@@ -2341,6 +2363,7 @@ class RVEditorDialog(tk.Toplevel):
             glider_LD=LD,
             glider_pullup_g_max=g_max,
             glider_beta_entry_kg_m2=beta_S,
+            separation_mode=self._sep_var.get(),
         )
 
     def _update_glider_state(self):
@@ -2348,6 +2371,20 @@ class RVEditorDialog(tk.Toplevel):
             self._glider_frm.pack(fill=tk.X)
         else:
             self._glider_frm.pack_forget()
+
+    def _update_separation_state(self):
+        """When 'Body (no separation)' is selected, mass/diameter/length
+        are inherited from the missile body at run-time, so disable those
+        entries to make the inheritance visible to the user.  β stays
+        editable (it's a glide-phase scalar with no clean default from the
+        body's Mach-dependent Cd table)."""
+        is_body = (self._sep_var.get() == 'body')
+        state = 'disabled' if is_body else 'normal'
+        for w in (getattr(self, '_mass_entry', None),
+                  getattr(self, '_dia_entry', None),
+                  getattr(self, '_len_entry', None)):
+            if w is not None:
+                w.configure(state=state)
 
     def _ok(self):
         rv = self._build_rv()
@@ -3669,30 +3706,26 @@ class MissileFlyoutApp(tk.Tk):
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
 
         # ── Glider / HGV guidance ────────────────────────────────────
-        self._glider_main_var = tk.BooleanVar(value=False)
-        self._glider_main_chk = ttk.Checkbutton(
-            gf, text="Glider / HGV guidance",
-            variable=self._glider_main_var,
-            command=self._on_glider_main_toggled)
-        self._glider_main_chk.grid(row=11, column=0, columnspan=2,
-                                    sticky=tk.W, padx=8, pady=(0, 2))
+        # Row 11: read-only status line — reflects whether the terminal
+        # vehicle (set in the RV editor) is configured as a maneuvering
+        # glider.  No toggle here; "is this a glider" is decided in one
+        # place — the Terminal Vehicle editor.
+        self._glider_status_var = tk.StringVar(
+            value="Ballistic — enable maneuvering in Edit Terminal Vehicle…")
+        self._glider_status_lbl = ttk.Label(gf, textvariable=self._glider_status_var,
+                                             foreground="#555555")
+        self._glider_status_lbl.grid(row=11, column=0, columnspan=2,
+                                      sticky=tk.W, padx=8, pady=(0, 2))
 
-        # Row 12: glider detail frame
+        # Row 12: glider mission-control detail frame.  Auto-shown by
+        # _refresh_glider_status_line() when the active RV has
+        # glider_enabled = True.  Vehicle properties (L/D, g-limit, βₛ)
+        # do NOT appear here — they're vehicle traits that live with
+        # the terminal-vehicle/RV.
         _gmf = ttk.Frame(gf)
         self._glider_main_frame = _gmf
 
         _gmf.columnconfigure(1, weight=1)
-
-        # L/D row (row 0) — always shown; blank → use RV's stored value
-        ttk.Label(_gmf, text="L/D:").grid(
-            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-        _ld_row = ttk.Frame(_gmf)
-        _ld_row.grid(row=0, column=1, sticky=tk.W, pady=1, padx=(0, 8))
-        self._main_LD_var = tk.StringVar(value="")
-        ttk.Entry(_ld_row, textvariable=self._main_LD_var, width=5).pack(side=tk.LEFT)
-        ttk.Button(_ld_row, text="Est.", width=4,
-                   command=self._estimate_body_LD).pack(side=tk.LEFT, padx=(3, 0))
-        ttk.Label(_ld_row, text="  (blank = from RV)").pack(side=tk.LEFT)
 
         # Guidance combobox
         ttk.Label(_gmf, text="Guidance:").grid(
@@ -3705,16 +3738,6 @@ class MissileFlyoutApp(tk.Tk):
                      state="readonly", width=26)
         _guid_cb.grid(row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
         _guid_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_glider_guidance_changed())
-
-        # Acton Phase-3 βₛ entry (row 2) — shown only for Acton guidance
-        _abf = ttk.Frame(_gmf)
-        _abf.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
-        self._acton_beta_frame = _abf
-        ttk.Label(_abf, text="Re-entry βₛ:").pack(side=tk.LEFT)
-        self._main_beta_s_var = tk.StringVar(value="5000")
-        ttk.Entry(_abf, textvariable=self._main_beta_s_var, width=7).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_abf, text="kg/m²").pack(side=tk.LEFT)
 
         # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
@@ -4274,10 +4297,16 @@ class MissileFlyoutApp(tk.Tk):
                     if 'stop'     in saved: yv['stop'].set(saved['stop'])
                     if 'final_az' in saved: yv['final_az'].set(saved['final_az'])
 
-        # Seed glider fields from RV if present; do not override if already set
+        # Seed glider mission-control fields from the RV if it has glider
+        # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
+        # belong to the RV editor — they're not displayed here; the status
+        # line summarises them.  When the missile loads with an RV that has
+        # glider_enabled, populate self._rv so the status line and the
+        # mission-control frame appear automatically.
         _p_erv = effective_rv(p)
-        if _p_erv is not None and _p_erv.glider_enabled and hasattr(self, '_glider_main_var'):
-            self._glider_main_var.set(True)
+        if _p_erv is not None and _p_erv.glider_enabled:
+            # Sync self._rv so _refresh_glider_status_line picks it up
+            self._rv = _p_erv
             self._main_guidance_var.set(
                 "Skip-glide (natural phugoid)"
                 if _p_erv.glider_guidance in ("skip_glide", "azimuth_command")
@@ -4297,10 +4326,6 @@ class MissileFlyoutApp(tk.Tk):
                     _bvars['start'].set('')
                     _bvars['end'].set('')
                     _bvars['bank'].set('')
-            if hasattr(self, '_main_beta_s_var'):
-                _bs_v = _p_erv.glider_beta_entry_kg_m2
-                self._main_beta_s_var.set(
-                    f"{_bs_v:.0f}" if _bs_v > 0 else "5000")
             if hasattr(self, '_main_aero_var'):
                 self._main_aero_var.set(
                     "Slender-body polar"
@@ -4315,9 +4340,8 @@ class MissileFlyoutApp(tk.Tk):
                     f"{getattr(_p_erv, 'glider_dive_target_lon_deg', 0.0):.4f}")
                 self._main_dt_radius_var.set(
                     f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
-            if hasattr(self, '_main_LD_var') and _p_erv.glider_LD > 0:
-                self._main_LD_var.set(f"{_p_erv.glider_LD:.2f}")
-            self._on_glider_main_toggled()
+        if hasattr(self, '_glider_status_var'):
+            self._refresh_glider_status_line()
             self._on_main_bank_toggled()
             self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
@@ -4352,31 +4376,49 @@ class MissileFlyoutApp(tk.Tk):
         else:
             self._adv_yaw_frame.grid_forget()
 
-    def _on_glider_main_toggled(self):
-        if self._glider_main_var.get():
+    def _refresh_glider_status_line(self):
+        """Update the Glider/HGV status label and auto-show the
+        mission-control frame based on the active terminal vehicle's
+        glider_enabled flag.  Called whenever the active RV changes,
+        replacing the old _glider_main_var checkbox toggle."""
+        rv = self._rv
+        on = bool(rv and rv.glider_enabled and rv.glider_LD > 0)
+        if on:
+            sep = getattr(rv, 'separation_mode', 'separating_rv')
+            sep_lbl = "body" if sep == "body" else "separating RV"
+            self._glider_status_var.set(
+                f"Maneuvering glider: {rv.name or 'RV'}  "
+                f"({sep_lbl}, L/D {rv.glider_LD:.2f}, "
+                f"g-lim {rv.glider_pullup_g_max:.0f})  "
+                f"— edit in Edit Terminal Vehicle…")
             self._glider_main_frame.grid(row=12, column=0, columnspan=2,
                                           sticky=tk.EW, padx=0, pady=(0, 4))
         else:
+            self._glider_status_var.set(
+                "Ballistic — enable maneuvering in Edit Terminal Vehicle…")
             self._glider_main_frame.grid_forget()
 
+    def _is_glider_active(self) -> bool:
+        """True iff the active terminal vehicle is a maneuvering glider."""
+        rv = self._rv
+        return bool(rv and rv.glider_enabled and rv.glider_LD > 0)
+
     def _on_main_bank_toggled(self):
-        if self._glider_main_var.get() and self._main_bank_sched_var.get():
+        if self._is_glider_active() and self._main_bank_sched_var.get():
             self._main_bank_frm.grid()
         else:
             self._main_bank_frm.grid_remove()
 
     def _on_main_dive_target_toggled(self):
-        if self._glider_main_var.get() and self._main_dive_target_var.get():
+        if self._is_glider_active() and self._main_dive_target_var.get():
             self._main_dive_target_frm.grid()
         else:
             self._main_dive_target_frm.grid_remove()
 
     def _on_glider_guidance_changed(self):
-        guid = self._main_guidance_var.get().lower()
-        if "acton" in guid:
-            self._acton_beta_frame.grid()
-        else:
-            self._acton_beta_frame.grid_remove()
+        # Acton βₛ is now configured in the Terminal Vehicle editor as a
+        # vehicle property, not in this panel — nothing to toggle here.
+        pass
 
     def _estimate_body_LD(self):
         """Estimate body max L/D from geometry, drag model, and fin parameters.
@@ -4455,7 +4497,10 @@ class MissileFlyoutApp(tk.Tk):
         ld_max    = math.sqrt(cl_alpha_total / cd0_total) / 2.0
         alpha_deg = math.degrees(math.sqrt(cd0_total / cl_alpha_total))
 
-        self._main_LD_var.set(f"{ld_max:.2f}")
+        # The estimate is displayed for the user to copy into the
+        # Terminal Vehicle editor's L/D field.  (Previously this also
+        # wrote into a main-panel L/D entry, which has been removed —
+        # L/D is now a vehicle property that lives only in the editor.)
         messagebox.showinfo(
             "Body L/D Estimate",
             f"Body Cd₀  = {cd0_body:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
@@ -5333,127 +5378,74 @@ class MissileFlyoutApp(tk.Tk):
             launch_elevation_deg = 90.0
         missile.launch_elevation_deg = launch_elevation_deg
 
-        # Glider / HGV guidance — override RV params from main panel
-        if getattr(self, '_glider_main_var', None) and self._glider_main_var.get():
+        # Glider / HGV mission control — write only mission-time fields.
+        # Vehicle properties (glider_enabled, glider_LD, glider_pullup_g_max,
+        # glider_beta_entry_kg_m2, separation_mode) are owned by the
+        # Terminal Vehicle editor and live on self._rv / params.rv.  This
+        # block runs only when the active terminal vehicle has glider mode
+        # enabled.
+        _g_erv = effective_rv(missile)
+        if _g_erv is not None and _g_erv.glider_enabled:
             import dataclasses as _dc
-            import math as _math
             missile = copy.deepcopy(missile)
-            _g_erv = effective_rv(missile)
-
-            # Parse optional main-panel L/D override
             try:
-                _g_ld_str = getattr(self, '_main_LD_var', tk.StringVar()).get().strip()
-                _g_main_ld = float(_g_ld_str) if _g_ld_str else None
-            except (ValueError, AttributeError):
-                _g_main_ld = None
-
-            # No RV at all (no-sep with no rv field) — synthesise one from the
-            # last stage's body geometry so lift can be applied after burnout.
-            if _g_erv is None:
-                from missile_models import drag_coefficient as _dc_fn, _cd_fins as _cdf_fn
-                _last = missile
-                while _last.stage2 is not None:
-                    _last = _last.stage2
-                _bm = float(_last.mass_final)
-                _bd = float(_last.diameter_m)
-                if _bd > 0 and _bm > 0:
-                    _ba = _math.pi * (_bd / 2.0) ** 2
-                    # Use the missile's actual Cd table at Mach 3 for body beta;
-                    # add fin drag increment when fins are configured.
-                    _cd0_body = _dc_fn(_last, 3.0)
-                    _cd_fin   = 0.0
-                    if getattr(_last, 'has_fins', False):
-                        _L_ref = float(_last.length_m) if _last.length_m > 0 else _bd * 5
-                        _re_l  = 1.2 * 900.0 * _L_ref / 1.789e-5
-                        _cd_fin = _cdf_fn(
-                            int(_last.n_fins or 4),
-                            float(_last.fin_span_m or 0.0),
-                            float(_last.fin_root_chord_m or 0.0),
-                            float(_last.fin_tip_chord_m or 0.0),
-                            float(_last.fin_thickness_m or 0.0),
-                            _bd, 3.0, _re_l,
-                            float(_last.fin_sweep_deg or 0.0),
-                        )
-                    _cd_eff = max(_cd0_body + _cd_fin, 0.01)
-                    _bb = _bm / (_cd_eff * _ba)
-                    _g_erv = RVParams(
-                        name='(body)',
-                        mass_kg=_bm,
-                        beta_kg_m2=_bb,
-                        glider_enabled=True,
-                        glider_LD=float(_g_main_ld) if _g_main_ld is not None else 2.0,
-                    )
-                    missile.rv = _g_erv
-
-            if _g_erv is not None:
-                try:
-                    _g_dalt = float(self._main_dive_alt_var.get())
-                except ValueError:
-                    _g_dalt = 30.0
-                _g_guid_label = self._main_guidance_var.get()
-                _g_guid_lower = _g_guid_label.lower()
-                _g_guid_key = (
-                    "skip_glide"               if "skip"  in _g_guid_lower else
-                    "equilibrium_glide_acton"  if "acton" in _g_guid_lower else
-                    "equilibrium_glide"
-                )
-                _g_terminal = True
-                _g_bank = []
-                if self._main_bank_sched_var.get():
-                    for _bv in self._main_bank_vars:
-                        try:
-                            _g_bank.append((float(_bv['start'].get()),
-                                            float(_bv['end'].get()),
-                                            float(_bv['bank'].get())))
-                        except ValueError:
-                            pass
-                try:
-                    _g_beta_s = float(self._main_beta_s_var.get())
-                except (ValueError, AttributeError):
-                    _g_beta_s = 0.0
-                _g_aero_label = self._main_aero_var.get()
-                _g_aero_key = ("polar"
-                               if "polar" in _g_aero_label.lower()
-                               else "constant_LD")
-                # Dive-at-target trigger (radius = 0 ⇒ disabled)
-                _g_dt_lat = 0.0
-                _g_dt_lon = 0.0
-                _g_dt_rad = 0.0
-                if (hasattr(self, '_main_dive_target_var')
-                        and self._main_dive_target_var.get()):
-                    try:    _g_dt_lat = float(self._main_dt_lat_var.get())
-                    except (ValueError, AttributeError): pass
-                    try:    _g_dt_lon = float(self._main_dt_lon_var.get())
-                    except (ValueError, AttributeError): pass
-                    try:    _g_dt_rad = float(self._main_dt_radius_var.get())
-                    except (ValueError, AttributeError): pass
-                _replace_kw = dict(
-                    glider_enabled=True,
-                    glider_guidance=_g_guid_key,
-                    glider_terminal_dive=_g_terminal,
-                    glider_terminal_alt_km=_g_dalt,
-                    glider_bank_schedule=_g_bank,
-                    glider_aero_model=_g_aero_key,
-                    glider_dive_target_lat_deg=_g_dt_lat,
-                    glider_dive_target_lon_deg=_g_dt_lon,
-                    glider_dive_target_radius_km=_g_dt_rad,
-                    glider_beta_entry_kg_m2=_g_beta_s,
-                )
-                if _g_main_ld is not None:
-                    _replace_kw['glider_LD'] = _g_main_ld
-                _g_new_rv = _dc.replace(_g_erv, **_replace_kw)
-                # Walk the stage chain to find where rv lives; fall back to
-                # missile.rv for legacy missiles where all rv fields are None.
-                _g_node = missile
-                _g_saved = False
-                while _g_node is not None:
-                    if _g_node.rv is not None:
-                        _g_node.rv = _g_new_rv
-                        _g_saved = True
-                        break
-                    _g_node = _g_node.stage2
-                if not _g_saved:
-                    missile.rv = _g_new_rv
+                _g_dalt = float(self._main_dive_alt_var.get())
+            except ValueError:
+                _g_dalt = 30.0
+            _g_guid_label = self._main_guidance_var.get()
+            _g_guid_lower = _g_guid_label.lower()
+            _g_guid_key = (
+                "skip_glide"               if "skip"  in _g_guid_lower else
+                "equilibrium_glide_acton"  if "acton" in _g_guid_lower else
+                "equilibrium_glide"
+            )
+            _g_bank = []
+            if self._main_bank_sched_var.get():
+                for _bv in self._main_bank_vars:
+                    try:
+                        _g_bank.append((float(_bv['start'].get()),
+                                        float(_bv['end'].get()),
+                                        float(_bv['bank'].get())))
+                    except ValueError:
+                        pass
+            _g_aero_label = self._main_aero_var.get()
+            _g_aero_key = ("polar"
+                           if "polar" in _g_aero_label.lower()
+                           else "constant_LD")
+            # Dive-at-target trigger (radius = 0 ⇒ disabled)
+            _g_dt_lat = 0.0
+            _g_dt_lon = 0.0
+            _g_dt_rad = 0.0
+            if (hasattr(self, '_main_dive_target_var')
+                    and self._main_dive_target_var.get()):
+                try:    _g_dt_lat = float(self._main_dt_lat_var.get())
+                except (ValueError, AttributeError): pass
+                try:    _g_dt_lon = float(self._main_dt_lon_var.get())
+                except (ValueError, AttributeError): pass
+                try:    _g_dt_rad = float(self._main_dt_radius_var.get())
+                except (ValueError, AttributeError): pass
+            _replace_kw = dict(
+                glider_guidance=_g_guid_key,
+                glider_terminal_dive=True,
+                glider_terminal_alt_km=_g_dalt,
+                glider_bank_schedule=_g_bank,
+                glider_aero_model=_g_aero_key,
+                glider_dive_target_lat_deg=_g_dt_lat,
+                glider_dive_target_lon_deg=_g_dt_lon,
+                glider_dive_target_radius_km=_g_dt_rad,
+            )
+            _g_new_rv = _dc.replace(_g_erv, **_replace_kw)
+            # Write back into wherever the rv currently lives in the stack
+            _g_node = missile
+            _g_saved = False
+            while _g_node is not None:
+                if _g_node.rv is not None:
+                    _g_node.rv = _g_new_rv
+                    _g_saved = True
+                    break
+                _g_node = _g_node.stage2
+            if not _g_saved:
+                missile.rv = _g_new_rv
 
         return (missile, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
@@ -6108,7 +6100,6 @@ class MissileFlyoutApp(tk.Tk):
                  'final_az': v['final_az'].get()}
                 for v in self._yaw_vars
             ],
-            'glider_on':  getattr(self, '_glider_main_var', tk.BooleanVar()).get(),
             'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
             'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='30')).get(),
             'glider_bank_on':  getattr(self, '_main_bank_sched_var', tk.BooleanVar()).get(),
@@ -6179,8 +6170,7 @@ class MissileFlyoutApp(tk.Tk):
                 row['angle'].set(ov.get('angle', ''))
                 if 'coast' in row:
                     row['coast'].set(ov.get('coast', ''))
-        if hasattr(self, '_glider_main_var'):
-            self._glider_main_var.set(bool(meta.get('glider_on', False)))
+        if hasattr(self, '_main_guidance_var'):
             self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Tracy)'))
             self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
             self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))
@@ -6199,7 +6189,8 @@ class MissileFlyoutApp(tk.Tk):
                 self._main_dt_lat_var.set(meta.get('glider_dt_lat', '0.0'))
                 self._main_dt_lon_var.set(meta.get('glider_dt_lon', '0.0'))
                 self._main_dt_radius_var.set(meta.get('glider_dt_radius', '20'))
-            self._on_glider_main_toggled()
+            if hasattr(self, '_glider_status_var'):
+                self._refresh_glider_status_line()
             self._on_main_bank_toggled()
             self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
