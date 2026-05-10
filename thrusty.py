@@ -4381,7 +4381,7 @@ class MissileFlyoutApp(tk.Tk):
         mission-control frame based on the active terminal vehicle's
         glider_enabled flag.  Called whenever the active RV changes,
         replacing the old _glider_main_var checkbox toggle."""
-        rv = self._rv
+        rv = getattr(self, '_rv', None)
         on = bool(rv and rv.glider_enabled and rv.glider_LD > 0)
         if on:
             sep = getattr(rv, 'separation_mode', 'separating_rv')
@@ -4400,7 +4400,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _is_glider_active(self) -> bool:
         """True iff the active terminal vehicle is a maneuvering glider."""
-        rv = self._rv
+        rv = getattr(self, '_rv', None)
         return bool(rv and rv.glider_enabled and rv.glider_LD > 0)
 
     def _on_main_bank_toggled(self):
