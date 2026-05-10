@@ -1593,6 +1593,56 @@ def integrate_trajectory(params: MissileParams,
             # path as for non-trivial banking).
             _need_numerical = _bank_active or _target_trigger_active
 
+            # When the analytical pull-up arc returned no samples (shallow
+            # pierce angle below 3° → degenerate arc geometry), the
+            # analytical equilibrium-glide formula would teleport the vehicle
+            # from the pierce altitude (~100 km) to h_eq(V_pierce) (~60 km),
+            # creating a non-physical altitude jump in plots.  Run a brief
+            # numerical-EOM bridge from the pierce state until altitude
+            # reaches ~h_eq + 2 km, then hand off to the analytical glide.
+            # This preserves Tracy/Acton's analytical solution for the long-
+            # range portion while keeping the descent visually continuous.
+            _bridge_t = np.empty(0)
+            _bridge_pos = np.empty((0, 3))
+            _bridge_vel = np.empty((0, 3))
+            if (len(arc_samples) == 0 and not _need_numerical):
+                # Estimate target equilibrium altitude h_eq from V_pierce.
+                _vp_mag = float(np.linalg.norm(state_pierce[3:]))
+                _r_mag  = float(np.linalg.norm(state_pierce[:3]))
+                _g_p    = float(np.linalg.norm(gravity_ecef(state_pierce[:3])))
+                _ra_p   = _g_p - _vp_mag * _vp_mag / _r_mag
+                if _ra_p > 0.0:
+                    _rho_eq_b = (2.0 * beta_L * _ra_p
+                                 / (_vp_mag * _vp_mag * LD))
+                    _h_eq_b   = (ACTON_SCALE_HEIGHT_M
+                                 * float(np.log(ACTON_SEA_LEVEL_RHO
+                                                / max(_rho_eq_b, 1e-30))))
+                    _h_target = max(_h_eq_b + 2_000.0, 30_000.0)
+
+                    def _bridge_done(_t, _s, *_a, _ht=_h_target):
+                        _, _, _h = ecef_to_geodetic(_s[:3])
+                        return float(_h) - float(_ht)
+                    _bridge_done.terminal  = True
+                    _bridge_done.direction = -1
+
+                    _sol_br = solve_ivp(
+                        _eom, (t_pierce, t_pierce + 200.0),
+                        np.concatenate([state_pierce[:3], state_pierce[3:]]),
+                        method='RK45',
+                        events=[_hit_ground, _bridge_done],
+                        args=eom_args,
+                        rtol=_rtol, atol=_atol,
+                        dense_output=False, max_step=2.0)
+                    if _sol_br.y.shape[1] > 1:
+                        _bridge_t   = _sol_br.t[1:]   # drop pierce sample (already in pre)
+                        _bridge_pos = _sol_br.y[:3, 1:].T
+                        _bridge_vel = _sol_br.y[3:, 1:].T
+                        # Hand off the analytical glide from the bridge endpoint.
+                        state_post   = _sol_br.y[:, -1]
+                        t_glide_start = float(_sol_br.t[-1])
+                        _t_ms_pullup_start = float(t_pierce)
+                        _t_ms_glide_start  = float(t_glide_start)
+
             if _need_numerical:
                 # A non-trivial bank schedule is present.  The analytical
                 # equilibrium-glide formula gives turn rate ∝ (g − V²/r),
@@ -1706,8 +1756,16 @@ def integrate_trajectory(params: MissileParams,
             else:
                 _p3_t = np.empty(0)
                 _p3_y = np.empty((6, 0))
-            t_arr   = np.concatenate([_pre_t, _p3_t, _arc_t, _t_gl_abs])
-            sol_y   = np.concatenate([_pre_y, _p3_y, _arc_y, _glide_y],
+            # Bridge samples (numerical descent from pierce to ~h_eq) — only
+            # populated when the arc returned fallback for shallow γ pierce.
+            if _bridge_t.size > 0:
+                _br_y = np.vstack([_bridge_pos.T, _bridge_vel.T])  # 6 × N
+            else:
+                _br_y = np.empty((6, 0))
+            t_arr   = np.concatenate([_pre_t, _p3_t, _arc_t,
+                                      _bridge_t, _t_gl_abs])
+            sol_y   = np.concatenate([_pre_y, _p3_y, _arc_y,
+                                      _br_y, _glide_y],
                                      axis=1)
             pos_arr = sol_y[:3].T
             vel_arr = sol_y[3:].T
