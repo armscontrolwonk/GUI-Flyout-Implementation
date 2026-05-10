@@ -184,7 +184,17 @@ def _col_headers(ws, row: int, pairs: list) -> None:
         c.alignment = _align('center')
 
 def _label(ws, row: int, text: str, unit: str = '', notes: str = '') -> None:
-    for col, val in ((2, text), (3, unit or ''), (9, notes or '')):
+    # openpyxl auto-detects any string starting with '=' as a formula and
+    # writes it into a <f> element.  When the body isn't valid formula
+    # syntax (e.g. a math-flavoured note like "= Initial − Final"), Excel
+    # flags the file as corrupt and strips the cell during recovery.
+    # Defang any leading-equals value before assignment.
+    def _safe(v):
+        if isinstance(v, str) and v.startswith('='):
+            return "​" + v   # zero-width space → forces string type
+        return v
+    for col, val in ((2, _safe(text)), (3, _safe(unit) or ''),
+                     (9, _safe(notes) or '')):
         c = ws.cell(row=row, column=col, value=val)
         c.fill      = _fill(_CLB)
         c.font      = _font(size=10 if col != 9 else 9,
@@ -313,7 +323,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
          notes='Structure + propellant + payload')
     srow('mass_prop',  'Propellant mass',            'kg', 'mass_propellant')
     srow('mass_final', 'Final (burnout) mass',       'kg', 'mass_final',
-         notes='= Initial − Propellant')
+         notes='Initial − Propellant')
     srow('diam',       'Diameter',                   'm',  'diameter_m')
     srow('length',     'Length',                     'm',  'length_m')
     srow('thrust',     'Vacuum thrust',              'N',  'thrust_N',
@@ -346,7 +356,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
              computed=True)
     comp_labels = [
         (_RC_STAGES+1, 'Propellant mass check', 'kg',
-         '= Initial − Final  (should equal Propellant mass above)'),
+         'Initial − Final  (should equal Propellant mass above)'),
         (_RC_STAGES+2, 'Mass fraction',         '—',  'Propellant / Initial'),
         (_RC_STAGES+3, 'ΔV  (Tsiolkovsky)',     'm/s','Isp × g₀ × ln(m₀/m_f)'),
         (_RC_STAGES+4, 'T/W at ignition',       '—',  'Thrust / (Initial × g₀)'),
