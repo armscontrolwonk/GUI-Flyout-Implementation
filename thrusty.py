@@ -1400,10 +1400,13 @@ class MissileDialog(tk.Toplevel):
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
         gf.pack(fill=tk.X, padx=8, pady=4)
-        self._guidance_var = tk.StringVar(value="gravity_turn")
-        ttk.Radiobutton(gf, text="Gravity Turn (SRBM / MRBM / IRBM / ICBM)",
-                        variable=self._guidance_var, value="gravity_turn").pack(
+        self._guidance_var = tk.StringVar(value="pitch_program")
+        ttk.Radiobutton(gf, text="Pitch Program (per-stage thrust angle)",
+                        variable=self._guidance_var, value="pitch_program").pack(
             anchor=tk.W, padx=8, pady=(4, 2))
+        ttk.Radiobutton(gf, text="Gravity Turn (thrust along velocity, η kick)",
+                        variable=self._guidance_var, value="true_gravity_turn").pack(
+            anchor=tk.W, padx=8, pady=(0, 2))
         ttk.Radiobutton(gf, text="Orbital Insertion",
                         variable=self._guidance_var, value="orbital_insertion").pack(
             anchor=tk.W, padx=8, pady=(0, 4))
@@ -3596,12 +3599,15 @@ class MissileFlyoutApp(tk.Tk):
         self._guidance_frame = gf          # saved for dynamic grid management
         gf.columnconfigure(1, weight=1)    # column 1 fills available width
 
-        self._guidance_var = tk.StringVar(value="gravity_turn")
+        self._guidance_var = tk.StringVar(value="pitch_program")
         gmode_frame = ttk.Frame(gf)
         gmode_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W,
                          padx=6, pady=(4, 2))
+        ttk.Radiobutton(gmode_frame, text="Pitch Program",
+                        variable=self._guidance_var, value="pitch_program",
+                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(gmode_frame, text="Gravity Turn",
-                        variable=self._guidance_var, value="gravity_turn",
+                        variable=self._guidance_var, value="true_gravity_turn",
                         command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(gmode_frame, text="Orbital Insertion",
                         variable=self._guidance_var, value="orbital_insertion",
@@ -3826,7 +3832,7 @@ class MissileFlyoutApp(tk.Tk):
         self._adv_pitch_chk.grid_forget()
         self._adv_yaw_chk.grid_forget()
         self._glider_main_frame.grid_remove()
-        self._update_guidance_labels("gravity_turn")
+        self._update_guidance_labels("pitch_program")
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -4731,9 +4737,13 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _update_guidance_labels(self, guidance: str):
         """Relabel the main-panel guidance fields to match the active mode."""
-        if guidance in ("gravity_turn", "orbital_insertion"):
-            self._loft_angle_lbl.config(text="Burnout Angle:")
-            self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
+        if guidance in ("pitch_program", "true_gravity_turn", "orbital_insertion"):
+            if guidance == "true_gravity_turn":
+                self._loft_angle_lbl.config(text="η kick angle:")
+                self._loft_angle_unit_lbl.config(text="°  (+ pitches down)")
+            else:
+                self._loft_angle_lbl.config(text="Burnout Angle:")
+                self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
             self._loft_angle_lbl.grid(
                 row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
             self._loft_angle_frame.grid(
@@ -4760,7 +4770,7 @@ class MissileFlyoutApp(tk.Tk):
             self._plan_orbit_btn.grid_forget()
 
         # Advanced pitch checkbox — only meaningful for turn-based modes
-        if guidance in ("gravity_turn", "orbital_insertion"):
+        if guidance in ("pitch_program", "true_gravity_turn", "orbital_insertion"):
             self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
                                       sticky=tk.W, padx=8, pady=(0, 2))
             if self._adv_pitch_var.get():
@@ -5332,7 +5342,7 @@ class MissileFlyoutApp(tk.Tk):
         # Advanced per-stage pitch: deep-copy the missile and stamp each
         # stage object with the values from the inline rows.
         if (self._adv_pitch_var.get()
-                and guidance in ("gravity_turn", "orbital_insertion")
+                and guidance in ("pitch_program", "orbital_insertion")
                 and self._stage_rows):
             missile = copy.deepcopy(missile)
             node = missile
@@ -5362,7 +5372,7 @@ class MissileFlyoutApp(tk.Tk):
                 return None
         _yaw_chk = getattr(self, '_adv_yaw_var', None)
         yaw_enabled = (bool(_yaw_chk and _yaw_chk.get())
-                       and guidance in ("gravity_turn", "orbital_insertion"))
+                       and guidance in ("pitch_program", "orbital_insertion"))
         yaw_maneuvers = []
         if yaw_enabled:
             for _yvars in self._yaw_vars:
@@ -5677,7 +5687,7 @@ class MissileFlyoutApp(tk.Tk):
         # updates and the canvas redraw.
         if r.get('optimal_burnout_angle_deg') is not None:
             self._loft_angle_var.set(f"{r['optimal_burnout_angle_deg']:.4f}")
-        if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "gravity_turn":
+        if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "pitch_program":
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
 
         orbital   = r.get('orbital', False)
@@ -6137,7 +6147,9 @@ class MissileFlyoutApp(tk.Tk):
         self._launch_lat.set(meta.get('launch_lat', ''))
         self._launch_lon.set(meta.get('launch_lon', ''))
         self._azimuth_var.set(meta.get('azimuth_deg', '0.0'))
-        guidance = meta.get('guidance', 'gravity_turn')
+        guidance = meta.get('guidance', 'pitch_program')
+        if guidance == 'gravity_turn':       # legacy key from pre-rename saves
+            guidance = 'pitch_program'
         self._guidance_var.set(guidance)
         self._update_guidance_labels(guidance)
         self._loft_angle_var.set(meta.get('burnout_angle_deg', '45.0'))

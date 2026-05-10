@@ -396,6 +396,78 @@ def _orbital_insertion_thrust_dir(lat_rad, lon_rad, azimuth_rad,
     return thrust / norm if norm > 1e-12 else e_up
 
 
+# ---------------------------------------------------------------------------
+# True gravity turn (Wright 2020 convention)
+# ---------------------------------------------------------------------------
+#
+# Thrust is aligned with the velocity vector and offset by an angle-of-attack
+# η ("eta") in the local trajectory plane.  η > 0 tilts the thrust BELOW the
+# velocity vector — this is Wright's convention (positive etad lowers γ).
+#
+# Each stage may schedule a kick window [stage_turn_start_s, stage_turn_stop_s]
+# during which η = stage_burnout_angle_deg (re-using the existing per-stage
+# field as the "η during kick window" value).  Outside any window η = 0, so
+# thrust is exactly along velocity and gravity does the trajectory turning —
+# the textbook gravity-turn behaviour.
+#
+# Initial-kick handling: while ground speed is below 50 m/s OR mission time
+# is below 4 s (Wright's lines 1173, 1213), we hold thrust along local-vertical
+# instead.  This avoids the v_hat singularity at launch.
+#
+# Reference: David Wright, "Missile_trajectory_v5_2.py" (2020), eta_calc().
+
+_TGT_KICK_HOLD_T_S = 4.0
+_TGT_KICK_HOLD_V_MS = 50.0
+
+
+def _tgt_eta_now(active_stage, t):
+    """Return η (deg) for the active stage at mission-elapsed time t.
+
+    Re-uses the per-stage fields stage_turn_start_s, stage_turn_stop_s,
+    stage_burnout_angle_deg as (kick_start, kick_stop, η_deg).  Outside the
+    window η = 0.  Stages without these overrides default to η = 0 (pure
+    gravity turn for that burn).
+    """
+    if active_stage is None:
+        return 0.0
+    t_s = active_stage.stage_turn_start_s
+    t_e = active_stage.stage_turn_stop_s
+    eta = active_stage.stage_burnout_angle_deg
+    if t_s is None or t_e is None or eta is None:
+        return 0.0
+    if t_s < t <= t_e:
+        return float(eta)
+    return 0.0
+
+
+def _true_gravity_turn_thrust_dir(pos, vel, lat_rad, lon_rad,
+                                  azimuth_rad, t, active_stage):
+    """Thrust direction for the true (velocity-aligned) gravity-turn mode.
+
+    Returns a unit vector in ECEF.  During the initial-kick window (t < 4s
+    or |v| < 50 m/s) thrust is held along local-vertical East-of-North so
+    the rocket lifts off without a v_hat singularity.
+    """
+    speed = float(np.linalg.norm(vel))
+    if t < _TGT_KICK_HOLD_T_S or speed < _TGT_KICK_HOLD_V_MS:
+        # Vertical kick at the configured launch azimuth.
+        e_east, e_north, e_up = _enu_frame(lat_rad, lon_rad)
+        return e_up
+
+    v_hat = vel / speed
+    r_mag = float(np.linalg.norm(pos))
+    r_hat = pos / r_mag if r_mag > 1.0 else np.array([0.0, 0.0, 1.0])
+    # n_perp = component of local-up perpendicular to v_hat, normalised.
+    n_perp = r_hat - np.dot(r_hat, v_hat) * v_hat
+    n_mag  = float(np.linalg.norm(n_perp))
+    if n_mag > 1e-9:
+        n_perp = n_perp / n_mag
+    else:
+        n_perp = np.zeros(3)
+
+    eta_rad = np.radians(_tgt_eta_now(active_stage, t))
+    # Wright sign convention: positive η tilts thrust BELOW velocity (−n_perp).
+    return np.cos(eta_rad) * v_hat - np.sin(eta_rad) * n_perp
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +579,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     attitude during coast has no effect on the trajectory.
 
     gt_turn_start_s / gt_turn_stop_s are used only when params.guidance ==
-    "gravity_turn"; they bound the active pitch window.
+    "pitch_program"; they bound the active pitch window.
 
     target_orbit_alt_m  : when params.guidance == "orbital_insertion" and the
         active stage is NOT a solid motor, engine cutoff is commanded once the
@@ -691,9 +763,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         # otherwise fall back to the global gravity-turn params.
         # For orbital_insertion without per-stage overrides, the two-phase
         # function applies (final stage forced horizontal).
-        _stage_override = (astage is not None and
-                           astage.stage_burnout_angle_deg is not None)
-        if _stage_override:
+        if params.guidance == "true_gravity_turn":
+            # Thrust along velocity, with optional per-stage η kick.
+            thrust_dir = _true_gravity_turn_thrust_dir(
+                pos, vel, lat, lon, azimuth_rad, t, astage)
+        elif (astage is not None and
+              astage.stage_burnout_angle_deg is not None):
             _eff_angle = astage.stage_burnout_angle_deg
             _eff_start = (astage.stage_turn_start_s
                           if astage.stage_turn_start_s is not None
@@ -2181,7 +2256,7 @@ def integrate_trajectory(params: MissileParams,
             _last_az = _az_val
         _az_cmd.append(_last_az if _t_gp <= _final_burn_end else float('nan'))
         # Commanded pitch (elevation angle)
-        if params.guidance in ("gravity_turn", "orbital_insertion"):
+        if params.guidance in ("pitch_program", "orbital_insertion"):
             _gp_angle = (_gp_stage.stage_burnout_angle_deg
                          if _gp_stage is not None
                          and _gp_stage.stage_burnout_angle_deg is not None
@@ -2575,7 +2650,7 @@ def maximize_range(params: MissileParams,
     best_la    = params.burnout_angle_deg
     best_ts    = total_burn if gt_turn_stop_s is None else gt_turn_stop_s
 
-    if effective_guidance == "gravity_turn":
+    if effective_guidance == "pitch_program":
         ts_min = gt_turn_start_s + 5.0
         if gt_turn_stop_s is None:
             # Dense 2-s steps over the early window where the range peak is
