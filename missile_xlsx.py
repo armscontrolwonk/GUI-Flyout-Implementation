@@ -98,7 +98,7 @@ _GRAIN_OPTS = [
     'Double anchor (regressive)', 'Star (neutral)',
     'Multi-fin (two-phase)', 'Dual composition (two-phase)',
 ]
-_GUID_OPTS  = ['Gravity Turn', 'Loft']
+_GUID_OPTS  = ['Pitch Program', 'Gravity Turn', 'Loft']
 _YESNO_OPTS = ['YES', 'NO']
 
 # Internal-key → human label
@@ -115,7 +115,9 @@ _GRAIN_LABEL = {
     'star': 'Star (neutral)', 'multi_fin': 'Multi-fin (two-phase)',
     'dual_composition': 'Dual composition (two-phase)',
 }
-_GUID_LABEL  = {'gravity_turn': 'Gravity Turn', 'loft': 'Loft'}
+_GUID_LABEL  = {'pitch_program': 'Pitch Program',
+                'true_gravity_turn': 'Gravity Turn',
+                'loft': 'Loft'}
 
 # Human label → internal key (reverse maps)
 _NOSE_KEY  = {v: k for k, v in _NOSE_LABEL.items()}
@@ -246,7 +248,7 @@ def _grain_label(key: str) -> str:
     return _GRAIN_LABEL.get(key or '', '')
 
 def _guid_label(key: str) -> str:
-    return _GUID_LABEL.get(key or 'gravity_turn', 'Gravity Turn')
+    return _GUID_LABEL.get(key or 'pitch_program', 'Pitch Program')
 
 def _yn(val: bool) -> str:
     return 'YES' if val else 'NO'
