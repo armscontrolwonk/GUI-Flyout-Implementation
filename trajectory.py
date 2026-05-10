@@ -448,19 +448,23 @@ def _aero_polar(rv) -> tuple:
 
     Linear slender-body theory gives C_L = 2α (Munk 1924; Ashley & Landahl
     Eq. 6-108) referenced to the base cross-section A_ref = π·d²/4.  The
-    drag-due-to-lift, derived from the geometric tilt of the lift vector
-    by α, is C_Di = ½·C_L², so the polar is
+    drag-due-to-lift is C_Di = k·C_L², so the polar is
 
-        C_D = C_D0 + ½·C_L²
+        C_D = C_D0 + k·C_L²
 
-    with C_D0 the zero-lift drag.  We back-solve the two coefficients
-    from inputs the user already provides:
+    The user supplies β (the *glide* ballistic coefficient, measured at
+    max-L/D trim) and (L/D)_max.  At max-L/D the induced drag equals the
+    zero-lift drag (C_Di = C_D0), so the total trim drag is 2·C_D0 and
 
-        A_ref  = π·d²/4
-        C_D0   = m / (β · A_ref)            (β at zero lift)
-        k      = 1 / (4·C_D0·(L/D)_max²)    (back-solved so that the
-                                             polar reproduces the user's
-                                             max L/D exactly at trim)
+        β_glide = m / (A_ref · 2·C_D0)  →  C_D0 = m / (2·β·A_ref)
+
+    This convention means polar and constant_LD give identical drag and
+    lift at wings-level trim, so the two models agree at equilibrium and
+    only diverge for off-trim conditions (banking, pull-up, phugoid).
+
+    The induced-drag factor k is back-solved from (L/D)_max:
+
+        (L/D)_max = 1 / (2·√(k·C_D0))  →  k = 1 / (4·C_D0·(L/D)_max²)
 
     Returns (C_D0, k, A_ref).  Falls back to generic-HGV defaults if the
     inputs are missing or non-physical.
@@ -473,17 +477,17 @@ def _aero_polar(rv) -> tuple:
     bet = float(getattr(rv, 'beta_kg_m2', 0.0) or 0.0)
     LD  = float(getattr(rv, 'glider_LD', 0.0) or 0.0)
     if m > 0.0 and bet > 0.0:
-        C_D0 = m / (bet * A_ref)
+        # β is the GLIDE β (at trim); C_D_trim = 2·C_D0 → C_D0 = m/(2·β·A_ref)
+        C_D0 = m / (2.0 * bet * A_ref)
     else:
-        C_D0 = 0.08                             # generic HGV C_D0
+        C_D0 = 0.04                             # generic HGV C_D0
     if LD > 0.0:
         k = 1.0 / (4.0 * C_D0 * LD * LD)
     else:
         k = 0.5                                 # slender-body theoretical
-    # Sanity floors — keep the polar well-conditioned for pathological
-    # inputs (very low β + very low L/D would otherwise give k → ∞).
+    # Sanity floors — keep the polar well-conditioned for pathological inputs.
     k = max(min(k, 5.0), 0.05)
-    C_D0 = max(min(C_D0, 1.0), 0.005)
+    C_D0 = max(min(C_D0, 0.5), 0.002)
     return C_D0, k, A_ref
 
 
@@ -587,38 +591,39 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 bank_rad = np.pi
 
                         if getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
-                            # Slender-body drag polar.  Vehicle trims its
-                            # angle of attack to produce the lift required
-                            # for equilibrium glide (vertical-balance
-                            # condition L·cos σ = m·(g − V²/r)); off-trim
-                            # banking and pull-up incur the correct C_D =
-                            # C_D0 + k·C_L² drag penalty.  At trim the
-                            # polar reproduces the constant_LD model, so
-                            # wings-level cruise is unchanged.
                             _CD0, _kp, _Aref = _aero_polar(_erv)
-                            _g_perp = g_mag - speed * speed / r_mag
-                            if _g_perp < 0.0:
-                                _g_perp = 0.0
-                            _L_vert = rv_mass * _g_perp
-                            _cos_b  = abs(float(np.cos(bank_rad)))
-                            if _cos_b < 0.05:
-                                _cos_b = 0.05      # cap demand at σ ≈ 90°
-                            _L_total = _L_vert / _cos_b
-                            # Structural g-load cap
+                            _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
-                            if _L_total > _L_max:
-                                _L_total = _L_max
-                            if q > 1.0:
-                                _C_L = _L_total / (q * _Aref)
-                                # Slender-body validity: |α| ≲ 25° → C_L ≲ 0.87
-                                _C_L_lim = 2.0 * np.radians(25.0)
-                                if _C_L > _C_L_lim:
-                                    _C_L = _C_L_lim
-                                _C_D = _CD0 + _kp * _C_L * _C_L
-                                drag_mag = q * _Aref * _C_D
-                                lift_mag = q * _Aref * _C_L
+                            if _erv.glider_guidance in (
+                                    'equilibrium_glide', 'equilibrium_glide_acton'):
+                                # Equilibrium trim: solve for the C_L that
+                                # satisfies L·cos σ = m·(g − V²/r).  Suppresses
+                                # phugoid, giving steady equilibrium-glide descent.
+                                _g_perp = g_mag - speed * speed / r_mag
+                                if _g_perp < 0.0:
+                                    _g_perp = 0.0
+                                _cos_b = abs(float(np.cos(bank_rad)))
+                                if _cos_b < 0.05:
+                                    _cos_b = 0.05
+                                _L_total = min(rv_mass * _g_perp / _cos_b, _L_max)
+                                if q > 1.0:
+                                    _C_L = min(_L_total / (q * _Aref), _C_L_lim)
+                                    _C_D = _CD0 + _kp * _C_L * _C_L
+                                    drag_mag = q * _Aref * _C_D
+                                    lift_mag = q * _Aref * _C_L
+                                else:
+                                    lift_mag = 0.0
                             else:
-                                lift_mag = 0.0
+                                # skip_glide / phugoid: fly at max-L/D AoA (α*)
+                                # so lift ∝ q and the natural phugoid oscillation
+                                # is preserved.  C_L* = √(C_D0/k); C_D* = 2·C_D0.
+                                if q > 1.0:
+                                    _C_L = min(np.sqrt(_CD0 / _kp), _C_L_lim)
+                                    _C_D = _CD0 + _kp * _C_L * _C_L
+                                    drag_mag = q * _Aref * _C_D
+                                    lift_mag = min(q * _Aref * _C_L, _L_max)
+                                else:
+                                    lift_mag = 0.0
                             # Override drag with the polar-derived value
                             f_drag = -drag_mag * v_hat
                         else:
