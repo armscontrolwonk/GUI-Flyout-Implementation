@@ -452,19 +452,18 @@ def _aero_polar(rv) -> tuple:
 
         C_D = C_D0 + k·C_L²
 
-    The user supplies β (the *glide* ballistic coefficient, measured at
-    max-L/D trim) and (L/D)_max.  At max-L/D the induced drag equals the
-    zero-lift drag (C_Di = C_D0), so the total trim drag is 2·C_D0 and
+    We back-solve C_D0 and k from the user's β (zero-lift ballistic
+    coefficient) and (L/D)_max:
 
-        β_glide = m / (A_ref · 2·C_D0)  →  C_D0 = m / (2·β·A_ref)
+        A_ref  = π·d²/4
+        C_D0   = m / (β · A_ref)            (β at zero lift)
+        k      = 1 / (4·C_D0·(L/D)_max²)    (back-solved so that the
+                                             polar yields (L/D)_max
+                                             at the trim AoA α*)
 
-    This convention means polar and constant_LD give identical drag and
-    lift at wings-level trim, so the two models agree at equilibrium and
-    only diverge for off-trim conditions (banking, pull-up, phugoid).
-
-    The induced-drag factor k is back-solved from (L/D)_max:
-
-        (L/D)_max = 1 / (2·√(k·C_D0))  →  k = 1 / (4·C_D0·(L/D)_max²)
+    At α*: C_L* = √(C_D0/k), C_D* = 2·C_D0, (L/D)* = (L/D)_max.
+    The skip_glide EOM trims at α* so lift ∝ q (phugoid preserved).
+    The equilibrium_glide EOM trims to satisfy L·cos σ = m·g⊥.
 
     Returns (C_D0, k, A_ref).  Falls back to generic-HGV defaults if the
     inputs are missing or non-physical.
@@ -477,17 +476,16 @@ def _aero_polar(rv) -> tuple:
     bet = float(getattr(rv, 'beta_kg_m2', 0.0) or 0.0)
     LD  = float(getattr(rv, 'glider_LD', 0.0) or 0.0)
     if m > 0.0 and bet > 0.0:
-        # β is the GLIDE β (at trim); C_D_trim = 2·C_D0 → C_D0 = m/(2·β·A_ref)
-        C_D0 = m / (2.0 * bet * A_ref)
+        C_D0 = m / (bet * A_ref)               # β at zero lift
     else:
-        C_D0 = 0.04                             # generic HGV C_D0
+        C_D0 = 0.08                             # generic HGV C_D0
     if LD > 0.0:
         k = 1.0 / (4.0 * C_D0 * LD * LD)
     else:
         k = 0.5                                 # slender-body theoretical
     # Sanity floors — keep the polar well-conditioned for pathological inputs.
     k = max(min(k, 5.0), 0.05)
-    C_D0 = max(min(C_D0, 0.5), 0.002)
+    C_D0 = max(min(C_D0, 1.0), 0.005)
     return C_D0, k, A_ref
 
 
