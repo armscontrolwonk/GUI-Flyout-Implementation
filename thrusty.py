@@ -7067,22 +7067,22 @@ class MissileFlyoutApp(tk.Tk):
                         and 'impact_lat' in ms)
             return (('ignition' in e and 'stage' not in e) or
                     ('impact'   in e and 'empty' not in e
-                                     and 'shroud' not in e) or
-                    'pull-up start' in e or
-                    'glide start'   in e or
-                    'peak heating'  in e or
-                    'max-g'         in e or
-                    'terminal dive' in e)
+                                     and 'shroud' not in e))
 
         def _show_tick(e, is_debris):
             if is_debris:
                 return False
-            return ('apogee'   in e or
-                    're-entry' in e or
-                    'burnout'  in e or
+            return ('apogee'       in e or
+                    're-entry'     in e or
+                    'burnout'      in e or
                     ('ignition' in e and 'stage' in e) or
-                    'jettison'  in e or
-                    'bank' in e)
+                    'jettison'     in e or
+                    'bank'         in e or
+                    'pull-up start' in e or
+                    'glide start'  in e or
+                    'peak heating' in e or
+                    'max-g'        in e or
+                    'terminal dive' in e)
 
         def _is_major(e, is_debris):
             return not is_debris
@@ -7514,7 +7514,8 @@ class MissileFlyoutApp(tk.Tk):
                                 this.getZoom(), {{animate: false}});
                         }}
                     }}, map);
-                    map.on('moveend zoomend', function() {{ _update(map); }});
+                    map.on('moveend zoomend overlayadd overlayremove',
+                           function() {{ _update(map); }});
                     _update(map);
                 }}
             }}, 50);
