@@ -1849,8 +1849,11 @@ def integrate_trajectory(params: MissileParams,
                 _posdata   = np.vstack([_posdata, _s_handoff[:3]])
                 _veldata   = np.vstack([_veldata, _s_handoff[3:]])
 
-            # Drop the duplicate boundary point from all segments after the first
-            if _segs_t:
+            # Drop the first point only if it exactly coincides with the
+            # last point already in the buffer (happens when t_eval=None
+            # is passed and scipy includes the IC at t=_t_now).
+            if (_segs_t and len(_tdata) > 0 and len(_segs_t[-1]) > 0
+                    and abs(_tdata[0] - _segs_t[-1][-1]) < 1e-6):
                 _tdata   = _tdata[1:]
                 _posdata = _posdata[1:]
                 _veldata = _veldata[1:]
@@ -1891,11 +1894,16 @@ def integrate_trajectory(params: MissileParams,
                 rtol=_rtol, atol=_atol,
                 dense_output=False, max_step=_maxstep,
             )
-            # Drop first point — it duplicates the crossing state already
-            # appended to the last skip segment.
-            _tg = _sol_glide.t[1:]
-            _pg = _sol_glide.y[:3, 1:].T
-            _vg = _sol_glide.y[3:, 1:].T
+            # Drop first point only if it duplicates the crossing state
+            # (coincidence with a t_eval grid point, or t_eval=None case).
+            _tg = _sol_glide.t
+            _pg = _sol_glide.y[:3].T
+            _vg = _sol_glide.y[3:].T
+            if (len(_tg) > 0 and len(_segs_t) > 0 and len(_segs_t[-1]) > 0
+                    and abs(_tg[0] - _segs_t[-1][-1]) < 1e-6):
+                _tg = _tg[1:]
+                _pg = _pg[1:]
+                _vg = _vg[1:]
             if len(_tg) > 0:
                 _segs_t.append(_tg)
                 _segs_pos.append(_pg)
