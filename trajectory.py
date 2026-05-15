@@ -767,8 +767,18 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     'equilibrium_glide', 'equilibrium_glide_acton'):
                                 _g_perp_c = max(g_mag - speed * speed / r_mag, 0.0)
                                 _cos_b_c  = max(abs(float(np.cos(bank_rad))), 0.05)
+                                # Cap at what the aerodynamics can actually supply
+                                # (drag × L/D).  Without this cap the analytical
+                                # lift term m·g⊥ is applied even when dynamic
+                                # pressure is negligible (high altitude, thin
+                                # atmosphere), locking the vehicle at the handoff
+                                # altitude and producing unrealistically long range.
+                                # When v < v_eq (above equilibrium altitude) the
+                                # aero cap is smaller than m·g⊥ and the vehicle
+                                # descends naturally to the proper glide altitude.
                                 lift_mag  = min(
                                     rv_mass * _g_perp_c / _cos_b_c,
+                                    drag_mag * _erv.glider_LD,
                                     _erv.glider_pullup_g_max * g_mag * rv_mass)
                             else:
                                 lift_mag = drag_mag * _erv.glider_LD
