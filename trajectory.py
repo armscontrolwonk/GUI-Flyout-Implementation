@@ -637,6 +637,16 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # Active stage (needed for drag and mass; guidance uses top-level params)
     astage, _ = active_stage_and_t(params, t)
 
+    # Latch "vehicle has been above the 100 km pierce altitude at least
+    # once."  Reentry-phase aero modes (lift, polar drag override) are
+    # only allowed to activate after this latches AND alt drops back
+    # below 100 km — i.e. the vehicle has crossed the pierce altitude
+    # going down.  Sub-100 km depressed trajectories therefore never
+    # trigger glide; they fly purely ballistic with β drag.
+    _gl_above = getattr(params, '_gl_above_pierce', None)
+    if _gl_above is not None and not _gl_above[0] and alt > ACTON_PIERCE_ALT_M:
+        _gl_above[0] = True
+
     # --- Drag ---
     # The standard atmosphere model (US Std Atm 1976) is only tabulated to
     # ~86 km; above that it returns the clamped 86 km density (~5.6e-6 kg/m³),
@@ -654,6 +664,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             q        = 0.5 * rho * speed ** 2
             rv_mass  = _erv.mass_kg
             drag_mag = q * rv_mass / _erv.beta_kg_m2
+            # Reentry-phase activation: glider lift / polar drag override
+            # are allowed only after the vehicle has crossed the 100 km
+            # pierce altitude going down.  The _gl_above_pierce latch
+            # (set in the EOM preamble) records whether alt has been
+            # above 100 km at any point in this integration; combined
+            # with the existing alt < 100 km gate below, this enforces
+            # "reentry modes operate only after reentry at 100 km."
+            _glider_active = bool(_gl_above is not None and _gl_above[0])
             v_hat    = vel / speed
             f_drag   = -drag_mag * v_hat
             # Gate all glider activity (lift, polar drag-override) on being
@@ -666,7 +684,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # 86–120 km band, costing velocity and dropping apogee
             # relative to constant_LD.
             if (_erv.glider_enabled and _erv.glider_LD > 0
-                    and alt < ACTON_PIERCE_ALT_M):
+                    and alt < ACTON_PIERCE_ALT_M
+                    and _glider_active):
                 # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
                 r_mag = np.linalg.norm(pos)
                 if r_mag > 1e-3:
@@ -1339,6 +1358,21 @@ def integrate_trajectory(params: MissileParams,
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
+
+    # Per-integration latch: enforces the rule "reentry modes only
+    # operate after the vehicle has been above 100 km and is now below
+    # it."  Without this, depressed trajectories whose apogee is in the
+    # atmosphere see mode-dependent lift on the way up, and polar /
+    # constant_LD / equilibrium / skip glide modes each yield a different
+    # apogee — which violates the user-facing model that reentry-phase
+    # aero only operates after the 100 km pierce.  For sub-100 km
+    # ballistic trajectories the latch never arms and the glider stays
+    # off for the entire flight.  Stashed on params so the EOM (a top-
+    # level function) can find it without changing the eom_args tuple
+    # shape used by many call sites.
+    if not hasattr(params, '__dict__'):
+        params = copy.copy(params)
+    params._gl_above_pierce = [False]   # set once alt > 100 km
 
     # Compute the mission-elapsed time at which the final stage ignites.
     # This is the sum of all earlier stage burn times and coast times.
