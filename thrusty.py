@@ -3790,6 +3790,10 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Entry(_dtf, textvariable=self._main_dt_radius_var, width=6).pack(
             side=tk.LEFT, padx=2)
         ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
+        ttk.Button(_dtf, text="Find…", width=7,
+                   command=lambda: self._pick_location(
+                       self._main_dt_lat_var, self._main_dt_lon_var)
+                   ).pack(side=tk.LEFT, padx=(6, 0))
 
         # Bank schedule
         ttk.Separator(_gmf, orient=tk.HORIZONTAL).grid(
@@ -5239,14 +5243,18 @@ class MissileFlyoutApp(tk.Tk):
         frm.columnconfigure(1, weight=1)
         frm.rowconfigure(1, weight=1)
 
-        # Search row
+        # Search row — entry + column of action buttons
         ttk.Label(frm, text="Search:").grid(
             row=0, column=0, sticky=tk.W, padx=(0, 4), pady=(0, 4))
         search_var = tk.StringVar()
         search_entry = ttk.Entry(frm, textvariable=search_var, width=28)
         search_entry.grid(row=0, column=1, sticky=tk.EW, pady=(0, 4))
-        online_btn = ttk.Button(frm, text="Search online…", width=15)
-        online_btn.grid(row=0, column=2, sticky=tk.W, padx=(6, 0), pady=(0, 4))
+        # Both action buttons share a frame in column 2 so they stack neatly.
+        _btn_col = ttk.Frame(frm)
+        _btn_col.grid(row=0, column=2, sticky=tk.NW, padx=(6, 0), pady=(0, 4))
+        online_btn = ttk.Button(_btn_col, text="Search online…", width=15)
+        online_btn.pack(fill=tk.X, pady=(0, 2))
+        # Map-picker button added after _pick_on_map is defined below.
 
         # Results listbox
         lb_frm = ttk.Frame(frm)
@@ -5360,6 +5368,75 @@ class MissileFlyoutApp(tk.Tk):
             threading.Thread(target=_thread, daemon=True).start()
 
         online_btn.config(command=_run_online, state=tk.DISABLED)
+
+        # ── Map picker ─────────────────────────────────────────────────
+        def _pick_on_map():
+            try:
+                import cartopy.crs      as ccrs
+                import cartopy.feature  as cfeature
+            except ImportError:
+                messagebox.showinfo(
+                    "Missing package",
+                    "cartopy is not installed.\n\nRun:  pip install cartopy",
+                    parent=dlg)
+                return
+
+            map_win = tk.Toplevel(dlg)
+            map_win.title("Click to select location — close to cancel")
+            map_win.grab_set()
+
+            fig = Figure(figsize=(9, 4.5), tight_layout=True)
+            ax  = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+            ax.set_global()
+            ax.add_feature(cfeature.LAND,   facecolor='#f0ede8', zorder=0)
+            ax.add_feature(cfeature.OCEAN,  facecolor='#d0e8f0', zorder=0)
+            ax.coastlines(resolution='110m', linewidth=0.5, color='#444')
+            ax.add_feature(cfeature.BORDERS, linewidth=0.3,
+                           edgecolor='#888', zorder=1)
+            ax.gridlines(draw_labels=True, linewidth=0.3, alpha=0.5,
+                         xlocs=range(-180, 181, 30),
+                         ylocs=range(-90,   91, 30))
+            ax.set_title("Click anywhere to select — close window to cancel",
+                         fontsize=9)
+
+            canvas = FigureCanvasTkAgg(fig, master=map_win)
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            canvas.draw()
+            ttk.Label(map_win,
+                      text="Click the map to select a point.  "
+                           "Close this window to cancel.",
+                      font=("TkDefaultFont", 9)).pack(pady=4)
+
+            _clicked = [False]
+
+            def _on_map_click(event):
+                if event.inaxes is not ax or event.xdata is None:
+                    return
+                if _clicked[0]:
+                    return          # guard against duplicate events
+                _clicked[0] = True
+                lon_c, lat_c = event.xdata, event.ydata
+                ax.plot(lon_c, lat_c, 'r+', markersize=14,
+                        markeredgewidth=2,
+                        transform=ccrs.PlateCarree(), zorder=10)
+                canvas.draw()
+                map_win.after(350, lambda: _confirm_map(lat_c, lon_c))
+
+            def _confirm_map(lat_c, lon_c):
+                lat_var.set(f"{lat_c:.4f}")
+                lon_var.set(f"{lon_c:.4f}")
+                ns = 'N' if lat_c >= 0 else 'S'
+                ew = 'E' if lon_c >= 0 else 'W'
+                status_var.set(
+                    f"Map pick  →  {abs(lat_c):.4f}°{ns},  "
+                    f"{abs(lon_c):.4f}°{ew}")
+                map_win.destroy()
+
+            canvas.mpl_connect('button_press_event', _on_map_click)
+
+        ttk.Button(_btn_col, text="Pick on map…", width=15,
+                   command=_pick_on_map).pack(fill=tk.X)
+
         search_var.trace_add("write", _schedule)
 
         # ── Selection & apply ──────────────────────────────────────────
