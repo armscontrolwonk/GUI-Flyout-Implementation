@@ -637,6 +637,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # Active stage (needed for drag and mass; guidance uses top-level params)
     astage, _ = active_stage_and_t(params, t)
 
+    # Latch "vehicle has been above the 100 km pierce altitude at least
+    # once."  Reentry-phase aero modes (lift, polar drag override) are
+    # only allowed to activate after this latches AND alt drops back
+    # below 100 km — i.e. the vehicle has crossed the pierce altitude
+    # going down.  Sub-100 km depressed trajectories therefore never
+    # trigger glide; they fly purely ballistic with β drag.
+    _gl_above = getattr(params, '_gl_above_pierce', None)
+    if _gl_above is not None and not _gl_above[0] and alt > ACTON_PIERCE_ALT_M:
+        _gl_above[0] = True
 
     # --- Drag ---
     # The standard atmosphere model (US Std Atm 1976) is only tabulated to
@@ -655,19 +664,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             q        = 0.5 * rho * speed ** 2
             rv_mass  = _erv.mass_kg
             drag_mag = q * rv_mass / _erv.beta_kg_m2
-            # Reentry-phase activation: only during descent.  Gates on
-            # instantaneous radial velocity sign so the rule is robust
-            # to scipy's intermediate RK45 evaluations (no history /
-            # latch needed).  During ascent (r̂·v ≥ 0) every glide mode
-            # collapses to β-drag only, so first apogee is mode-
-            # independent.  Across apogee the gate smoothly opens via
-            # the r̂·v zero-crossing.
-            _r_mag_chk = np.linalg.norm(pos)
-            if _r_mag_chk > 1e-3:
-                _r_dot_chk = float(np.dot(pos, vel) / _r_mag_chk)
-            else:
-                _r_dot_chk = 0.0
-            _glider_active = (_r_dot_chk < 0.0)
+            # Reentry-phase activation: glider lift / polar drag override
+            # are allowed only after the vehicle has crossed the 100 km
+            # pierce altitude going down.  The _gl_above_pierce latch
+            # (set in the EOM preamble) records whether alt has been
+            # above 100 km at any point in this integration; combined
+            # with the existing alt < 100 km gate below, this enforces
+            # "reentry modes operate only after reentry at 100 km."
+            _glider_active = bool(_gl_above is not None and _gl_above[0])
             v_hat    = vel / speed
             f_drag   = -drag_mag * v_hat
             # Gate all glider activity (lift, polar drag-override) on being
@@ -1355,16 +1359,20 @@ def integrate_trajectory(params: MissileParams,
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
 
-    # Reentry-phase aero (lift, polar drag override) only operates while
-    # the vehicle is descending (r̂·v < 0).  This makes the first apogee
-    # mode-independent (during ascent every mode falls back to β-drag
-    # only) while still letting the glider activate immediately upon
-    # crossing apogee, regardless of whether apogee is above or below
-    # 100 km.  The gate is on instantaneous r̂·v (no latch) — robust to
-    # scipy's non-physical intermediate RK45 evaluations.  Trade-off:
-    # phugoid skip ascents lose lift briefly while r̂·v is positive
-    # between nadir and skip apex; the skip's main bouncing dynamics
-    # (peak q at nadir) are preserved, so range is only slightly affected.
+    # Per-integration latch: enforces the rule "reentry modes only
+    # operate after the vehicle has been above 100 km and is now below
+    # it."  Without this, depressed trajectories whose apogee is in the
+    # atmosphere see mode-dependent lift on the way up, and polar /
+    # constant_LD / equilibrium / skip glide modes each yield a different
+    # apogee — which violates the user-facing model that reentry-phase
+    # aero only operates after the 100 km pierce.  For sub-100 km
+    # ballistic trajectories the latch never arms and the glider stays
+    # off for the entire flight.  Stashed on params so the EOM (a top-
+    # level function) can find it without changing the eom_args tuple
+    # shape used by many call sites.
+    if not hasattr(params, '__dict__'):
+        params = copy.copy(params)
+    params._gl_above_pierce = [False]   # set once alt > 100 km
 
     # Compute the mission-elapsed time at which the final stage ignites.
     # This is the sum of all earlier stage burn times and coast times.
