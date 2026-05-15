@@ -3678,7 +3678,7 @@ class MissileFlyoutApp(tk.Tk):
                    command=self._estimate_azimuth).pack(side=tk.LEFT, padx=4)
 
         # ── Guidance — mode radio + burnout angle / pitch-over ───────
-        gf = ttk.LabelFrame(parent, text="Guidance")
+        gf = ttk.LabelFrame(parent, text="Ascent Mode")
         gf.pack(fill=tk.X, padx=6, pady=3)
         self._guidance_frame = gf          # saved for dynamic grid management
         gf.columnconfigure(1, weight=1)    # column 1 fills available width
@@ -3795,45 +3795,60 @@ class MissileFlyoutApp(tk.Tk):
             ttk.Label(yf, text=_unit).grid(
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
 
-        # ── Glider / HGV guidance ────────────────────────────────────
-        # Row 11: read-only status line — reflects whether the terminal
-        # vehicle (set in the RV editor) is configured as a maneuvering
-        # glider.  No toggle here; "is this a glider" is decided in one
-        # place — the Terminal Vehicle editor.
+        # Row 11: Reset trajectory button — always visible in Ascent Mode
+        self._reset_traj_btn = ttk.Button(
+            gf, text="Reset trajectory to defaults",
+            command=self._reset_traj_profile)
+        self._reset_traj_btn.grid(row=11, column=0, columnspan=2,
+                                  sticky=tk.EW, padx=8, pady=(4, 2))
+
+        # Initialise ascent-mode row visibility for the default mode.
+        self._orbit_alt_lbl.grid_forget()
+        self._orbit_alt_frame.grid_forget()
+        self._plan_orbit_btn.grid_forget()
+        self._adv_pitch_chk.grid_forget()
+        self._adv_yaw_chk.grid_forget()
+        self._update_guidance_labels("pitch_program")
+
+        # ── Reentry Mode ──────────────────────────────────────────────
+        rf = ttk.LabelFrame(parent, text="Reentry Mode")
+        rf.pack(fill=tk.X, padx=6, pady=3)
+        self._reentry_frame = rf
+        rf.columnconfigure(1, weight=1)
+
+        # Row 0: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
-            value="Ballistic — enable maneuvering in Edit Terminal Vehicle…")
-        self._glider_status_lbl = ttk.Label(gf, textvariable=self._glider_status_var,
+            value="Terminal vehicle not configured for maneuvering"
+            " — set L/D in Edit Terminal Vehicle…")
+        self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
-        self._glider_status_lbl.grid(row=11, column=0, columnspan=2,
-                                      sticky=tk.W, padx=8, pady=(0, 2))
+        self._glider_status_lbl.grid(row=0, column=0, columnspan=2,
+                                      sticky=tk.W, padx=8, pady=(4, 2))
 
-        # Row 12: glider mission-control detail frame.  Auto-shown by
-        # _refresh_glider_status_line() when the active RV has
-        # glider_enabled = True.  Vehicle properties (L/D, g-limit, βₛ)
-        # do NOT appear here — they're vehicle traits that live with
-        # the terminal-vehicle/RV.
-        _gmf = ttk.Frame(gf)
+        # Row 1: reentry-mode detail frame.  Always visible; combobox at the
+        # top selects the mode, rest of rows show/hide per selection.
+        _gmf = ttk.Frame(rf)
         self._glider_main_frame = _gmf
-
         _gmf.columnconfigure(1, weight=1)
 
-        # Guidance combobox
-        ttk.Label(_gmf, text="Guidance:").grid(
-            row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+        # Reentry mode combobox — no label needed; the LabelFrame title suffices
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
-        _guid_cb = ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
-                     values=["Ballistic (drag · gravity · rotation)",
-                             "Equilibrium glide (Tracy)",
-                             "Equilibrium glide (Acton)",
-                             "Phugoid / skip-glide",
-                             "Skip → equilibrium (auto-handoff)"],
-                     state="readonly", width=30)
-        _guid_cb.grid(row=1, column=1, sticky=tk.W, pady=1, padx=(0, 8))
-        _guid_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_glider_guidance_changed())
+        self._main_guidance_cb = ttk.Combobox(
+            _gmf, textvariable=self._main_guidance_var,
+            values=["Ballistic (drag · gravity · rotation)",
+                    "Equilibrium glide (Tracy)",
+                    "Equilibrium glide (Acton)",
+                    "Phugoid / skip-glide",
+                    "Skip → equilibrium (auto-handoff)"],
+            state="readonly", width=32)
+        self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
+                                     sticky=tk.W, padx=8, pady=(2, 1))
+        self._main_guidance_cb.bind("<<ComboboxSelected>>",
+                                     lambda _e: self._on_glider_guidance_changed())
 
         # Skip count — only visible for "Skip → equilibrium (auto-handoff)"
         _skf = ttk.Frame(_gmf)
-        _skf.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _skf.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_skip_frame = _skf
         ttk.Label(_skf, text="Number of skips:").pack(side=tk.LEFT)
         self._main_skip_count_var = tk.StringVar(value="1")
@@ -3844,7 +3859,7 @@ class MissileFlyoutApp(tk.Tk):
 
         # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
-        _r2.grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _r2.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_glide_detail_frm = _r2
         ttk.Label(_r2, text="Terminal dive below").pack(side=tk.LEFT)
         self._main_dive_alt_var = tk.StringVar(value="30")
@@ -3858,16 +3873,47 @@ class MissileFlyoutApp(tk.Tk):
                              "Slender-body polar"],
                      state="readonly", width=20).pack(side=tk.LEFT, padx=2)
 
+        # Bank schedule separator + checkbox
+        self._main_glide_sep = ttk.Separator(_gmf, orient=tk.HORIZONTAL)
+        self._main_glide_sep.grid(row=3, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+        self._main_bank_sched_var = tk.BooleanVar(value=False)
+        self._main_bank_chk = ttk.Checkbutton(_gmf, text="Bank schedule",
+                        variable=self._main_bank_sched_var,
+                        command=self._on_main_bank_toggled)
+        self._main_bank_chk.grid(
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
+        _mbf = ttk.Frame(_gmf)
+        _mbf.grid(row=5, column=0, columnspan=2, sticky=tk.W)
+        self._main_bank_frm = _mbf
+        self._main_bank_vars = [{'start': tk.StringVar(value=""),
+                                  'end':   tk.StringVar(value=""),
+                                  'bank':  tk.StringVar(value="")}
+                                 for _ in range(3)]
+        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
+            ttk.Label(_mbf, text=_hdr, foreground="#555555").grid(
+                row=0, column=_mc, padx=4, pady=(4, 1))
+        for _yr, _lbl, _key, _unit in [
+                (1, "Bank start:", "start", "s"),
+                (2, "Bank end:",   "end",   "s"),
+                (3, "Angle:",      "bank",  "°")]:
+            ttk.Label(_mbf, text=_lbl).grid(
+                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
+            for _mc, _bvars in enumerate(self._main_bank_vars, start=1):
+                ttk.Entry(_mbf, textvariable=_bvars[_key], width=6).grid(
+                    row=_yr, column=_mc, padx=3, pady=1)
+            ttk.Label(_mbf, text=_unit).grid(
+                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
+
         # Dive-at-target trigger (optional)
         self._main_dive_target_var = tk.BooleanVar(value=False)
         self._main_dive_target_chk = ttk.Checkbutton(_gmf, text="Dive at target (lat/lon)",
                         variable=self._main_dive_target_var,
                         command=self._on_main_dive_target_toggled)
         self._main_dive_target_chk.grid(
-            row=8, column=0, columnspan=2,
+            row=6, column=0, columnspan=2,
             sticky=tk.W, padx=(8, 0), pady=(4, 0))
         _dtf = ttk.Frame(_gmf)
-        _dtf.grid(row=9, column=0, columnspan=2,
+        _dtf.grid(row=7, column=0, columnspan=2,
                   sticky=tk.W, padx=(24, 0), pady=1)
         self._main_dive_target_frm = _dtf
         ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
@@ -3888,56 +3934,12 @@ class MissileFlyoutApp(tk.Tk):
                        self._main_dt_lat_var, self._main_dt_lon_var)
                    ).pack(side=tk.LEFT, padx=(6, 0))
 
-        # Bank schedule
-        self._main_glide_sep = ttk.Separator(_gmf, orient=tk.HORIZONTAL)
-        self._main_glide_sep.grid(row=5, column=0, columnspan=2, sticky='ew', pady=(6, 0))
-        self._main_bank_sched_var = tk.BooleanVar(value=False)
-        self._main_bank_chk = ttk.Checkbutton(_gmf, text="Bank schedule",
-                        variable=self._main_bank_sched_var,
-                        command=self._on_main_bank_toggled)
-        self._main_bank_chk.grid(
-            row=6, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
-        _mbf = ttk.Frame(_gmf)
-        _mbf.grid(row=7, column=0, columnspan=2, sticky=tk.W)
-        self._main_bank_frm = _mbf
-        self._main_bank_vars = [{'start': tk.StringVar(value=""),
-                                  'end':   tk.StringVar(value=""),
-                                  'bank':  tk.StringVar(value="")}
-                                 for _ in range(3)]
-        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
-            ttk.Label(_mbf, text=_hdr, foreground="#555555").grid(
-                row=0, column=_mc, padx=4, pady=(4, 1))
-        for _yr, _lbl, _key, _unit in [
-                (1, "Bank start:", "start", "s"),
-                (2, "Bank end:",   "end",   "s"),
-                (3, "Angle:",      "bank",  "°")]:
-            ttk.Label(_mbf, text=_lbl).grid(
-                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-            for _mc, _bvars in enumerate(self._main_bank_vars, start=1):
-                ttk.Entry(_mbf, textvariable=_bvars[_key], width=6).grid(
-                    row=_yr, column=_mc, padx=3, pady=1)
-            ttk.Label(_mbf, text=_unit).grid(
-                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
-        self._on_main_bank_toggled()   # sync hidden state
-        self._on_main_dive_target_toggled()   # sync hidden state
-        self._on_glider_guidance_changed()   # sync hidden state
-
-        # Row 13: Reset trajectory button — always visible
-        self._reset_traj_btn = ttk.Button(
-            gf, text="Reset trajectory to defaults",
-            command=self._reset_traj_profile)
-        self._reset_traj_btn.grid(row=13, column=0, columnspan=2,
-                                  sticky=tk.EW, padx=8, pady=(4, 2))
-
-        # Initialise guidance-specific row visibility for the default mode.
-        self._orbit_alt_lbl.grid_forget()
-        self._orbit_alt_frame.grid_forget()
-        self._plan_orbit_btn.grid_forget()
-        self._adv_pitch_chk.grid_forget()
-        self._adv_yaw_chk.grid_forget()
-        self._glider_main_frame.grid(row=12, column=0, columnspan=2,
+        # Sync initial hidden state and grid _glider_main_frame in its parent (rf)
+        self._on_main_bank_toggled()
+        self._on_main_dive_target_toggled()
+        self._on_glider_guidance_changed()
+        self._glider_main_frame.grid(row=1, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
-        self._update_guidance_labels("pitch_program")
 
         # ── Engine cutoff ─────────────────────────────────────────────
         cf = ttk.LabelFrame(parent, text="Engine Cutoff")
@@ -4533,7 +4535,7 @@ class MissileFlyoutApp(tk.Tk):
                 "Terminal vehicle not configured for maneuvering"
                 " — set L/D in Edit Terminal Vehicle…")
         # Reentry mode combobox is always visible regardless of glider config.
-        self._glider_main_frame.grid(row=12, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=1, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
     def _is_glider_active(self) -> bool:
@@ -4950,6 +4952,17 @@ class MissileFlyoutApp(tk.Tk):
             self._adv_yaw_chk.grid_forget()
             self._adv_yaw_frame.grid_forget()
             self._adv_yaw_var.set(False)
+
+        # Reentry Mode frame: orbital insertion has no descent phase.
+        if hasattr(self, '_main_guidance_cb'):
+            if guidance == "orbital_insertion":
+                self._main_guidance_cb.config(state='disabled')
+                self._glider_status_var.set(
+                    "Not applicable — orbital trajectories have no reentry phase")
+            else:
+                self._main_guidance_cb.config(state='readonly')
+                # Status line is updated by _refresh_glider_status_line when
+                # the active terminal vehicle changes; just ensure it's readable.
 
     # ------------------------------------------------------------------
     # Custom missile management
