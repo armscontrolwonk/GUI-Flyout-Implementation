@@ -3592,6 +3592,8 @@ class MissileFlyoutApp(tk.Tk):
         self._azimuth_var = tk.StringVar(value="0.0")
         ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
         ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
+        ttk.Button(az_frame, text="Estimate…", width=10,
+                   command=self._estimate_azimuth).pack(side=tk.LEFT, padx=4)
 
         # ── Guidance — mode radio + burnout angle / pitch-over ───────
         gf = ttk.LabelFrame(parent, text="Guidance")
@@ -5204,6 +5206,176 @@ class MissileFlyoutApp(tk.Tk):
                 if beta > 0:
                     _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
 
+
+    # ------------------------------------------------------------------
+    # Estimate azimuth from target coordinates (with Earth-rotation correction)
+    # ------------------------------------------------------------------
+    def _estimate_azimuth(self):
+        """
+        Open a dialog to compute the launch azimuth needed to hit a target
+        at a given lat/lon, optionally corrected for Earth's rotation during
+        flight.  Sets the azimuth entry on Apply.
+        """
+        dlg = tk.Toplevel(self)
+        dlg.title("Estimate Launch Azimuth")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        frm = ttk.Frame(dlg, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        # Target coordinates
+        ttk.Label(frm, text="Target latitude (°):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 6), pady=4)
+        lat_var = tk.StringVar(value="0.0")
+        ttk.Entry(frm, textvariable=lat_var, width=12).grid(
+            row=0, column=1, sticky=tk.W, pady=4)
+
+        ttk.Label(frm, text="Target longitude (°):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 6), pady=4)
+        lon_var = tk.StringVar(value="0.0")
+        ttk.Entry(frm, textvariable=lon_var, width=12).grid(
+            row=1, column=1, sticky=tk.W, pady=4)
+
+        ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
+            row=2, column=0, columnspan=2, sticky=tk.EW, pady=6)
+        ttk.Label(frm, text="Earth-rotation correction:").grid(
+            row=3, column=0, columnspan=2, sticky=tk.W)
+
+        # Correction method
+        method_var = tk.StringVar(value="ballistic")
+        user_t_var = tk.StringVar(value="10.0")
+        preview_var = tk.StringVar(value="")
+
+        last_t = (self._result.get('time_of_flight_s')
+                  if self._result is not None else None)
+
+        OMEGA = 7.2921e-5   # Earth rotation rate (rad/s, sidereal)
+        G_MS2 = 9.81
+
+        def _compute():
+            try:
+                lat1 = np.radians(float(self._launch_lat.get()))
+                lon1 = np.radians(float(self._launch_lon.get()))
+                lat2 = np.radians(float(lat_var.get()))
+                lon2 = np.radians(float(lon_var.get()))
+            except (ValueError, AttributeError):
+                return None
+
+            rng_m  = float(range_between(lat1, lon1, lat2, lon2))
+            rng_km = rng_m / 1000.0
+
+            method = method_var.get()
+            if method == "none":
+                T = 0.0
+            elif method == "ballistic":
+                # Minimum-energy ballistic flight time: T = sqrt(2 R / g)
+                T = float(np.sqrt(2.0 * rng_m / G_MS2))
+            elif method == "last_sim":
+                T = float(last_t) if last_t else 0.0
+            elif method == "user_t":
+                try:
+                    T = float(user_t_var.get()) * 60.0
+                except ValueError:
+                    T = 0.0
+            else:
+                T = 0.0
+
+            # Target drifts east by Ω·T during flight; aim at where it
+            # WILL BE, i.e. shift the aim longitude east by the same amount.
+            # (Equivalently: the missile's inertial trajectory must end
+            # at the target's future ECI position.)
+            dlon_corr = OMEGA * T
+
+            def _bearing(la1, lo1, la2, lo2):
+                dl = lo2 - lo1
+                x  = np.sin(dl) * np.cos(la2)
+                y  = (np.cos(la1) * np.sin(la2)
+                      - np.sin(la1) * np.cos(la2) * np.cos(dl))
+                return float(np.degrees(np.arctan2(x, y)) % 360.0)
+
+            az_u = _bearing(lat1, lon1, lat2, lon2)
+            az   = _bearing(lat1, lon1, lat2, lon2 + dlon_corr)
+            return rng_km, T, float(np.degrees(dlon_corr)), az, az_u
+
+        def _update(*_):
+            r = _compute()
+            if r is None:
+                preview_var.set("(enter valid target coordinates)")
+                return
+            rng_km, T, dlon_deg, az, az_u = r
+            preview_var.set(
+                f"Range:            {rng_km:>8.1f} km\n"
+                f"Flight time T:    {T:>8.0f} s  ({T/60:.1f} min)\n"
+                f"Earth rotation:   {dlon_deg:>8.2f}°  east\n"
+                f"Bearing (no corr.):{az_u:>7.2f}°\n"
+                f"Bearing (corr.):  {az:>8.2f}°"
+            )
+
+        ttk.Radiobutton(
+            frm, text="Ballistic minimum-energy estimate  (T = √(2R/g))",
+            variable=method_var, value="ballistic",
+            command=_update
+        ).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+
+        last_label = (f"Use last simulation  (T = {last_t:.0f} s)"
+                      if last_t else "Use last simulation  (no result yet)")
+        ttk.Radiobutton(
+            frm, text=last_label,
+            variable=method_var, value="last_sim",
+            state=(tk.NORMAL if last_t else tk.DISABLED),
+            command=_update
+        ).grid(row=5, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+
+        user_t_row = ttk.Frame(frm)
+        user_t_row.grid(row=6, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+        ttk.Radiobutton(
+            user_t_row, text="User flight time (min):",
+            variable=method_var, value="user_t",
+            command=_update
+        ).pack(side=tk.LEFT)
+        ttk.Entry(user_t_row, textvariable=user_t_var, width=8
+                  ).pack(side=tk.LEFT, padx=4)
+
+        ttk.Radiobutton(
+            frm, text="No correction (instantaneous bearing)",
+            variable=method_var, value="none",
+            command=_update
+        ).grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+
+        ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
+            row=8, column=0, columnspan=2, sticky=tk.EW, pady=6)
+        ttk.Label(frm, textvariable=preview_var,
+                  font=("TkFixedFont", 9), justify=tk.LEFT
+                  ).grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=2)
+
+        def _apply():
+            r = _compute()
+            if r is None:
+                messagebox.showerror(
+                    "Input error",
+                    "Target latitude and longitude must be numbers.",
+                    parent=dlg)
+                return
+            _, _, _, az, _ = r
+            self._azimuth_var.set(f"{az:.2f}")
+            dlg.destroy()
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.grid(row=10, column=0, columnspan=2, pady=(8, 0))
+        ttk.Button(btn_frm, text="Apply",  width=8, command=_apply
+                   ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frm, text="Cancel", width=8, command=dlg.destroy
+                   ).pack(side=tk.LEFT, padx=4)
+
+        # Live update as user edits coordinates or user-flight-time field
+        lat_var.trace_add("write", _update)
+        lon_var.trace_add("write", _update)
+        user_t_var.trace_add("write", _update)
+
+        _update()
+        dlg.bind("<Return>", lambda e: _apply())
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
 
     # ------------------------------------------------------------------
     # Aim at target
