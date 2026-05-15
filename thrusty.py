@@ -3820,7 +3820,7 @@ class MissileFlyoutApp(tk.Tk):
         # Guidance combobox
         ttk.Label(_gmf, text="Guidance:").grid(
             row=1, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-        self._main_guidance_var = tk.StringVar(value="Equilibrium glide (Tracy)")
+        self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         _guid_cb = ttk.Combobox(_gmf, textvariable=self._main_guidance_var,
                      values=["Ballistic (drag · gravity · rotation)",
                              "Equilibrium glide (Tracy)",
@@ -3935,7 +3935,8 @@ class MissileFlyoutApp(tk.Tk):
         self._plan_orbit_btn.grid_forget()
         self._adv_pitch_chk.grid_forget()
         self._adv_yaw_chk.grid_forget()
-        self._glider_main_frame.grid_remove()
+        self._glider_main_frame.grid(row=12, column=0, columnspan=2,
+                                      sticky=tk.EW, padx=0, pady=(0, 4))
         self._update_guidance_labels("pitch_program")
 
         # ── Engine cutoff ─────────────────────────────────────────────
@@ -4433,15 +4434,22 @@ class MissileFlyoutApp(tk.Tk):
                 and self._rv_main_var.get() == self._RV_DEFAULT_SENTINEL):
             self._rv_main_var.set(_p_erv.name)
             self._rv_del_btn.config(state=tk.NORMAL)
-        if _p_erv is not None and _p_erv.glider_enabled:
-            # Sync self._rv so _refresh_glider_status_line picks it up
+        if _p_erv is not None:
+            # Sync self._rv so _refresh_glider_status_line picks it up.
+            # Reentry mode is always loaded, regardless of glider_enabled.
             self._rv = _p_erv
+            _guid = (_p_erv.glider_guidance
+                     if _p_erv.glider_enabled else "ballistic")
             self._main_guidance_var.set(
-                "Skip-glide (natural phugoid)"
-                if _p_erv.glider_guidance in ("skip_glide", "azimuth_command")
+                "Phugoid / skip-glide"
+                if _guid in ("skip_glide", "azimuth_command")
+                else "Skip → equilibrium (auto-handoff)"
+                if _guid == "skip_to_equilibrium"
                 else "Equilibrium glide (Acton)"
-                if _p_erv.glider_guidance == "equilibrium_glide_acton"
-                else "Equilibrium glide (Tracy)")
+                if _guid == "equilibrium_glide_acton"
+                else "Equilibrium glide (Tracy)"
+                if _guid == "equilibrium_glide"
+                else "Ballistic (drag · gravity · rotation)")
             self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
             _sched = _p_erv.glider_bank_schedule or []
             self._main_bank_sched_var.set(bool(_sched))
@@ -4469,6 +4477,9 @@ class MissileFlyoutApp(tk.Tk):
                     f"{getattr(_p_erv, 'glider_dive_target_lon_deg', 0.0):.4f}")
                 self._main_dt_radius_var.set(
                     f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
+            if hasattr(self, '_main_skip_count_var'):
+                self._main_skip_count_var.set(
+                    str(getattr(_p_erv, 'glider_skip_count', 1)))
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             self._on_main_bank_toggled()
@@ -4506,26 +4517,24 @@ class MissileFlyoutApp(tk.Tk):
             self._adv_yaw_frame.grid_forget()
 
     def _refresh_glider_status_line(self):
-        """Update the Glider/HGV status label and auto-show the
-        mission-control frame based on the active terminal vehicle's
-        glider_enabled flag.  Called whenever the active RV changes,
-        replacing the old _glider_main_var checkbox toggle."""
+        """Update the Glider/HGV status label.  The reentry-mode combobox is
+        always shown; this line summarises the terminal vehicle's properties."""
         rv = getattr(self, '_rv', None)
-        on = bool(rv and rv.glider_enabled and rv.glider_LD > 0)
-        if on:
+        if rv and rv.glider_enabled and rv.glider_LD > 0:
             sep = getattr(rv, 'separation_mode', 'separating_rv')
             sep_lbl = "body" if sep == "body" else "separating RV"
             self._glider_status_var.set(
-                f"Maneuvering glider: {rv.name or 'RV'}  "
+                f"Terminal vehicle: {rv.name or 'RV'}  "
                 f"({sep_lbl}, L/D {rv.glider_LD:.2f}, "
                 f"g-lim {rv.glider_pullup_g_max:.0f})  "
                 f"— edit in Edit Terminal Vehicle…")
-            self._glider_main_frame.grid(row=12, column=0, columnspan=2,
-                                          sticky=tk.EW, padx=0, pady=(0, 4))
         else:
             self._glider_status_var.set(
-                "Ballistic — enable maneuvering in Edit Terminal Vehicle…")
-            self._glider_main_frame.grid_forget()
+                "Terminal vehicle not configured for maneuvering"
+                " — set L/D in Edit Terminal Vehicle…")
+        # Reentry mode combobox is always visible regardless of glider config.
+        self._glider_main_frame.grid(row=12, column=0, columnspan=2,
+                                      sticky=tk.EW, padx=0, pady=(0, 4))
 
     def _is_glider_active(self) -> bool:
         """True iff the active terminal vehicle is a maneuvering glider."""
@@ -6232,7 +6241,7 @@ class MissileFlyoutApp(tk.Tk):
         # block runs only when the active terminal vehicle has glider mode
         # enabled.
         _g_erv = effective_rv(missile)
-        if _g_erv is not None and _g_erv.glider_enabled:
+        if _g_erv is not None:
             import dataclasses as _dc
             missile = copy.deepcopy(missile)
             try:
@@ -6284,6 +6293,7 @@ class MissileFlyoutApp(tk.Tk):
                     try:    _g_dt_rad = float(self._main_dt_radius_var.get())
                     except (ValueError, AttributeError): pass
                 _replace_kw = dict(
+                    glider_enabled=True,
                     glider_guidance=_g_guid_key,
                     glider_skip_count=_g_skip_count,
                     glider_terminal_dive=True,
