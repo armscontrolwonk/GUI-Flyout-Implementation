@@ -3369,6 +3369,7 @@ class MissileFlyoutApp(tk.Tk):
         self._running        = False
         self._cancel_event   = threading.Event()
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
+        self._units_var      = tk.StringVar(value="km")  # plot display units
 
         _load_custom_missiles()      # restore any user-saved missiles
 
@@ -3433,6 +3434,12 @@ class MissileFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
+
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_radiobutton(label="km  (metric)",       variable=self._units_var, value="km")
+        view_menu.add_radiobutton(label="nmi  (nautical)",    variable=self._units_var, value="nm")
+        view_menu.add_radiobutton(label="miles  (statute)",   variable=self._units_var, value="mi")
+        menubar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="About…", command=self._show_about)
@@ -3546,16 +3553,6 @@ class MissileFlyoutApp(tk.Tk):
                                    command=self._delete_missile,
                                    state=tk.DISABLED)
         self._del_btn.pack(side=tk.LEFT, padx=2)
-
-        # ── Units ──────────────────────────────────────────────────────
-        uf = ttk.LabelFrame(parent, text="Display Units for Plots")
-        uf.pack(fill=tk.X, padx=6, pady=3)
-        self._units_var = tk.StringVar(value="km")
-        uf_inner = ttk.Frame(uf)
-        uf_inner.pack(pady=3)
-        for val, lbl in [("km", "km"), ("nm", "nmi"), ("mi", "miles")]:
-            ttk.Radiobutton(uf_inner, text=lbl, variable=self._units_var,
-                            value=val).pack(side=tk.LEFT, padx=8)
 
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
