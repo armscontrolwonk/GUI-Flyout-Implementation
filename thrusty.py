@@ -3480,15 +3480,16 @@ class MissileFlyoutApp(tk.Tk):
                                command=lambda: self._plot_toolbar.configure_subplots())
         plots_menu.add_command(label="Save figure…",
                                command=lambda: self._plot_toolbar.save_figure())
+        plots_menu.add_separator()
+        plots_menu.add_command(label="Export Figures…", command=self._export_figures)
         menubar.add_cascade(label="Plots", menu=plots_menu)
 
-        # Cartography — map exports, figure export, and NOTAM overlays
-        # (grouped here so the File menu stays focused on save/load of
-        # inputs and trajectory outputs).
+        # Cartography — map exports and NOTAM overlays (kept separate from
+        # File so the latter stays focused on save/load of inputs and
+        # trajectory outputs).
         carto_menu = tk.Menu(menubar, tearoff=0)
         carto_menu.add_command(label="Open Folium Map…",     command=self._export_folium)
         carto_menu.add_command(label="Export Cartopy Map…",  command=self._export_cartopy)
-        carto_menu.add_command(label="Export Figures…",      command=self._export_figures)
         carto_menu.add_separator()
         carto_menu.add_command(label="Load NOTAM overlay…",  command=self._load_notam_overlay)
         carto_menu.add_command(label="Clear NOTAM overlay",  command=self._clear_notam_overlay)
