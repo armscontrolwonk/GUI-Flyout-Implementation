@@ -1810,12 +1810,20 @@ def integrate_trajectory(params: MissileParams,
             _te_seg  = t_eval[t_eval >= _t_now]
 
             # Re-define the event each iteration so the "armed" flag is fresh.
-            # Background: when a segment restarts from the exact equilibrium
-            # crossing state (δ = v²−v_eq² = 0), scipy's find_active_events
-            # treats g(t0)=0 → g(t1)<0 as a downward crossing and fires the
-            # terminal event immediately, leaving y=[] (Python list, not ndarray).
-            # The "armed" flag delays triggering until the vehicle has first been
-            # above equilibrium speed (δ>0) after the segment start.
+            # When a segment restarts from the exact equilibrium crossing
+            # state, v = v_eq ⇒ δ = v²−v_eq² is mathematically 0 but in
+            # practice ≈ 1e-7 (float round-off from scipy's event resolver).
+            # Without protection, scipy's find_active_events treats
+            # g(t₀)=tiny-positive → g(t₁)=negative as a + → − crossing and
+            # fires the terminal event immediately, returning y=[] (Python
+            # list, not ndarray).
+            #
+            # The "armed" flag suppresses triggering until v is clearly above
+            # the equilibrium curve (δ > 0.1·v_eq², i.e., v > 1.05·v_eq).
+            # That threshold is well above float noise but well below the
+            # δ ~ v² typical of the bottom of a phugoid bounce.  While not
+            # armed we return a NEGATIVE sentinel so scipy never sees a
+            # + → − transition right after the segment start.
             _eq_armed = [False]
 
             def _eq_upward_xing(t, s, *_,
@@ -1826,21 +1834,22 @@ def integrate_trajectory(params: MissileParams,
                 _h = max(_h, 0.0)
                 _spd = np.linalg.norm(_v)
                 if _spd < 50.0:
-                    return 1.0          # avoid trigger at near-zero speed
+                    return -1.0 if not _arm[0] else 1.0
                 _, _, _rho, _ = atmosphere(_h)
                 if _rho < 1e-20:
-                    return 1.0          # above sensible atmosphere
+                    return -1.0 if not _arm[0] else 1.0
                 _rmag  = np.linalg.norm(_p)
                 _gperp = max(float(np.linalg.norm(gravity_ecef(_p)))
                              - _spd * _spd / _rmag, 0.0)
                 _den = _rho * _ld
                 if _den < 1e-30:
-                    return 1.0
-                _delta = _spd * _spd - 2.0 * _b * _gperp / _den
-                if _delta > 0.0:
-                    _arm[0] = True      # vehicle above equilibrium — arm the trigger
+                    return -1.0 if not _arm[0] else 1.0
+                _v_eq_sq = 2.0 * _b * _gperp / _den
+                _delta   = _spd * _spd - _v_eq_sq
+                if _delta > 0.1 * _v_eq_sq:
+                    _arm[0] = True      # vehicle clearly above v_eq — arm
                 if not _arm[0]:
-                    return 1.0          # not yet armed — suppress premature trigger
+                    return -1.0         # negative sentinel until armed
                 return _delta
 
             _eq_upward_xing.terminal  = True
