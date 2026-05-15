@@ -184,6 +184,7 @@ _DIR_SITES        = _THRUSTY_ROOT / "sites"
 _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
 _DIR_EVENTS       = _THRUSTY_ROOT / "events"
 _DIR_MAPS         = _THRUSTY_ROOT / "maps"
+_DIR_PLOTS        = _THRUSTY_ROOT / "plots"
 
 
 def _safe_name(s: str, maxlen: int = 40) -> str:
@@ -4111,7 +4112,7 @@ class MissileFlyoutApp(tk.Tk):
     # Plot panel  (6-subplot grid; slot [2,1] reserved for future use)
     # ------------------------------------------------------------------
     def _build_plot_panel(self, parent):
-        self._fig = Figure(figsize=(8, 8.5), dpi=96)
+        self._fig = Figure(figsize=(8, 8.5), dpi=110)
         gs = self._fig.add_gridspec(3, 2, hspace=0.52, wspace=0.38,
                                     left=0.10, right=0.95,
                                     top=0.95, bottom=0.06)
@@ -6521,7 +6522,7 @@ class MissileFlyoutApp(tk.Tk):
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".png",
-            initialdir=str(_ensure_dir(_DIR_MAPS)),
+            initialdir=str(_ensure_dir(_DIR_PLOTS)),
             initialfile=f"{ts}_{missile}{rng_sfx}.figures.png",
             filetypes=[
                 ("PNG image",    "*.png"),
