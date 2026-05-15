@@ -656,7 +656,17 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             drag_mag = q * rv_mass / _erv.beta_kg_m2
             v_hat    = vel / speed
             f_drag   = -drag_mag * v_hat
-            if _erv.glider_enabled and _erv.glider_LD > 0:
+            # Gate all glider activity (lift, polar drag-override) on being
+            # below the re-entry pierce altitude.  Above 100 km the vehicle
+            # is in ballistic coast — it isn't trimmed at the max-L/D AoA
+            # and isn't producing useful lift, so both aero modes should
+            # collapse to the same β-based drag computed above.  Without
+            # this gate the polar mode applies its α*-trim induced drag
+            # (C_D = 2·C_D0) during the post-burnout ascent through the
+            # 86–120 km band, costing velocity and dropping apogee
+            # relative to constant_LD.
+            if (_erv.glider_enabled and _erv.glider_LD > 0
+                    and alt < ACTON_PIERCE_ALT_M):
                 # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
                 r_mag = np.linalg.norm(pos)
                 if r_mag > 1e-3:
