@@ -1985,20 +1985,21 @@ def integrate_trajectory(params: MissileParams,
                 _t_handoff = float(_sol_seg.t_events[1][0])
                 _s_handoff = _sol_seg.y_events[1][0].copy()
                 # FPA correction: the v = v_eq crossing occurs on the
-                # ascending leg where the flight path angle is non-zero.
-                # Rotate the velocity to horizontal (γ = 0) while
-                # preserving its magnitude and azimuth.  This places the
-                # vehicle exactly on the equilibrium-glide initial
-                # condition (correct altitude, correct speed, zero FPA)
-                # without waiting for the phugoid to damp naturally.
+                # ascending leg where the flight path angle γ is non-zero.
+                # Zero the radial velocity component (project onto local
+                # horizontal plane) without rescaling the magnitude.
+                # Speed after correction: v_eq·cos γ, consistent with a
+                # single physical pull-up that dissipates the radial KE
+                # (½m·v_eq²·sin²γ) rather than artificially restoring it.
+                # Rescaling to v_eq would overestimate by Δv ≈ v_eq(1−cos γ):
+                # ~1.5% at γ=10°, ~6% at γ=20°.
                 _p_ho    = _s_handoff[:3]
                 _v_ho    = _s_handoff[3:].copy()
                 _rhat_ho = _p_ho / np.linalg.norm(_p_ho)
-                _spd_ho  = float(np.linalg.norm(_v_ho))
                 _v_horiz = _v_ho - float(np.dot(_rhat_ho, _v_ho)) * _rhat_ho
                 _vhm     = float(np.linalg.norm(_v_horiz))
                 if _vhm > 1.0:
-                    _s_handoff[3:] = (_v_horiz / _vhm) * _spd_ho
+                    _s_handoff[3:] = _v_horiz   # v = v_eq·cos γ
                 _tdata   = np.append(_tdata,   _t_handoff)
                 _posdata = np.vstack([_posdata, _s_handoff[:3]])
                 _veldata = np.vstack([_veldata, _s_handoff[3:]])
