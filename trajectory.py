@@ -1790,7 +1790,7 @@ def integrate_trajectory(params: MissileParams,
         _beta_ste  = float(_erv_full.beta_kg_m2)
         _LD_ste    = float(_erv_full.glider_LD)
 
-        def _eq_upward_xing(t, s):
+        def _eq_upward_xing(t, s, *_):
             _p, _v = s[:3], s[3:]
             _, _, _h = ecef_to_geodetic(_p)
             _h = max(_h, 0.0)
