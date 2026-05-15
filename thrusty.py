@@ -3354,7 +3354,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Thrusty")
+        self.title("Thrusty — A Rocket Performance Calculator")
         self.minsize(900, 700)
         # Size to 92 % of the available screen, capped at 1600 × 1050.
         self.update_idletasks()
@@ -3524,11 +3524,6 @@ class MissileFlyoutApp(tk.Tk):
     # Control panel  (mirrors Forden's left-side panel)
     # ------------------------------------------------------------------
     def _build_control_panel(self, parent):
-        # ── Title ──────────────────────────────────────────────────────
-        ttk.Label(parent, text="Thrusty",
-                  font=("", 11, "bold")).pack(pady=(6, 2))
-        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=6)
-
         # ── Missile type ───────────────────────────────────────────────
         mf = ttk.LabelFrame(parent, text="Missile Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
