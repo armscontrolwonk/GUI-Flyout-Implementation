@@ -3450,14 +3450,6 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Export Flight Events CSV…",  command=self._export_timeline)
         file_menu.add_command(label="Export Flight Events XLSX…", command=self._export_timeline_xlsx)
         file_menu.add_separator()
-        # ── Cartographic (export only) ────────────────────────────────
-        file_menu.add_command(label="Open Folium Map…",       command=self._export_folium)
-        file_menu.add_command(label="Export Cartopy Map…",    command=self._export_cartopy)
-        file_menu.add_command(label="Export Figures…",        command=self._export_figures)
-        file_menu.add_separator()
-        file_menu.add_command(label="Load NOTAM overlay…",    command=self._load_notam_overlay)
-        file_menu.add_command(label="Clear NOTAM overlay",    command=self._clear_notam_overlay)
-        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=file_menu)
 
@@ -3489,6 +3481,18 @@ class MissileFlyoutApp(tk.Tk):
         plots_menu.add_command(label="Save figure…",
                                command=lambda: self._plot_toolbar.save_figure())
         menubar.add_cascade(label="Plots", menu=plots_menu)
+
+        # Cartography — map exports, figure export, and NOTAM overlays
+        # (grouped here so the File menu stays focused on save/load of
+        # inputs and trajectory outputs).
+        carto_menu = tk.Menu(menubar, tearoff=0)
+        carto_menu.add_command(label="Open Folium Map…",     command=self._export_folium)
+        carto_menu.add_command(label="Export Cartopy Map…",  command=self._export_cartopy)
+        carto_menu.add_command(label="Export Figures…",      command=self._export_figures)
+        carto_menu.add_separator()
+        carto_menu.add_command(label="Load NOTAM overlay…",  command=self._load_notam_overlay)
+        carto_menu.add_command(label="Clear NOTAM overlay",  command=self._clear_notam_overlay)
+        menubar.add_cascade(label="Cartography", menu=carto_menu)
 
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_radiobutton(label="km  (metric)",       variable=self._units_var, value="km")
