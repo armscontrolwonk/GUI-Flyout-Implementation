@@ -733,11 +733,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # Override drag with the polar-derived value
                             f_drag = -drag_mag * v_hat
                         else:
-                            # constant_LD (default): lift is a fixed multiple
-                            # of the β-derived drag.  Implicitly assumes the
-                            # vehicle is always at trim (max-L/D AoA);
-                            # matches the closed-form Tracy/Acton solution.
-                            lift_mag = drag_mag * _erv.glider_LD
+                            # constant_LD (default): lift is drag × L/D unless
+                            # equilibrium-glide guidance is selected, in which
+                            # case we trim to L·cos σ = m·g⊥ (suppresses the
+                            # phugoid, matching the closed-form Tracy/Acton soln).
+                            if _erv.glider_guidance in (
+                                    'equilibrium_glide', 'equilibrium_glide_acton'):
+                                _g_perp_c = max(g_mag - speed * speed / r_mag, 0.0)
+                                _cos_b_c  = max(abs(float(np.cos(bank_rad))), 0.05)
+                                lift_mag  = min(
+                                    rv_mass * _g_perp_c / _cos_b_c,
+                                    _erv.glider_pullup_g_max * g_mag * rv_mass)
+                            else:
+                                lift_mag = drag_mag * _erv.glider_LD
                             lift_cap = _erv.glider_pullup_g_max * g_mag * rv_mass
                             if lift_mag > lift_cap:
                                 lift_mag = lift_cap
@@ -1790,27 +1798,6 @@ def integrate_trajectory(params: MissileParams,
         _beta_ste  = float(_erv_full.beta_kg_m2)
         _LD_ste    = float(_erv_full.glider_LD)
 
-        def _eq_upward_xing(t, s, *_):
-            _p, _v = s[:3], s[3:]
-            _, _, _h = ecef_to_geodetic(_p)
-            _h = max(_h, 0.0)
-            _spd = np.linalg.norm(_v)
-            if _spd < 50.0:
-                return 1.0          # avoid trigger at near-zero speed
-            _, _, _rho, _ = atmosphere(_h)
-            if _rho < 1e-20:
-                return 1.0          # above sensible atmosphere
-            _rmag  = np.linalg.norm(_p)
-            _gperp = max(float(np.linalg.norm(gravity_ecef(_p)))
-                         - _spd * _spd / _rmag, 0.0)
-            _den = _rho * _LD_ste
-            if _den < 1e-30:
-                return 1.0
-            return _spd * _spd - 2.0 * _beta_ste * _gperp / _den
-
-        _eq_upward_xing.terminal  = True
-        _eq_upward_xing.direction = -1   # δ: + → − means ascending through v_eq
-
         _segs_t   = []
         _segs_pos = []
         _segs_vel = []
@@ -1821,6 +1808,44 @@ def integrate_trajectory(params: MissileParams,
 
         for _skip_i in range(_n_target):
             _te_seg  = t_eval[t_eval >= _t_now]
+
+            # Re-define the event each iteration so the "armed" flag is fresh.
+            # Background: when a segment restarts from the exact equilibrium
+            # crossing state (δ = v²−v_eq² = 0), scipy's find_active_events
+            # treats g(t0)=0 → g(t1)<0 as a downward crossing and fires the
+            # terminal event immediately, leaving y=[] (Python list, not ndarray).
+            # The "armed" flag delays triggering until the vehicle has first been
+            # above equilibrium speed (δ>0) after the segment start.
+            _eq_armed = [False]
+
+            def _eq_upward_xing(t, s, *_,
+                                _b=_beta_ste, _ld=_LD_ste,
+                                _arm=_eq_armed):
+                _p, _v = s[:3], s[3:]
+                _, _, _h = ecef_to_geodetic(_p)
+                _h = max(_h, 0.0)
+                _spd = np.linalg.norm(_v)
+                if _spd < 50.0:
+                    return 1.0          # avoid trigger at near-zero speed
+                _, _, _rho, _ = atmosphere(_h)
+                if _rho < 1e-20:
+                    return 1.0          # above sensible atmosphere
+                _rmag  = np.linalg.norm(_p)
+                _gperp = max(float(np.linalg.norm(gravity_ecef(_p)))
+                             - _spd * _spd / _rmag, 0.0)
+                _den = _rho * _ld
+                if _den < 1e-30:
+                    return 1.0
+                _delta = _spd * _spd - 2.0 * _b * _gperp / _den
+                if _delta > 0.0:
+                    _arm[0] = True      # vehicle above equilibrium — arm the trigger
+                if not _arm[0]:
+                    return 1.0          # not yet armed — suppress premature trigger
+                return _delta
+
+            _eq_upward_xing.terminal  = True
+            _eq_upward_xing.direction = -1   # δ: + → − means ascending through v_eq
+
             _sol_seg = solve_ivp(
                 _eom, (_t_now, max_time_s), _s_now,
                 method='RK45',
