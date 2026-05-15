@@ -1798,6 +1798,13 @@ def integrate_trajectory(params: MissileParams,
         _beta_ste  = float(_erv_full.beta_kg_m2)
         _LD_ste    = float(_erv_full.glider_LD)
 
+        # Earliest time the equilibrium-crossing event is eligible to fire.
+        # For a separating RV the vehicle is still attached to the last stage
+        # until total_burn; for a body-mode vehicle, engine cutoff is enough.
+        _is_separating = (getattr(_erv_full, 'separation_mode', 'separating_rv')
+                          == 'separating_rv')
+        _t_eligible = total_burn if _is_separating else cutoff_time_s
+
         _segs_t   = []
         _segs_pos = []
         _segs_vel = []
@@ -1824,11 +1831,17 @@ def integrate_trajectory(params: MissileParams,
             # δ ~ v² typical of the bottom of a phugoid bounce.  While not
             # armed we return a NEGATIVE sentinel so scipy never sees a
             # + → − transition right after the segment start.
+            #
+            # _t_eligible gates out any crossing that occurs during boost or
+            # before RV separation.
             _eq_armed = [False]
 
             def _eq_upward_xing(t, s, *_,
                                 _b=_beta_ste, _ld=_LD_ste,
-                                _arm=_eq_armed):
+                                _arm=_eq_armed,
+                                _min_t=_t_eligible):
+                if t < _min_t:
+                    return -1.0         # boost / pre-separation — ignore
                 _p, _v = s[:3], s[3:]
                 _, _, _h = ecef_to_geodetic(_p)
                 _h = max(_h, 0.0)
