@@ -3584,6 +3584,10 @@ class MissileFlyoutApp(tk.Tk):
         lf_grid.pack(fill=tk.X)
         self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
         self._launch_lon = _dd_row(lf_grid, "Longitude:", row=1, default="0.0")
+        ttk.Button(lf_grid, text="Find…", width=7,
+                   command=lambda: self._pick_location(
+                       self._launch_lat, self._launch_lon)
+                   ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=2)
 
         ttk.Label(lf_grid, text="Azimuth:").grid(row=2, column=0,
                                                   sticky=tk.W, padx=(8, 2), pady=2)
@@ -5208,6 +5212,194 @@ class MissileFlyoutApp(tk.Tk):
 
 
     # ------------------------------------------------------------------
+    # Shared location picker — used by launch site, aim-at-target, and
+    # estimate-azimuth.  Writes to lat_var / lon_var on Apply.
+    # ------------------------------------------------------------------
+    def _pick_location(self, lat_var, lon_var, parent=None):
+        """
+        Open a small modal search dialog.  The user types a place name;
+        results come from geonamescache (offline, instant) or Nominatim
+        (online, threaded).  Selecting a row and clicking Apply writes
+        decimal-degree strings into lat_var and lon_var.
+
+        Direct lat/lon entry in the caller is unaffected — this is purely
+        an optional convenience.
+        """
+        if parent is None:
+            parent = self
+
+        dlg = tk.Toplevel(parent)
+        dlg.title("Find Location")
+        dlg.resizable(True, False)
+        dlg.grab_set()
+        dlg.minsize(460, 300)
+
+        frm = ttk.Frame(dlg, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+        frm.columnconfigure(1, weight=1)
+        frm.rowconfigure(1, weight=1)
+
+        # Search row
+        ttk.Label(frm, text="Search:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 4), pady=(0, 4))
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(frm, textvariable=search_var, width=28)
+        search_entry.grid(row=0, column=1, sticky=tk.EW, pady=(0, 4))
+        online_btn = ttk.Button(frm, text="Search online…", width=15)
+        online_btn.grid(row=0, column=2, sticky=tk.W, padx=(6, 0), pady=(0, 4))
+
+        # Results listbox
+        lb_frm = ttk.Frame(frm)
+        lb_frm.grid(row=1, column=0, columnspan=3, sticky=tk.NSEW, pady=(0, 4))
+        lb_frm.columnconfigure(0, weight=1)
+        lb_frm.rowconfigure(0, weight=1)
+        sb = ttk.Scrollbar(lb_frm, orient=tk.VERTICAL)
+        lb = tk.Listbox(lb_frm, height=10, yscrollcommand=sb.set,
+                        selectmode=tk.SINGLE, font=("TkFixedFont", 9),
+                        activestyle="dotbox")
+        sb.config(command=lb.yview)
+        lb.grid(row=0, column=0, sticky=tk.NSEW)
+        sb.grid(row=0, column=1, sticky=tk.NS)
+
+        # Status / selection preview line
+        status_var = tk.StringVar(value="")
+        ttk.Label(frm, textvariable=status_var, font=("TkDefaultFont", 9),
+                  justify=tk.LEFT).grid(
+            row=2, column=0, columnspan=3, sticky=tk.W, pady=2)
+
+        # ── Data ──────────────────────────────────────────────────────
+        _rows = []   # [(display_name, lat_dd, lon_dd), …]
+
+        _gc_cities = None
+        try:
+            import geonamescache as _gnc
+            _gc_cities = list(_gnc.GeonamesCache().get_cities().values())
+        except ImportError:
+            status_var.set(
+                "Tip: pip install geonamescache  for instant offline city search")
+
+        def _do_offline(query):
+            if not _gc_cities:
+                return []
+            q = query.strip().lower()
+            if not q:
+                return []
+            hits = []
+            for c in _gc_cities:
+                if q in c['name'].lower():
+                    hits.append((
+                        c['name'],
+                        float(c['latitude']),
+                        float(c['longitude']),
+                        c.get('countrycode', ''),
+                        int(c.get('population') or 0),
+                    ))
+            hits.sort(key=lambda x: -x[4])
+            return hits[:50]
+
+        def _fmt_row(name, lat, lon, cc):
+            ns = 'N' if lat >= 0 else 'S'
+            ew = 'E' if lon >= 0 else 'W'
+            return f"{name}, {cc:<3}  {abs(lat):>7.2f}°{ns}  {abs(lon):>8.2f}°{ew}"
+
+        def _populate(results):
+            _rows.clear()
+            lb.delete(0, tk.END)
+            for name, lat, lon, cc, *_ in results:
+                lb.insert(tk.END, _fmt_row(name, lat, lon, cc))
+                _rows.append((name, lat, lon))
+
+        # ── Search scheduling ──────────────────────────────────────────
+        _after_id = [None]
+
+        def _schedule(*_):
+            if _after_id[0]:
+                dlg.after_cancel(_after_id[0])
+            _after_id[0] = dlg.after(200, _run_offline)
+
+        def _run_offline():
+            q = search_var.get()
+            results = _do_offline(q)
+            _populate(results)
+            if results:
+                status_var.set(
+                    f"{len(results)} result(s) — select one and click Apply")
+                online_btn.config(state=tk.DISABLED)
+            else:
+                if q.strip() and _gc_cities:
+                    status_var.set("No offline match — try Search online…")
+                online_btn.config(
+                    state=tk.NORMAL if q.strip() else tk.DISABLED)
+
+        def _run_online():
+            q = search_var.get().strip()
+            if not q:
+                return
+            online_btn.config(state=tk.DISABLED, text="Searching…")
+            status_var.set("Querying Nominatim (OpenStreetMap)…")
+
+            def _thread():
+                try:
+                    from geopy.geocoders import Nominatim
+                    geo  = Nominatim(user_agent="thrusty-location-picker")
+                    locs = geo.geocode(q, exactly_one=False, limit=15) or []
+                    rows = [(loc.address[:52], loc.latitude,
+                             loc.longitude, '', 0) for loc in locs]
+                    msg  = (f"{len(rows)} result(s) — select one and click Apply"
+                            if rows else "No results from Nominatim")
+                except ImportError:
+                    rows, msg = [], "geopy not installed  (pip install geopy)"
+                except Exception as ex:
+                    rows, msg = [], f"Online search failed: {ex}"
+                dlg.after(0, lambda: (
+                    _populate(rows),
+                    status_var.set(msg),
+                    online_btn.config(state=tk.NORMAL, text="Search online…"),
+                ))
+
+            threading.Thread(target=_thread, daemon=True).start()
+
+        online_btn.config(command=_run_online, state=tk.DISABLED)
+        search_var.trace_add("write", _schedule)
+
+        # ── Selection & apply ──────────────────────────────────────────
+        def _on_select(_evt=None):
+            sel = lb.curselection()
+            if not sel:
+                return
+            name, lat, lon = _rows[sel[0]]
+            ns = 'N' if lat >= 0 else 'S'
+            ew = 'E' if lon >= 0 else 'W'
+            status_var.set(
+                f"{name}  →  {abs(lat):.4f}°{ns},  {abs(lon):.4f}°{ew}")
+
+        def _apply():
+            sel = lb.curselection()
+            if not sel:
+                messagebox.showinfo("No selection",
+                                    "Select a location from the list.",
+                                    parent=dlg)
+                return
+            _, lat, lon = _rows[sel[0]]
+            lat_var.set(f"{lat:.4f}")
+            lon_var.set(f"{lon:.4f}")
+            dlg.destroy()
+
+        lb.bind("<<ListboxSelect>>", _on_select)
+        lb.bind("<Double-1>",        lambda _e: _apply())
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.grid(row=3, column=0, columnspan=3, pady=(6, 0))
+        ttk.Button(btn_frm, text="Apply",  width=8,
+                   command=_apply        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frm, text="Cancel", width=8,
+                   command=dlg.destroy   ).pack(side=tk.LEFT, padx=4)
+
+        dlg.bind("<Return>", lambda _e: _apply())
+        dlg.bind("<Escape>", lambda _e: dlg.destroy())
+        search_entry.focus_set()
+
+    # ------------------------------------------------------------------
     # Estimate azimuth from target coordinates (with Earth-rotation correction)
     # ------------------------------------------------------------------
     def _estimate_azimuth(self):
@@ -5236,11 +5428,14 @@ class MissileFlyoutApp(tk.Tk):
         lon_var = tk.StringVar(value="0.0")
         ttk.Entry(frm, textvariable=lon_var, width=12).grid(
             row=1, column=1, sticky=tk.W, pady=4)
+        ttk.Button(frm, text="Find…", width=7,
+                   command=lambda: self._pick_location(lat_var, lon_var, dlg)
+                   ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=4)
 
         ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
-            row=2, column=0, columnspan=2, sticky=tk.EW, pady=6)
+            row=2, column=0, columnspan=3, sticky=tk.EW, pady=6)
         ttk.Label(frm, text="Earth-rotation correction:").grid(
-            row=3, column=0, columnspan=2, sticky=tk.W)
+            row=3, column=0, columnspan=3, sticky=tk.W)
 
         # Correction method
         method_var = tk.StringVar(value="ballistic")
@@ -5316,7 +5511,7 @@ class MissileFlyoutApp(tk.Tk):
             frm, text="Ballistic minimum-energy estimate  (T = √(2R/g))",
             variable=method_var, value="ballistic",
             command=_update
-        ).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+        ).grid(row=4, column=0, columnspan=3, sticky=tk.W, padx=(20, 0))
 
         last_label = (f"Use last simulation  (T = {last_t:.0f} s)"
                       if last_t else "Use last simulation  (no result yet)")
@@ -5325,10 +5520,10 @@ class MissileFlyoutApp(tk.Tk):
             variable=method_var, value="last_sim",
             state=(tk.NORMAL if last_t else tk.DISABLED),
             command=_update
-        ).grid(row=5, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+        ).grid(row=5, column=0, columnspan=3, sticky=tk.W, padx=(20, 0))
 
         user_t_row = ttk.Frame(frm)
-        user_t_row.grid(row=6, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+        user_t_row.grid(row=6, column=0, columnspan=3, sticky=tk.W, padx=(20, 0))
         ttk.Radiobutton(
             user_t_row, text="User flight time (min):",
             variable=method_var, value="user_t",
@@ -5341,13 +5536,13 @@ class MissileFlyoutApp(tk.Tk):
             frm, text="No correction (instantaneous bearing)",
             variable=method_var, value="none",
             command=_update
-        ).grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=(20, 0))
+        ).grid(row=7, column=0, columnspan=3, sticky=tk.W, padx=(20, 0))
 
         ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
-            row=8, column=0, columnspan=2, sticky=tk.EW, pady=6)
+            row=8, column=0, columnspan=3, sticky=tk.EW, pady=6)
         ttk.Label(frm, textvariable=preview_var,
                   font=("TkFixedFont", 9), justify=tk.LEFT
-                  ).grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=2)
+                  ).grid(row=9, column=0, columnspan=3, sticky=tk.W, pady=2)
 
         def _apply():
             r = _compute()
@@ -5362,7 +5557,7 @@ class MissileFlyoutApp(tk.Tk):
             dlg.destroy()
 
         btn_frm = ttk.Frame(frm)
-        btn_frm.grid(row=10, column=0, columnspan=2, pady=(8, 0))
+        btn_frm.grid(row=10, column=0, columnspan=3, pady=(8, 0))
         ttk.Button(btn_frm, text="Apply",  width=8, command=_apply
                    ).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_frm, text="Cancel", width=8, command=dlg.destroy
@@ -5404,6 +5599,9 @@ class MissileFlyoutApp(tk.Tk):
         lon_var = tk.StringVar(value="0.0")
         ttk.Entry(frm, textvariable=lon_var, width=12).grid(
             row=1, column=1, sticky=tk.W, pady=4)
+        ttk.Button(frm, text="Find…", width=7,
+                   command=lambda: self._pick_location(lat_var, lon_var, dlg)
+                   ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=4)
 
         result = {}
 
@@ -5422,7 +5620,7 @@ class MissileFlyoutApp(tk.Tk):
             dlg.destroy()
 
         btn_frm = ttk.Frame(frm)
-        btn_frm.grid(row=2, column=0, columnspan=2, pady=(8, 0))
+        btn_frm.grid(row=2, column=0, columnspan=3, pady=(8, 0))
         ttk.Button(btn_frm, text="OK",     width=8, command=_ok    ).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_frm, text="Cancel", width=8, command=_cancel).pack(side=tk.LEFT, padx=4)
 
