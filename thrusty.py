@@ -1171,7 +1171,6 @@ class MissileDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _build(self, existing_name):
         pad = dict(padx=8, pady=4)
-        self._rv = None   # RVParams, set by Load/Edit/New buttons
 
         # Name row
         nf = ttk.Frame(self)
@@ -1324,19 +1323,18 @@ class MissileDialog(tk.Toplevel):
             _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
         self._num_rvs_spinbox.pack(side=tk.LEFT)
 
-        # RV type: summary label + action buttons (rows 1-2)
-        self._rv_summary_var = tk.StringVar(value="No RV loaded")
+        # RV identity is owned by the sidebar's Reentry Vehicle library
+        # (since the recent refactor).  The dialog shows a read-only
+        # summary of whatever is selected there, so the user can verify
+        # the loadout without re-editing it from here.
+        self._rv_summary_var = tk.StringVar(value="")
         ttk.Label(self._rv_section, textvariable=self._rv_summary_var,
                   wraplength=320, foreground="navy").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 2))
-        _rv_btn_row = ttk.Frame(self._rv_section)
-        _rv_btn_row.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=2)
-        self._rv_load_btn = ttk.Button(_rv_btn_row, text="Load RV…", command=self._load_rv)
-        self._rv_load_btn.pack(side=tk.LEFT)
-        self._rv_edit_btn = ttk.Button(_rv_btn_row, text="Edit Terminal Vehicle…", command=self._edit_rv)
-        self._rv_edit_btn.pack(side=tk.LEFT, padx=(4, 0))
-        self._rv_new_btn  = ttk.Button(_rv_btn_row, text="New RV…",  command=self._new_rv)
-        self._rv_new_btn.pack(side=tk.LEFT, padx=(4, 0))
+            row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+        ttk.Label(self._rv_section,
+                  text="(choose the RV in the sidebar's Reentry Vehicle panel)",
+                  foreground="gray").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
 
         # Has PBV toggle
         self._has_pbv_var = tk.BooleanVar(value=False)
@@ -1419,9 +1417,8 @@ class MissileDialog(tk.Toplevel):
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
 
-        # Live throw-weight update when RV fields change.  The per-RV mass now
-        # comes from self._rv.mass_kg and is refreshed by _load_rv / _edit_rv /
-        # _new_rv, which call _update_throw_weight directly.
+        # Live throw-weight update when RV-count or PBV mass changes.
+        # RV mass per unit comes from the sidebar selection via _current_main_rv().
         for _v in (self._num_rvs_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
 
@@ -1543,12 +1540,10 @@ class MissileDialog(tk.Toplevel):
         self._payload_shape_cb.config(state="disabled")
         self._payload_diameter_entry.config(state="disabled")
         self._payload_length_entry.config(state="disabled")
-        # RV section
+        # RV section (RV identity is owned by the sidebar — nothing to
+        # disable in the dialog itself; the summary label is non-editable.)
         self._rv_separates_check.config(state="disabled")
         self._num_rvs_spinbox.config(state="disabled")
-        self._rv_load_btn.config(state="disabled")
-        self._rv_edit_btn.config(state="disabled")
-        self._rv_new_btn.config(state="disabled")
         self._has_pbv_check.config(state="disabled")
         self._pbv_mass_entry.config(state="disabled")
         self._pbv_diameter_entry.config(state="disabled")
@@ -1586,13 +1581,13 @@ class MissileDialog(tk.Toplevel):
         """Recompute throw weight = N × RV.mass_kg + PBV when RV separates is active."""
         if not self._rv_separates_var.get():
             return
-        if self._rv is None:
-            return  # No RV loaded yet; leave throw weight untouched.
+        rv = self._current_main_rv()
+        if rv is None:
+            return  # No RV selected in sidebar; leave throw weight untouched.
         try:
             n   = max(1, int(self._num_rvs_var.get()))
-            rv  = float(self._rv.mass_kg)
             bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
-            total = n * rv + bus
+            total = n * rv.mass_kg + bus
             self._throw_weight_entry.config(state="normal")
             self._throw_weight_var.set(f"{total:.0f}")
             self._throw_weight_entry.config(state="readonly")
@@ -1605,6 +1600,7 @@ class MissileDialog(tk.Toplevel):
             self._rv_section.grid()
             self._payload_shape_frame.grid_remove()   # RV geometry takes over
             self._throw_weight_entry.config(state="readonly")
+            self._update_rv_summary()
             self._update_throw_weight()
         else:
             self._rv_section.grid_remove()
@@ -1641,11 +1637,18 @@ class MissileDialog(tk.Toplevel):
             self._fins_section.grid_remove()
 
     # ------------------------------------------------------------------
+    def _current_main_rv(self):
+        """Return the RVParams currently selected in the parent app's
+        sidebar combobox, or None if the sentinel is active."""
+        app = self.master
+        name = app._rv_main_var.get() if hasattr(app, '_rv_main_var') else ""
+        return RV_DB[name]() if name in RV_DB else None
+
     def _update_rv_summary(self):
-        """Refresh the summary label from self._rv."""
-        rv = self._rv
+        """Refresh the summary label from the main panel's RV selection."""
+        rv = self._current_main_rv()
         if rv is None:
-            self._rv_summary_var.set("No RV loaded")
+            self._rv_summary_var.set("No RV selected in sidebar")
         else:
             parts = [rv.name,
                      f"{rv.mass_kg:,.0f} kg",
@@ -1657,49 +1660,8 @@ class MissileDialog(tk.Toplevel):
                         else "skip")
                 parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
             self._rv_summary_var.set(" — ".join(parts))
-        # The glider mission-control panel auto-shows / hides based on
-        # the active terminal vehicle.  Refresh whenever the RV changes.
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
-
-    def _load_rv(self):
-        """Browse for an .rv.json file and load it into self._rv."""
-        from tkinter import filedialog
-        path = filedialog.askopenfilename(
-            parent=self,
-            title="Load RV",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
-            filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
-        if not path:
-            return
-        try:
-            d = json.loads(Path(path).read_text())
-            self._rv = rv_from_dict(d)
-        except Exception as exc:
-            messagebox.showerror("Load RV", f"Could not read RV file:\n{exc}", parent=self)
-            return
-        self._update_rv_summary()
-        self._update_throw_weight()
-
-    def _edit_rv(self):
-        """Open RVEditorDialog to edit self._rv; update on OK."""
-        mass = self._rv.mass_kg if self._rv is not None else 500.0
-        dlg = RVEditorDialog(self, rv=self._rv, mass_kg=mass)
-        self.wait_window(dlg)
-        if dlg.result is not None:
-            self._rv = dlg.result
-            self._update_rv_summary()
-            self._update_throw_weight()
-
-    def _new_rv(self):
-        """Open RVEditorDialog with blank/default values."""
-        mass = self._rv.mass_kg if self._rv is not None else 500.0
-        dlg = RVEditorDialog(self, rv=None, mass_kg=mass)
-        self.wait_window(dlg)
-        if dlg.result is not None:
-            self._rv = dlg.result
-            self._update_rv_summary()
-            self._update_throw_weight()
 
     # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
@@ -1799,8 +1761,8 @@ class MissileDialog(tk.Toplevel):
             self._pbv_mass_var.set("0")
             self._pbv_diameter_var.set("0")
             self._pbv_length_var.set("0")
-        # RV — resolve from either new rv field or deprecated inline fields
-        self._rv = effective_rv(p)
+        # RV identity comes from the sidebar library, not from the missile;
+        # just refresh the read-only summary to reflect that selection.
         self._update_rv_summary()
 
         # Payload shape / diameter / length
@@ -1885,14 +1847,17 @@ class MissileDialog(tk.Toplevel):
         # Throw weight / payload decomposition
         rv_separates = self._rv_separates_var.get()
         if rv_separates:
-            if self._rv is None:
-                raise ValueError("Please load or create an RV (use 'Load RV…' or 'New RV…') before saving.")
+            main_rv = self._current_main_rv()
+            if main_rv is None:
+                raise ValueError(
+                    "No RV selected in the sidebar's Reentry Vehicle panel. "
+                    "Pick or create an RV there before saving this missile.")
             try:
                 num_rvs  = max(1, int(self._num_rvs_var.get()))
                 bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
             except ValueError:
                 raise ValueError("No. of RVs and PBV mass must be numbers.")
-            rv_mass = float(self._rv.mass_kg)
+            rv_mass = float(main_rv.mass_kg)
             payload = num_rvs * rv_mass + bus_mass
         else:
             try:
@@ -2025,16 +1990,12 @@ class MissileDialog(tk.Toplevel):
                 thrust_profile=list(sd.get("thrust_profile", [])),
             )
 
-        # Sync per-RV mass into the RVParams object so the trajectory gets
-        # the mass entered in the missile editor rather than the library default.
-        import dataclasses
-        _rv_for_node = (dataclasses.replace(self._rv, mass_kg=rv_mass)
-                        if self._rv is not None else None)
-
+        # Saved missiles no longer embed an RV — RV identity lives in the
+        # library and is injected at run time from the sidebar selection.
         node.name                   = name
         node.guidance               = self._guidance_var.get()
         node.payload_kg             = payload
-        node.rv                     = _rv_for_node
+        node.rv                     = None
         node.bus_mass_kg            = bus_mass
         node.num_rvs                = num_rvs
         node.rv_mass_kg             = rv_mass
@@ -6097,13 +6058,13 @@ class MissileFlyoutApp(tk.Tk):
     def _get_inputs(self):
         missile  = get_missile(self._missile_var.get())
 
-        # Override the missile's embedded RV with the user's library selection.
-        # Only applies when the missile is configured for a separating RV
-        # (effective_rv() returns non-None); otherwise the missile is treated
-        # as a ballistic body and the selection is ignored.
+        # Override / supply the missile's RV from the sidebar library.
+        # Only applies when the missile is configured for a separating RV;
+        # otherwise the missile is treated as a ballistic body and the
+        # selection is ignored.
         _rv_sel = getattr(self, '_rv_main_var', None)
         _rv_name = _rv_sel.get() if _rv_sel is not None else ""
-        if _rv_name in RV_DB and effective_rv(missile) is not None:
+        if _rv_name in RV_DB and getattr(missile, 'rv_separates', False):
             _user_rv = RV_DB[_rv_name]()
             missile = copy.deepcopy(missile)
             _node, _placed = missile, False
