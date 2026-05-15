@@ -648,15 +648,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         _gl_above[0] = True
 
     # --- Drag ---
-    # The standard atmosphere model (US Std Atm 1976) is only tabulated to
-    # ~86 km; above that it returns the clamped 86 km density (~5.6e-6 kg/m³),
-    # which is 4–5 orders of magnitude too high at orbital altitudes.  Real
-    # aerodynamic drag above 120 km is genuinely negligible for all trajectory
-    # types modelled here (sub-orbital apogee, Stage-3 burn, orbital insertion),
-    # so we zero it rather than apply a physically wrong value.
-    if alt > 120_000:
-        f_drag = np.zeros(3)
-    elif (_erv := effective_rv(params)) is not None and t > total_burn_time(params):
+    # Density comes from NRLMSISE-00 (or US Std Atm 1976 fallback), both
+    # tabulated to 1000 km, so drag is computed from the physical ρ at any
+    # altitude — no hard cutoff.  At high altitudes ρ is small enough that
+    # the drag force is naturally negligible.
+    if (_erv := effective_rv(params)) is not None and t > total_burn_time(params):
         # After final-stage burnout, RV is flying: use β-based drag + optional lift.
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
@@ -1922,31 +1918,17 @@ def integrate_trajectory(params: MissileParams,
             #
             # _t_eligible gates out any crossing that occurs during boost or
             # before RV separation.
-            #
-            # _pull_started gates out crossings until the vehicle has
-            # descended to 80 km on its first atmospheric dip (the skip
-            # nadir / pull-up start), so we never catch a false v_eq
-            # crossing during the initial descent from apogee.
-            _eq_armed     = [False]
-            _pull_started = [False]   # True once alt drops below 80 km
+            _eq_armed = [False]
 
             def _eq_upward_xing(t, s, *_,
                                 _b=_beta_ste, _ld=_LD_ste,
                                 _arm=_eq_armed,
-                                _pull=_pull_started,
                                 _min_t=_t_eligible):
                 if t < _min_t:
                     return -1.0         # boost / pre-separation — ignore
                 _p, _v = s[:3], s[3:]
                 _, _, _h = ecef_to_geodetic(_p)
                 _h = max(_h, 0.0)
-                # Gate: don't search until vehicle has entered the lower
-                # atmosphere (proxy for pull-up nadir).  80 km is below
-                # re-entry interface (100 km) but above typical skip nadir.
-                if not _pull[0] and _h < 80_000.0:
-                    _pull[0] = True
-                if not _pull[0]:
-                    return -1.0
                 _spd = np.linalg.norm(_v)
                 if _spd < 50.0:
                     return -1.0 if not _arm[0] else 1.0
