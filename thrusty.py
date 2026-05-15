@@ -185,6 +185,7 @@ _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
 _DIR_EVENTS       = _THRUSTY_ROOT / "events"
 _DIR_MAPS         = _THRUSTY_ROOT / "maps"
 _DIR_PLOTS        = _THRUSTY_ROOT / "plots"
+_DIR_SCENARIOS    = _THRUSTY_ROOT / "scenarios"
 
 
 def _safe_name(s: str, maxlen: int = 40) -> str:
@@ -3476,6 +3477,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Load Launch Site…",        command=self._load_site)
         file_menu.add_command(label="Save Launch Site…",        command=self._export_site)
         file_menu.add_separator()
+        file_menu.add_command(label="Load Scenario…",           command=self._load_scenario)
+        file_menu.add_command(label="Save Scenario…",           command=self._save_scenario)
+        file_menu.add_separator()
         # ── Trajectory outcomes (export only) ─────────────────────────
         file_menu.add_command(label="Export Trajectory CSV…",   command=self._save_trajectory)
         file_menu.add_command(label="Export Trajectory XLSX…",  command=self._export_trajectory_xlsx)
@@ -5185,6 +5189,71 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
 
+    # ------------------------------------------------------------------
+    # Scenario save / load (bundle: missile + RV + site + guidance)
+    # ------------------------------------------------------------------
+    def _save_scenario(self):
+        """Save the full input state — missile name, RV name, launch site,
+        azimuth, and every guidance / glider field — as a .scenario.json."""
+        from tkinter import filedialog
+        import datetime as _dt
+        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        missile = _safe_name(self._missile_var.get())
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save scenario",
+            defaultextension=".json",
+            initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
+            initialfile=f"{ts}_{missile}.scenario.json",
+            filetypes=[("Scenario files (*.scenario.json)", "*.json"),
+                       ("All files", "*.*")],
+        )
+        if not path:
+            return
+        data = dict(self._trajectory_metadata())
+        data['_type']    = 'scenario'
+        data['_version'] = 1
+        try:
+            Path(path).write_text(json.dumps(data, indent=2))
+        except Exception as exc:
+            messagebox.showerror("Save scenario",
+                                 f"Could not write file:\n{exc}", parent=self)
+            return
+        self._status_var.set(f"Scenario saved: {os.path.basename(path)}")
+
+    def _load_scenario(self):
+        """Load a scenario file (or any JSON / trajectory CSV that carries
+        a scenario-shaped header) and apply it to the GUI."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Load scenario",
+            initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
+            filetypes=[("Scenario files (*.scenario.json)", "*.json"),
+                       ("JSON files", "*.json"),
+                       ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text())
+        except Exception as exc:
+            messagebox.showerror("Load scenario",
+                                 f"Could not read file:\n{exc}", parent=self)
+            return
+        if not isinstance(data, dict):
+            messagebox.showerror("Load scenario",
+                                 "File does not contain a scenario object.",
+                                 parent=self)
+            return
+        try:
+            self._apply_trajectory_metadata(data)
+        except Exception as exc:
+            messagebox.showerror("Load scenario",
+                                 f"Could not apply scenario:\n{exc}", parent=self)
+            return
+        self._status_var.set(f"Scenario loaded: {os.path.basename(path)}")
+
     def _update_params_display(self, p=None):
         """Rebuild the Missile Parameters tab with structured label rows."""
         if p is None:
@@ -6759,8 +6828,16 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _trajectory_metadata(self):
         """Return a dict of all guidance/launch settings for CSV header embedding."""
+        _rv_name = (self._rv_main_var.get()
+                    if hasattr(self, '_rv_main_var') else '')
+        _site_name = (self._site_var.get()
+                      if (hasattr(self, '_site_var')
+                          and self._site_var.get() in getattr(self, '_site_map', {}))
+                      else '')
         meta = {
             'missile':              self._missile_var.get(),
+            'rv':                   _rv_name,
+            'site_name':            _site_name,
             'launch_lat':           self._launch_lat.get(),
             'launch_lon':           self._launch_lon.get(),
             'azimuth_deg':          self._azimuth_var.get(),
@@ -6813,8 +6890,23 @@ class MissileFlyoutApp(tk.Tk):
         if name in MISSILE_DB or name in [m for m in MISSILE_DB]:
             self._missile_var.set(name)
             self._on_missile_changed()
+        # RV selection (added with the scenario schema; absent in older files)
+        if hasattr(self, '_rv_main_var'):
+            _rv_name = meta.get('rv', '')
+            if _rv_name in RV_DB:
+                self._rv_main_var.set(_rv_name)
+            else:
+                self._rv_main_var.set(self._RV_DEFAULT_SENTINEL)
+            self._on_rv_selected_main()
+        # Launch coordinates are authoritative; site_name is for display only.
         self._launch_lat.set(meta.get('launch_lat', ''))
         self._launch_lon.set(meta.get('launch_lon', ''))
+        if hasattr(self, '_site_var'):
+            _site_name = meta.get('site_name', '')
+            if _site_name and _site_name in getattr(self, '_site_map', {}):
+                self._site_var.set(_site_name)
+            else:
+                self._site_var.set('')
         self._azimuth_var.set(meta.get('azimuth_deg', '0.0'))
         guidance = meta.get('guidance', 'pitch_program')
         if guidance == 'gravity_turn':       # legacy key from pre-rename saves
