@@ -243,6 +243,64 @@ def _save_custom_missiles():
     _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
 
 
+# ---------------------------------------------------------------------------
+# RV library — RVs are first-class objects, decoupled from any specific
+# missile.  Each .rv.json file in rv_library/ becomes an entry in RV_DB,
+# keyed by RV name.  The main control panel exposes the library via a
+# combobox; at run time the selected RV is injected into the missile.
+# ---------------------------------------------------------------------------
+
+RV_DB: dict = {}   # name -> callable returning a fresh RVParams
+
+
+def _load_rv_library():
+    """Scan rv_library/ and register every .rv.json into RV_DB."""
+    _ensure_dir(_RV_LIBRARY_PATH)
+    RV_DB.clear()
+    for fp in sorted(_RV_LIBRARY_PATH.glob("*.rv.json")):
+        try:
+            rv = rv_from_dict(json.loads(fp.read_text()))
+            key = rv.name or fp.stem.replace(".rv", "")
+            RV_DB[key] = lambda _r=rv: _r
+        except Exception as exc:
+            print(f"Warning: could not load RV '{fp.name}': {exc}")
+
+
+def _save_rv_to_library(rv) -> Path:
+    """Write an RVParams to <safe_name>.rv.json and register it in RV_DB."""
+    _ensure_dir(_RV_LIBRARY_PATH)
+    safe = _safe_name(rv.name) or "RV"
+    fp = _RV_LIBRARY_PATH / f"{safe}.rv.json"
+    fp.write_text(json.dumps(rv_to_dict(rv), indent=2))
+    RV_DB[rv.name] = lambda _r=rv: _r
+    return fp
+
+
+def _extract_rvs_from_missiles():
+    """One-time migration: copy every missile-embedded RV into rv_library/
+    if not already present.  Guarded by a marker file so the user can
+    delete library entries without having them re-extracted on next launch."""
+    marker = _RV_LIBRARY_PATH / ".migrated"
+    if marker.exists():
+        return
+    for name in list(MISSILE_DB.keys()):
+        try:
+            p = MISSILE_DB[name]()
+        except Exception:
+            continue
+        erv = effective_rv(p)
+        if erv is None or not erv.name or erv.name in RV_DB:
+            continue
+        try:
+            _save_rv_to_library(erv)
+        except Exception as exc:
+            print(f"Warning: could not extract RV '{erv.name}' from '{name}': {exc}")
+    try:
+        marker.touch()
+    except Exception:
+        pass
+
+
 _SITE_SEPARATOR = "──────────────────────────────"
 
 
@@ -3380,7 +3438,9 @@ class MissileFlyoutApp(tk.Tk):
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
+        _load_rv_library()           # populate RV_DB from rv_library/*.rv.json
         _load_custom_missiles()      # restore any user-saved missiles
+        _extract_rvs_from_missiles() # migrate: pull embedded RVs into the library
 
         self._build_menu()
         self._build_ui()
@@ -3557,6 +3617,30 @@ class MissileFlyoutApp(tk.Tk):
                                    command=self._delete_missile,
                                    state=tk.DISABLED)
         self._del_btn.pack(side=tk.LEFT, padx=2)
+
+        # ── Reentry vehicle (payload) ─────────────────────────────────
+        # The RV library is independent of any missile; the run-time
+        # selection here overrides whatever RV the missile was saved with.
+        rf = ttk.LabelFrame(parent, text="Reentry Vehicle")
+        rf.pack(fill=tk.X, padx=6, pady=3)
+        self._rv_main_var = tk.StringVar(value="(missile default)")
+        self._rv_main_cb = ttk.Combobox(rf, textvariable=self._rv_main_var,
+                                        values=self._rv_combo_values(),
+                                        state="readonly", width=24)
+        self._rv_main_cb.pack(padx=6, pady=(4, 2))
+        self._rv_main_cb.bind("<<ComboboxSelected>>", self._on_rv_selected_main)
+        _bind_typeahead(self._rv_main_cb)
+
+        rb = ttk.Frame(rf)
+        rb.pack(padx=6, pady=(0, 4))
+        ttk.Button(rb, text="New",   width=7,
+                   command=self._new_rv_main).pack(side=tk.LEFT, padx=2)
+        ttk.Button(rb, text="Edit…", width=7,
+                   command=self._edit_rv_main).pack(side=tk.LEFT, padx=2)
+        self._rv_del_btn = ttk.Button(rb, text="Delete", width=7,
+                                      command=self._delete_rv_main,
+                                      state=tk.DISABLED)
+        self._rv_del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
@@ -4321,6 +4405,15 @@ class MissileFlyoutApp(tk.Tk):
         # glider_enabled, populate self._rv so the status line and the
         # mission-control frame appear automatically.
         _p_erv = effective_rv(p)
+        # If the missile carries a named RV that we have in the library, point
+        # the main-panel combobox at it.  Otherwise leave the user's current
+        # selection (or the sentinel) alone — they may want the same RV across
+        # different missiles.
+        if (hasattr(self, '_rv_main_cb') and _p_erv is not None
+                and _p_erv.name and _p_erv.name in RV_DB
+                and self._rv_main_var.get() == self._RV_DEFAULT_SENTINEL):
+            self._rv_main_var.set(_p_erv.name)
+            self._rv_del_btn.config(state=tk.NORMAL)
         if _p_erv is not None and _p_erv.glider_enabled:
             # Sync self._rv so _refresh_glider_status_line picks it up
             self._rv = _p_erv
@@ -4848,6 +4941,114 @@ class MissileFlyoutApp(tk.Tk):
             _save_traj_profiles(profiles)
         self._refresh_missile_list()
         self._status_var.set(f"Missile '{name}' deleted.")
+
+    # ------------------------------------------------------------------
+    # Reentry vehicle (payload) selection
+    # ------------------------------------------------------------------
+    _RV_DEFAULT_SENTINEL = "(missile default)"
+
+    def _rv_combo_values(self):
+        """Combobox values: the sentinel plus every name in RV_DB."""
+        return [self._RV_DEFAULT_SENTINEL] + sorted(RV_DB.keys())
+
+    def _refresh_rv_list(self, select_name=None):
+        """Rebuild the RV combobox after a library change."""
+        _load_rv_library()
+        self._rv_main_cb.configure(values=self._rv_combo_values())
+        target = select_name or self._rv_main_var.get()
+        if target not in RV_DB and target != self._RV_DEFAULT_SENTINEL:
+            target = self._RV_DEFAULT_SENTINEL
+        self._rv_main_var.set(target)
+        self._rv_del_btn.config(
+            state=tk.NORMAL if target in RV_DB else tk.DISABLED)
+        self._on_rv_selected_main()
+
+    def _on_rv_selected_main(self, _event=None):
+        """Sync self._rv to the selected library entry and refresh the
+        glider mission-control panel."""
+        sel = self._rv_main_var.get()
+        if sel in RV_DB:
+            self._rv = RV_DB[sel]()
+            self._rv_del_btn.config(state=tk.NORMAL)
+        else:
+            self._rv_del_btn.config(state=tk.DISABLED)
+            # Fall back to whatever the active missile carries.
+            try:
+                p = get_missile(self._missile_var.get())
+                self._rv = effective_rv(p)
+            except Exception:
+                self._rv = None
+        if hasattr(self, '_glider_status_var'):
+            self._refresh_glider_status_line()
+            if hasattr(self, '_main_bank_sched_var'):
+                self._on_main_bank_toggled()
+            if hasattr(self, '_main_dive_target_var'):
+                self._on_main_dive_target_toggled()
+            self._on_glider_guidance_changed()
+
+    def _new_rv_main(self):
+        """Create an RV in the editor; on Save, write it to the library."""
+        dlg = RVEditorDialog(self, rv=None, mass_kg=500.0)
+        self.wait_window(dlg)
+        if dlg.result is None:
+            return
+        try:
+            _save_rv_to_library(dlg.result)
+        except Exception as exc:
+            messagebox.showerror("Save RV",
+                                 f"Could not write RV file:\n{exc}", parent=self)
+            return
+        self._refresh_rv_list(select_name=dlg.result.name)
+        self._status_var.set(f"RV '{dlg.result.name}' saved to library.")
+
+    def _edit_rv_main(self):
+        """Edit the currently selected RV in place; rewrite the library file."""
+        sel = self._rv_main_var.get()
+        if sel not in RV_DB:
+            messagebox.showinfo("Edit RV",
+                                "Select an RV from the library to edit, "
+                                "or use 'New' to create one.", parent=self)
+            return
+        base = RV_DB[sel]()
+        dlg = RVEditorDialog(self, rv=base, mass_kg=base.mass_kg)
+        self.wait_window(dlg)
+        if dlg.result is None:
+            return
+        # If the user renamed it, delete the old file so we don't leak orphans.
+        if dlg.result.name != base.name:
+            old_fp = _RV_LIBRARY_PATH / f"{_safe_name(base.name)}.rv.json"
+            try:
+                old_fp.unlink(missing_ok=True)
+            except Exception:
+                pass
+        try:
+            _save_rv_to_library(dlg.result)
+        except Exception as exc:
+            messagebox.showerror("Save RV",
+                                 f"Could not write RV file:\n{exc}", parent=self)
+            return
+        self._refresh_rv_list(select_name=dlg.result.name)
+        self._status_var.set(f"RV '{dlg.result.name}' updated.")
+
+    def _delete_rv_main(self):
+        """Remove the selected RV from RV_DB and from rv_library/."""
+        sel = self._rv_main_var.get()
+        if sel not in RV_DB:
+            return
+        if not messagebox.askyesno("Delete RV",
+                                   f"Permanently delete '{sel}' from the library?",
+                                   parent=self):
+            return
+        fp = _RV_LIBRARY_PATH / f"{_safe_name(sel)}.rv.json"
+        try:
+            fp.unlink(missing_ok=True)
+        except Exception as exc:
+            messagebox.showerror("Delete RV",
+                                 f"Could not delete RV file:\n{exc}", parent=self)
+            return
+        RV_DB.pop(sel, None)
+        self._refresh_rv_list(select_name=self._RV_DEFAULT_SENTINEL)
+        self._status_var.set(f"RV '{sel}' deleted.")
 
     def _snapshot_traj_profile(self, missile_name: str) -> None:
         """Save current trajectory panel fields as a profile for missile_name.
@@ -5772,6 +5973,26 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _get_inputs(self):
         missile  = get_missile(self._missile_var.get())
+
+        # Override the missile's embedded RV with the user's library selection.
+        # Only applies when the missile is configured for a separating RV
+        # (effective_rv() returns non-None); otherwise the missile is treated
+        # as a ballistic body and the selection is ignored.
+        _rv_sel = getattr(self, '_rv_main_var', None)
+        _rv_name = _rv_sel.get() if _rv_sel is not None else ""
+        if _rv_name in RV_DB and effective_rv(missile) is not None:
+            _user_rv = RV_DB[_rv_name]()
+            missile = copy.deepcopy(missile)
+            _node, _placed = missile, False
+            while _node is not None:
+                if _node.rv is not None:
+                    _node.rv = _user_rv
+                    _placed = True
+                    break
+                _node = getattr(_node, 'stage2', None)
+            if not _placed:
+                missile.rv = _user_rv
+
         guidance = self._guidance_var.get()
         lat      = float(self._launch_lat.get())
         lon      = float(self._launch_lon.get())
