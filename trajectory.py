@@ -1445,6 +1445,12 @@ def integrate_trajectory(params: MissileParams,
     _acton_mode = (_pullup_mode
                    and _erv_full.glider_guidance == "equilibrium_glide_acton"
                    and _erv_full.glider_beta_entry_kg_m2 > 0)
+    # Hybrid mode: phugoid skip-glide for N upward crossings of the
+    # equilibrium speed curve, then one-way switch to equilibrium-glide EOM.
+    _skip_to_eq_mode = (_erv_full is not None
+                        and _erv_full.glider_enabled
+                        and _erv_full.glider_LD > 0
+                        and _erv_full.glider_guidance == "skip_to_equilibrium")
 
     # Mission-elapsed times of the analytical pull-up arc start and the
     # equilibrium-glide start, captured below for use by the milestone
@@ -1774,6 +1780,138 @@ def integrate_trajectory(params: MissileParams,
             pos_arr = sol_pre.y[:3].T
             vel_arr = sol_pre.y[3:].T
             orbital = (len(sol_pre.t_events[0]) == 0)
+    elif _skip_to_eq_mode:
+        # Phugoid skip-glide until N upward crossings of the equilibrium speed
+        # curve v_eq²(h) = 2β·g⊥/(ρ·L/D), then one-way switch to
+        # equilibrium-glide EOM.  An "upward crossing" is when δ = v²−v_eq²
+        # goes from + to − while the vehicle is ascending; this corresponds
+        # to scipy event direction = −1.
+        _n_target  = max(1, int(getattr(_erv_full, 'glider_skip_count', 1)))
+        _beta_ste  = float(_erv_full.beta_kg_m2)
+        _LD_ste    = float(_erv_full.glider_LD)
+
+        def _eq_upward_xing(t, s):
+            _p, _v = s[:3], s[3:]
+            _, _, _h = ecef_to_geodetic(_p)
+            _h = max(_h, 0.0)
+            _spd = np.linalg.norm(_v)
+            if _spd < 50.0:
+                return 1.0          # avoid trigger at near-zero speed
+            _, _, _rho, _ = atmosphere(_h)
+            if _rho < 1e-20:
+                return 1.0          # above sensible atmosphere
+            _rmag  = np.linalg.norm(_p)
+            _gperp = max(float(np.linalg.norm(gravity_ecef(_p)))
+                         - _spd * _spd / _rmag, 0.0)
+            _den = _rho * _LD_ste
+            if _den < 1e-30:
+                return 1.0
+            return _spd * _spd - 2.0 * _beta_ste * _gperp / _den
+
+        _eq_upward_xing.terminal  = True
+        _eq_upward_xing.direction = -1   # δ: + → − means ascending through v_eq
+
+        _segs_t   = []
+        _segs_pos = []
+        _segs_vel = []
+        _t_handoff = None
+        _s_handoff = None
+        _t_now     = 0.0
+        _s_now     = state0.copy()
+
+        for _skip_i in range(_n_target):
+            _te_seg  = t_eval[t_eval >= _t_now]
+            _sol_seg = solve_ivp(
+                _eom, (_t_now, max_time_s), _s_now,
+                method='RK45',
+                t_eval=_te_seg if len(_te_seg) > 0 else None,
+                events=[_hit_ground, _eq_upward_xing],
+                args=eom_args,
+                rtol=_rtol, atol=_atol,
+                dense_output=False, max_step=_maxstep,
+            )
+            _tdata   = _sol_seg.t
+            _posdata = _sol_seg.y[:3].T
+            _veldata = _sol_seg.y[3:].T
+
+            _ground_hit = (len(_sol_seg.t_events[0]) > 0)
+            _cross_hit  = (len(_sol_seg.t_events[1]) > 0)
+            _took_cross = (_cross_hit and
+                           (not _ground_hit or
+                            _sol_seg.t_events[1][0] < _sol_seg.t_events[0][0]))
+
+            if _took_cross:
+                # Append the crossing state so the segment ends exactly on
+                # the equilibrium curve — this gives a smooth joint.
+                _t_handoff = float(_sol_seg.t_events[1][0])
+                _s_handoff = _sol_seg.y_events[1][0].copy()
+                _tdata     = np.append(_tdata,   _t_handoff)
+                _posdata   = np.vstack([_posdata, _s_handoff[:3]])
+                _veldata   = np.vstack([_veldata, _s_handoff[3:]])
+
+            # Drop the duplicate boundary point from all segments after the first
+            if _segs_t:
+                _tdata   = _tdata[1:]
+                _posdata = _posdata[1:]
+                _veldata = _veldata[1:]
+            _segs_t.append(_tdata)
+            _segs_pos.append(_posdata)
+            _segs_vel.append(_veldata)
+
+            if _took_cross:
+                _t_now = _t_handoff
+                _s_now = _s_handoff
+            else:
+                break   # ground reached before the N-th crossing
+        else:
+            # for/else: all N crossings achieved — switch to equilibrium-glide EOM.
+            import dataclasses as _dc_ste
+            _params_eq = copy.deepcopy(params)
+            _erv_eq_obj = effective_rv(_params_eq)
+            if _erv_eq_obj is not None:
+                _erv_eq_new = _dc_ste.replace(_erv_eq_obj,
+                                              glider_guidance="equilibrium_glide")
+                _neq = _params_eq
+                while _neq is not None:
+                    if _neq.rv is not None:
+                        _neq.rv = _erv_eq_new
+                        break
+                    _neq = getattr(_neq, 'stage2', None)
+            _eom_args_eq = (_params_eq, cutoff_time_s, az,
+                            gt_turn_start_s, gt_turn_stop_s,
+                            _target_orbit_alt_m, _t_final_ignition,
+                            _yaw_maneuvers)
+            _te_glide  = t_eval[t_eval >= _t_handoff]
+            _sol_glide = solve_ivp(
+                _eom, (_t_handoff, max_time_s), _s_handoff,
+                method='RK45',
+                t_eval=_te_glide if len(_te_glide) > 0 else None,
+                events=_hit_ground,
+                args=_eom_args_eq,
+                rtol=_rtol, atol=_atol,
+                dense_output=False, max_step=_maxstep,
+            )
+            # Drop first point — it duplicates the crossing state already
+            # appended to the last skip segment.
+            _tg = _sol_glide.t[1:]
+            _pg = _sol_glide.y[:3, 1:].T
+            _vg = _sol_glide.y[3:, 1:].T
+            if len(_tg) > 0:
+                _segs_t.append(_tg)
+                _segs_pos.append(_pg)
+                _segs_vel.append(_vg)
+            _t_ms_glide_start = _t_handoff   # milestone: handoff point
+
+        if _segs_t:
+            t_arr   = np.concatenate(_segs_t)
+            pos_arr = np.concatenate(_segs_pos)
+            vel_arr = np.concatenate(_segs_vel)
+        else:
+            t_arr   = np.array([0.0])
+            pos_arr = state0[:3].reshape(1, 3)
+            vel_arr = state0[3:].reshape(1, 3)
+        orbital = False
+
     else:
         sol = solve_ivp(
             fun=_eom,
@@ -2172,6 +2310,14 @@ def integrate_trajectory(params: MissileParams,
                 _row['event'] = f"Glide start ({alts[_igs]/1000:.0f} km)"
                 _insert_chrono(_row)
                 _emitted_pullup_glide = True
+            elif _t_ms_glide_start is not None:
+                # skip_to_equilibrium: emit the handoff milestone; skip phases
+                # are handled by the extrema detector below.
+                _igs = int(np.searchsorted(t_arr, _t_ms_glide_start))
+                _igs = max(0, min(_igs, len(alts) - 1))
+                _row = _milestone(float(t_arr[_igs]))
+                _row['event'] = f"→ Equilibrium glide ({alts[_igs]/1000:.0f} km)"
+                _insert_chrono(_row)
 
             if not _emitted_pullup_glide:
                 # Altitude extrema after re-entry: alternating minima
@@ -2183,6 +2329,9 @@ def integrate_trajectory(params: MissileParams,
                 pus_count = 0
                 apx_count = 0
                 _last_alt = None
+                # For skip_to_equilibrium, label all skips up to the handoff;
+                # for other modes, emit only the primary pull-up/apex pair.
+                _is_ste = (_t_ms_glide_start is not None)
                 for ic in _ext_locs:
                     if not (1 <= ic < len(_post) - 1):
                         continue
@@ -2195,19 +2344,31 @@ def integrate_trajectory(params: MissileParams,
                         continue
                     _last_alt = _post[ic]
                     full_idx = _re_idx + ic
+                    # For skip_to_equilibrium stop labelling skips at the handoff.
+                    if _is_ste and t_arr[full_idx] >= _t_ms_glide_start:
+                        break
                     _row = _milestone(t_arr[full_idx])
                     if is_min:
                         pus_count += 1
-                        if pus_count == 1:
-                            _row['event'] = (f"Pull-up start "
-                                             f"({alts[full_idx]/1000:.0f} km)")
-                            _insert_chrono(_row)
+                        _n_lbl = f" {pus_count}" if (_is_ste and pus_count > 1) else ""
+                        _row['event'] = (f"Skip{_n_lbl} pull-up"
+                                         if _is_ste else
+                                         f"Pull-up start "
+                                         f"({alts[full_idx]/1000:.0f} km)")
+                        if not _is_ste and pus_count > 1:
+                            continue   # only first pull-up for non-ste modes
+                        _row['event'] += f" ({alts[full_idx]/1000:.0f} km)"
+                        _insert_chrono(_row)
                     else:
                         apx_count += 1
-                        if apx_count == 1:
-                            _row['event'] = (f"Glide start "
-                                             f"({alts[full_idx]/1000:.0f} km)")
-                            _insert_chrono(_row)
+                        _n_lbl = f" {apx_count}" if (_is_ste and apx_count > 1) else ""
+                        _row['event'] = (f"Skip{_n_lbl} apex"
+                                         if _is_ste else
+                                         f"Glide start "
+                                         f"({alts[full_idx]/1000:.0f} km)")
+                        _row['event'] += f" ({alts[full_idx]/1000:.0f} km)"
+                        _insert_chrono(_row)
+                        if not _is_ste:
                             break  # only emit the primary pull-up/glide pair
 
             # Peak heating: Sutton-Graves stagnation-point rate using a
