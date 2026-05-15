@@ -3469,6 +3469,27 @@ class MissileFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
+        # Plots menu mirrors the matplotlib navigation toolbar so the icon
+        # strip doesn't have to live at the bottom of the plot panel.
+        plots_menu = tk.Menu(menubar, tearoff=0)
+        plots_menu.add_command(label="Home (reset view)",
+                               command=lambda: self._plot_toolbar.home())
+        plots_menu.add_command(label="Back",
+                               command=lambda: self._plot_toolbar.back())
+        plots_menu.add_command(label="Forward",
+                               command=lambda: self._plot_toolbar.forward())
+        plots_menu.add_separator()
+        plots_menu.add_command(label="Pan",
+                               command=lambda: self._plot_toolbar.pan())
+        plots_menu.add_command(label="Zoom to rectangle",
+                               command=lambda: self._plot_toolbar.zoom())
+        plots_menu.add_separator()
+        plots_menu.add_command(label="Configure subplots…",
+                               command=lambda: self._plot_toolbar.configure_subplots())
+        plots_menu.add_command(label="Save figure…",
+                               command=lambda: self._plot_toolbar.save_figure())
+        menubar.add_cascade(label="Plots", menu=plots_menu)
+
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_radiobutton(label="km  (metric)",       variable=self._units_var, value="km")
         view_menu.add_radiobutton(label="nmi  (nautical)",    variable=self._units_var, value="nm")
@@ -4176,8 +4197,12 @@ class MissileFlyoutApp(tk.Tk):
         self._canvas = FigureCanvasTkAgg(self._fig, master=parent)
         self._canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        toolbar = NavigationToolbar2Tk(self._canvas, parent)
-        toolbar.update()
+        # The standard matplotlib toolbar is kept around for its underlying
+        # actions (home / pan / zoom / save) but hidden — the Plots menu
+        # drives those same actions, which keeps the chrome out of the way.
+        self._plot_toolbar = NavigationToolbar2Tk(self._canvas, parent)
+        self._plot_toolbar.update()
+        self._plot_toolbar.pack_forget()
 
         # Initialise axes with placeholder labels
         self._init_axes()
