@@ -671,7 +671,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # above 100 km at any point in this integration; combined
             # with the existing alt < 100 km gate below, this enforces
             # "reentry modes operate only after reentry at 100 km."
-            _glider_active = bool(_gl_above is not None and _gl_above[0])
+            _glider_active = (bool(_gl_above is not None and _gl_above[0])
+                              and not getattr(params, '_glider_phase1', False))
             v_hat    = vel / speed
             f_drag   = -drag_mag * v_hat
             # Gate all glider activity (lift, polar drag-override) on being
@@ -1373,6 +1374,7 @@ def integrate_trajectory(params: MissileParams,
     if not hasattr(params, '__dict__'):
         params = copy.copy(params)
     params._gl_above_pierce = [False]   # set once alt > 100 km
+    params._glider_phase1   = False     # True during pre-apogee Phase 1
 
     # Compute the mission-elapsed time at which the final stage ignites.
     # This is the sum of all earlier stage burn times and coast times.
@@ -1503,6 +1505,23 @@ def integrate_trajectory(params: MissileParams,
                         and _erv_full.glider_enabled
                         and _erv_full.glider_LD > 0
                         and _erv_full.glider_guidance == "skip_to_equilibrium")
+
+    # Apogee event: r̂·v crosses zero descending (ascending → descending).
+    # Used to split Phase 1 (glider off, pre-apogee) from Phase 2 (glider
+    # on, post-apogee).  Gated on t > total_burn so it never fires during
+    # powered flight.
+    _t_apo_gate = total_burn
+    def _apogee_event(t, s, *_,
+                      _gate=_t_apo_gate):
+        if t <= _gate:
+            return 1.0
+        r, v = s[:3], s[3:]
+        rmag = float(np.linalg.norm(r))
+        if rmag < 1.0:
+            return 1.0
+        return float(np.dot(r, v) / rmag)
+    _apogee_event.terminal  = True
+    _apogee_event.direction = -1   # r̂·v: + → −  (ascending → descending)
 
     # Mission-elapsed times of the analytical pull-up arc start and the
     # equilibrium-glide start, captured below for use by the milestone
@@ -1849,18 +1868,43 @@ def integrate_trajectory(params: MissileParams,
                           == 'separating_rv')
         _t_eligible = total_burn if _is_separating else cutoff_time_s
 
-        _segs_t   = []
-        _segs_pos = []
-        _segs_vel = []
         _t_handoff = None
         _s_handoff = None
-        _t_now     = 0.0
-        _s_now     = state0.copy()
 
-        for _skip_i in range(_n_target):
+        # Phase 0 — glider disabled; integrate from launch to apogee.
+        # This makes the pre-apogee arc mode-independent (purely ballistic)
+        # for all aero modes, then seeds the skip loop from the apogee state.
+        params._glider_phase1 = True
+        _sol_pre_ste = solve_ivp(
+            _eom, (0.0, max_time_s), state0,
+            method='RK45',
+            t_eval=t_eval,
+            events=[_hit_ground, _apogee_event],
+            args=eom_args,
+            rtol=_rtol, atol=_atol,
+            dense_output=False, max_step=_maxstep,
+        )
+        params._glider_phase1 = False
+
+        _apo_fired_ste = (len(_sol_pre_ste.t_events[1]) > 0
+                          and (len(_sol_pre_ste.t_events[0]) == 0
+                               or (_sol_pre_ste.t_events[1][0] <
+                                   _sol_pre_ste.t_events[0][0])))
+        if _apo_fired_ste:
+            _t_now = float(_sol_pre_ste.t_events[1][0])
+            _s_now = _sol_pre_ste.y_events[1][0].copy()
+        else:
+            _t_now = 0.0
+            _s_now = state0.copy()
+
+        _segs_t   = [_sol_pre_ste.t]
+        _segs_pos = [_sol_pre_ste.y[:3].T]
+        _segs_vel = [_sol_pre_ste.y[3:].T]
+
+        for _skip_i in range(_n_target if _apo_fired_ste else 0):
             _te_seg  = t_eval[t_eval >= _t_now]
 
-            # Re-define the event each iteration so the "armed" flag is fresh.
+            # Re-define the event each iteration so the flags are fresh.
             # When a segment restarts from the exact equilibrium crossing
             # state, v = v_eq ⇒ δ = v²−v_eq² is mathematically 0 but in
             # practice ≈ 1e-7 (float round-off from scipy's event resolver).
@@ -1878,17 +1922,31 @@ def integrate_trajectory(params: MissileParams,
             #
             # _t_eligible gates out any crossing that occurs during boost or
             # before RV separation.
-            _eq_armed = [False]
+            #
+            # _pull_started gates out crossings until the vehicle has
+            # descended to 80 km on its first atmospheric dip (the skip
+            # nadir / pull-up start), so we never catch a false v_eq
+            # crossing during the initial descent from apogee.
+            _eq_armed     = [False]
+            _pull_started = [False]   # True once alt drops below 80 km
 
             def _eq_upward_xing(t, s, *_,
                                 _b=_beta_ste, _ld=_LD_ste,
                                 _arm=_eq_armed,
+                                _pull=_pull_started,
                                 _min_t=_t_eligible):
                 if t < _min_t:
                     return -1.0         # boost / pre-separation — ignore
                 _p, _v = s[:3], s[3:]
                 _, _, _h = ecef_to_geodetic(_p)
                 _h = max(_h, 0.0)
+                # Gate: don't search until vehicle has entered the lower
+                # atmosphere (proxy for pull-up nadir).  80 km is below
+                # re-entry interface (100 km) but above typical skip nadir.
+                if not _pull[0] and _h < 80_000.0:
+                    _pull[0] = True
+                if not _pull[0]:
+                    return -1.0
                 _spd = np.linalg.norm(_v)
                 if _spd < 50.0:
                     return -1.0 if not _arm[0] else 1.0
@@ -1959,47 +2017,50 @@ def integrate_trajectory(params: MissileParams,
                 break   # ground reached before the N-th crossing
         else:
             # for/else: all N crossings achieved — switch to equilibrium-glide EOM.
-            import dataclasses as _dc_ste
-            _params_eq = copy.deepcopy(params)
-            _erv_eq_obj = effective_rv(_params_eq)
-            if _erv_eq_obj is not None:
-                _erv_eq_new = _dc_ste.replace(_erv_eq_obj,
-                                              glider_guidance="equilibrium_glide")
-                _neq = _params_eq
-                while _neq is not None:
-                    if _neq.rv is not None:
-                        _neq.rv = _erv_eq_new
-                        break
-                    _neq = getattr(_neq, 'stage2', None)
-            _eom_args_eq = (_params_eq, cutoff_time_s, az,
-                            gt_turn_start_s, gt_turn_stop_s,
-                            _target_orbit_alt_m, _t_final_ignition,
-                            _yaw_maneuvers)
-            _te_glide  = t_eval[t_eval >= _t_handoff]
-            _sol_glide = solve_ivp(
-                _eom, (_t_handoff, max_time_s), _s_handoff,
-                method='RK45',
-                t_eval=_te_glide if len(_te_glide) > 0 else None,
-                events=_hit_ground,
-                args=_eom_args_eq,
-                rtol=_rtol, atol=_atol,
-                dense_output=False, max_step=_maxstep,
-            )
-            # Drop first point only if it duplicates the crossing state
-            # (coincidence with a t_eval grid point, or t_eval=None case).
-            _tg = _sol_glide.t
-            _pg = _sol_glide.y[:3].T
-            _vg = _sol_glide.y[3:].T
-            if (len(_tg) > 0 and len(_segs_t) > 0 and len(_segs_t[-1]) > 0
-                    and abs(_tg[0] - _segs_t[-1][-1]) < 1e-6):
-                _tg = _tg[1:]
-                _pg = _pg[1:]
-                _vg = _vg[1:]
-            if len(_tg) > 0:
-                _segs_t.append(_tg)
-                _segs_pos.append(_pg)
-                _segs_vel.append(_vg)
-            _t_ms_glide_start = _t_handoff   # milestone: handoff point
+            # _t_handoff is None when Phase 0 didn't reach apogee (range was 0);
+            # in that case the trajectory is just the Phase 0 arc.
+            if _t_handoff is not None:
+                import dataclasses as _dc_ste
+                _params_eq = copy.deepcopy(params)
+                _erv_eq_obj = effective_rv(_params_eq)
+                if _erv_eq_obj is not None:
+                    _erv_eq_new = _dc_ste.replace(_erv_eq_obj,
+                                                  glider_guidance="equilibrium_glide")
+                    _neq = _params_eq
+                    while _neq is not None:
+                        if _neq.rv is not None:
+                            _neq.rv = _erv_eq_new
+                            break
+                        _neq = getattr(_neq, 'stage2', None)
+                _eom_args_eq = (_params_eq, cutoff_time_s, az,
+                                gt_turn_start_s, gt_turn_stop_s,
+                                _target_orbit_alt_m, _t_final_ignition,
+                                _yaw_maneuvers)
+                _te_glide  = t_eval[t_eval >= _t_handoff]
+                _sol_glide = solve_ivp(
+                    _eom, (_t_handoff, max_time_s), _s_handoff,
+                    method='RK45',
+                    t_eval=_te_glide if len(_te_glide) > 0 else None,
+                    events=_hit_ground,
+                    args=_eom_args_eq,
+                    rtol=_rtol, atol=_atol,
+                    dense_output=False, max_step=_maxstep,
+                )
+                # Drop first point only if it duplicates the crossing state
+                # (coincidence with a t_eval grid point, or t_eval=None case).
+                _tg = _sol_glide.t
+                _pg = _sol_glide.y[:3].T
+                _vg = _sol_glide.y[3:].T
+                if (len(_tg) > 0 and len(_segs_t) > 0 and len(_segs_t[-1]) > 0
+                        and abs(_tg[0] - _segs_t[-1][-1]) < 1e-6):
+                    _tg = _tg[1:]
+                    _pg = _pg[1:]
+                    _vg = _vg[1:]
+                if len(_tg) > 0:
+                    _segs_t.append(_tg)
+                    _segs_pos.append(_pg)
+                    _segs_vel.append(_vg)
+                _t_ms_glide_start = _t_handoff   # milestone: handoff point
 
         if _segs_t:
             t_arr   = np.concatenate(_segs_t)
@@ -2012,28 +2073,89 @@ def integrate_trajectory(params: MissileParams,
         orbital = False
 
     else:
-        sol = solve_ivp(
-            fun=_eom,
-            t_span=t_span,
-            y0=state0,
-            method='RK45',
-            t_eval=t_eval,
-            events=_hit_ground,
-            args=eom_args,
-            rtol=_rtol,
-            atol=_atol,
-            dense_output=False,
-            max_step=_maxstep,
-        )
+        # For glider modes (non-pullup, non-skip), split at apogee:
+        # Phase 1 (glider off) integrates to apogee so the ascent arc is
+        # always mode-independent; Phase 2 (glider on) continues to ground.
+        _needs_apo_split = (_erv_full is not None
+                            and _erv_full.glider_enabled
+                            and _erv_full.glider_LD > 0)
+        if _needs_apo_split:
+            params._glider_phase1 = True
+            _sol_p1 = solve_ivp(
+                fun=_eom,
+                t_span=t_span,
+                y0=state0,
+                method='RK45',
+                t_eval=t_eval,
+                events=[_hit_ground, _apogee_event],
+                args=eom_args,
+                rtol=_rtol,
+                atol=_atol,
+                dense_output=False,
+                max_step=_maxstep,
+            )
+            _apo_fired = (len(_sol_p1.t_events[1]) > 0
+                          and (len(_sol_p1.t_events[0]) == 0
+                               or (_sol_p1.t_events[1][0] <
+                                   _sol_p1.t_events[0][0])))
+            if _apo_fired:
+                params._glider_phase1 = False
+                _t_apo  = float(_sol_p1.t_events[1][0])
+                _s_apo  = _sol_p1.y_events[1][0]
+                _te_p2  = t_eval[t_eval >= _t_apo]
+                _sol_p2 = solve_ivp(
+                    fun=_eom,
+                    t_span=(_t_apo, max_time_s),
+                    y0=_s_apo,
+                    method='RK45',
+                    t_eval=_te_p2 if len(_te_p2) > 0 else None,
+                    events=_hit_ground,
+                    args=eom_args,
+                    rtol=_rtol,
+                    atol=_atol,
+                    dense_output=False,
+                    max_step=_maxstep,
+                )
+                # Stitch phases; drop duplicate at the apogee joint if
+                # _t_apo coincides with a t_eval grid point.
+                _t1, _y1 = _sol_p1.t, _sol_p1.y
+                _t2, _y2 = _sol_p2.t, _sol_p2.y
+                if len(_t1) > 0 and len(_t2) > 0 and abs(_t1[-1] - _t2[0]) < 1e-6:
+                    _t2 = _t2[1:]
+                    _y2 = _y2[:, 1:]
+                t_arr   = np.concatenate([_t1, _t2])
+                pos_arr = np.concatenate([_y1[:3].T, _y2[:3].T])
+                vel_arr = np.concatenate([_y1[3:].T, _y2[3:].T])
+                orbital = (len(_sol_p2.t_events[0]) == 0)
+            else:
+                params._glider_phase1 = False
+                t_arr   = _sol_p1.t
+                pos_arr = _sol_p1.y[:3].T
+                vel_arr = _sol_p1.y[3:].T
+                orbital = (len(_sol_p1.t_events[0]) == 0)
+        else:
+            sol = solve_ivp(
+                fun=_eom,
+                t_span=t_span,
+                y0=state0,
+                method='RK45',
+                t_eval=t_eval,
+                events=_hit_ground,
+                args=eom_args,
+                rtol=_rtol,
+                atol=_atol,
+                dense_output=False,
+                max_step=_maxstep,
+            )
 
-        t_arr    = sol.t
-        pos_arr  = sol.y[:3].T   # (N, 3)
-        vel_arr  = sol.y[3:].T   # (N, 3)
+            t_arr    = sol.t
+            pos_arr  = sol.y[:3].T   # (N, 3)
+            vel_arr  = sol.y[3:].T   # (N, 3)
 
-        # Detect whether the warhead actually reached the ground.  When the
-        # _hit_ground event never fires the vehicle is on an orbital or
-        # very-long-range sub-orbital arc that didn't return within max_time_s.
-        orbital = len(sol.t_events[0]) == 0
+            # Detect whether the warhead actually reached the ground.  When the
+            # _hit_ground event never fires the vehicle is on an orbital or
+            # very-long-range sub-orbital arc that didn't return within max_time_s.
+            orbital = len(sol.t_events[0]) == 0
 
     # Verify the orbital flag by computing the perigee of the trajectory's
     # osculating orbit at the final state.  A long sub-orbital arc (apogee
