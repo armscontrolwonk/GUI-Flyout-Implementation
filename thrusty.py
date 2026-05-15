@@ -1609,7 +1609,7 @@ class MissileDialog(tk.Toplevel):
         path = filedialog.askopenfilename(
             parent=self,
             title="Load RV",
-            initialdir=str(_RV_LIBRARY_PATH) if _RV_LIBRARY_PATH.exists() else ".",
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
         if not path:
             return
@@ -2408,12 +2408,10 @@ class RVEditorDialog(tk.Toplevel):
         from tkinter import filedialog
         _safe_name = "".join(c if c.isalnum() or c in "-_" else "_"
                              for c in rv.name).strip("_") or "RV"
-        init_dir = (str(_RV_LIBRARY_PATH) if _RV_LIBRARY_PATH.exists()
-                    else str(Path.cwd()))
         path = filedialog.asksaveasfilename(
             parent=self,
             title="Save RV to Library",
-            initialdir=init_dir,
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile=f"{_safe_name}.rv.json",
             defaultextension=".json",
             filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
