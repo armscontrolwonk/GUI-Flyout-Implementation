@@ -5192,6 +5192,48 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Scenario save / load (bundle: missile + RV + site + guidance)
     # ------------------------------------------------------------------
+    _CSV_SCENARIO_PREFIX = "# scenario: "
+    _XLSX_SCENARIO_SHEET = "Scenario"
+
+    def _scenario_dict(self) -> dict:
+        """Return _trajectory_metadata() stamped as a scenario record."""
+        data = dict(self._trajectory_metadata())
+        data['_type']    = 'scenario'
+        data['_version'] = 1
+        return data
+
+    @staticmethod
+    def _read_scenario_from_csv(path: Path) -> dict:
+        """Parse the leading '# scenario: <json>' line from a trajectory CSV."""
+        with open(path, encoding="utf-8-sig") as fh:
+            first = fh.readline().strip()
+        prefix = MissileFlyoutApp._CSV_SCENARIO_PREFIX.strip()
+        if not first.startswith(prefix):
+            raise ValueError("CSV does not start with a scenario header line.")
+        return json.loads(first[len(prefix):].strip())
+
+    @staticmethod
+    def _read_scenario_from_xlsx(path: Path) -> dict:
+        """Read the 'Scenario' sheet of a trajectory XLSX into a dict."""
+        from openpyxl import load_workbook
+        wb = load_workbook(path, read_only=True, data_only=True)
+        sheet = MissileFlyoutApp._XLSX_SCENARIO_SHEET
+        if sheet not in wb.sheetnames:
+            raise ValueError(f"XLSX has no '{sheet}' sheet.")
+        ws = wb[sheet]
+        data: dict = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or row[0] is None:
+                continue
+            k, v = row[0], (row[1] if len(row) > 1 else None)
+            if isinstance(v, str) and v[:1] in ("[", "{"):
+                try:
+                    v = json.loads(v)
+                except Exception:
+                    pass
+            data[k] = v
+        return data
+
     def _save_scenario(self):
         """Save the full input state — missile name, RV name, launch site,
         azimuth, and every guidance / glider field — as a .scenario.json."""
@@ -5210,11 +5252,8 @@ class MissileFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        data = dict(self._trajectory_metadata())
-        data['_type']    = 'scenario'
-        data['_version'] = 1
         try:
-            Path(path).write_text(json.dumps(data, indent=2))
+            Path(path).write_text(json.dumps(self._scenario_dict(), indent=2))
         except Exception as exc:
             messagebox.showerror("Save scenario",
                                  f"Could not write file:\n{exc}", parent=self)
@@ -5222,21 +5261,36 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Scenario saved: {os.path.basename(path)}")
 
     def _load_scenario(self):
-        """Load a scenario file (or any JSON / trajectory CSV that carries
-        a scenario-shaped header) and apply it to the GUI."""
+        """Load a scenario from a .scenario.json, a trajectory CSV with an
+        embedded scenario header, or a trajectory XLSX with a Scenario sheet,
+        and apply it to the GUI."""
         from tkinter import filedialog
         path = filedialog.askopenfilename(
             parent=self,
             title="Load scenario",
             initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
-            filetypes=[("Scenario files (*.scenario.json)", "*.json"),
-                       ("JSON files", "*.json"),
-                       ("All files", "*.*")],
+            filetypes=[
+                ("Scenario / trajectory",
+                    ("*.scenario.json", "*.json",
+                     "*.traj.csv", "*.csv",
+                     "*.traj.xlsx", "*.xlsx")),
+                ("Scenario JSON",   ("*.scenario.json", "*.json")),
+                ("Trajectory CSV",  ("*.traj.csv", "*.csv")),
+                ("Trajectory XLSX", ("*.traj.xlsx", "*.xlsx")),
+                ("All files",       "*.*"),
+            ],
         )
         if not path:
             return
+        p   = Path(path)
+        ext = p.suffix.lower()
         try:
-            data = json.loads(Path(path).read_text())
+            if ext == '.csv':
+                data = self._read_scenario_from_csv(p)
+            elif ext == '.xlsx':
+                data = self._read_scenario_from_xlsx(p)
+            else:
+                data = json.loads(p.read_text())
         except Exception as exc:
             messagebox.showerror("Load scenario",
                                  f"Could not read file:\n{exc}", parent=self)
@@ -6988,7 +7042,10 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         r = self._result
-        rows = ["piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km"]
+        rows = [
+            self._CSV_SCENARIO_PREFIX + json.dumps(self._scenario_dict()),
+            "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km",
+        ]
         for i, ti in enumerate(r['t']):
             rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
                         f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
@@ -7044,6 +7101,10 @@ class MissileFlyoutApp(tk.Tk):
                 ws.append([label, float(ti),
                            float(d['lat'][i]), float(d['lon'][i]),
                            float(d['alt'][i]), None, None])
+        scn = wb.create_sheet(self._XLSX_SCENARIO_SHEET)
+        scn.append(["key", "value"])
+        for k, v in self._scenario_dict().items():
+            scn.append([k, json.dumps(v) if isinstance(v, (list, dict)) else v])
         wb.save(path)
         self._status_var.set(f"Trajectory XLSX exported: {path}")
 
