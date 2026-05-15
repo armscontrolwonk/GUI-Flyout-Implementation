@@ -1901,62 +1901,92 @@ def integrate_trajectory(params: MissileParams,
             _te_seg  = t_eval[t_eval >= _t_now]
 
             # Re-define the event each iteration so the flags are fresh.
-            # When a segment restarts from the exact equilibrium crossing
-            # state, v = v_eq ⇒ δ = v²−v_eq² is mathematically 0 but in
-            # practice ≈ 1e-7 (float round-off from scipy's event resolver).
-            # Without protection, scipy's find_active_events treats
-            # g(t₀)=tiny-positive → g(t₁)=negative as a + → − crossing and
-            # fires the terminal event immediately, returning y=[] (Python
-            # list, not ndarray).
+            # Each iteration integrates one full skip: from the previous
+            # apex (or main apogee on the first pass), through the skip
+            # nadir, up to the NEXT skip apex.  The handoff fires at that
+            # apex — not mid-ascent — so the equilibrium-glide EOM starts
+            # from a near-horizontal state (r̂·v ≈ 0) and doesn't produce
+            # a phugoid second arc.
             #
-            # The "armed" flag suppresses triggering until v is clearly above
-            # the equilibrium curve (δ > 0.1·v_eq², i.e., v > 1.05·v_eq).
-            # That threshold is well above float noise but well below the
-            # δ ~ v² typical of the bottom of a phugoid bounce.  While not
-            # armed we return a NEGATIVE sentinel so scipy never sees a
-            # + → − transition right after the segment start.
+            # Two closure flags prevent spurious triggers:
+            #   _apex_armed   – arms only once r̂·v > 100 m/s, so the
+            #                   segment-start apex (where r̂·v ≈ 0) and the
+            #                   early-descent arc never arm the event.
+            #   _below_veq_asc – latches only when v < v_eq WHILE r̂·v > 0
+            #                   (ascending); v can dip below v_eq during
+            #                   descent without triggering the latch, so
+            #                   the function stays positive then and no
+            #                   spurious + → − crossing is detected.
             #
-            # _t_eligible gates out any crossing that occurs during boost or
-            # before RV separation.
-            _eq_armed = [False]
+            # Event function logic:
+            #   • Before armed OR before latch: return 1.0 (positive
+            #     sentinel — scipy never sees a + → − crossing).
+            #   • Once both flags are set: return r̂·v, which is positive
+            #     on the ascending leg, passes through 0 at the apex, then
+            #     goes negative — giving a clean + → − crossing exactly at
+            #     the skip apex.  direction = −1 selects this crossing.
+            #
+            # _t_eligible gates out any firing during boost / pre-separation.
+            _apex_armed    = [False]
+            _below_veq_asc = [False]
 
-            def _eq_upward_xing(t, s, *_,
-                                _b=_beta_ste, _ld=_LD_ste,
-                                _arm=_eq_armed,
-                                _min_t=_t_eligible):
+            def _eq_apex_handoff(t, s, *_,
+                                 _b=_beta_ste, _ld=_LD_ste,
+                                 _arm=_apex_armed,
+                                 _bva=_below_veq_asc,
+                                 _min_t=_t_eligible):
                 if t < _min_t:
-                    return -1.0         # boost / pre-separation — ignore
+                    return 1.0          # boost / pre-separation — ignore
                 _p, _v = s[:3], s[3:]
+                _rmag = float(np.linalg.norm(_p))
+                if _rmag < 1.0:
+                    return 1.0
+                _r_dot = float(np.dot(_p, _v)) / _rmag   # + ascending, 0 at apex
+                _spd   = float(np.linalg.norm(_v))
+                # Arm only when clearly ascending; this prevents the
+                # segment-start apex (r̂·v ≈ 0) from arming immediately.
+                if _r_dot > 100.0:
+                    _arm[0] = True
+                if not _arm[0]:
+                    return 1.0          # not yet ascending — positive sentinel
+                # Compute v_eq at current altitude.
                 _, _, _h = ecef_to_geodetic(_p)
                 _h = max(_h, 0.0)
-                _spd = np.linalg.norm(_v)
                 if _spd < 50.0:
-                    return -1.0 if not _arm[0] else 1.0
+                    return 1.0
                 _, _, _rho, _ = atmosphere(_h)
                 if _rho < 1e-20:
-                    return -1.0 if not _arm[0] else 1.0
-                _rmag  = np.linalg.norm(_p)
+                    return 1.0
                 _gperp = max(float(np.linalg.norm(gravity_ecef(_p)))
                              - _spd * _spd / _rmag, 0.0)
                 _den = _rho * _ld
                 if _den < 1e-30:
-                    return -1.0 if not _arm[0] else 1.0
+                    return 1.0
                 _v_eq_sq = 2.0 * _b * _gperp / _den
-                _delta   = _spd * _spd - _v_eq_sq
-                if _delta > 0.1 * _v_eq_sq:
-                    _arm[0] = True      # vehicle clearly above v_eq — arm
-                if not _arm[0]:
-                    return -1.0         # negative sentinel until armed
-                return _delta
+                # Latch _below_veq_asc only on the ascending leg (r̂·v > 0).
+                # If v drops below v_eq during descent, the latch stays
+                # False and we return the positive sentinel — no spurious
+                # crossing detected.
+                if _spd * _spd <= _v_eq_sq and _r_dot > 0.0:
+                    _bva[0] = True
+                if not _bva[0]:
+                    # v still above v_eq, or hasn't been below v_eq while
+                    # ascending yet — keep function positive so the apex of
+                    # this skip doesn't trigger a handoff.
+                    return abs(_r_dot) + 1.0
+                # Both flags set: return r̂·v.
+                # Ascending → r̂·v > 0; apex → r̂·v = 0; descending → r̂·v < 0.
+                # direction = −1 fires at the + → − crossing, i.e. the apex.
+                return _r_dot
 
-            _eq_upward_xing.terminal  = True
-            _eq_upward_xing.direction = -1   # δ: + → − means ascending through v_eq
+            _eq_apex_handoff.terminal  = True
+            _eq_apex_handoff.direction = -1   # r̂·v: + → − fires at the skip apex
 
             _sol_seg = solve_ivp(
                 _eom, (_t_now, max_time_s), _s_now,
                 method='RK45',
                 t_eval=_te_seg if len(_te_seg) > 0 else None,
-                events=[_hit_ground, _eq_upward_xing],
+                events=[_hit_ground, _eq_apex_handoff],
                 args=eom_args,
                 rtol=_rtol, atol=_atol,
                 dense_output=False, max_step=_maxstep,
@@ -1972,8 +2002,8 @@ def integrate_trajectory(params: MissileParams,
                             _sol_seg.t_events[1][0] < _sol_seg.t_events[0][0]))
 
             if _took_cross:
-                # Append the crossing state so the segment ends exactly on
-                # the equilibrium curve — this gives a smooth joint.
+                # Append the apex handoff state so the segment ends at the
+                # skip apex — this gives a smooth joint with the glide phase.
                 _t_handoff = float(_sol_seg.t_events[1][0])
                 _s_handoff = _sol_seg.y_events[1][0].copy()
                 _tdata     = np.append(_tdata,   _t_handoff)
