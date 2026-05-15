@@ -522,14 +522,18 @@ class _StageFrame(ttk.LabelFrame):
                                         foreground="gray50")
         self._burn_hint_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
-        # Solid motor checkbox (row 9) — coast time moved to advanced pitch panel
-        self._solid_motor_var = tk.BooleanVar(value=False)
-        self._solid_motor_check = ttk.Checkbutton(
-            self, text="Solid rocket motor (cannot be shut off)",
-            variable=self._solid_motor_var,
-            command=self._on_solid_toggled)
-        self._solid_motor_check.grid(
-            row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(2, 4))
+        # Propellant type selector (row 9)
+        _prop_row = ttk.Frame(self)
+        _prop_row.grid(row=9, column=0, columnspan=2,
+                       sticky=tk.W, padx=(6, 2), pady=(2, 4))
+        ttk.Label(_prop_row, text="Propellant:").pack(side=tk.LEFT)
+        self._propellant_var = tk.StringVar(value="Liquid")
+        self._propellant_cb = ttk.Combobox(
+            _prop_row, textvariable=self._propellant_var,
+            values=["Liquid", "Solid"], state="readonly", width=10)
+        self._propellant_cb.pack(side=tk.LEFT, padx=(4, 0))
+        self._propellant_cb.bind("<<ComboboxSelected>>",
+                                 lambda _e: self._on_propellant_changed())
 
         # ── Solid grain profile block (row 10) — hidden until solid is checked ──
         _GRAIN_KEYS   = list(GRAIN_LABELS.keys())
@@ -623,7 +627,7 @@ class _StageFrame(ttk.LabelFrame):
             isp       = float(self._isp.get())
             if prop <= 0 or thrust_kn <= 0 or isp <= 0:
                 raise ValueError
-            if getattr(self, '_solid_motor_var', None) and self._solid_motor_var.get():
+            if getattr(self, '_propellant_var', None) and self._propellant_var.get() == "Solid":
                 key  = self._get_grain_key()
                 fill = grain_fill_factor(key) if key else 1.0
                 thrust_avg_kn = (thrust_kn * fill
@@ -638,9 +642,9 @@ class _StageFrame(ttk.LabelFrame):
         except (ValueError, ZeroDivisionError):
             self._burn_var.set("—")
 
-    def _on_solid_toggled(self):
+    def _on_propellant_changed(self):
         """Show/hide grain frame; relabel thrust field for peak/avg context."""
-        is_solid = self._solid_motor_var.get()
+        is_solid = self._propellant_var.get() == "Solid"
         if is_solid:
             self._solid_frame.grid()
             self._thrust_lbl.config(text=self._thrust_label_text())
@@ -685,7 +689,7 @@ class _StageFrame(ttk.LabelFrame):
 
     def _update_solid_display(self, *_):
         """Update the alternate-thrust label and fill-factor warning (solid mode only)."""
-        if not (hasattr(self, '_grain_cb') and self._solid_motor_var.get()):
+        if not (hasattr(self, '_grain_cb') and self._propellant_var.get() == "Solid"):
             return
         key = self._get_grain_key()
         fill = grain_fill_factor(key) if key else 1.0
@@ -960,13 +964,12 @@ class _StageFrame(ttk.LabelFrame):
     def set_readonly(self, readonly: bool):
         """Set all editable entry fields to readonly (for Forden reference missiles)."""
         state = "readonly" if readonly else "normal"
-        cb_state = "disabled" if readonly else "normal"
-        self._solid_motor_check.config(state=cb_state)
+        self._propellant_cb.config(state="disabled" if readonly else "readonly")
         self._grain_cb.config(state="disabled" if readonly else "readonly")
         for entry in self._iter_entries(self):
-            # Burn entry: readonly unless solid motor is enabled (managed by _on_solid_toggled)
+            # Burn entry: readonly unless solid motor is enabled (managed by _on_propellant_changed)
             if entry is self._burn_entry:
-                if not readonly and self._solid_motor_var.get():
+                if not readonly and self._propellant_var.get() == "Solid":
                     entry.config(state="normal")
                 else:
                     entry.config(state="readonly")
@@ -1000,7 +1003,7 @@ class _StageFrame(ttk.LabelFrame):
         except ValueError:
             raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
         result["coast"] = 0.0   # coast is now set in the advanced pitch panel
-        result["solid_motor"] = bool(self._solid_motor_var.get())
+        result["solid_motor"] = (self._propellant_var.get() == "Solid")
 
         # Solid-motor grain fields
         result["grain_type"]    = ""
@@ -1041,7 +1044,7 @@ class _StageFrame(ttk.LabelFrame):
         self._isp         .set(str(d["isp"]))
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
         # _burn_var is updated automatically by traces on Isp/thrust/masses
-        self._solid_motor_var.set(bool(d.get("solid_motor", False)))
+        self._propellant_var.set("Solid" if d.get("solid_motor", False) else "Liquid")
 
         # Grain profile fields
         grain_key = d.get("grain_type", "")
@@ -1067,8 +1070,8 @@ class _StageFrame(ttk.LabelFrame):
 
         # Trigger UI state update — burn time will be recomputed from
         # Isp / prop / (peak × fill_factor or average) thrust by _recompute_burn.
-        if self._solid_motor_var.get():
-            self._on_solid_toggled()
+        if self._propellant_var.get() == "Solid":
+            self._on_propellant_changed()
             self._on_grain_changed()
             self._on_thrust_mode_changed()
 
