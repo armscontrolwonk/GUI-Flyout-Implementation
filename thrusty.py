@@ -3355,6 +3355,13 @@ class MissileFlyoutApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Thrusty — A Rocket Performance Calculator")
+        # Disable macOS window-tabbing so the system doesn't inject
+        # Hide/Show Tab Bar into the View menu (Thrusty is single-window).
+        try:
+            self.tk.call('::tk::unsupported::MacWindowStyle',
+                         'tabbingMode', self._w, 'disallowed')
+        except tk.TclError:
+            pass   # non-macOS platforms ignore this silently
         self.minsize(900, 700)
         # Size to 92 % of the available screen, capped at 1600 × 1050.
         self.update_idletasks()
