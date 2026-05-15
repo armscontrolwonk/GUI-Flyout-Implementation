@@ -3455,9 +3455,6 @@ class MissileFlyoutApp(tk.Tk):
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
-        analysis_menu.add_command(label="HGV Footprint…",
-                                  command=self._open_footprint)
-        analysis_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
@@ -3484,15 +3481,17 @@ class MissileFlyoutApp(tk.Tk):
         plots_menu.add_command(label="Export Figures…", command=self._export_figures)
         menubar.add_cascade(label="Plots", menu=plots_menu)
 
-        # Cartography — map exports and NOTAM overlays (kept separate from
-        # File so the latter stays focused on save/load of inputs and
-        # trajectory outputs).
+        # Cartography — anything that produces or overlays a map: map
+        # exports, NOTAM overlays, and the map-based analysis tools.
         carto_menu = tk.Menu(menubar, tearoff=0)
-        carto_menu.add_command(label="Open Folium Map…",     command=self._export_folium)
-        carto_menu.add_command(label="Export Cartopy Map…",  command=self._export_cartopy)
+        carto_menu.add_command(label="Open Folium Map…",         command=self._export_folium)
+        carto_menu.add_command(label="Export Cartopy Map…",      command=self._export_cartopy)
         carto_menu.add_separator()
-        carto_menu.add_command(label="Load NOTAM overlay…",  command=self._load_notam_overlay)
-        carto_menu.add_command(label="Clear NOTAM overlay",  command=self._clear_notam_overlay)
+        carto_menu.add_command(label="HGV Footprint…",           command=self._open_footprint)
+        carto_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
+        carto_menu.add_separator()
+        carto_menu.add_command(label="Load NOTAM overlay…",      command=self._load_notam_overlay)
+        carto_menu.add_command(label="Clear NOTAM overlay",      command=self._clear_notam_overlay)
         menubar.add_cascade(label="Cartography", menu=carto_menu)
 
         view_menu = tk.Menu(menubar, tearoff=0)
@@ -4205,9 +4204,15 @@ class MissileFlyoutApp(tk.Tk):
         # The standard matplotlib toolbar is kept around for its underlying
         # actions (home / pan / zoom / save) but hidden — the Plots menu
         # drives those same actions, which keeps the chrome out of the way.
-        self._plot_toolbar = NavigationToolbar2Tk(self._canvas, parent)
+        # pack_toolbar=False (mpl ≥ 3.3) builds a headless toolbar with
+        # clean event wiring; pack_forget() after construction is fragile.
+        try:
+            self._plot_toolbar = NavigationToolbar2Tk(
+                self._canvas, parent, pack_toolbar=False)
+        except TypeError:
+            self._plot_toolbar = NavigationToolbar2Tk(self._canvas, parent)
+            self._plot_toolbar.pack_forget()
         self._plot_toolbar.update()
-        self._plot_toolbar.pack_forget()
 
         # Initialise axes with placeholder labels
         self._init_axes()
