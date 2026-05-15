@@ -263,6 +263,11 @@ class RVParams:
     #   "skip_glide":              no analytical pull-up; the vehicle re-
     #                              enters with whatever γ it had and the
     #                              natural EOM produces a phugoid.
+    #   "skip_to_equilibrium":     starts as skip_glide; after N upward
+    #                              crossings of the equilibrium curve the
+    #                              guidance switches one-way to
+    #                              equilibrium_glide.  N is set by
+    #                              glider_skip_count (default 1).
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
@@ -312,6 +317,9 @@ class RVParams:
     # to disable Phase 3 (effectively reverts to Tracy when paired with
     # Acton mode).
     glider_beta_entry_kg_m2: float = 0.0
+    # Number of phugoid upward crossings of the equilibrium curve before the
+    # one-way handoff to equilibrium glide.  Only used by skip_to_equilibrium.
+    glider_skip_count:      int   = 1
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -334,6 +342,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_dive_target_lon_deg':   rv.glider_dive_target_lon_deg,
         'glider_dive_target_radius_km': rv.glider_dive_target_radius_km,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
+        'glider_skip_count':     rv.glider_skip_count,
         'separation_mode':       rv.separation_mode,
     }
 
@@ -366,6 +375,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_dive_target_lon_deg=float(d.get('glider_dive_target_lon_deg', 0.0)),
         glider_dive_target_radius_km=float(d.get('glider_dive_target_radius_km', 0.0)),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
+        glider_skip_count=int(d.get('glider_skip_count', 1)),
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
     )
 
