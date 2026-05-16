@@ -737,7 +737,18 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 _cos_b = abs(float(np.cos(bank_rad)))
                                 if _cos_b < 0.05:
                                     _cos_b = 0.05
-                                _L_total = min(rv_mass * _g_perp / _cos_b, _L_max)
+                                # β-based aerodynamic cap (same as constant_LD):
+                                # lift ≤ (q/β)·m·L/D.  This cap decreases as v
+                                # drops, so when v < v_eq the vehicle descends to
+                                # denser air rather than zooming up.  Without it,
+                                # the analytic m·g_perp term grows as v decreases
+                                # (g_perp = g − v²/r increases), driving a zoom
+                                # climb instead of a descending equilibrium glide.
+                                _drag_beta  = (q / float(_erv.beta_kg_m2)) * rv_mass
+                                _lift_beta_cap = _drag_beta * _erv.glider_LD
+                                _L_total = min(rv_mass * _g_perp / _cos_b,
+                                              _lift_beta_cap,
+                                              _L_max)
                                 if q > 1.0:
                                     _C_L = min(_L_total / (q * _Aref), _C_L_lim)
                                     _C_D = _CD0 + _kp * _C_L * _C_L
