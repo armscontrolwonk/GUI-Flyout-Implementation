@@ -7742,12 +7742,24 @@ class MissileFlyoutApp(tk.Tk):
             if is_debris:
                 return (('empty impact' in e or 'shroud impact' in e)
                         and 'impact_lat' in ms)
-            return 'ignition' in e or 'impact' in e
+            # Dots for ground events only: launch ignition and impacts.
+            # "Ignition" (no boosters, t=0) and "Launch" (strap-on boosters,
+            # t=0) are on the pad.  "Core ignition" (t=delay, airborne) and
+            # "Stage N ignition" (in flight) get tick marks instead.
+            _launch_ignition = (e == 'launch' or
+                                ('ignition' in e and
+                                 'stage' not in e and
+                                 'core'  not in e))
+            return _launch_ignition or 'impact' in e
 
         def _show_tick(e, is_debris):
             if is_debris:
                 return False
-            return 'ignition' not in e and 'impact' not in e
+            return not (e == 'launch' or
+                        'impact' in e or
+                        ('ignition' in e and
+                         'stage' not in e and
+                         'core'  not in e))
 
         def _mk_pos(ms):
             if ms.get('is_debris') and 'impact_lat' in ms:
