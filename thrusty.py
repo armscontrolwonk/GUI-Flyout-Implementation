@@ -403,17 +403,24 @@ def _bind_typeahead(cb):
         cb.after(150, _do_commit_silent)
 
     def _do_commit_silent():
+        # Wrapped in a broad try/except so that any TclError raised while
+        # the combobox's parent window is in a modal-dialog state on macOS
+        # (Python 3.11) does not propagate to tkinter's CallWrapper.__call__
+        # and trigger a spurious UnboundLocalError crash there.
         try:
-            focused = cb.focus_get()
+            try:
+                focused = cb.focus_get()
+            except Exception:
+                focused = None
+            if focused is _lb[0]:
+                return   # user is navigating the popup — let _pick handle it
+            _dismiss()
+            cb['values'] = _all
+            m = _best(cb.get())
+            if m:
+                cb.set(m)
         except Exception:
-            focused = None
-        if focused is _lb[0]:
-            return   # user is navigating the popup — let _pick handle it
-        _dismiss()
-        cb['values'] = _all
-        m = _best(cb.get())
-        if m:
-            cb.set(m)
+            pass
 
     def _on_selected(event=None):
         cb['values'] = _all
@@ -5331,22 +5338,25 @@ class MissileFlyoutApp(tk.Tk):
         """Load a scenario from a .scenario.json, a trajectory CSV with an
         embedded scenario header, or a trajectory XLSX with a Scenario sheet,
         and apply it to the GUI."""
-        from tkinter import filedialog
-        path = filedialog.askopenfilename(
-            parent=self,
-            title="Load scenario",
-            initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
-            filetypes=[
-                ("Scenario / trajectory",
-                    ("*.scenario.json", "*.json",
-                     "*.traj.csv", "*.csv",
-                     "*.traj.xlsx", "*.xlsx")),
-                ("Scenario JSON",   ("*.scenario.json", "*.json")),
-                ("Trajectory CSV",  ("*.traj.csv", "*.csv")),
-                ("Trajectory XLSX", ("*.traj.xlsx", "*.xlsx")),
-                ("All files",       "*.*"),
-            ],
-        )
+        try:
+            from tkinter import filedialog
+            path = filedialog.askopenfilename(
+                parent=self,
+                title="Load scenario",
+                initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
+                filetypes=[
+                    ("Scenario / trajectory",
+                        "*.json *.csv *.xlsx"),
+                    ("Scenario JSON",   "*.json"),
+                    ("Trajectory CSV",  "*.csv"),
+                    ("Trajectory XLSX", "*.xlsx"),
+                    ("All files",       "*.*"),
+                ],
+            )
+        except Exception as exc:
+            messagebox.showerror("Load scenario",
+                                 f"Could not open file dialog:\n{exc}", parent=self)
+            return
         if not path:
             return
         p   = Path(path)
