@@ -7742,21 +7742,12 @@ class MissileFlyoutApp(tk.Tk):
             if is_debris:
                 return (('empty impact' in e or 'shroud impact' in e)
                         and 'impact_lat' in ms)
-            return (('ignition' in e and 'stage' not in e) or
-                    ('impact'   in e and 'empty' not in e
-                                     and 'shroud' not in e) or
-                    'pull-up start' in e or
-                    'glide start'   in e or
-                    'peak heating'  in e or
-                    'max-g'         in e or
-                    'terminal dive' in e)
+            return 'ignition' in e or 'impact' in e
 
         def _show_tick(e, is_debris):
             if is_debris:
                 return False
-            return ('apogee' in e or 're-entry' in e or 'burnout' in e or
-                    ('ignition' in e and 'stage' in e) or 'jettison' in e or
-                    'bank' in e)
+            return 'ignition' not in e and 'impact' not in e
 
         def _mk_pos(ms):
             if ms.get('is_debris') and 'impact_lat' in ms:
