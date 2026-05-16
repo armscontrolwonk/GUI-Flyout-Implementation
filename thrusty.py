@@ -3692,17 +3692,22 @@ class MissileFlyoutApp(tk.Tk):
 
         self._guidance_var = tk.StringVar(value="pitch_program")
         gmode_frame = ttk.Frame(gf)
-        gmode_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W,
+        gmode_frame.grid(row=0, column=0, columnspan=2, sticky=tk.EW,
                          padx=6, pady=(4, 2))
-        ttk.Radiobutton(gmode_frame, text="Pitch Program",
-                        variable=self._guidance_var, value="pitch_program",
-                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
-        ttk.Radiobutton(gmode_frame, text="Gravity Turn",
-                        variable=self._guidance_var, value="true_gravity_turn",
-                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
-        ttk.Radiobutton(gmode_frame, text="Orbital Insertion",
-                        variable=self._guidance_var, value="orbital_insertion",
-                        command=self._on_guidance_changed).pack(side=tk.LEFT, padx=4)
+        ttk.Label(gmode_frame, text="Mode:").pack(side=tk.LEFT, padx=(0, 4))
+        self._guidance_cb = ttk.Combobox(
+            gmode_frame,
+            values=["Simple pitch profile",
+                    "Advanced pitch profile",
+                    "Gravity turn",
+                    "Orbital insertion"],
+            state="readonly",
+            width=22,
+        )
+        self._guidance_cb.set("Simple pitch profile")
+        self._guidance_cb.pack(side=tk.LEFT)
+        self._guidance_cb.bind("<<ComboboxSelected>>",
+                               lambda _e: self._on_guidance_changed())
 
         self._launch_el_lbl = ttk.Label(gf, text="Launch elev.:")
         self._launch_el_lbl.grid(row=1, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -4495,6 +4500,9 @@ class MissileFlyoutApp(tk.Tk):
             self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
 
+        self._sync_ascent_mode_display(
+            self._guidance_var.get(), self._adv_pitch_var.get())
+
     # ------------------------------------------------------------------
     # Advanced per-stage pitch program
     # ------------------------------------------------------------------
@@ -4902,8 +4910,34 @@ class MissileFlyoutApp(tk.Tk):
         self._query_alt_entry.config(state=state)
 
     def _on_guidance_changed(self):
-        """Called when the user clicks a guidance radio button."""
+        """Called when the user selects an ascent mode from the dropdown."""
+        display = self._guidance_cb.get()
+        if display == "Simple pitch profile":
+            self._guidance_var.set("pitch_program")
+            self._adv_pitch_var.set(False)
+            self._on_adv_pitch_toggled()
+        elif display == "Advanced pitch profile":
+            self._guidance_var.set("pitch_program")
+            self._adv_pitch_var.set(True)
+            self._on_adv_pitch_toggled()
+        elif display == "Gravity turn":
+            self._guidance_var.set("true_gravity_turn")
+        elif display == "Orbital insertion":
+            self._guidance_var.set("orbital_insertion")
         self._update_guidance_labels(self._guidance_var.get())
+
+    def _sync_ascent_mode_display(self, guidance: str, adv_pitch: bool):
+        """Keep the ascent-mode combobox in sync with backend state."""
+        if guidance == "pitch_program":
+            display = "Advanced pitch profile" if adv_pitch else "Simple pitch profile"
+        elif guidance == "true_gravity_turn":
+            display = "Gravity turn"
+        elif guidance == "orbital_insertion":
+            display = "Orbital insertion"
+        else:
+            display = "Simple pitch profile"
+        if hasattr(self, '_guidance_cb'):
+            self._guidance_cb.set(display)
 
     # ------------------------------------------------------------------
     def _update_guidance_labels(self, guidance: str):
@@ -4940,14 +4974,18 @@ class MissileFlyoutApp(tk.Tk):
             self._orbit_alt_frame.grid_forget()
             self._plan_orbit_btn.grid_forget()
 
-        # Advanced pitch checkbox — only meaningful for turn-based modes
+        # Advanced pitch checkbox — shown for gravity_turn/orbital_insertion;
+        # for pitch_program the dropdown ("Simple"/"Advanced") handles it.
         if guidance in ("pitch_program", "true_gravity_turn", "orbital_insertion"):
-            self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
-                                      sticky=tk.W, padx=8, pady=(0, 2))
+            if guidance == "pitch_program":
+                self._adv_pitch_chk.grid_forget()
+            else:
+                self._adv_pitch_chk.grid(row=7, column=0, columnspan=2,
+                                          sticky=tk.W, padx=8, pady=(0, 2))
             if self._adv_pitch_var.get():
                 self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
                                             sticky=tk.EW, padx=0, pady=(0, 4))
-            # Yaw checkbox — also only for turn-based modes
+            # Yaw checkbox — shown for all ascent modes
             self._adv_yaw_chk.grid(row=9, column=0, columnspan=2,
                                     sticky=tk.W, padx=8, pady=(0, 2))
             if self._adv_yaw_var.get():
@@ -7081,6 +7119,7 @@ class MissileFlyoutApp(tk.Tk):
         adv = bool(meta.get('adv_pitch', False))
         self._adv_pitch_var.set(adv)
         self._on_adv_pitch_toggled()
+        self._sync_ascent_mode_display(guidance, adv)
         overrides = meta.get('stage_overrides', [])
         if adv and overrides and self._stage_rows:
             for row, ov in zip(self._stage_rows, overrides):
