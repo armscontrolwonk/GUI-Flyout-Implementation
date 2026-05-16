@@ -4949,18 +4949,21 @@ class MissileFlyoutApp(tk.Tk):
             else:
                 self._loft_angle_lbl.config(text="Burnout Angle:")
                 self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
-            self._loft_angle_lbl.grid(
-                row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-            self._loft_angle_frame.grid(
-                row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._gt_turn_start_lbl.grid(
-                row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-            self._gt_turn_start_frame.grid(
-                row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-            self._gt_turn_stop_lbl.grid(
-                row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-            self._gt_turn_stop_frame.grid(
-                row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+            # Only restore basic fields when the advanced per-stage panel is
+            # not active; otherwise _on_adv_pitch_toggled already hid them.
+            if not self._adv_pitch_var.get():
+                self._loft_angle_lbl.grid(
+                    row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+                self._loft_angle_frame.grid(
+                    row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+                self._gt_turn_start_lbl.grid(
+                    row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+                self._gt_turn_start_frame.grid(
+                    row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+                self._gt_turn_stop_lbl.grid(
+                    row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+                self._gt_turn_stop_frame.grid(
+                    row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         if guidance == "orbital_insertion":
             self._orbit_alt_lbl.grid(
                 row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
