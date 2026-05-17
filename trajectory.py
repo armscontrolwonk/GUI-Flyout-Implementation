@@ -2626,8 +2626,14 @@ def integrate_trajectory(params: MissileParams,
             if len(_q_dot) and np.max(_q_dot) > 0:
                 _ipk = int(np.argmax(_q_dot))
                 _row = _milestone(t_arr[_re_idx + _ipk])
+                # Radiative-equilibrium stagnation temperature:
+                # T_eq = (q̇ / (σ·ε))^(1/4).  Validates against public-source
+                # claims about peak RV nose temperatures.
+                _eps  = float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85)
+                _T_eq = (_q_dot[_ipk] / (5.670374419e-8 * _eps)) ** 0.25
                 _row['event'] = (f"Peak heating "
-                                 f"({_q_dot[_ipk]/1e6:.1f} MW/m²)")
+                                 f"({_q_dot[_ipk]/1e6:.1f} MW/m², "
+                                 f"T_eq ≈ {_T_eq:.0f} K)")
                 _insert_chrono(_row)
 
             # Max structural load factor n = |a_proper| / g0, where

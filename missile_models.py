@@ -321,6 +321,11 @@ class RVParams:
     # one-way handoff to equilibrium glide.  Only used by skip_to_equilibrium.
     glider_skip_count:      int   = 1
 
+    # Surface emissivity used for radiative-equilibrium temperature at the
+    # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 is typical for
+    # oxidised carbon-carbon / RCC; ablators run 0.8–0.9.
+    emissivity:             float = 0.85
+
 
 def rv_to_dict(rv: RVParams) -> dict:
     return {
@@ -344,6 +349,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
         'glider_skip_count':     rv.glider_skip_count,
         'separation_mode':       rv.separation_mode,
+        'emissivity':            rv.emissivity,
     }
 
 
@@ -377,6 +383,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
         glider_skip_count=int(d.get('glider_skip_count', 1)),
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
+        emissivity=float(d.get('emissivity', 0.85)),
     )
 
 
