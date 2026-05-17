@@ -4,7 +4,7 @@
   "beta_kg_m2": 15000,
   "shape": "cone",
   "diameter_m": 0.58,
-  "length_m": 2.43,
+  "length_m": 1.5,
   "nose_radius_m": 0.02,
   "glider_enabled": true,
   "glider_LD": 2.0,
