@@ -326,8 +326,13 @@ class RVParams:
     glider_skip_count:      int   = 1
 
     # Surface emissivity used for radiative-equilibrium temperature at the
-    # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 is typical for
-    # oxidised carbon-carbon / RCC; ablators run 0.8–0.9.
+    # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 is a defensible
+    # engineering default for oxidised carbon-carbon / RCC.  Shuttle design
+    # data (Williams & Curry, NASA RP-1289, 1992) show ε strongly
+    # temperature-dependent: 0.89 at 2000°F dropping to 0.54 at 3040°F.
+    # More recent arc-jet measurements (Ohlhorst et al., NTRS 20070031768,
+    # 2007) report 0.88–0.91 at 2700–3000°F, suggesting the design data
+    # are conservative at high temperatures.
     emissivity:             float = 0.85
 
 
