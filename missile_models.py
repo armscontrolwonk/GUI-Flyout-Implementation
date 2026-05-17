@@ -327,12 +327,25 @@ class RVParams:
 
     # Surface emissivity used for radiative-equilibrium temperature at the
     # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 is a defensible
-    # engineering default for oxidised carbon-carbon / RCC.  Shuttle design
-    # data (Williams & Curry, NASA RP-1289, 1992) show ε strongly
-    # temperature-dependent: 0.89 at 2000°F dropping to 0.54 at 3040°F.
-    # More recent arc-jet measurements (Ohlhorst et al., NTRS 20070031768,
-    # 2007) report 0.88–0.91 at 2700–3000°F, suggesting the design data
-    # are conservative at high temperatures.
+    # engineering default for oxidised carbon-carbon / RCC, picking the
+    # upper-mid range of the temperature-dependent Shuttle design data.
+    #
+    # Verified values from Williams & Curry, "Thermal Protection Materials:
+    # Thermophysical Property Data," NASA RP-1289, December 1992 (Table
+    # for RCC, attributed to Space Shuttle Program Thermodynamic Design
+    # Data Book SD73-SH-0226, Rockwell International, 1981):
+    #     ε = 0.78 at   0°F   (256 K)
+    #     ε = 0.87 at 1000°F  (811 K)
+    #     ε = 0.90 at 1500°F (1089 K)  ← peak
+    #     ε = 0.89 at 2000°F (1367 K)
+    #     ε = 0.83 at 2500°F (1644 K)
+    #     ε = 0.75 at 2800°F (1811 K)  ← max tabulated
+    # Ohlhorst et al., NASA NTRS 20070031768, 2007, report arc-jet
+    # measurements of 0.88–0.91 at 2700–3000°F, suggesting design data are
+    # conservative at high T.  For peak-heating T_eq in the 2500–3800 K
+    # range RCC is above its working temperature anyway (surface ablates,
+    # no longer at equilibrium); the constant-ε model is a lower bound on
+    # the actual stagnation temperature there.
     emissivity:             float = 0.85
 
 
