@@ -232,6 +232,10 @@ class RVParams:
     shape:      str   = ""    # key from NOSE_SHAPES; "" → Forden Cd fallback
     diameter_m: float = 0.0
     length_m:   float = 0.0
+    # Nose-tip radius of curvature (m), used for Sutton-Graves stagnation
+    # heating q̇ ∝ 1/√R_N.  Default 0.05 m (5 cm) matches the conventional
+    # placeholder used in preliminary heating analysis.
+    nose_radius_m: float = 0.05
 
     # Separation mode — does the terminal vehicle separate from the missile
     # body, or IS the missile body the terminal vehicle?
@@ -335,6 +339,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'shape':                 rv.shape,
         'diameter_m':            rv.diameter_m,
         'length_m':              rv.length_m,
+        'nose_radius_m':         rv.nose_radius_m,
         'glider_enabled':        rv.glider_enabled,
         'glider_LD':             rv.glider_LD,
         'glider_guidance':       rv.glider_guidance,
@@ -369,6 +374,7 @@ def rv_from_dict(d: dict) -> RVParams:
         shape=str(d.get('shape', '')),
         diameter_m=float(d.get('diameter_m', 0.0)),
         length_m=float(d.get('length_m', 0.0)),
+        nose_radius_m=float(d.get('nose_radius_m', 0.05)),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_guidance=_g,

@@ -2201,6 +2201,12 @@ class RVEditorDialog(tk.Toplevel):
             value=f"{rv.length_m:.2f}" if rv else "2.0")
         self._len_entry = _entry(6, self._len_var, width=10)
 
+        # Nose-tip radius — drives Sutton-Graves stagnation heating (∝ 1/√RN).
+        _lbl(7, "Nose radius (m):")
+        self._nose_var = tk.StringVar(
+            value=f"{rv.nose_radius_m:.3f}" if rv else "0.050")
+        self._nose_entry = _entry(7, self._nose_var, width=10)
+
         # Sync the read-only state of mass/diameter/length to separation mode
         self._update_separation_state()
 
@@ -2290,7 +2296,14 @@ class RVEditorDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=theta_var, width=10).grid(row=2, column=1, sticky=tk.W)
 
         _lbl(3, "Nose radius / base radius:")
-        eps_var  = tk.StringVar(value="0.0")
+        try:
+            _d_eps = float(self._dia_var.get())
+            _rn_eps = float(self._nose_var.get())
+            _eps_dflt = (f"{2.0 * _rn_eps / _d_eps:.3f}"
+                         if _d_eps > 0 and _rn_eps >= 0 else "0.0")
+        except (ValueError, AttributeError):
+            _eps_dflt = "0.0"
+        eps_var  = tk.StringVar(value=_eps_dflt)
         eps_row  = ttk.Frame(frm)
         eps_row.grid(row=3, column=1, sticky=tk.W)
         ttk.Entry(eps_row, textvariable=eps_var, width=10).pack(side=tk.LEFT)
@@ -2352,6 +2365,15 @@ class RVEditorDialog(tk.Toplevel):
         def _use():
             if _result[0] is not None and _result[0] != float('inf'):
                 self._beta_var.set(f"{_result[0]:.0f}")
+                # Also stamp the absolute nose-tip radius (eps × base radius)
+                # back into the editor so heating uses the same geometry.
+                try:
+                    _dia = float(dia_var.get())
+                    _ep  = float(eps_var.get())
+                    if _dia > 0 and _ep >= 0:
+                        self._nose_var.set(f"{_ep * _dia / 2.0:.3f}")
+                except (ValueError, AttributeError):
+                    pass
             dlg.destroy()
 
         ttk.Button(bf, text="Use this value", command=_use).pack(side=tk.LEFT)
@@ -2371,10 +2393,11 @@ class RVEditorDialog(tk.Toplevel):
                             if v == _sl), "cone")
             dia     = float(self._dia_var.get())
             length  = float(self._len_var.get())
+            nose_rn = float(self._nose_var.get())
         except ValueError:
             messagebox.showerror(
                 "Invalid input",
-                "Mass, β, diameter, and length must be numbers.",
+                "Mass, β, diameter, length, and nose radius must be numbers.",
                 parent=self)
             return None
 
@@ -2396,6 +2419,7 @@ class RVEditorDialog(tk.Toplevel):
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
+            nose_radius_m=nose_rn,
             glider_enabled=glider_on,
             glider_LD=LD,
             glider_pullup_g_max=g_max,
