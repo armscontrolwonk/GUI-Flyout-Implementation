@@ -257,7 +257,7 @@ class RVParams:
     #                              h_eq; the schema's t₂ and t₃ coincide
     #                              (no separate direct-re-entry phase).
     #                              Uses one β (= β_L for glide).
-    #   "equilibrium_glide_acton": Acton 2021 three-phase model.  After
+    #   "equilibrium_glide_acton": Acton 2015 three-phase model.  After
     #                              piercing at 100 km the vehicle enters a
     #                              direct-re-entry segment with β_S drag
     #                              and L/D = 0 until alt = h_3 (Acton
@@ -313,7 +313,7 @@ class RVParams:
     glider_dive_target_lat_deg:    float = 0.0
     glider_dive_target_lon_deg:    float = 0.0
     glider_dive_target_radius_km:  float = 0.0     # 0 = disabled
-    # Acton 2021 Phase-3 (direct re-entry) ballistic coefficient β_S.
+    # Acton 2015 Phase-3 (direct re-entry) ballistic coefficient β_S.
     # During Phase 3 the glider holds a high-AoA orientation: flat lower
     # surface to airflow, large drag, L/D = 0.  Acton's HTV-2 fit gives
     # β_S ≈ 7 kg/m² (Table 3, p. 206).  Used only by the
@@ -1618,7 +1618,7 @@ def _minotaur_4_htv2():
         shroud_jettison_alt_km=50.0,
         shroud_diameter_m=2.34,
         shroud_length_m=4.0,
-        # HTV-2 glide vehicle — Acton 2021 Table 3 fit values.
+        # HTV-2 glide vehicle — Acton 2015 Table 3 fit values.
         payload_kg=1000.0,
         rv_separates=True,
         stage2=stage2,

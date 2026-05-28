@@ -97,7 +97,7 @@ _HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
 
 # Tracy & Wright 2020 (sgs28tracy.pdf) boost-glide model.
 #
-# The pull-up is treated analytically following Acton 2021 (Eq. 11):
+# The pull-up is treated analytically following Acton 2015 (Eq. 11):
 # at the moment the vehicle pierces the upper atmosphere on descent,
 # the state is reset to equilibrium-glide initial conditions:
 #     v_4  = v_3 · exp(−(L/D)·θ_2)        (Acton Eq. 11)
@@ -932,7 +932,7 @@ def _make_phase3_end_event(h_3_target_m: float):
     """
     Acton-mode event: descending crossing of h_3, the altitude at which
     the high-AoA direct-re-entry orientation transitions to glide
-    orientation.  ρ(h_3)/β_S = ρ(h_eq)/β_L  (Acton 2021 Eq. 8).
+    orientation.  ρ(h_3)/β_S = ρ(h_eq)/β_L  (Acton 2015 Eq. 8).
     """
     def _evt(t, state, *args, **kwargs):
         _, _, alt = ecef_to_geodetic(state[:3])
@@ -946,7 +946,7 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
                       LD: float, beta_L: float,
                       n_samples: int = 12) -> tuple:
     """
-    Generate samples along Acton's analytical pull-up arc (Acton 2021,
+    Generate samples along Acton's analytical pull-up arc (Acton 2015,
     Eqs. 11, 13–17) plus Tracy's equilibrium-glide initial condition
     (Tracy 2020, Eq. 7).
 
@@ -1089,7 +1089,7 @@ def _analytical_equil_glide(
         t_offset: float = 0.0,
 ) -> tuple:
     """
-    Tracy 2020 / Acton 2021 Phase-5 equilibrium glide, closed-form.
+    Tracy 2020 / Acton 2015 Phase-5 equilibrium glide, closed-form.
 
     Uses the isothermal exponential atmosphere (Acton's fit, valid 30–100 km):
         ρ(h) = ρ_0 · exp(−h / H)
@@ -1498,7 +1498,7 @@ def integrate_trajectory(params: MissileParams,
     # the pierce point.  Two flavours:
     #   • equilibrium_glide        — Tracy 2020.  Two-phase: ballistic +
     #                                pierce → analytical arc → glide.
-    #   • equilibrium_glide_acton  — Acton 2021 three-phase.  Adds a
+    #   • equilibrium_glide_acton  — Acton 2015 three-phase.  Adds a
     #                                direct-re-entry segment with β_S
     #                                drag and zero lift between the
     #                                100 km pierce point (t₂) and the
