@@ -209,6 +209,18 @@ The Forden Mach table (Figure 1, piecewise linear):
 `Mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5]`,
 `Cd   = [0.20, 0.20, 0.27, 0.27, 0.20, 0.20]`.
 
+**Strap-on booster drag** is computed independently in `booster_drag_vector`
+(`missile_models.py:2205`) as n × Cd_booster × q × πr² and added to the
+core-body drag vector.  The presence of boosters does **not** trigger any
+correction to the core's base drag.  Physically, a booster cluster attached
+to the rear of the core alters the base-pressure and wake-suction development,
+which would reduce or eliminate base drag on the core aft section while the
+boosters are attached.  This interaction is not modelled; core drag and booster
+drag are treated as fully independent.  The simplification is conservative
+(slightly over-predicts total drag at low Mach numbers) but should be noted
+when interpreting boost-phase range or burnout-velocity results for missiles
+with large strap-on boosters.
+
 ### Guidance laws
 
 **Gravity Turn** (`gravity_turn`) — The missile launches at
