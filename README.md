@@ -20,6 +20,7 @@ Al Hussein, No-dong, and Taepodong-I.
 | `atmosphere.py` | ~97 | COESA 1976 standard atmosphere (0–86 km), dynamic pressure |
 | `gravity.py` | ~62 | WGS-84 J2 gravity vector in ECEF |
 | `slv_performance.py` | ~287 | Algebraic SLV payload-to-orbit estimation (Schilling/Townsend) |
+| `mass_estimator.py` | ~600 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
 
 ---
 
@@ -86,6 +87,13 @@ tabbed notebook**.
   Newtonian hypersonic Cd chart (Ref (4) Ch. 5).
 - **Thrust Estimator** — back-calculates engine thrust from observed rocket
   acceleration: `T = m · √(a_h² + (a_v + g)²)`.
+- **Dry Mass Estimator** (Analysis menu) — estimates a stage's dry/inert mass
+  from its geometry, propellant and thrust using component-level Wilhite-school
+  mass estimating relationships (Akin/UMD) and aggregate relations (Pietrobon
+  hydrolox; structural coefficient; Zandbergen solid-stage regressions), and
+  reports how far the missile's stated burnout mass diverges from each. Pulls
+  per-stage parameters from the selected missile; works standalone too
+  (`python mass_estimator.py --demo`). Full method notes in `MASS_ESTIMATOR.md`.
 
 ---
 

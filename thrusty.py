@@ -38,6 +38,7 @@ from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
 from slv_performance import schilling_performance
+import mass_estimator as mest
 
 # ---------------------------------------------------------------------------
 # Country border map data (Natural Earth 110m, bundled GeoJSON)
@@ -3403,6 +3404,253 @@ class FootprintDialog(tk.Toplevel):
             webbrowser.open(f"file://{self._map_path}")
 
 
+class MassEstimatorDialog(tk.Toplevel):
+    """Estimate a stage's dry (inert) mass from parameters and report how far
+    the missile's stated burnout mass diverges from known mass relationships.
+
+    Wraps mass_estimator.py: component-level Wilhite-school MERs (Akin/UMD)
+    plus aggregate relations (Pietrobon hydrolox, structural coefficient,
+    Zandbergen solid-stage regressions).  Stage parameters are prefilled from
+    the currently selected missile; the user picks the propellant combination
+    (liquid) or casing material (solid) and any unknowns, then recomputes.
+    """
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._app = app
+        self.title("Dry Mass Estimator")
+        self.resizable(True, True)
+
+        name = app._missile_var.get()
+        try:
+            self._params = get_missile(name)
+        except Exception as exc:                       # pragma: no cover
+            messagebox.showerror("Dry Mass Estimator",
+                                 f"Could not load missile {name!r}:\n{exc}",
+                                 parent=app)
+            self.destroy()
+            return
+        self._stages = self._decompose(self._params)
+
+        self._build(name)
+        self._load_stage(0)
+        self._compute()
+        app._center_dialog(self)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _decompose(p):
+        """Per-stage (fueled, dry, prop, thrust, geometry) for a missile.
+
+        Mirrors MissileDialog._prefill: mass_initial is cumulative, so per-stage
+        fueled mass is recovered by differencing adjacent stages and stripping
+        payload / shroud; the stage's own dry (structural) mass is
+        fueled − propellant, independent of the possibly-cumulative mass_final.
+        """
+        payload     = p.payload_kg
+        shroud_mass = p.shroud_mass_kg
+        out, node, idx = [], p, 0
+        while node is not None:
+            nxt      = node.stage2
+            is_first = (idx == 0)
+            is_last  = (nxt is None)
+            if is_last and is_first:
+                fueled = node.mass_initial - payload - shroud_mass
+            elif is_last:
+                fueled = node.mass_initial - payload
+            elif is_first:
+                fueled = node.mass_initial - shroud_mass - nxt.mass_initial
+            else:
+                fueled = node.mass_initial - nxt.mass_initial
+            out.append({
+                "prop":   node.mass_propellant,
+                "dry":    fueled - node.mass_propellant,
+                "fueled": fueled,
+                "thrust": node.thrust_N,
+                "dia":    node.diameter_m,
+                "length": node.length_m,
+                "solid":  bool(getattr(node, "solid_motor", False)
+                               or getattr(node, "grain_type", "")),
+            })
+            node, idx = nxt, idx + 1
+        return out
+
+    # ------------------------------------------------------------------
+    def _build(self, name):
+        pad = dict(padx=6, pady=3)
+        top = ttk.Frame(self, padding=10)
+        top.pack(fill=tk.X)
+        top.columnconfigure(1, weight=1)
+        top.columnconfigure(3, weight=1)
+
+        ttk.Label(top, text="Missile:").grid(row=0, column=0, sticky=tk.W, **pad)
+        ttk.Label(top, text=name, foreground="navy").grid(
+            row=0, column=1, sticky=tk.W, **pad)
+
+        ttk.Label(top, text="Stage:").grid(row=0, column=2, sticky=tk.E, **pad)
+        self._stage_var = tk.StringVar()
+        stages = [f"Stage {i+1}" for i in range(len(self._stages))]
+        self._stage_cb = ttk.Combobox(top, textvariable=self._stage_var,
+                                      values=stages, state="readonly", width=10)
+        self._stage_cb.grid(row=0, column=3, sticky=tk.W, **pad)
+        self._stage_cb.current(0)
+        self._stage_cb.bind("<<ComboboxSelected>>",
+                            lambda _e: (self._load_stage(self._stage_cb.current()),
+                                        self._compute()))
+
+        # Propulsion type
+        ttk.Label(top, text="Propulsion:").grid(row=1, column=0, sticky=tk.W, **pad)
+        self._type_var = tk.StringVar(value="Liquid")
+        tfrm = ttk.Frame(top)
+        tfrm.grid(row=1, column=1, columnspan=3, sticky=tk.W, **pad)
+        for t in ("Liquid", "Solid"):
+            ttk.Radiobutton(tfrm, text=t, value=t, variable=self._type_var,
+                            command=self._on_type).pack(side=tk.LEFT, padx=(0, 10))
+
+        # Common parameter grid
+        grid = ttk.LabelFrame(self, text="Stage parameters", padding=8)
+        grid.pack(fill=tk.X, padx=10, pady=(0, 6))
+        for c in (1, 3):
+            grid.columnconfigure(c, weight=1)
+
+        def _entry(parent, label, r, c, default="", width=12, unit=""):
+            ttk.Label(parent, text=label).grid(row=r, column=c, sticky=tk.W, **pad)
+            var = tk.StringVar(value=default)
+            ent = ttk.Entry(parent, textvariable=var, width=width)
+            ent.grid(row=r, column=c + 1, sticky=tk.W, **pad)
+            if unit:
+                ttk.Label(parent, text=unit).grid(row=r, column=c + 2,
+                                                  sticky=tk.W)
+            return var
+
+        self._prop_mass_var = _entry(grid, "Propellant mass:", 0, 0, unit="kg")
+        self._thrust_var    = _entry(grid, "Total thrust:",    0, 3, unit="kN")
+        self._dia_var       = _entry(grid, "Diameter:",        1, 0, unit="m")
+        self._len_var       = _entry(grid, "Length:",          1, 3, unit="m")
+        self._gross_var     = _entry(grid, "Gross (wet) mass:",2, 0, unit="kg")
+        self._pc_var        = _entry(grid, "Chamber pressure:",2, 3,
+                                     default="6.9", unit="MPa")
+        self._stated_var    = _entry(grid, "Stated dry mass:", 3, 0, unit="kg")
+
+        # Liquid-specific controls
+        self._liq_frm = ttk.Frame(grid)
+        self._liq_frm.grid(row=4, column=0, columnspan=6, sticky=tk.W + tk.E,
+                           pady=(4, 0))
+        ttk.Label(self._liq_frm, text="Propellant:").pack(side=tk.LEFT, padx=(0, 4))
+        self._combo_var = tk.StringVar(value="LOX/RP1")
+        ttk.Combobox(self._liq_frm, textvariable=self._combo_var,
+                     values=mest.available_propellants(), state="readonly",
+                     width=12).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm, text="# engines:").pack(side=tk.LEFT, padx=(0, 4))
+        self._neng_var = tk.StringVar(value="1")
+        ttk.Entry(self._liq_frm, textvariable=self._neng_var, width=5).pack(
+            side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm, text="Expansion ε:").pack(side=tk.LEFT, padx=(0, 4))
+        self._exp_var = tk.StringVar(value="30")
+        ttk.Entry(self._liq_frm, textvariable=self._exp_var, width=6).pack(
+            side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm, text="Fairing area:").pack(side=tk.LEFT, padx=(0, 4))
+        self._fair_var = tk.StringVar(value="0")
+        ttk.Entry(self._liq_frm, textvariable=self._fair_var, width=7).pack(
+            side=tk.LEFT)
+        ttk.Label(self._liq_frm, text="m²").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Solid-specific controls
+        self._sol_frm = ttk.Frame(grid)
+        self._sol_frm.grid(row=4, column=0, columnspan=6, sticky=tk.W,
+                           pady=(4, 0))
+        ttk.Label(self._sol_frm, text="Casing:").pack(side=tk.LEFT, padx=(0, 4))
+        self._casing_var = tk.StringVar(value="steel")
+        ttk.Combobox(self._sol_frm, textvariable=self._casing_var,
+                     values=["steel", "composite"], state="readonly",
+                     width=10).pack(side=tk.LEFT, padx=(0, 12))
+
+        # Buttons
+        btns = ttk.Frame(self, padding=(10, 0))
+        btns.pack(fill=tk.X)
+        ttk.Button(btns, text="Compute", command=self._compute).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Close", command=self.destroy).pack(
+            side=tk.RIGHT)
+
+        # Output
+        outfrm = ttk.Frame(self, padding=(10, 6))
+        outfrm.pack(fill=tk.BOTH, expand=True)
+        self._out = tk.Text(outfrm, width=86, height=26, wrap="none",
+                            font=("Courier", 9))
+        vsb = ttk.Scrollbar(outfrm, orient=tk.VERTICAL, command=self._out.yview)
+        self._out.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._out.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    # ------------------------------------------------------------------
+    def _on_type(self):
+        solid = (self._type_var.get() == "Solid")
+        # Show only the relevant sub-frame (both share the same grid cell).
+        self._sol_frm.grid() if solid else self._sol_frm.grid_remove()
+        self._liq_frm.grid_remove() if solid else self._liq_frm.grid()
+
+    def _load_stage(self, idx):
+        sd = self._stages[idx]
+        self._type_var.set("Solid" if sd["solid"] else "Liquid")
+        self._prop_mass_var.set(f"{sd['prop']:.0f}")
+        self._thrust_var.set(f"{sd['thrust']/1e3:.1f}")    # kN
+        self._dia_var.set(f"{sd['dia']:.3f}")
+        self._len_var.set(f"{sd['length']:.2f}")
+        self._gross_var.set(f"{sd['fueled']:.0f}")
+        self._stated_var.set(f"{sd['dry']:.0f}")
+        self._on_type()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _f(var, default=0.0):
+        try:
+            return float(var.get())
+        except (ValueError, tk.TclError):
+            return default
+
+    def _compute(self):
+        try:
+            prop_mass = self._f(self._prop_mass_var)
+            thrust_n  = self._f(self._thrust_var) * 1e3      # kN → N
+            dia       = self._f(self._dia_var)
+            length    = self._f(self._len_var)
+            gross     = self._f(self._gross_var)
+            pc_pa     = self._f(self._pc_var, 6.9) * 1e6     # MPa → Pa
+            stated    = self._f(self._stated_var)
+
+            if self._type_var.get() == "Solid":
+                inp = mest.SolidStageInputs(
+                    prop_mass_kg=prop_mass, thrust_n=thrust_n,
+                    chamber_pressure_pa=pc_pa, casing=self._casing_var.get(),
+                    diameter_m=dia, length_m=length, gross_mass_kg=gross)
+                estimates, report = mest.analyse_solid(inp, stated)
+            else:
+                inp = mest.LiquidStageInputs(
+                    propellant=self._combo_var.get(), prop_mass_kg=prop_mass,
+                    thrust_n=thrust_n, n_engines=int(self._f(self._neng_var, 1)),
+                    expansion_ratio=self._f(self._exp_var, 30.0),
+                    chamber_pressure_pa=pc_pa, diameter_m=dia, length_m=length,
+                    gross_mass_kg=gross,
+                    fairing_area_m2=self._f(self._fair_var))
+                estimates, report = mest.analyse_liquid(inp, stated)
+
+            lines = []
+            for e in estimates:
+                lines.append(e.table())
+                lines.append("")
+            if report:
+                lines.append("Divergence of stated dry mass vs. estimates:")
+                lines.append(mest.format_divergence(report))
+            text = "\n".join(lines)
+        except Exception as exc:                            # pragma: no cover
+            text = f"Could not compute estimate:\n{exc}"
+
+        self._out.configure(state=tk.NORMAL)
+        self._out.delete("1.0", tk.END)
+        self._out.insert("1.0", text)
+        self._out.configure(state=tk.DISABLED)
+
+
 # ---------------------------------------------------------------------------
 # Main application window
 # ---------------------------------------------------------------------------
@@ -3490,6 +3738,7 @@ class MissileFlyoutApp(tk.Tk):
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
+        analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         # Plots menu mirrors the matplotlib navigation toolbar so the icon
@@ -6414,6 +6663,9 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_footprint(self):
         FootprintDialog(self)
+
+    def _open_mass_estimator(self):
+        MassEstimatorDialog(self)
 
     def _open_range_ring(self):
         RangeRingDialog(self)
