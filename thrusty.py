@@ -3569,6 +3569,25 @@ class MassEstimatorDialog(tk.Toplevel):
             side=tk.LEFT)
         ttk.Label(self._liq_frm, text="m²").pack(side=tk.LEFT, padx=(2, 0))
 
+        # Second liquid row: physics-based (GT-STRESS) tank sizing.
+        self._liq_frm2 = ttk.Frame(grid)
+        self._liq_frm2.grid(row=5, column=0, columnspan=6, sticky=tk.W,
+                            pady=(2, 0))
+        self._physics_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self._liq_frm2,
+                        text="Physics tank (GT-STRESS: load + material)",
+                        variable=self._physics_var,
+                        command=self._compute).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm2, text="Lateral g:").pack(side=tk.LEFT, padx=(0, 4))
+        self._latg_var = tk.StringVar(value="0.5")
+        ttk.Entry(self._liq_frm2, textvariable=self._latg_var, width=6).pack(
+            side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm2, text="Ullage:").pack(side=tk.LEFT, padx=(0, 4))
+        self._ullage_var = tk.StringVar(value="0.25")
+        ttk.Entry(self._liq_frm2, textvariable=self._ullage_var, width=6).pack(
+            side=tk.LEFT)
+        ttk.Label(self._liq_frm2, text="MPa").pack(side=tk.LEFT, padx=(2, 0))
+
         # Solid-specific controls
         self._sol_frm = ttk.Frame(grid)
         self._sol_frm.grid(row=4, column=0, columnspan=6, sticky=tk.W,
@@ -3601,7 +3620,8 @@ class MassEstimatorDialog(tk.Toplevel):
         solid = (self._type_var.get() == "Solid")
         # Show only the relevant sub-frame (both share the same grid cell).
         self._sol_frm.grid() if solid else self._sol_frm.grid_remove()
-        self._liq_frm.grid_remove() if solid else self._liq_frm.grid()
+        for f in (self._liq_frm, self._liq_frm2):
+            f.grid_remove() if solid else f.grid()
 
     def _load_stage(self, idx):
         sd = self._stages[idx]
@@ -3652,7 +3672,10 @@ class MassEstimatorDialog(tk.Toplevel):
                     gross_mass_kg=gross,
                     fairing_area_m2=self._f(self._fair_var),
                     tank_material=self._tankmat_var.get(),
-                    include_avionics=avionics, vehicle_gross_kg=glow)
+                    include_avionics=avionics, vehicle_gross_kg=glow,
+                    physics_tank=bool(self._physics_var.get()),
+                    lateral_g=self._f(self._latg_var, 0.5),
+                    ullage_pa=self._f(self._ullage_var, 0.25) * 1e6)
                 estimates, report = mest.analyse_liquid(inp, stated)
 
             lines = []

@@ -118,6 +118,32 @@ def test_avionics_scope():
     _close(av, mest.avionics_mass(500_000), rel=0.001, msg="avionics on GLOW")
 
 
+def test_physics_tank():
+    # Sanity magnitude: aluminium kerolox tank, ~few mm wall, hundreds–few t.
+    m, det = mest.tank_structural_mass(
+        180_000, 1140.0, 3.81, 20.0, thrust_n=3.8e6, gross_mass_kg=284_000,
+        lateral_g=0.5, material="aluminium")
+    assert 0.5 < det["t_mm"] < 30, det
+    assert 200 < m < 6000, m
+    # Higher lateral load → heavier (bending drives thickness).
+    m_hi, _ = mest.tank_structural_mass(
+        180_000, 1140.0, 3.81, 20.0, thrust_n=3.8e6, gross_mass_kg=284_000,
+        lateral_g=3.0, material="aluminium")
+    assert m_hi >= m
+    # Composite lighter than steel for the same tank.
+    mc, _ = mest.tank_structural_mass(180_000, 1140.0, 3.81, 20.0, 3.8e6,
+                                      284_000, material="composite")
+    ms, _ = mest.tank_structural_mass(180_000, 1140.0, 3.81, 20.0, 3.8e6,
+                                      284_000, material="steel")
+    assert mc < ms
+    # Physics-tank path runs end to end and labels its tanks.
+    inp = mest.LiquidStageInputs(propellant="LOX/RP1", prop_mass_kg=284_000,
+                                 thrust_n=3.8e6, diameter_m=3.81, length_m=32,
+                                 physics_tank=True)
+    names = [c.name for c in mest.estimate_liquid_stage(inp).components]
+    assert any("GT-STRESS" in n for n in names), names
+
+
 def test_epsilon_in_divergence():
     est = [mest.MassEstimate("x", 1000.0)]
     rep = mest.divergence_report(1000.0, est, prop_mass_kg=9000.0)
