@@ -77,8 +77,17 @@ toolset.
 | Thrust structure | `M = 2.55e-4·T` | T N total |
 | Gimbals / TVC | `M = 237.8·(T/P₀)^0.9375` | T N, P₀ Pa |
 | Fairing / shroud | `M = 4.95·A^1.15` | A m² |
-| Avionics | `M = 10·M₀^0.361` | M₀ kg gross |
-| Wiring | `M = 1.058·√M₀·L^0.25` | M₀ kg, L m |
+| Avionics | `M = 10·M₀^0.361` | M₀ = vehicle GLOW |
+| Wiring | `M = 1.058·√M₀·L^0.25` | M₀ stage gross, L m |
+
+**Avionics is one package per vehicle.** Guidance avionics is the flight
+computer / IMU suite, carried on the **upper stage only** (never on lower
+boosters and never on the bus / PBV), and is sized on the **vehicle gross
+liftoff mass** (the size of vehicle it guides), not the stage it rides on. In
+the Thrusty dialog the "carries guidance avionics" box defaults **on** for the
+last stage and **off** for boosters; the CLI exposes `--no-avionics`. Wiring,
+by contrast, is present on every stage and is sized on the stage's own gross
+mass.
 
 Tank volumes are obtained by splitting the total propellant load with a
 representative mixture ratio (O/F by mass) and dividing by stored density;

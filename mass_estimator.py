@@ -448,7 +448,8 @@ class LiquidStageInputs:
     length_m: float = 0.0            # stage length (for wiring; 0 → skip)
     gross_mass_kg: float = 0.0       # stage gross mass (for avionics/wiring)
     fairing_area_m2: float = 0.0     # payload fairing area (0 → none)
-    include_avionics: bool = True
+    include_avionics: bool = True    # True only on the stage carrying the IU
+    vehicle_gross_kg: float = 0.0    # vehicle GLOW for avionics sizing (0 → stage)
     of_ratio: float = 0.0            # override O/F (0 → combo default)
     tank_material: str = "aluminium"  # aluminium | al-li | composite | steel
 
@@ -468,6 +469,7 @@ class SolidStageInputs:
     length_m: float = 0.0
     gross_mass_kg: float = 0.0
     include_avionics: bool = True
+    vehicle_gross_kg: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -531,15 +533,19 @@ def estimate_liquid_stage(inp: LiquidStageInputs) -> MassEstimate:
         est.add("Fairing / shroud", fairing_mass(inp.fairing_area_m2),
                 basis=f"A={inp.fairing_area_m2:,.1f} m²", source="Akin")
 
-    # Avionics + wiring (need a gross-mass reference).
+    # Wiring is present on every stage (sized on the stage's own gross mass).
+    stage_m0 = inp.gross_mass_kg if inp.gross_mass_kg > 0 else \
+        inp.prop_mass_kg + est.total_kg
+    if inp.length_m > 0:
+        est.add("Wiring", wiring_mass(stage_m0, inp.length_m),
+                basis=f"L={inp.length_m:.1f} m", source="Akin")
+    # Avionics is the guidance package — one per vehicle, carried on the upper
+    # stage (never on the bus).  Sized on vehicle GLOW when supplied, since the
+    # package scales with the vehicle it guides, not the stage it rides on.
     if inp.include_avionics:
-        m0 = inp.gross_mass_kg if inp.gross_mass_kg > 0 else \
-            inp.prop_mass_kg + est.total_kg
-        est.add("Avionics", avionics_mass(m0),
-                basis=f"M0={m0/1e3:,.0f} t", source="Akin")
-        if inp.length_m > 0:
-            est.add("Wiring", wiring_mass(m0, inp.length_m),
-                    basis=f"L={inp.length_m:.1f} m", source="Akin")
+        veh_m0 = inp.vehicle_gross_kg if inp.vehicle_gross_kg > 0 else stage_m0
+        est.add("Avionics", avionics_mass(veh_m0),
+                basis=f"GLOW={veh_m0/1e3:,.0f} t", source="Akin")
 
     est.notes.append(f"O/F={of:g}; ρ_ox={ox.density:.0f}, ρ_fu={fu.density:.0f}")
     # Engine cross-check note.
@@ -571,10 +577,11 @@ def estimate_solid_stage(inp: SolidStageInputs) -> MassEstimate:
                     basis=f"Pc={inp.chamber_pressure_pa/1e6:.1f} MPa",
                     source="Akin")
     if inp.include_avionics:
-        m0 = inp.gross_mass_kg if inp.gross_mass_kg > 0 else \
-            inp.prop_mass_kg + est.total_kg
-        est.add("Avionics", avionics_mass(m0),
-                basis=f"M0={m0/1e3:,.0f} t", source="Akin")
+        veh_m0 = inp.vehicle_gross_kg if inp.vehicle_gross_kg > 0 else \
+            (inp.gross_mass_kg if inp.gross_mass_kg > 0
+             else inp.prop_mass_kg + est.total_kg)
+        est.add("Avionics", avionics_mass(veh_m0),
+                basis=f"GLOW={veh_m0/1e3:,.0f} t", source="Akin")
 
     # Physics-based pressure-vessel case (reported as a note, not summed, to
     # avoid double counting with the Akin case relation).
@@ -819,6 +826,10 @@ def main(argv=None):
     pl.add_argument("--length", type=float, default=0.0, help="m")
     pl.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     pl.add_argument("--fairing-area", type=float, default=0.0, help="m²")
+    pl.add_argument("--no-avionics", action="store_true",
+                    help="stage does not carry guidance avionics (booster)")
+    pl.add_argument("--vehicle-gross", type=float, default=0.0,
+                    help="vehicle GLOW (kg) for avionics sizing; 0 → stage gross")
     pl.add_argument("--stated-dry", type=float, default=0.0, help="kg")
 
     ps = sub.add_parser("solid", help="solid rocket stage")
@@ -831,6 +842,10 @@ def main(argv=None):
                     help="optional propellant mass fraction extra estimate")
     ps.add_argument("--diameter", type=float, default=0.0, help="m")
     ps.add_argument("--gross-mass", type=float, default=0.0, help="kg")
+    ps.add_argument("--no-avionics", action="store_true",
+                    help="stage does not carry guidance avionics (booster)")
+    ps.add_argument("--vehicle-gross", type=float, default=0.0,
+                    help="vehicle GLOW (kg) for avionics sizing; 0 → stage gross")
     ps.add_argument("--stated-dry", type=float, default=0.0, help="kg")
 
     args = p.parse_args(argv)
@@ -846,7 +861,9 @@ def main(argv=None):
             expansion_ratio=args.expansion, chamber_pressure_pa=args.pc,
             diameter_m=args.diameter, length_m=args.length,
             gross_mass_kg=args.gross_mass, fairing_area_m2=args.fairing_area,
-            tank_material=args.tank_material)
+            tank_material=args.tank_material,
+            include_avionics=not args.no_avionics,
+            vehicle_gross_kg=args.vehicle_gross)
         est, rep = analyse_liquid(inp, args.stated_dry)
         _print_analysis(est, rep)
     elif args.cmd == "solid":
@@ -854,7 +871,9 @@ def main(argv=None):
             prop_mass_kg=args.prop_mass, thrust_n=args.thrust,
             chamber_pressure_pa=args.pc, casing=args.casing,
             mass_fraction=args.zeta,
-            diameter_m=args.diameter, gross_mass_kg=args.gross_mass)
+            diameter_m=args.diameter, gross_mass_kg=args.gross_mass,
+            include_avionics=not args.no_avionics,
+            vehicle_gross_kg=args.vehicle_gross)
         est, rep = analyse_solid(inp, args.stated_dry)
         _print_analysis(est, rep)
     return 0
