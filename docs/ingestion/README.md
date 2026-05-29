@@ -21,8 +21,9 @@ missile models. **Design only — none of this is wired into the app yet.**
 ## Documents
 | File | What it covers |
 |------|----------------|
-| `missile.schema.json` | Canonical model format (JSON Schema 2020-12). Required vs optional fields, `stages` array, payload/rv/booster/shroud blocks, `source`, `provenance`, `completeness`. |
-| `estimators.md` | The resolution ladder data: derivations, Isp-by-propellant, class defaults, aero/β fallbacks, sanity checks, confidence scoring, worked example. This is how "fix during ingest" actually works. |
+| `missile.schema.json` | Canonical model format (JSON Schema 2020-12). Required vs optional fields, `stages` array, payload (`terminal_mode`: reentry/orbital/suborbital) / rv / booster / shroud blocks, `source`, `provenance`, `completeness`. |
+| `rv.schema.json` | Independently-loadable reentry-vehicle / glide-body format (`rv_library/*.rv.json`). `rv_kind` discriminator (ballistic / marv_body / glider / decoy) drives required-vs-inherited fields. Satellites are NOT here — they're an orbital payload on the missile. |
+| `estimators.md` | The resolution ladder data: derivations, Isp-by-propellant, class defaults, aero/β fallbacks, RV pass (§6b), orbital-payload handling (§6c), sanity checks, confidence scoring, worked example. This is how "fix during ingest" actually works. |
 | `spreadsheet-and-sheets.md` | Spreadsheet redesign (keep the detailed workbook, add a long-format catalog sheet) + three-level Google Sheets integration plan. |
 
 ## Key design decisions captured

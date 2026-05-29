@@ -133,6 +133,59 @@ report with a VERIFY flag; info is logged only.
 
 ---
 
+## 6b. Reentry vehicles (separate resolver pass)
+
+RVs are resolved independently (they're shared via `rv_library`). Required: `name`,
+`rv_kind`, `beta_kg_m2`. The `rv_kind` discriminator controls which fields are
+required vs. inherited — getting this right is what prevents false "missing data"
+flags.
+
+| `rv_kind` | also required | inherited (DO NOT flag/estimate) |
+|-----------|---------------|----------------------------------|
+| `ballistic` | `mass_kg` | — |
+| `marv_body` | maneuver props | `mass_kg`, `diameter_m`, `length_m` (from missile last-stage burnout via `effective_rv()`) |
+| `glider` | `glider_LD`, `glider_guidance` (+`glider_beta_entry_kg_m2` if Acton) | — |
+| `decoy` | `mass_kg` | — |
+
+β resolution ladder:
+
+| Rung | Method | Notes | Confidence |
+|------|--------|-------|-----------:|
+| given | — | always preferred | 1.0 |
+| derived | `beta_from_geometry` | β = m/(C_d·A); hypersonic C_d-by-shape is uncertain | 0.4 ← VERIFY |
+| estimated | `rv_kind_typical` | ballistic 30 000–100 000; marv lower; glider 5 000–15 000; decoy 100–1 000 kg/m² | 0.4 ← VERIFY |
+
+Heating defaults (`nose_radius_m`=0.05, `emissivity`=0.85) and `glider_*` defaults
+(`pullup_g_max`=10, `terminal_alt_km`=30, `aero_model`=constant_LD) are filled
+**silently** (confidence ≥ 0.7) — they have sound physical defaults.
+
+## 6c. Satellites / orbital payloads (NOT RVs)
+
+A payload with `terminal_mode: orbital` does not reenter and has **no RV**.
+`effective_rv()` returns `None` by design. The resolver behaves asymmetrically:
+
+- **Skip the entire RV pass.** Absence of `beta_kg_m2`, `rv`, heating fields is
+  *correct, not a gap* — never flag it, never estimate it, never let it lower
+  `completeness`.
+- **Required instead:** `payload.payload_kg` (satellite mass) and a final stage with
+  `guidance: orbital_insertion`. `target_orbit_alt_km` optional (omit → report the
+  naturally achieved orbit; solid final stages run to burnout regardless).
+- **Default fill:** `terminal_mode` ← `orbital` when `missile_class='slv'`, else
+  `reentry`.
+
+Orbital sanity checks (replace the impact-side checks):
+
+| Check | Severity | Condition |
+|-------|----------|-----------|
+| reaches orbit | **error** | achieved ΔV well short of orbital velocity (~7.8 km/s LEO) / perigee ≤ 0 |
+| "doesn't reenter" | warn | perigee < ~200 km **or** `orbital_lifetime_estimate` below horizon → "decays within N orbits, not a stable orbit" |
+| eccentricity | info | flag highly elliptical vs intended circular |
+| target met | info | achieved orbit vs `target_orbit_alt_km` |
+
+Note: every LEO orbit eventually decays. "Doesn't reenter" within Thrusty's scope
+means the run **terminates at insertion and reports orbital elements + a decay
+lifetime estimate**, rather than propagating to an impact point.
+
 ## 7. Worked example (what the resolver emits)
 
 Source doc gives, for a notional 2-stage solid SRBM: name, class=`srbm`, both
