@@ -85,6 +85,16 @@ representative mixture ratio (O/F by mass) and dividing by stored density;
 cryogenic insulation is added only for cryogenic fluids. Tank surface area uses
 a sphere, or a cylinder-with-hemispherical-domes when a body diameter is given.
 
+**Tank material** (`tank_material`) scales the tank MER — the tanks are the
+material-sensitive part; engines, thrust structure and avionics are not scaled:
+
+| Material | Factor | Basis |
+|---|---|---|
+| Aluminium (Al 2219) | 1.00 | Akin baseline |
+| Al-Li 2195 | 0.74 | Pietrobon (−26%, from specific-yield-strength ratio) |
+| Composite (Gr/Ep) | 0.45 | Rohrschneider/SSDL 1970→2015 tank coefficients (≈0.43–0.47×) |
+| Steel | 1.60 | thin-gauge / pressure-fed tankage; rare on pump-fed stages |
+
 > **Note on the engine MER.** Akin's lecture *table* lists 373 kg per engine in
 > the worked SSTO example, but his own printed formula gives ≈ 641 kg at the
 > example's 324.9 kN / ε = 30 — and that agrees with the independent Zandbergen
@@ -150,6 +160,18 @@ preferred. (This matches the "doesn't work very well yet" caveat on the
 component-level solid approach in the source spreadsheet.)
 
 ---
+
+## Reading the result as a structural coefficient
+
+When a stated dry mass is supplied, the divergence report leads with the
+**structural coefficient** ε = dry / (dry + propellant) implied by that mass
+(and λ = dry/propellant for reference), then lists each method's *estimated* ε
+next to the percentage divergence and verdict. This lets you judge a design in
+the units you think in — "ε = 0.068; a composite stage of this size estimates
+ε ≈ 0.065, so the stated mass is reasonable (+6 %)" — and, because tank material
+moves the estimated ε, directly answer *is this dry mass plausible for this
+material?* For dense-propellant and small stages ε runs higher; for large
+hydrolox stages it falls (the Pietrobon `mp^0.848` size dependence).
 
 ## Accuracy and caveats
 

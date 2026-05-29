@@ -85,6 +85,30 @@ def test_mass_fraction():
     _close(mp / (mp + mi), zeta, rel=0.001, msg="zeta round-trip")
 
 
+def test_tank_material_scaling():
+    base = mest.LiquidStageInputs(propellant="LOX/RP1", prop_mass_kg=300_000,
+                                  thrust_n=7e6, n_engines=9, diameter_m=3.7)
+    al = mest.estimate_liquid_stage(base).total_kg
+    base.tank_material = "composite"
+    comp = mest.estimate_liquid_stage(base).total_kg
+    base.tank_material = "steel"
+    steel = mest.estimate_liquid_stage(base).total_kg
+    # Composite tanks lighten the stage; steel tanks make it heavier.
+    assert comp < al < steel, f"{comp} < {al} < {steel}"
+    # Factor sanity: composite tank coeff is 0.45× aluminium.
+    _close(mest.material_tank_factor("composite"), 0.45, rel=0.001)
+    _close(mest.material_tank_factor("aluminum"), 1.0, rel=0.001)
+
+
+def test_epsilon_in_divergence():
+    est = [mest.MassEstimate("x", 1000.0)]
+    rep = mest.divergence_report(1000.0, est, prop_mass_kg=9000.0)
+    # dry=1000, prop=9000 → ε = 1000/10000 = 0.10
+    _close(rep[0].eps_stated, 0.10, rel=0.001, msg="eps stated")
+    _close(rep[0].eps_estimate, 0.10, rel=0.001, msg="eps estimate")
+    assert "ε =" in mest.format_divergence(rep)
+
+
 def test_divergence_signs():
     est = [mest.MassEstimate("x", 1000.0)]
     rep = mest.divergence_report(1200.0, est)
