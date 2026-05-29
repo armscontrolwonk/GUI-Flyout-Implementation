@@ -178,11 +178,35 @@ def tank_mass_by_volume(volume_m3: float, family: str) -> float:
     """Propellant tank mass from tank volume.
 
     Akin ENAE 791:  M_LH2 = 9.09·V ;  M_other = 12.16·V   (V in m³, M in kg).
+    The Akin coefficients are for aluminium / Al-Li launch-vehicle tankage;
+    apply MATERIAL_TANK_FACTOR for other materials.
     """
     if volume_m3 <= 0:
         return 0.0
     coeff = 9.09 if family == "LH2" else 12.16
     return coeff * volume_m3
+
+
+# Tank-wall material multiplier on the (aluminium-baselined) Akin tank MER.
+# Only the tanks are material-sensitive; engines, thrust structure and avionics
+# are essentially material-independent and are not scaled.
+#   aluminium  1.00  — Akin baseline (Al 2219 class)
+#   al-li      0.74  — Al-Li 2195 is ~26% lighter for equal strength
+#                      (Pietrobon 2009, from specific-yield-strength ratio)
+#   composite  0.45  — graphite/epoxy tankage ≈0.43–0.47× aluminium
+#                      (Rohrschneider/SSDL 1970→2015 tank coefficients)
+#   steel      1.60  — heavier thin-gauge / pressure-fed tankage; rare on
+#                      pump-fed stages (Rohrschneider high-pressure steel MER)
+MATERIAL_TANK_FACTOR = {
+    "aluminium": 1.00, "aluminum": 1.00,
+    "al-li": 0.74, "alli": 0.74,
+    "composite": 0.45,
+    "steel": 1.60,
+}
+
+
+def material_tank_factor(material: str) -> float:
+    return MATERIAL_TANK_FACTOR.get((material or "aluminium").lower(), 1.0)
 
 
 def tank_mass_by_propmass(prop_mass_kg: float, family: str) -> float:
@@ -426,6 +450,7 @@ class LiquidStageInputs:
     fairing_area_m2: float = 0.0     # payload fairing area (0 → none)
     include_avionics: bool = True
     of_ratio: float = 0.0            # override O/F (0 → combo default)
+    tank_material: str = "aluminium"  # aluminium | al-li | composite | steel
 
 
 @dataclass
@@ -465,13 +490,14 @@ def estimate_liquid_stage(inp: LiquidStageInputs) -> MassEstimate:
     v_ox = m_ox / ox.density
     v_fu = m_fu / fu.density
 
-    # Tanks (Akin volume relation).
+    # Tanks (Akin volume relation, scaled by wall material).
+    mat = material_tank_factor(inp.tank_material)
     est.add(f"Oxidiser tank ({combo.oxidizer})",
-            tank_mass_by_volume(v_ox, ox.tank_family),
-            basis=f"V={v_ox:,.1f} m³", source="Akin")
+            mat * tank_mass_by_volume(v_ox, ox.tank_family),
+            basis=f"V={v_ox:,.1f} m³, {inp.tank_material}", source="Akin")
     est.add(f"Fuel tank ({combo.fuel})",
-            tank_mass_by_volume(v_fu, fu.tank_family),
-            basis=f"V={v_fu:,.1f} m³", source="Akin")
+            mat * tank_mass_by_volume(v_fu, fu.tank_family),
+            basis=f"V={v_fu:,.1f} m³, {inp.tank_material}", source="Akin")
 
     # Cryogenic insulation (only for cryo fluids).
     if ox.cryo:
@@ -616,6 +642,22 @@ class Divergence:
     method: str
     estimate_kg: float
     stated_kg: float
+    prop_mass_kg: float = 0.0     # enables structural-coefficient reporting
+
+    @staticmethod
+    def _eps(dry, prop):
+        tot = dry + prop
+        return (dry / tot) if tot > 0 else float("nan")
+
+    @property
+    def eps_stated(self) -> float:
+        """Structural coefficient ε = dry/(dry+prop) implied by the stated mass."""
+        return self._eps(self.stated_kg, self.prop_mass_kg)
+
+    @property
+    def eps_estimate(self) -> float:
+        """ε implied by this method's estimated dry mass."""
+        return self._eps(self.estimate_kg, self.prop_mass_kg)
 
     @property
     def delta_kg(self) -> float:
@@ -642,15 +684,36 @@ class Divergence:
 
 
 def divergence_report(stated_dry_kg: float,
-                      estimates: list[MassEstimate]) -> list[Divergence]:
-    """Compare a stated dry mass against every estimate's total."""
-    return [Divergence(e.method, e.total_kg, stated_dry_kg) for e in estimates]
+                      estimates: list[MassEstimate],
+                      prop_mass_kg: float = 0.0) -> list[Divergence]:
+    """Compare a stated dry mass against every estimate's total.
+
+    When ``prop_mass_kg`` is given, each Divergence also exposes the implied
+    structural coefficient ε = dry/(dry+prop) for the stated and estimated
+    masses.
+    """
+    return [Divergence(e.method, e.total_kg, stated_dry_kg, prop_mass_kg)
+            for e in estimates]
 
 
 def format_divergence(report: list[Divergence]) -> str:
     if not report:
         return "(no estimates)"
     wm = max(len(d.method) for d in report)
+    show_eps = any(d.prop_mass_kg > 0 for d in report)
+    if show_eps:
+        # ε_stated is the same for every row; print it once as a header.
+        eps_s = report[0].eps_stated
+        head = [f"  stated dry mass → structural coefficient ε = "
+                f"{eps_s:.3f}  (λ = dry/prop = {eps_s/(1-eps_s):.3f})",
+                "",
+                f"  {'method':<{wm}}  {'est dry':>9}  {'ε est':>6}  "
+                f"{'Δ%':>7}   verdict",
+                "  " + "-" * (wm + 40)]
+        rows = [f"  {d.method:<{wm}}  {d.estimate_kg:>7,.0f}kg  "
+                f"{d.eps_estimate:>6.3f}  {d.pct:>+6.1f}%   {d.verdict()}"
+                for d in report]
+        return "\n".join(head + rows)
     lines = [f"  {'method':<{wm}}  {'estimate':>10}  {'stated':>10}  "
              f"{'Δ%':>7}   verdict",
              "  " + "-" * (wm + 45)]
@@ -671,7 +734,8 @@ def analyse_liquid(inp: LiquidStageInputs,
     aggs = aggregate_estimates(inp.prop_mass_kg, is_solid=False,
                                hydrolox=(combo.engine_class == "hydrolox"))
     estimates = [comp] + aggs
-    report = divergence_report(stated_dry_kg, estimates) if stated_dry_kg else []
+    report = (divergence_report(stated_dry_kg, estimates, inp.prop_mass_kg)
+              if stated_dry_kg else [])
     return estimates, report
 
 
@@ -682,7 +746,8 @@ def analyse_solid(inp: SolidStageInputs,
     aggs = aggregate_estimates(inp.prop_mass_kg, is_solid=True,
                                casing=inp.casing, zeta=inp.mass_fraction)
     estimates = [comp] + aggs
-    report = divergence_report(stated_dry_kg, estimates) if stated_dry_kg else []
+    report = (divergence_report(stated_dry_kg, estimates, inp.prop_mass_kg)
+              if stated_dry_kg else [])
     return estimates, report
 
 
@@ -742,6 +807,9 @@ def main(argv=None):
     pl = sub.add_parser("liquid", help="liquid bipropellant stage")
     pl.add_argument("--prop", default="LOX/RP1",
                     help=f"propellant combo {available_propellants()}")
+    pl.add_argument("--tank-material", default="aluminium",
+                    choices=["aluminium", "al-li", "composite", "steel"],
+                    help="tank wall material (scales tank mass)")
     pl.add_argument("--prop-mass", type=float, required=True, help="kg")
     pl.add_argument("--thrust", type=float, required=True, help="N (total vac)")
     pl.add_argument("--engines", type=int, default=1)
@@ -777,7 +845,8 @@ def main(argv=None):
             thrust_n=args.thrust, n_engines=args.engines,
             expansion_ratio=args.expansion, chamber_pressure_pa=args.pc,
             diameter_m=args.diameter, length_m=args.length,
-            gross_mass_kg=args.gross_mass, fairing_area_m2=args.fairing_area)
+            gross_mass_kg=args.gross_mass, fairing_area_m2=args.fairing_area,
+            tank_material=args.tank_material)
         est, rep = analyse_liquid(inp, args.stated_dry)
         _print_analysis(est, rep)
     elif args.cmd == "solid":

@@ -3541,6 +3541,12 @@ class MassEstimatorDialog(tk.Toplevel):
         ttk.Combobox(self._liq_frm, textvariable=self._combo_var,
                      values=mest.available_propellants(), state="readonly",
                      width=12).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm, text="Tank material:").pack(side=tk.LEFT,
+                                                             padx=(0, 4))
+        self._tankmat_var = tk.StringVar(value="aluminium")
+        ttk.Combobox(self._liq_frm, textvariable=self._tankmat_var,
+                     values=["aluminium", "al-li", "composite", "steel"],
+                     state="readonly", width=10).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Label(self._liq_frm, text="# engines:").pack(side=tk.LEFT, padx=(0, 4))
         self._neng_var = tk.StringVar(value="1")
         ttk.Entry(self._liq_frm, textvariable=self._neng_var, width=5).pack(
@@ -3631,7 +3637,8 @@ class MassEstimatorDialog(tk.Toplevel):
                     expansion_ratio=self._f(self._exp_var, 30.0),
                     chamber_pressure_pa=pc_pa, diameter_m=dia, length_m=length,
                     gross_mass_kg=gross,
-                    fairing_area_m2=self._f(self._fair_var))
+                    fairing_area_m2=self._f(self._fair_var),
+                    tank_material=self._tankmat_var.get())
                 estimates, report = mest.analyse_liquid(inp, stated)
 
             lines = []
