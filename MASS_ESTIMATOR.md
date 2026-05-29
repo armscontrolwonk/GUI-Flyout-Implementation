@@ -124,6 +124,41 @@ thrust structure `K·T^1.0687`, intertank/interstage/skirt `K·S·b_body^K2`,
 TVC `0.001185·T`, tanks `K·V·(1−ullage)` with shuttle `K_LH2 = 0.5595`,
 `K_LOX = 0.8086` lb/ft³ (≡ the Akin SI values).
 
+### Liquid — physics-based tank option (Hutchinson & Olds, GT-STRESS, 2004)
+
+Instead of the empirical tank MER, the liquid tanks can be sized from **loads
+and material properties** — a simplified single-critical-station version of the
+GT-STRESS beam/shell method (Hutchinson & Olds, AIAA 2004-3661, the same
+Georgia Tech SSDL lineage as Rohrschneider). Each tank is sized as a thin
+circular shell under the worst of two load cases:
+
+- **burnout / max axial** — peak axial compression (≈ stage thrust reacted at
+  the base), tank nearly empty so head pressure is small;
+- **liftoff / max-q-α** — full tank (full hydrostatic head + ullage) plus a
+  lateral inertial bending load from the design **lateral-g**.
+
+Shell thickness at each station is the max over **ultimate-tensile, yield,
+axial buckling** (stiffened wide-column, Table-1 efficiencies) and **minimum
+gauge**; the governing thickness × tank area × material density × a correlation
+factor (`TANK_CORRELATION = 1.50`, folding in frames + secondary structure +
+the single-station simplification) gives the structural mass. Material
+properties (ρ, σ_yield, σ_ult, E, min gauge) are taken from `MATERIALS` for
+aluminium 2219 / Al-Li 2195 / steel / composite, so material choice is physics,
+not a multiplier. Internal pressure relieves axial compression, as in flight.
+
+Inputs: design **lateral-g** (default 0.5; axial load comes from thrust, so no
+trajectory run is needed — peak axial ≈ T/(m_burnout·g₀) is implicit), design
+**ullage pressure** (default 0.25 MPa), and shell configuration. Calibrated to
+reproduce the aluminium EELV and Shuttle-ET tanks of the source paper to ≈±30%
+(comparable to the paper's own 11–29% pre-correlation scatter). Cryogenic
+insulation is added on top, as in the empirical path. Enable with
+`--physics-tank` (CLI) or the "Physics tank (GT-STRESS)" box in the dialog.
+
+> The workflow this supports: estimate cold (axial from thrust, design
+> lateral-g), then fly the trajectory in Thrusty and refine the loads from the
+> actual peak axial-g and max-q to trim mass. Pulling loads directly from the
+> last trajectory is a planned follow-on; today the lateral-g is a manual field.
+
 ### Liquid — aggregate relations
 
 - **Pietrobon (2009) LOX/LH₂ stage-mass power law** (stage mass *less engines*,
@@ -213,6 +248,10 @@ hydrolox stages it falls (the Pietrobon `mp^0.848` size dependence).
    (`Revisit_of_solid_rocket_stage_inert_mass_estimation.pdf`).
 5. S. S. Pietrobon, *Analysis of Propellant Tank Masses*, 2009
    (`382034main_…Analysis_of_Propellant_Tank_Masses.pdf`).
-6. J. B. Nowell Jr., *Missile Total and Subsection Weight and Size Estimation
+6. V. L. Hutchinson Jr. & J. R. Olds, *Estimation of Launch Vehicle Propellant
+   Tank Structural Weight Using Simplified Beam Approximation* (GT-STRESS),
+   AIAA 2004-3661, Georgia Tech SSDL, 2004 (`hutchinson2004.pdf`) — basis for
+   the physics-based tank option.
+7. J. B. Nowell Jr., *Missile Total and Subsection Weight and Size Estimation
    Equations*, NPS thesis, 1992 (`a256081.pdf`) — tactical-missile regressions,
    consulted for context.

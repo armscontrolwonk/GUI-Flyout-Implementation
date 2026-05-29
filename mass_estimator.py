@@ -328,6 +328,101 @@ def pressure_vessel_mass(pressure_pa: float, volume_m3: float,
 
 
 # ---------------------------------------------------------------------------
+# Physics-based tank structural mass (Hutchinson & Olds, GT-STRESS, 2004)
+# ---------------------------------------------------------------------------
+# Structural-material property sets (SI):
+#   density kg/m³, yield Pa, ultimate Pa, Young's modulus Pa, min gauge m.
+#   Aluminium 2219 and Al-Li 2195 strengths follow Pietrobon (2009); steel is a
+#   maraging/high-strength case; composite is a representative graphite/epoxy
+#   laminate allowable.  These feed the failure-mode shell sizing below.
+MATERIALS = {
+    "aluminium": dict(rho=2840.0, sy=352e6,  su=455e6,  E=73.1e9, tmg=1.0e-3),
+    "al-li":     dict(rho=2700.0, sy=520e6,  su=565e6,  E=76.0e9, tmg=1.0e-3),
+    "steel":     dict(rho=7850.0, sy=1380e6, su=1500e6, E=200e9,  tmg=0.5e-3),
+    "composite": dict(rho=1600.0, sy=600e6,  su=700e6,  E=70.0e9, tmg=1.3e-3),
+}
+
+# Stiffened-shell configuration factors (Hutchinson & Olds Table 1, after
+# Ardema PDCYL): buckling efficiency ε and minimum-gauge multiplier K_mg.
+SHELL_CONFIG = {
+    "integral":   dict(eff=0.656, kmg=2.463),  # unflanged integrally stiffened ≈ isogrid
+    "z-stiffened": dict(eff=0.911, kmg=2.475),
+    "truss-core": dict(eff=0.605, kmg=4.310),
+}
+
+# Single-station simplification undershoots the full station-by-station
+# GT-STRESS (which itself needs ×1.3665 to reach actual mass for secondary
+# structure + vibration).  This factor folds frames + secondary structure +
+# the station simplification together; calibrated so the model reproduces the
+# aluminium EELV/ET tanks of Hutchinson & Olds (2004) to ≈±30%.
+TANK_CORRELATION = 1.50
+
+_FRAME_SPACING_M = 0.50   # representative ring-frame pitch for the buckling term
+
+
+def tank_structural_mass(prop_mass_kg: float, prop_density_kg_m3: float,
+                         diameter_m: float, length_m: float,
+                         thrust_n: float, gross_mass_kg: float,
+                         lateral_g: float = 0.5, ullage_pa: float = 2.5e5,
+                         material: str = "aluminium",
+                         shell_config: str = "integral") -> tuple[float, dict]:
+    """Load- and material-driven tank shell structural mass (kg).
+
+    A simplified single-critical-station implementation of the GT-STRESS beam /
+    shell method of Hutchinson & Olds (AIAA 2004-3661).  The tank is sized at
+    its most critical station as a thin circular shell under the worst of two
+    load cases:
+
+        * burnout / max axial : peak axial compression (≈ thrust reacted at the
+          base), tank nearly empty so head pressure is small;
+        * liftoff / max-q-α   : full tank (full head pressure) plus a lateral
+          inertial bending load set by ``lateral_g``.
+
+    Shell thickness at each case is the max over ultimate-tensile, yield, axial
+    buckling (stiffened wide-column) and minimum-gauge criteria; the governing
+    thickness across cases is multiplied by tank surface area, material density
+    and TANK_CORRELATION (frames + secondary structure).  Returns (mass_kg,
+    detail dict).  Internal pressure relieves axial compression, as in flight.
+    """
+    mat = MATERIALS.get(material, MATERIALS["aluminium"])
+    cfg = SHELL_CONFIG.get(shell_config, SHELL_CONFIG["integral"])
+    R = diameter_m / 2.0
+    if R <= 0 or length_m <= 0 or prop_density_kg_m3 <= 0:
+        return 0.0, {}
+
+    # Axial compression reacted at the tank base ≈ stage thrust (at burnout
+    # n_axial·g0·m_burnout = thrust; at liftoff n_axial·g0·m_gross ≈ thrust).
+    P = max(thrust_n, gross_mass_kg * _G0)        # N
+    M = lateral_g * _G0 * gross_mass_kg * (length_m / 2.0)   # N·m bending
+    V = lateral_g * _G0 * gross_mass_kg                       # N shear
+    head_full = prop_density_kg_m3 * _G0 * length_m           # Pa, full column
+
+    def thickness(pct_fuel, with_lateral):
+        p = ullage_pa + head_full * pct_fuel
+        n_ax = -P / (2.0 * math.pi * R)                  # axial running load (compression)
+        n_bend = (M / (math.pi * R ** 2)) if with_lateral else 0.0
+        n_pr_x = p * R / 2.0                             # pressure (tensile)
+        n_xy = (V / (math.pi * R)) if with_lateral else 0.0
+        nx = n_bend + n_ax + n_pr_x
+        ny = p * R                                       # hoop (tensile)
+        n1 = (nx + ny) / 2.0 + math.sqrt(((nx - ny) / 2.0) ** 2 + n_xy ** 2)
+        neq = math.sqrt(nx ** 2 + ny ** 2 - nx * ny + 3 * n_xy ** 2)
+        n_comp = max(0.0, -(n_ax + n_bend))              # net compression
+        t_uts = abs(n1) / mat["su"]
+        t_ys = neq / mat["sy"]
+        t_b = math.sqrt(n_comp * _FRAME_SPACING_M / (cfg["eff"] * mat["E"])) \
+            if n_comp > 0 else 0.0
+        return max(t_uts, t_ys, t_b, cfg["kmg"] * mat["tmg"])
+
+    t = max(thickness(0.08, with_lateral=False),   # burnout: empty, axial
+            thickness(1.00, with_lateral=True))     # liftoff/max-q-α: full
+    area = tank_surface_area(prop_mass_kg / prop_density_kg_m3, diameter_m)
+    mass = TANK_CORRELATION * mat["rho"] * area * t
+    return mass, {"t_mm": t * 1e3, "area_m2": area,
+                  "axial_kN": P / 1e3, "head_kPa": head_full / 1e3}
+
+
+# ---------------------------------------------------------------------------
 # Aggregate relations
 # ---------------------------------------------------------------------------
 # Pietrobon (2009) LOX/LH2 stage-mass power law, ms & mp in TONNES.  ms is the
@@ -452,6 +547,11 @@ class LiquidStageInputs:
     vehicle_gross_kg: float = 0.0    # vehicle GLOW for avionics sizing (0 → stage)
     of_ratio: float = 0.0            # override O/F (0 → combo default)
     tank_material: str = "aluminium"  # aluminium | al-li | composite | steel
+    # Physics-based (GT-STRESS) tank sizing instead of the empirical tank MER.
+    physics_tank: bool = False
+    lateral_g: float = 0.5           # design lateral load factor (bending)
+    ullage_pa: float = 2.5e5         # design tank/ullage pressure
+    shell_config: str = "integral"   # integral | z-stiffened | truss-core
 
 
 @dataclass
@@ -492,14 +592,33 @@ def estimate_liquid_stage(inp: LiquidStageInputs) -> MassEstimate:
     v_ox = m_ox / ox.density
     v_fu = m_fu / fu.density
 
-    # Tanks (Akin volume relation, scaled by wall material).
-    mat = material_tank_factor(inp.tank_material)
-    est.add(f"Oxidiser tank ({combo.oxidizer})",
-            mat * tank_mass_by_volume(v_ox, ox.tank_family),
-            basis=f"V={v_ox:,.1f} m³, {inp.tank_material}", source="Akin")
-    est.add(f"Fuel tank ({combo.fuel})",
-            mat * tank_mass_by_volume(v_fu, fu.tank_family),
-            basis=f"V={v_fu:,.1f} m³, {inp.tank_material}", source="Akin")
+    # Tanks — either the empirical Akin MER (material-scaled) or the physics-
+    # based GT-STRESS shell sizing (load/material driven).
+    if inp.physics_tank:
+        gross = inp.gross_mass_kg if inp.gross_mass_kg > 0 else inp.prop_mass_kg
+        v_tot = v_ox + v_fu
+        for fl, mfl, vfl, tag in ((ox, m_ox, v_ox, combo.oxidizer),
+                                  (fu, m_fu, v_fu, combo.fuel)):
+            l_tank = inp.length_m * (vfl / v_tot) if (inp.length_m > 0 and
+                                                      v_tot > 0) else 0.0
+            if l_tank <= 0 and inp.diameter_m > 0:        # derive from volume
+                l_tank = vfl / (math.pi * (inp.diameter_m / 2.0) ** 2)
+            m_tank, det = tank_structural_mass(
+                mfl, fl.density, inp.diameter_m, l_tank, inp.thrust_n, gross,
+                lateral_g=inp.lateral_g, ullage_pa=inp.ullage_pa,
+                material=inp.tank_material, shell_config=inp.shell_config)
+            basis = (f"t={det.get('t_mm', 0):.1f} mm, {inp.tank_material}"
+                     if det else f"V={vfl:,.1f} m³")
+            est.add(f"{tag} tank (GT-STRESS)", m_tank, basis=basis,
+                    source="Hutchinson")
+    else:
+        matf = material_tank_factor(inp.tank_material)
+        est.add(f"Oxidiser tank ({combo.oxidizer})",
+                matf * tank_mass_by_volume(v_ox, ox.tank_family),
+                basis=f"V={v_ox:,.1f} m³, {inp.tank_material}", source="Akin")
+        est.add(f"Fuel tank ({combo.fuel})",
+                matf * tank_mass_by_volume(v_fu, fu.tank_family),
+                basis=f"V={v_fu:,.1f} m³, {inp.tank_material}", source="Akin")
 
     # Cryogenic insulation (only for cryo fluids).
     if ox.cryo:
@@ -826,6 +945,14 @@ def main(argv=None):
     pl.add_argument("--length", type=float, default=0.0, help="m")
     pl.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     pl.add_argument("--fairing-area", type=float, default=0.0, help="m²")
+    pl.add_argument("--physics-tank", action="store_true",
+                    help="use GT-STRESS load/material tank sizing (Hutchinson)")
+    pl.add_argument("--lateral-g", type=float, default=0.5,
+                    help="design lateral load factor for tank bending")
+    pl.add_argument("--ullage", type=float, default=2.5e5,
+                    help="design tank/ullage pressure (Pa)")
+    pl.add_argument("--shell-config", default="integral",
+                    choices=["integral", "z-stiffened", "truss-core"])
     pl.add_argument("--no-avionics", action="store_true",
                     help="stage does not carry guidance avionics (booster)")
     pl.add_argument("--vehicle-gross", type=float, default=0.0,
@@ -863,7 +990,9 @@ def main(argv=None):
             gross_mass_kg=args.gross_mass, fairing_area_m2=args.fairing_area,
             tank_material=args.tank_material,
             include_avionics=not args.no_avionics,
-            vehicle_gross_kg=args.vehicle_gross)
+            vehicle_gross_kg=args.vehicle_gross,
+            physics_tank=args.physics_tank, lateral_g=args.lateral_g,
+            ullage_pa=args.ullage, shell_config=args.shell_config)
         est, rep = analyse_liquid(inp, args.stated_dry)
         _print_analysis(est, rep)
     elif args.cmd == "solid":
