@@ -3532,6 +3532,14 @@ class MassEstimatorDialog(tk.Toplevel):
                                      default="6.9", unit="MPa")
         self._stated_var    = _entry(grid, "Stated dry mass:", 3, 0, unit="kg")
 
+        # Guidance avionics: one package per vehicle, on the upper stage only
+        # (never the bus).  Default on for the last stage, off for boosters.
+        self._avionics_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(grid, text="Carries guidance avionics (upper stage)",
+                        variable=self._avionics_var,
+                        command=self._compute).grid(
+            row=3, column=3, columnspan=3, sticky=tk.W, **pad)
+
         # Liquid-specific controls
         self._liq_frm = ttk.Frame(grid)
         self._liq_frm.grid(row=4, column=0, columnspan=6, sticky=tk.W + tk.E,
@@ -3604,6 +3612,8 @@ class MassEstimatorDialog(tk.Toplevel):
         self._len_var.set(f"{sd['length']:.2f}")
         self._gross_var.set(f"{sd['fueled']:.0f}")
         self._stated_var.set(f"{sd['dry']:.0f}")
+        # Avionics defaults on for the upper (last) stage only.
+        self._avionics_var.set(idx == len(self._stages) - 1)
         self._on_type()
 
     # ------------------------------------------------------------------
@@ -3624,11 +3634,14 @@ class MassEstimatorDialog(tk.Toplevel):
             pc_pa     = self._f(self._pc_var, 6.9) * 1e6     # MPa → Pa
             stated    = self._f(self._stated_var)
 
+            avionics = bool(self._avionics_var.get())
+            glow     = self._params.mass_initial   # vehicle GLOW for avionics
             if self._type_var.get() == "Solid":
                 inp = mest.SolidStageInputs(
                     prop_mass_kg=prop_mass, thrust_n=thrust_n,
                     chamber_pressure_pa=pc_pa, casing=self._casing_var.get(),
-                    diameter_m=dia, length_m=length, gross_mass_kg=gross)
+                    diameter_m=dia, length_m=length, gross_mass_kg=gross,
+                    include_avionics=avionics, vehicle_gross_kg=glow)
                 estimates, report = mest.analyse_solid(inp, stated)
             else:
                 inp = mest.LiquidStageInputs(
@@ -3638,7 +3651,8 @@ class MassEstimatorDialog(tk.Toplevel):
                     chamber_pressure_pa=pc_pa, diameter_m=dia, length_m=length,
                     gross_mass_kg=gross,
                     fairing_area_m2=self._f(self._fair_var),
-                    tank_material=self._tankmat_var.get())
+                    tank_material=self._tankmat_var.get(),
+                    include_avionics=avionics, vehicle_gross_kg=glow)
                 estimates, report = mest.analyse_liquid(inp, stated)
 
             lines = []

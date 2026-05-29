@@ -100,6 +100,24 @@ def test_tank_material_scaling():
     _close(mest.material_tank_factor("aluminum"), 1.0, rel=0.001)
 
 
+def test_avionics_scope():
+    # Booster (no guidance avionics) must omit the Avionics line but keep wiring.
+    booster = mest.LiquidStageInputs(
+        propellant="LOX/RP1", prop_mass_kg=300_000, thrust_n=7e6, n_engines=9,
+        diameter_m=3.7, length_m=40, include_avionics=False)
+    names = [c.name for c in mest.estimate_liquid_stage(booster).components]
+    assert not any("Avionics" in n for n in names), names
+    assert any("Wiring" in n for n in names), names
+    # Upper stage sizes avionics on vehicle GLOW, not its own gross mass.
+    upper = mest.LiquidStageInputs(
+        propellant="LOX/LH2", prop_mass_kg=20_000, thrust_n=1e6, diameter_m=4,
+        length_m=10, gross_mass_kg=23_000, include_avionics=True,
+        vehicle_gross_kg=500_000)
+    av = next(c.mass_kg for c in mest.estimate_liquid_stage(upper).components
+              if "Avionics" in c.name)
+    _close(av, mest.avionics_mass(500_000), rel=0.001, msg="avionics on GLOW")
+
+
 def test_epsilon_in_divergence():
     est = [mest.MassEstimate("x", 1000.0)]
     rep = mest.divergence_report(1000.0, est, prop_mass_kg=9000.0)
