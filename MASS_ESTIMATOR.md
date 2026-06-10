@@ -165,8 +165,14 @@ insulation is added on top, as in the empirical path. Enable with
   tonnes): `ms = a·mp^0.848`, `a = 0.19` (all-stages average), `0.1583`
   (common bulkhead, through Saturn S-II), `0.1171` (Al-Li 2195 common bulkhead).
   Strictly valid only for hydrolox; shown only when the propellant is LOX/LH₂.
-- **Structural coefficient** `ε = m_inert / (m_inert + m_prop)` ⇒
-  `m_inert = ε·m_prop/(1−ε)`. Default ε = 0.08.
+- **Assumed structural coefficient** `ε = m_inert / (m_inert + m_prop)` ⇒
+  `m_inert = ε·m_prop/(1−ε)`. **Opt-in only and not a prediction** — it merely
+  restates an ε you supply as kilograms, so it can never tell you anything you
+  didn't already assume. It is omitted unless explicitly given; ε's real role
+  in this tool is as the *reporting unit* of the divergence table (below).
+  Consequence: non-hydrolox liquids (kero-lox, storables) have **no fitted
+  aggregate** in the open literature, so the component-level buildup is the
+  only true estimate for them.
 
 ### Solid — whole-stage inert mass (Zandbergen 2026 / 2019)
 
@@ -183,8 +189,9 @@ stages). Masses in tonnes:
 | Composite (linear) | `m_i = 0.1110·m_p` | 0.978 | 25 % |
 
 These are **whole-stage** inert masses (case, nozzle, insulation, igniter,
-skirts, TVC, avionics, separation). A propellant-mass-fraction option
-`m_inert = m_prop·(1/ζ − 1)` is available for ad-hoc comparison.
+skirts, TVC, avionics, separation). An *assumed* propellant-mass-fraction
+option `m_inert = m_prop·(1/ζ − 1)` is available opt-in (`--zeta`) — like the
+liquid ε, it restates your assumption in kg and is not a prediction.
 
 ### Solid — component-level (partial)
 

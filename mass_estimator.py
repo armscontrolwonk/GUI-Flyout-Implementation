@@ -729,8 +729,15 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
 
     Returns one MassEstimate per applicable relation.  For solids the
     Zandbergen (2026) steel/composite stage regressions are the headline; for
-    liquids the structural coefficient and (for hydrolox) Pietrobon power laws
-    apply.
+    hydrolox liquids the Pietrobon power laws apply.  Non-hydrolox liquids
+    have no fitted aggregate in the open literature, so the component-level
+    buildup is the only true estimate for them.
+
+    ``epsilon`` (liquid) and ``zeta`` (solid) are *assumed* fractions, not
+    predictions — supplying them merely converts your own assumption into kg
+    (m_inert = ε·m_prop/(1−ε)).  They are therefore opt-in: omitted unless
+    explicitly given.  ε is otherwise used only as a reporting unit in the
+    divergence table.
     """
     out: list[MassEstimate] = []
     if is_solid:
@@ -742,8 +749,9 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
                 notes=[f"whole-stage inert; RMSPE ≈{rmspe*100:.0f}%"]))
         if zeta > 0:
             out.append(MassEstimate(
-                f"Aggregate: propellant mass fraction ζ={zeta:g}",
-                inert_from_mass_fraction(prop_mass_kg, zeta)))
+                f"Assumed propellant mass fraction ζ={zeta:g}",
+                inert_from_mass_fraction(prop_mass_kg, zeta),
+                notes=["restates your assumption in kg — not a prediction"]))
     else:
         if hydrolox:
             for variant, label in (("average", "avg"),
@@ -753,10 +761,11 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
                 out.append(MassEstimate(
                     f"Aggregate: Pietrobon hydrolox ({label})", m,
                     notes=["stage mass less engines"]))
-        e = epsilon if epsilon > 0 else 0.08
-        out.append(MassEstimate(
-            f"Aggregate: structural coefficient ε={e:g}",
-            inert_from_structural_coefficient(prop_mass_kg, e)))
+        if epsilon > 0:
+            out.append(MassEstimate(
+                f"Assumed structural coefficient ε={epsilon:g}",
+                inert_from_structural_coefficient(prop_mass_kg, epsilon),
+                notes=["restates your assumption in kg — not a prediction"]))
     return out
 
 
@@ -966,7 +975,8 @@ def main(argv=None):
     ps.add_argument("--casing", choices=["steel", "composite"], default="steel",
                     help="motor case material (Zandbergen 2026 regression)")
     ps.add_argument("--zeta", type=float, default=0.0,
-                    help="optional propellant mass fraction extra estimate")
+                    help="optional ASSUMED propellant mass fraction — restates "
+                         "your assumption in kg, not a prediction")
     ps.add_argument("--diameter", type=float, default=0.0, help="m")
     ps.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     ps.add_argument("--no-avionics", action="store_true",
