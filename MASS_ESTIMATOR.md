@@ -104,6 +104,19 @@ material-sensitive part; engines, thrust structure and avionics are not scaled:
 | Composite (Gr/Ep) | 0.45 | Rohrschneider/SSDL 1970→2015 tank coefficients (≈0.43–0.47×) |
 | Steel | 1.60 | thin-gauge / pressure-fed tankage; rare on pump-fed stages |
 
+The **tank sizing model** (`tank_model`) selects how the two tanks are massed:
+
+- `akin_volume` *(default)* — the volume MER above, material-scaled.
+- `akin_offset` — an alternate Akin vintage with a fixed-mass term
+  (`LOX 0.0152·m+318`, `LH2 0.0694·m+363`), better-behaved for small stages.
+  (The source's dedicated storables relation was unreadable in the scan, so
+  storables fall back to the RP-1 coefficient.)
+- `physics` — the GT-STRESS load/material shell sizing (below).
+- `averaged` — the mean of `akin_volume` and `physics`, following the SPSP
+  (Scher & North) multi-estimate philosophy: averaging independent estimates is
+  more robust than any single one. (SPSP independently validates the
+  pressure-vessel-plus-correction tank approach used here.)
+
 > **Note on the engine MER.** Akin's lecture *table* lists 373 kg per engine in
 > the worked SSTO example, but his own printed formula gives ≈ 641 kg at the
 > example's 324.9 kN / ε = 30 — and that agrees with the independent Zandbergen
@@ -170,9 +183,21 @@ insulation is added on top, as in the empirical path. Enable with
   restates an ε you supply as kilograms, so it can never tell you anything you
   didn't already assume. It is omitted unless explicitly given; ε's real role
   in this tool is as the *reporting unit* of the divergence table (below).
-  Consequence: non-hydrolox liquids (kero-lox, storables) have **no fitted
-  aggregate** in the open literature, so the component-level buildup is the
-  only true estimate for them.
+- **Engine-mass-ratio method (Shu et al. 2020)** — the predictive aggregate
+  for *any* liquid, including non-hydrolox. The structural mass is
+  `M_struct = M_engine / κ_E`, where κ_E = M_engine/M_struct is taken from
+  historical data; total inert = `M_engine·(1 + 1/κ_E)`. Engine mass is
+  *predicted* from thrust (the Akin engine MER), so — unlike assuming ε — this
+  carries real information; κ_E varies over a much narrower, more stable band
+  than ε (Shu's Fig. 2). κ_E defaults by stage role (lower ≈ 0.25, upper ≈ 0.12;
+  anchors: KSLV-II 0.252/0.177/0.094, Titan II 0.250/0.111) and is overridable.
+  Shown for every liquid stage with a thrust; this is what fills the
+  non-hydrolox gap that ε could not.
+- **Feasibility ceiling (Goldyn et al. 2025)** — `ε_max = 1/exp(Δv/(g₀·Isp))`.
+  Above it the rocket equation drives propellant mass negative, so a stated or
+  estimated ε exceeding the ceiling is physically impossible. When a stage Δv
+  and Isp are supplied (`--delta-v`, `--isp`), any estimate breaching the
+  ceiling is flagged with a ⚠ note.
 
 ### Solid — whole-stage inert mass (Zandbergen 2026 / 2019)
 
@@ -259,6 +284,18 @@ hydrolox stages it falls (the Pietrobon `mp^0.848` size dependence).
    Tank Structural Weight Using Simplified Beam Approximation* (GT-STRESS),
    AIAA 2004-3661, Georgia Tech SSDL, 2004 (`hutchinson2004.pdf`) — basis for
    the physics-based tank option.
-7. J. B. Nowell Jr., *Missile Total and Subsection Weight and Size Estimation
-   Equations*, NPS thesis, 1992 (`a256081.pdf`) — tactical-missile regressions,
-   consulted for context.
+7. J.-I. Shu, J.-W. Lee, S. Kim, et al., *Multistage Liquid Rocket Weight
+   Estimation and Optimization for Early Design Stages*, J. Aerospace Eng.
+   33(6), 2020 — basis for the engine-mass-ratio method (code:
+   github.com/jshu004/Rocket-Weight-Estimation-and-Optimization).
+8. P. Goldyn, A. Marwege, et al. (DLR), *Preliminary Design of Expendable and
+   Reusable Mixed-Staged Launch Vehicles*, J. Spacecraft & Rockets, 2025
+   (`goldyn-et-al-2025…pdf`) — structural-index feasibility ceiling.
+9. M. D. Scher & D. North, *The Space Propulsion Sizing Program* (SPSP),
+   NIA / Georgia Tech (`10.1.1.588.5523.pdf`) — pressure-vessel tank sizing
+   with multi-estimate averaging; validates the physics tank approach.
+10. D. M. Gaspar, *A Tool for Preliminary Design of Rockets*, IST Lisbon, 2014
+    (`Thesis.pdf`) — independent confirmation of the Akin MER coefficients.
+11. J. B. Nowell Jr., *Missile Total and Subsection Weight and Size Estimation
+    Equations*, NPS thesis, 1992 (`a256081.pdf`) — tactical-missile regressions,
+    consulted for context.

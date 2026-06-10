@@ -209,6 +209,38 @@ def material_tank_factor(material: str) -> float:
     return MATERIAL_TANK_FACTOR.get((material or "aluminium").lower(), 1.0)
 
 
+def tank_mass_offset(prop_mass_kg: float, family: str) -> float:
+    """Alternate ("offset") Akin tank MER vintage with a fixed-mass term.
+
+    A second Akin lecture set gives linear-plus-offset tank relations, which
+    behave better for small stages than the pure-proportional volume form:
+        LOX  M = 0.0152·m + 318 ;  LH2  M = 0.0694·m + 363   (kg).
+    For storables/RP-1 the source's dedicated relation could not be read
+    reliably from the scan, so the RP-1 proportional coefficient is reused.
+    """
+    if prop_mass_kg <= 0:
+        return 0.0
+    if family == "LOX":
+        return 0.0152 * prop_mass_kg + 318.0
+    if family == "LH2":
+        return 0.0694 * prop_mass_kg + 363.0
+    return 0.0148 * prop_mass_kg          # RP-1 family fallback (proportional)
+
+
+def structural_index_ceiling(delta_v_ms: float, isp_s: float) -> float:
+    """Maximum physically-attainable structural coefficient (Goldyn 2025):
+
+        ε_max = 1 / exp(Δv / (g₀·Isp)).
+
+    Above this, the rocket equation drives propellant mass negative — a stage
+    with a higher ε simply cannot reach the required Δv with this Isp.  Used as
+    a feasibility ceiling on a stated/estimated structural coefficient.
+    """
+    if delta_v_ms <= 0 or isp_s <= 0:
+        return 1.0
+    return 1.0 / math.exp(delta_v_ms / (_G0 * isp_s))
+
+
 def tank_mass_by_propmass(prop_mass_kg: float, family: str) -> float:
     """Propellant tank mass from contained propellant mass.
 
@@ -254,6 +286,47 @@ def engine_mass_zandbergen(thrust_n: float, engine_class: str) -> float:
     if engine_class == "hydrolox":
         return 0.00514 * thrust_n ** 0.92068
     return 1.104e-3 * thrust_n + 27.702
+
+
+def total_engine_mass(thrust_n: float, n_engines: int = 1,
+                      engine_class: str = "kerolox",
+                      expansion_ratio: float = 30.0,
+                      model: str = "akin") -> float:
+    """Total stage engine mass = n × per-engine MER (Akin or Zandbergen)."""
+    n = max(int(n_engines), 1)
+    t_each = thrust_n / n
+    per = (engine_mass_zandbergen(t_each, engine_class) if model == "zandbergen"
+           else engine_mass_akin(t_each, expansion_ratio))
+    return n * per
+
+
+# Typical engine-to-structure mass ratios κ_E = M_engine / M_structure by stage
+# role, from Shu et al. (2020) — narrower and more stable than the structural
+# ratio itself (their Fig. 2).  Anchors: KSLV-II 0.252/0.177/0.094 (stages
+# 1/2/3); Titan II 0.250/0.111.  Used only as defaults; κ_E is an input.
+_KAPPA_E_DEFAULT = {"lower": 0.25, "upper": 0.12, "": 0.18}
+
+
+def engine_mass_ratio_inert(thrust_n: float, kappa_e: float,
+                            n_engines: int = 1, engine_class: str = "kerolox",
+                            expansion_ratio: float = 30.0,
+                            model: str = "akin") -> tuple[float, float]:
+    """Stage inert mass via the engine-mass-ratio method (Shu et al. 2020).
+
+    The structural mass (excluding engines) is M_struct = M_engine / κ_E, where
+    κ_E = M_engine/M_struct is taken from historical data (it varies over a much
+    narrower band than the structural ratio).  Total inert = M_struct +
+    M_engine = M_engine·(1 + 1/κ_E).  Engine mass is *predicted* from thrust, so
+    — unlike assuming ε directly — this carries real information.
+
+    Returns (total_inert_kg, engine_mass_kg).
+    """
+    m_eng = total_engine_mass(thrust_n, n_engines, engine_class,
+                              expansion_ratio, model)
+    if kappa_e <= 0:
+        return 0.0, m_eng
+    m_struct = m_eng / kappa_e
+    return m_struct + m_eng, m_eng
 
 
 def thrust_structure_mass(total_thrust_n: float) -> float:
@@ -547,11 +620,22 @@ class LiquidStageInputs:
     vehicle_gross_kg: float = 0.0    # vehicle GLOW for avionics sizing (0 → stage)
     of_ratio: float = 0.0            # override O/F (0 → combo default)
     tank_material: str = "aluminium"  # aluminium | al-li | composite | steel
-    # Physics-based (GT-STRESS) tank sizing instead of the empirical tank MER.
-    physics_tank: bool = False
+    # Tank sizing model:
+    #   akin_volume — empirical Akin volume MER (material-scaled) [default]
+    #   akin_offset — alternate Akin linear+offset MER vintage
+    #   physics     — GT-STRESS load/material shell sizing (Hutchinson)
+    #   averaged    — mean of akin_volume and physics (SPSP multi-estimate)
+    tank_model: str = "akin_volume"
+    physics_tank: bool = False       # back-compat alias → tank_model="physics"
     lateral_g: float = 0.5           # design lateral load factor (bending)
     ullage_pa: float = 2.5e5         # design tank/ullage pressure
     shell_config: str = "integral"   # integral | z-stiffened | truss-core
+    # Engine-mass-ratio (Shu) aggregate: κ_E = M_engine/M_structure.
+    kappa_e: float = 0.0             # 0 → default by stage_role
+    stage_role: str = ""             # "lower" | "upper" | "" (picks κ_E default)
+    # Optional feasibility ceiling on the structural coefficient (Goldyn):
+    delta_v_ms: float = 0.0          # stage Δv (0 → skip ceiling)
+    isp_s: float = 0.0               # stage Isp (0 → skip ceiling)
 
 
 @dataclass
@@ -592,33 +676,46 @@ def estimate_liquid_stage(inp: LiquidStageInputs) -> MassEstimate:
     v_ox = m_ox / ox.density
     v_fu = m_fu / fu.density
 
-    # Tanks — either the empirical Akin MER (material-scaled) or the physics-
-    # based GT-STRESS shell sizing (load/material driven).
-    if inp.physics_tank:
-        gross = inp.gross_mass_kg if inp.gross_mass_kg > 0 else inp.prop_mass_kg
-        v_tot = v_ox + v_fu
-        for fl, mfl, vfl, tag in ((ox, m_ox, v_ox, combo.oxidizer),
-                                  (fu, m_fu, v_fu, combo.fuel)):
-            l_tank = inp.length_m * (vfl / v_tot) if (inp.length_m > 0 and
-                                                      v_tot > 0) else 0.0
-            if l_tank <= 0 and inp.diameter_m > 0:        # derive from volume
-                l_tank = vfl / (math.pi * (inp.diameter_m / 2.0) ** 2)
-            m_tank, det = tank_structural_mass(
-                mfl, fl.density, inp.diameter_m, l_tank, inp.thrust_n, gross,
-                lateral_g=inp.lateral_g, ullage_pa=inp.ullage_pa,
-                material=inp.tank_material, shell_config=inp.shell_config)
-            basis = (f"t={det.get('t_mm', 0):.1f} mm, {inp.tank_material}"
-                     if det else f"V={vfl:,.1f} m³")
-            est.add(f"{tag} tank (GT-STRESS)", m_tank, basis=basis,
+    # Tank sizing model (back-compat: physics_tank=True forces "physics").
+    model = "physics" if inp.physics_tank else inp.tank_model
+    matf = material_tank_factor(inp.tank_material)
+    gross = inp.gross_mass_kg if inp.gross_mass_kg > 0 else inp.prop_mass_kg
+    v_tot = v_ox + v_fu
+
+    def _empirical(vfl, mfl, fam):
+        if model == "akin_offset":
+            return tank_mass_offset(mfl, fam)
+        return matf * tank_mass_by_volume(vfl, fam)
+
+    def _physics(fl, mfl, vfl):
+        l_tank = inp.length_m * (vfl / v_tot) if (inp.length_m > 0 and
+                                                  v_tot > 0) else 0.0
+        if l_tank <= 0 and inp.diameter_m > 0:
+            l_tank = vfl / (math.pi * (inp.diameter_m / 2.0) ** 2)
+        m_tank, det = tank_structural_mass(
+            mfl, fl.density, inp.diameter_m, l_tank, inp.thrust_n, gross,
+            lateral_g=inp.lateral_g, ullage_pa=inp.ullage_pa,
+            material=inp.tank_material, shell_config=inp.shell_config)
+        return m_tank, det
+
+    for fl, mfl, vfl, tag in ((ox, m_ox, v_ox, combo.oxidizer),
+                              (fu, m_fu, v_fu, combo.fuel)):
+        if model == "physics":
+            m_tank, det = _physics(fl, mfl, vfl)
+            est.add(f"{tag} tank (GT-STRESS)", m_tank,
+                    basis=f"t={det.get('t_mm', 0):.1f} mm, {inp.tank_material}",
                     source="Hutchinson")
-    else:
-        matf = material_tank_factor(inp.tank_material)
-        est.add(f"Oxidiser tank ({combo.oxidizer})",
-                matf * tank_mass_by_volume(v_ox, ox.tank_family),
-                basis=f"V={v_ox:,.1f} m³, {inp.tank_material}", source="Akin")
-        est.add(f"Fuel tank ({combo.fuel})",
-                matf * tank_mass_by_volume(v_fu, fu.tank_family),
-                basis=f"V={v_fu:,.1f} m³, {inp.tank_material}", source="Akin")
+        elif model == "averaged":
+            m_emp = _empirical(vfl, mfl, fl.tank_family)
+            m_phys, _ = _physics(fl, mfl, vfl)
+            est.add(f"{tag} tank (avg MER+physics)", 0.5 * (m_emp + m_phys),
+                    basis=f"empirical {m_emp:,.0f} / physics {m_phys:,.0f}",
+                    source="SPSP")
+        else:  # akin_volume | akin_offset
+            label = "offset" if model == "akin_offset" else inp.tank_material
+            est.add(f"{'Oxidiser' if tag == combo.oxidizer else 'Fuel'} "
+                    f"tank ({tag})", _empirical(vfl, mfl, fl.tank_family),
+                    basis=f"V={vfl:,.1f} m³, {label}", source="Akin")
 
     # Cryogenic insulation (only for cryo fluids).
     if ox.cryo:
@@ -868,7 +965,32 @@ def analyse_liquid(inp: LiquidStageInputs,
     comp = estimate_liquid_stage(inp)
     aggs = aggregate_estimates(inp.prop_mass_kg, is_solid=False,
                                hydrolox=(combo.engine_class == "hydrolox"))
+
+    # Engine-mass-ratio method (Shu 2020) — predictive, propellant-agnostic;
+    # the key aggregate for non-hydrolox liquids that have no other.
+    kappa = inp.kappa_e if inp.kappa_e > 0 else \
+        _KAPPA_E_DEFAULT.get(inp.stage_role, _KAPPA_E_DEFAULT[""])
+    if inp.thrust_n > 0:
+        inert, m_eng = engine_mass_ratio_inert(
+            inp.thrust_n, kappa, inp.n_engines, combo.engine_class,
+            inp.expansion_ratio)
+        aggs.append(MassEstimate(
+            f"Engine-mass-ratio (Shu), κ_E={kappa:g}", inert,
+            notes=[f"M_engine={m_eng:,.0f} kg; M_struct=M_eng/κ_E"]))
+
     estimates = [comp] + aggs
+
+    # Feasibility ceiling on the structural coefficient (Goldyn 2025).
+    if inp.delta_v_ms > 0 and inp.isp_s > 0:
+        eps_max = structural_index_ceiling(inp.delta_v_ms, inp.isp_s)
+        for e in estimates:
+            eps = e.total_kg / (e.total_kg + inp.prop_mass_kg) \
+                if (e.total_kg + inp.prop_mass_kg) > 0 else 0.0
+            if eps > eps_max:
+                e.notes.append(f"⚠ ε={eps:.3f} exceeds feasibility ceiling "
+                               f"ε_max={eps_max:.3f} (Δv={inp.delta_v_ms:.0f}, "
+                               f"Isp={inp.isp_s:.0f}s)")
+
     report = (divergence_report(stated_dry_kg, estimates, inp.prop_mass_kg)
               if stated_dry_kg else [])
     return estimates, report
@@ -954,14 +1076,26 @@ def main(argv=None):
     pl.add_argument("--length", type=float, default=0.0, help="m")
     pl.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     pl.add_argument("--fairing-area", type=float, default=0.0, help="m²")
+    pl.add_argument("--tank-model", default="akin_volume",
+                    choices=["akin_volume", "akin_offset", "physics", "averaged"],
+                    help="tank sizing model")
     pl.add_argument("--physics-tank", action="store_true",
-                    help="use GT-STRESS load/material tank sizing (Hutchinson)")
+                    help="alias for --tank-model physics (Hutchinson GT-STRESS)")
     pl.add_argument("--lateral-g", type=float, default=0.5,
                     help="design lateral load factor for tank bending")
     pl.add_argument("--ullage", type=float, default=2.5e5,
                     help="design tank/ullage pressure (Pa)")
     pl.add_argument("--shell-config", default="integral",
                     choices=["integral", "z-stiffened", "truss-core"])
+    pl.add_argument("--kappa-e", type=float, default=0.0,
+                    help="engine-mass ratio M_eng/M_struct for Shu method "
+                         "(0 → default by --stage-role)")
+    pl.add_argument("--stage-role", default="", choices=["", "lower", "upper"],
+                    help="picks the default κ_E when --kappa-e is 0")
+    pl.add_argument("--delta-v", type=float, default=0.0,
+                    help="stage Δv (m/s) for the Goldyn feasibility ceiling")
+    pl.add_argument("--isp", type=float, default=0.0,
+                    help="stage Isp (s) for the Goldyn feasibility ceiling")
     pl.add_argument("--no-avionics", action="store_true",
                     help="stage does not carry guidance avionics (booster)")
     pl.add_argument("--vehicle-gross", type=float, default=0.0,
@@ -1001,8 +1135,10 @@ def main(argv=None):
             tank_material=args.tank_material,
             include_avionics=not args.no_avionics,
             vehicle_gross_kg=args.vehicle_gross,
-            physics_tank=args.physics_tank, lateral_g=args.lateral_g,
-            ullage_pa=args.ullage, shell_config=args.shell_config)
+            tank_model=args.tank_model, physics_tank=args.physics_tank,
+            lateral_g=args.lateral_g, ullage_pa=args.ullage,
+            shell_config=args.shell_config, kappa_e=args.kappa_e,
+            stage_role=args.stage_role, delta_v_ms=args.delta_v, isp_s=args.isp)
         est, rep = analyse_liquid(inp, args.stated_dry)
         _print_analysis(est, rep)
     elif args.cmd == "solid":
