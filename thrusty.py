@@ -3573,20 +3573,25 @@ class MassEstimatorDialog(tk.Toplevel):
         self._liq_frm2 = ttk.Frame(grid)
         self._liq_frm2.grid(row=5, column=0, columnspan=6, sticky=tk.W,
                             pady=(2, 0))
-        self._physics_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self._liq_frm2,
-                        text="Physics tank (GT-STRESS: load + material)",
-                        variable=self._physics_var,
-                        command=self._compute).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Label(self._liq_frm2, text="Tank model:").pack(side=tk.LEFT,
+                                                           padx=(0, 4))
+        self._tankmodel_var = tk.StringVar(value="akin_volume")
+        ttk.Combobox(self._liq_frm2, textvariable=self._tankmodel_var,
+                     values=["akin_volume", "akin_offset", "physics",
+                             "averaged"], state="readonly", width=12).pack(
+            side=tk.LEFT, padx=(0, 12))
         ttk.Label(self._liq_frm2, text="Lateral g:").pack(side=tk.LEFT, padx=(0, 4))
         self._latg_var = tk.StringVar(value="0.5")
-        ttk.Entry(self._liq_frm2, textvariable=self._latg_var, width=6).pack(
-            side=tk.LEFT, padx=(0, 12))
-        ttk.Label(self._liq_frm2, text="Ullage:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Entry(self._liq_frm2, textvariable=self._latg_var, width=5).pack(
+            side=tk.LEFT, padx=(0, 8))
+        ttk.Label(self._liq_frm2, text="Ullage MPa:").pack(side=tk.LEFT, padx=(0, 4))
         self._ullage_var = tk.StringVar(value="0.25")
-        ttk.Entry(self._liq_frm2, textvariable=self._ullage_var, width=6).pack(
+        ttk.Entry(self._liq_frm2, textvariable=self._ullage_var, width=5).pack(
+            side=tk.LEFT, padx=(0, 8))
+        ttk.Label(self._liq_frm2, text="κ_E:").pack(side=tk.LEFT, padx=(0, 4))
+        self._kappae_var = tk.StringVar(value="0")
+        ttk.Entry(self._liq_frm2, textvariable=self._kappae_var, width=5).pack(
             side=tk.LEFT)
-        ttk.Label(self._liq_frm2, text="MPa").pack(side=tk.LEFT, padx=(2, 0))
 
         # Solid-specific controls
         self._sol_frm = ttk.Frame(grid)
@@ -3673,9 +3678,12 @@ class MassEstimatorDialog(tk.Toplevel):
                     fairing_area_m2=self._f(self._fair_var),
                     tank_material=self._tankmat_var.get(),
                     include_avionics=avionics, vehicle_gross_kg=glow,
-                    physics_tank=bool(self._physics_var.get()),
+                    tank_model=self._tankmodel_var.get(),
                     lateral_g=self._f(self._latg_var, 0.5),
-                    ullage_pa=self._f(self._ullage_var, 0.25) * 1e6)
+                    ullage_pa=self._f(self._ullage_var, 0.25) * 1e6,
+                    kappa_e=self._f(self._kappae_var, 0.0),
+                    stage_role=("lower" if self._stage_cb.current() == 0
+                                else "upper"))
                 estimates, report = mest.analyse_liquid(inp, stated)
 
             lines = []

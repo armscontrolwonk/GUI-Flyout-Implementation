@@ -144,6 +144,74 @@ def test_physics_tank():
     assert any("GT-STRESS" in n for n in names), names
 
 
+def test_shu_engine_mass_ratio():
+    # M_struct = M_engine/κ_E; total inert = M_engine·(1 + 1/κ_E).
+    m_eng = mest.total_engine_mass(3.8e6, 1, "kerolox", 30)
+    inert, eng = mest.engine_mass_ratio_inert(3.8e6, 0.25, 1, "kerolox", 30)
+    _close(eng, m_eng, rel=0.001, msg="engine mass passthrough")
+    _close(inert, m_eng * (1 + 1 / 0.25), rel=0.001, msg="Shu inert")
+    # Smaller κ_E ⇒ heavier structure relative to engine ⇒ larger inert.
+    big, _ = mest.engine_mass_ratio_inert(3.8e6, 0.10, 1, "kerolox", 30)
+    assert big > inert
+    # Appears as an aggregate line for a (non-hydrolox) liquid stage.
+    est, _ = mest.analyse_liquid(mest.LiquidStageInputs(
+        propellant="LOX/RP1", prop_mass_kg=284_000, thrust_n=3.8e6,
+        stage_role="lower"))
+    assert any("Engine-mass-ratio" in e.method for e in est)
+
+
+def test_akin_offset_tank():
+    # LOX offset: 0.0152·m + 318 ; LH2: 0.0694·m + 363.
+    _close(mest.tank_mass_offset(116_400, "LOX"), 0.0152 * 116_400 + 318,
+           rel=0.001, msg="LOX offset")
+    _close(mest.tank_mass_offset(19_390, "LH2"), 0.0694 * 19_390 + 363,
+           rel=0.001, msg="LH2 offset")
+    # Offset tank model runs end to end.
+    est = mest.estimate_liquid_stage(mest.LiquidStageInputs(
+        propellant="LOX/LH2", prop_mass_kg=135_800, thrust_n=1.9e6,
+        tank_model="akin_offset"))
+    assert est.total_kg > 0
+
+
+def test_averaged_tank_is_mean():
+    base = dict(propellant="LOX/RP1", prop_mass_kg=284_000, thrust_n=3.8e6,
+                diameter_m=3.81, length_m=32)
+    emp = mest.estimate_liquid_stage(mest.LiquidStageInputs(
+        tank_model="akin_volume", **base))
+    phys = mest.estimate_liquid_stage(mest.LiquidStageInputs(
+        tank_model="physics", **base))
+    avg = mest.estimate_liquid_stage(mest.LiquidStageInputs(
+        tank_model="averaged", **base))
+    # Averaged total sits between the two source models.
+    assert min(emp.total_kg, phys.total_kg) <= avg.total_kg <= \
+        max(emp.total_kg, phys.total_kg)
+
+
+def test_goldyn_ceiling():
+    # ε_max = 1/exp(Δv/(g0·Isp)); higher Isp/lower Δv ⇒ higher ceiling.
+    e1 = mest.structural_index_ceiling(3000, 311)
+    e2 = mest.structural_index_ceiling(3000, 450)
+    assert 0 < e1 < 1 and e2 > e1
+    _close(e1, 1 / math.exp(3000 / (9.80665 * 311)), rel=0.001, msg="ceiling")
+    # An impossible stage (huge Δv, low Isp) flags the warning note.
+    est, _ = mest.analyse_liquid(mest.LiquidStageInputs(
+        propellant="LOX/RP1", prop_mass_kg=10_000, thrust_n=3.0e5,
+        delta_v_ms=9000, isp_s=250))
+    assert any("feasibility ceiling" in n for e in est for n in e.notes)
+
+
+def test_gaspar_confirms_akin_coefficients():
+    # Gaspar (2014) lists the same Akin MER coefficients we implement.
+    _close(mest.thrust_structure_mass(1e6), 2.55e-4 * 1e6, rel=0.001)
+    _close(mest.engine_mass_akin(1e6, 30),
+           7.81e-4 * 1e6 + 3.37e-5 * 1e6 * 30 + 59, rel=0.001)
+    _close(mest.tank_mass_by_propmass(1000, "LOX"), 10.7, rel=0.001)
+    _close(mest.tank_mass_by_propmass(1000, "LH2"), 128.0, rel=0.001)
+    _close(mest.tank_mass_by_propmass(1000, "RP1"), 14.8, rel=0.001)
+    _close(mest.cryo_insulation_mass(100, "LH2"), 288.0, rel=0.001)
+    _close(mest.fairing_mass(100), 4.95 * 100 ** 1.15, rel=0.001)
+
+
 def test_epsilon_in_divergence():
     est = [mest.MassEstimate("x", 1000.0)]
     rep = mest.divergence_report(1000.0, est, prop_mass_kg=9000.0)
