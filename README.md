@@ -21,6 +21,7 @@ Al Hussein, No-dong, and Taepodong-I.
 | `gravity.py` | ~62 | WGS-84 J2 gravity vector in ECEF |
 | `slv_performance.py` | ~287 | Algebraic SLV payload-to-orbit estimation (Schilling/Townsend) |
 | `mass_estimator.py` | ~600 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
+| `trajectory.py` glide modes | — | HGV pull-up / glide: Tracy/Acton equilibrium glide, skip-glide, skip→equilibrium, and damped-phugoid glide. See `DAMPED_GLIDE.md` |
 
 ---
 
