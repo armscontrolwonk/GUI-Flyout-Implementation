@@ -272,6 +272,12 @@ class RVParams:
     #                              guidance switches one-way to
     #                              equilibrium_glide.  N is set by
     #                              glider_skip_count (default 1).
+    #   "damped_glide":            skip_glide plus continuous altitude-rate
+    #                              lift feedback (Lu 2013 / Yu & Chen 2011)
+    #                              that damps the phugoid to a target ratio
+    #                              ζ = glider_damping_zeta (Vinh §7-2).  ζ=0
+    #                              ≡ skip_glide; large ζ → equilibrium_glide.
+    #                              See DAMPED_GLIDE.md.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
@@ -325,6 +331,20 @@ class RVParams:
     # one-way handoff to equilibrium glide.  Only used by skip_to_equilibrium.
     glider_skip_count:      int   = 1
 
+    # Target damping ratio ζ for the "damped_glide" guidance mode.  The vehicle
+    # flies at the max-L/D trim angle α* plus a flight-path-angle feedback term
+    #     α = α* + k_γ·(γ* − γ)                      (Yu & Chen 2011, Eq. 19)
+    # whose gain k_γ is computed each step for this ζ from the phugoid natural
+    # frequency derived by linearising the equilibrium-glide EOM (Vinh,
+    # Busemann & Culp, "Hypersonic and Planetary Entry Flight Mechanics" 1980,
+    # §7-2; equivalent to Lu, Forbes & Baldwin AIAA 2013-4648 Eq. 33):
+    #     ω_p² = g_eff/H_ρ ,  k_γ = ζ·C_L*·V/√(g_eff·H_ρ)
+    # with g_eff = g − V²/r and H_ρ the local density scale height.  ζ = 0
+    # recovers undamped skip_glide exactly (k_γ = 0); ζ ≈ 0.7 gives a couple of
+    # decaying oscillations into equilibrium glide; large ζ → equilibrium_glide.
+    # Only used by the "damped_glide" mode.
+    glider_damping_zeta:    float = 0.7
+
     # Surface emissivity used for radiative-equilibrium temperature at the
     # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 matches the value
     # Anderson, "Hypersonic and High-Temperature Gas Dynamics," 2nd ed.,
@@ -371,6 +391,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_dive_target_radius_km': rv.glider_dive_target_radius_km,
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
         'glider_skip_count':     rv.glider_skip_count,
+        'glider_damping_zeta':   rv.glider_damping_zeta,
         'separation_mode':       rv.separation_mode,
         'emissivity':            rv.emissivity,
     }
@@ -406,6 +427,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_dive_target_radius_km=float(d.get('glider_dive_target_radius_km', 0.0)),
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
         glider_skip_count=int(d.get('glider_skip_count', 1)),
+        glider_damping_zeta=float(d.get('glider_damping_zeta', 0.7)),
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
         emissivity=float(d.get('emissivity', 0.85)),
     )

@@ -722,7 +722,58 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             if _dive_now:
                                 bank_rad = np.pi
 
-                        if getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
+                        if _erv.glider_guidance == 'damped_glide':
+                            # Damped-phugoid glide: fly the max-L/D trim (α*) —
+                            # identical to skip_glide — plus a vertical-lift
+                            # feedback proportional to the altitude-rate error
+                            # (Lu, Forbes & Baldwin AIAA 2013-4648 Eq. 33;
+                            # equiv. Yu & Chen 2011 Eq. 19).  The gain k_h is
+                            # sized for the target damping ratio ζ from the
+                            # equilibrium-glide phugoid frequency
+                            #   ω_p² = g_eff/H_ρ        (Vinh §7-2 linearisation)
+                            #   k_h  = 2·ζ·m·√(g_eff/H_ρ)
+                            # with the command altitude-rate ḣ_eq = V·γ*, where
+                            #   γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)   (Lu Eq. 31).
+                            # ζ = 0 ⇒ k_h = 0 ⇒ exactly skip_glide.
+                            _polar = (getattr(_erv, 'glider_aero_model',
+                                              'constant_LD') == 'polar')
+                            _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
+                            if q > 1.0:
+                                if _polar:
+                                    _CD0, _kp, _Aref = _aero_polar(_erv)
+                                    _C_L = min(np.sqrt(_CD0 / _kp),
+                                               2.0 * np.radians(25.0))
+                                    _C_D = _CD0 + _kp * _C_L * _C_L
+                                    drag_mag = q * _Aref * _C_D
+                                    f_drag = -drag_mag * v_hat
+                                    lift_nom = q * _Aref * _C_L
+                                else:
+                                    lift_nom = drag_mag * _erv.glider_LD
+                                _g_eff = g_mag - speed * speed / r_mag
+                                if _g_eff > 1e-3:
+                                    _dh = 200.0
+                                    _rho0 = atmosphere(max(alt, 0.0))[2]
+                                    _rho1 = atmosphere(max(alt, 0.0) + _dh)[2]
+                                    _Hrho = (_dh / np.log(_rho0 / _rho1)
+                                             if (_rho1 > 0.0 and _rho0 > _rho1)
+                                             else 7000.0)
+                                    _Hrho = min(max(_Hrho, 4000.0), 12000.0)
+                                    _cos_b = max(abs(float(np.cos(bank_rad))),
+                                                 0.05)
+                                    _hdot = speed * float(np.dot(v_hat, r_hat))
+                                    _gstar = (-2.0 * _erv.glider_LD * _Hrho
+                                              * g_mag / (speed * speed * _cos_b))
+                                    _k_h = (2.0 * max(float(
+                                        _erv.glider_damping_zeta), 0.0)
+                                        * rv_mass * np.sqrt(_g_eff / _Hrho))
+                                    lift_mag = lift_nom - _k_h * (
+                                        _hdot - speed * _gstar)
+                                else:
+                                    lift_mag = lift_nom
+                                lift_mag = min(max(lift_mag, 0.0), _L_max)
+                            else:
+                                lift_mag = 0.0
+                        elif getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
                             _CD0, _kp, _Aref = _aero_polar(_erv)
                             _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass

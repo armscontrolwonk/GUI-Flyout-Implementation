@@ -1666,6 +1666,7 @@ class MissileDialog(tk.Toplevel):
                 guid = ("Tracy"        if _g == "equilibrium_glide"
                         else "Acton"   if _g == "equilibrium_glide_acton"
                         else "skip→eq" if _g == "skip_to_equilibrium"
+                        else "damped"  if _g == "damped_glide"
                         else "skip")
                 parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
             self._rv_summary_var.set(" — ".join(parts))
@@ -2122,6 +2123,7 @@ class RVEditorDialog(tk.Toplevel):
         "equilibrium_glide_acton": "Equilibrium glide (Acton)",
         "skip_glide":              "Phugoid / skip-glide",
         "skip_to_equilibrium":     "Skip → equilibrium (auto-handoff)",
+        "damped_glide":            "Damped phugoid glide",
     }
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
@@ -4176,7 +4178,8 @@ class MissileFlyoutApp(tk.Tk):
                     "Equilibrium glide (Tracy)",
                     "Equilibrium glide (Acton)",
                     "Phugoid / skip-glide",
-                    "Skip → equilibrium (auto-handoff)"],
+                    "Skip → equilibrium (auto-handoff)",
+                    "Damped phugoid glide"],
             state="readonly", width=32)
         self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
                                      sticky=tk.W, padx=8, pady=(2, 1))
@@ -4192,6 +4195,17 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Spinbox(_skf, textvariable=self._main_skip_count_var,
                     from_=1, to=10, width=4).pack(side=tk.LEFT, padx=4)
         ttk.Label(_skf, text="(1 = first upward crossing)",
+                  foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
+
+        # Damping ratio ζ — only visible for "Damped phugoid glide"
+        _zf = ttk.Frame(_gmf)
+        _zf.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        self._main_zeta_frame = _zf
+        ttk.Label(_zf, text="Damping ratio ζ:").pack(side=tk.LEFT)
+        self._main_zeta_var = tk.StringVar(value="0.7")
+        ttk.Entry(_zf, textvariable=self._main_zeta_var, width=5).pack(
+            side=tk.LEFT, padx=4)
+        ttk.Label(_zf, text="(0 = undamped skip-glide; ~0.7 = a few decaying skips)",
                   foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
 
         # Terminal dive altitude + aero-model selector on one row
@@ -4782,6 +4796,8 @@ class MissileFlyoutApp(tk.Tk):
             self._main_guidance_var.set(
                 "Phugoid / skip-glide"
                 if _guid in ("skip_glide", "azimuth_command")
+                else "Damped phugoid glide"
+                if _guid == "damped_glide"
                 else "Skip → equilibrium (auto-handoff)"
                 if _guid == "skip_to_equilibrium"
                 else "Equilibrium glide (Acton)"
@@ -4819,6 +4835,9 @@ class MissileFlyoutApp(tk.Tk):
             if hasattr(self, '_main_skip_count_var'):
                 self._main_skip_count_var.set(
                     str(getattr(_p_erv, 'glider_skip_count', 1)))
+            if hasattr(self, '_main_zeta_var'):
+                self._main_zeta_var.set(
+                    f"{getattr(_p_erv, 'glider_damping_zeta', 0.7):g}")
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             self._on_main_bank_toggled()
@@ -4899,13 +4918,20 @@ class MissileFlyoutApp(tk.Tk):
         label = self._main_guidance_var.get().lower()
         is_ballistic  = "ballistic"    in label
         is_skip_to_eq = "auto-handoff" in label
+        is_damped     = "damped"       in label
 
         # Skip-count row: only for skip_to_equilibrium
         if hasattr(self, '_main_skip_frame'):
-            if is_skip_to_eq:
+            if is_skip_to_eq and not is_damped:
                 self._main_skip_frame.grid()
             else:
                 self._main_skip_frame.grid_remove()
+        # Damping-ratio row: only for damped_glide (shares the row with skips)
+        if hasattr(self, '_main_zeta_frame'):
+            if is_damped:
+                self._main_zeta_frame.grid()
+            else:
+                self._main_zeta_frame.grid_remove()
 
         # Glide-specific controls: hidden for pure ballistic reentry
         for _w in (getattr(self, '_main_glide_detail_frm', None),
@@ -6641,6 +6667,7 @@ class MissileFlyoutApp(tk.Tk):
             _g_guid_lower = _g_guid_label.lower()
             _g_guid_key = (
                 "ballistic"               if "ballistic"    in _g_guid_lower else
+                "damped_glide"            if "damped"       in _g_guid_lower else
                 "skip_to_equilibrium"     if "auto-handoff" in _g_guid_lower else
                 "skip_glide"              if "skip"         in _g_guid_lower else
                 "equilibrium_glide_acton" if "acton"        in _g_guid_lower else
@@ -6656,6 +6683,12 @@ class MissileFlyoutApp(tk.Tk):
                         _g_skip_count = int(self._main_skip_count_var.get())
                     except (ValueError, AttributeError):
                         _g_skip_count = 1
+                _g_zeta = 0.7
+                if _g_guid_key == "damped_glide":
+                    try:
+                        _g_zeta = max(0.0, float(self._main_zeta_var.get()))
+                    except (ValueError, AttributeError):
+                        _g_zeta = 0.7
                 _g_bank = []
                 if self._main_bank_sched_var.get():
                     for _bv in self._main_bank_vars:
@@ -6685,6 +6718,7 @@ class MissileFlyoutApp(tk.Tk):
                     glider_enabled=True,
                     glider_guidance=_g_guid_key,
                     glider_skip_count=_g_skip_count,
+                    glider_damping_zeta=_g_zeta,
                     glider_terminal_dive=True,
                     glider_terminal_alt_km=_g_dalt,
                     glider_bank_schedule=_g_bank,
