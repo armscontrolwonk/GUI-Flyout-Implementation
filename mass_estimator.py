@@ -23,6 +23,8 @@ implemented, with different appetites for input detail:
        A single regression or coefficient for the entire stage, requiring
        almost no geometry.  Useful as a sanity bound.  Implemented:
          * Pietrobon (2009) LOX/LH2 stage-mass power law  ms = a·mp^0.848
+         * solid-stage inert regressions — Zandbergen (2026) broad-sample, and
+           Lewis (2026, NG catalog) best-in-class composite/steel fits
          * structural coefficient   ε = m_inert / (m_inert + m_prop)
          * solid-motor propellant mass fraction  ζ = m_prop / m_total
 
@@ -51,6 +53,9 @@ References (PDFs collected in the project's reference folder):
         6th EUCASS, 2015.
     Zandbergen, B. T. C.  "Simple Parametric Relations for Solid Rocket Stage
         Inert Mass Estimation", TU Delft, 2026 (extends Zandbergen 2019).
+    Northrop Grumman Propulsion Products Catalog (Jan 2023), pp. 9-39 — the
+        29-motor data set behind the "Lewis 2026 (NG catalog)" best-in-class
+        solid inert regression.
     Pietrobon, S. S.  "Analysis of Propellant Tank Masses", 2009.
     Heineman, W. Jr.  NASA TN-D-6349 (1971); NASA JSC-26098 (1994).
 """
