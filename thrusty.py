@@ -2120,7 +2120,7 @@ class RVEditorDialog(tk.Toplevel):
     _GUIDANCE_LABELS = {
         "ballistic":               "Ballistic (drag · gravity · rotation)",
         "equilibrium_glide":       "Equilibrium glide (Tracy)",
-        "equilibrium_glide_acton": "Equilibrium glide (Acton)",
+        "equilibrium_glide_acton": "Non-oscillatory glide (Acton)",
         "skip_glide":              "Phugoid / skip-glide",
         "skip_to_equilibrium":     "Skip → equilibrium (auto-handoff)",
         "damped_glide":            "Damped phugoid glide",
@@ -4183,9 +4183,9 @@ class MissileFlyoutApp(tk.Tk):
             values=["Ballistic (drag · gravity · rotation)",
                     "Phugoid / skip-glide",
                     "Damped phugoid glide",
+                    "Non-oscillatory glide (Acton)",
                     self._GUIDANCE_SEPARATOR,
                     "Equilibrium glide (Tracy)",
-                    "Equilibrium glide (Acton)",
                     "Skip → equilibrium (auto-handoff)"],
             state="readonly", width=32)
         self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
@@ -4807,7 +4807,7 @@ class MissileFlyoutApp(tk.Tk):
                 if _guid == "damped_glide"
                 else "Skip → equilibrium (auto-handoff)"
                 if _guid == "skip_to_equilibrium"
-                else "Equilibrium glide (Acton)"
+                else "Non-oscillatory glide (Acton)"
                 if _guid == "equilibrium_glide_acton"
                 else "Equilibrium glide (Tracy)"
                 if _guid == "equilibrium_glide"
@@ -5990,7 +5990,7 @@ class MissileFlyoutApp(tk.Tk):
                 _guid_lbl = (
                     "Equilibrium glide (Tracy)"
                         if _erv.glider_guidance == "equilibrium_glide"
-                    else "Equilibrium glide (Acton)"
+                    else "Non-oscillatory glide (Acton)"
                         if _erv.glider_guidance == "equilibrium_glide_acton"
                     else "Skip-glide")
                 _row2(af, r, "Glider L/D:", f"{_erv.glider_LD:.2f}",
