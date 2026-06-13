@@ -73,6 +73,30 @@ interpolates between the two existing endpoints, with ζ controlling how many
 decaying skips occur — the count *emerges* from the damping rather than being a
 hand‑set integer (the limitation of `skip_to_equilibrium`, which is retained).
 
+## Relation to the analytic equilibrium modes (Acton / Tracy)
+
+The two analytic equilibrium modes are the limiting cases this mode generalises.
+Tracy & Wright (2020) describe the phugoid as *"minor oscillations about the
+equilibrium flight altitude… [that] could be damped by active control of the
+vehicle"* and then model the steady glide (`equilibrium_glide`, "Tracy"). Acton
+(2015) goes further and assumes the oscillation away, *"assuming that the vehicle
+does not oscillate during the transition to equilibrium gliding"* — so his
+closed‑form pull‑up arc (`equilibrium_glide_acton`) is the **infinitely‑damped
+limit** of `damped_glide`. Acton justifies this as design intent (*"the DARPA
+schematic shows the glider bouncing just once during the pull‑up"*) and notes
+that a model which *permitted* oscillation would lose more speed in the pull‑up —
+which is exactly what a finite ζ does.
+
+Empirically, on the C‑HGB no single ζ bit‑reproduces the Acton mode (different
+model: his βS blunt‑entry plus ρ/β‑matched rotation vs. dynamic lift feedback),
+but **ζ ≈ 0.7–1.0 matches Acton's range to a few percent**, and ζ ≈ 0.7
+reproduces it almost exactly *while showing the single bounce* Acton attributes
+to the real vehicle. Prefer the Acton mode when you want a parsimonious,
+auditable, parameter‑free range estimate matching the published reference method;
+prefer `damped_glide` when the realism of the pull‑up transient is the object of
+study. See **`DAMPED_GLIDE_MEMO.md`** for the full derivation, the ζ=0.7
+rationale, and the when‑to‑use comparison.
+
 ## Validation
 
 `damped_glide_smoke_test.py` flies the repo's **C‑HGB** glide body
@@ -118,6 +142,12 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
 - N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
   Mechanics*, Univ. Michigan Press, 1980 — §7‑2 equilibrium‑glide linearisation
   (phugoid frequency); Ch. 16–17 lift modulation.
+- J. M. Acton, "Hypersonic Boost‑Glide Weapons," *Science & Global Security*
+  23:191–219, 2015 (DOI 10.1080/08929882.2015.1087242) — non‑oscillatory pull‑up
+  assumption (the infinitely‑damped limit of this mode).
+- C. L. Tracy, D. Wright, "Modeling the Performance of Hypersonic Boost‑Glide
+  Missiles," *Science & Global Security* 28, 2020 (DOI 10.1080/08929882.2020.1864945)
+  — equilibrium‑glide formulation; phugoid "damped by active control."
 - D. R. Chapman, NACA TN 4276 / NASA TR R‑11 (1958–59); H. J. Allen &
   A. J. Eggers, NACA Report 1381 (1958) — independent phugoid/skip grounding.
 - A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
