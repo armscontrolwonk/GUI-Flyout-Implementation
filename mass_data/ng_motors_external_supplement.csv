@@ -1,0 +1,9 @@
+motor,expansion_ratio_ext,chamber_pressure_psia_ext,source,confidence,note
+Orion 50S,40,841,Encyclopedia Astronautix (Pegasus-1),low,Pc=58 bar appears as a nominal family value (same 58 bar listed for all Pegasus stages)
+Orion 50 (50T),65,841,Encyclopedia Astronautix (Pegasus-2),low,Pc=58 bar nominal family value
+Orion 50S XL,40,841,Encyclopedia Astronautix (Pegasus XL-1),low,Pc=58 bar nominal family value
+"GEM 46 (Fixed, Ground-Ignited)",11,1312,Encyclopedia Astronautix (GEM 46),low,"Generic ""GEM 46"" entry; applies to the GEM 46 family, not resolved per variant"
+"GEM 46 (Vectorable, Ground-Ignited)",11,1312,Encyclopedia Astronautix (GEM 46),low,Family-level value (TVC version)
+"GEM 46 (Fixed, Air-Ignited)",11,1312,Encyclopedia Astronautix (GEM 46),low,Family-level value
+CASTOR 120,24,,Encyclopedia Astronautix (Castor 120),low,Area ratio only; no reliable Pc
+CASTOR 30XL,56,,AmericaSpace / ATK release,medium,56:1 submerged nozzle; widely reported. No catalog Pc

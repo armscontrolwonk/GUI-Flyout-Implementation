@@ -55,7 +55,7 @@ References (PDFs collected in the project's reference folder):
         Inert Mass Estimation", TU Delft, 2026 (extends Zandbergen 2019).
     Northrop Grumman Propulsion Products Catalog (Jan 2023), pp. 9-39 — the
         29-motor data set behind the "Lewis 2026 (NG catalog)" best-in-class
-        solid inert regression.
+        solid inert regression (size + L/D); data in mass_data/ng_motors.csv.
     Pietrobon, S. S.  "Analysis of Propellant Tank Masses", 2009.
     Heineman, W. Jr.  NASA TN-D-6349 (1971); NASA JSC-26098 (1994).
 """
@@ -580,20 +580,42 @@ _SOLID_STAGE_LEWIS = {
     "composite": {"k": 0.172, "f": 0.092, "rmspe": 0.22},
     "steel":     {"k": 0.258, "f": 0.132, "rmspe": 0.22},
     "exp":       0.947,
+    # Two-variable (size + slenderness) model, refit on the 26-motor composite
+    # group with PROPELLANT mass as the size term (not loaded mass — see note):
+    #   m_inert = k · m_prop^b · (L/D)^c          [lbm, L/D dimensionless]
+    # The L/D exponent is POSITIVE: a more slender motor carries more inert per
+    # unit propellant (case wall + insulation scale with surface area, not
+    # volume).  This is what makes the fit usable on slender missile stages,
+    # which the stubby-skewed catalogue under-covers.  Significant (p≈0.006),
+    # cuts RMS 21.6%→18.1%.  Steel uses the composite coefficients × a reduced
+    # 1.347 material multiplier — down from the size-only 1.50, because the
+    # slender steel Castor-IV motors' extra inert is now explained by L/D, not
+    # material.  Worst residual is still Castor 30XL at -26% (submerged nozzle /
+    # advanced composite, not in the data).
+    # NOTE: propellant-based, not the loaded-mass fit in the dataset README.
+    # Loaded mass scores marginally better (RMS 16.6%) but m_loaded = m_prop +
+    # m_inert, so predicting inert from loaded is partly circular — invalid for
+    # a tool that VALIDATES a stated inert mass.  Propellant is the independent
+    # design input, so it is the correct predictor here.
+    "ld": {"k": 0.24087, "b": 0.8832, "c": 0.1834,
+           "steel_mult": 1.347, "rmspe": 0.18},
 }
 _LB_PER_KG = 2.2046226218
 
 
 def solid_stage_inert(prop_mass_kg: float, casing: str = "steel",
-                      form: str = "power", source: str = "zandbergen") -> float:
+                      form: str = "power", source: str = "zandbergen",
+                      ld_ratio: float = 0.0) -> float:
     """Whole-stage solid inert mass.
 
     casing ∈ {"steel", "composite"}; form ∈ {"power", "linear"}.
     source ∈ {"zandbergen", "lewis"}:
       "zandbergen" — Zandbergen (2026) broad-sample stage regression (default).
       "lewis"      — Lewis (2026) fit to the NG Propulsion Products Catalog
-                     (2023); best-in-class US motors, ~10% lighter.  Here
-                     form="linear" uses the constant inert-fraction model.
+                     (2023); best-in-class US motors, ~10% lighter.  With
+                     form="power", if ``ld_ratio`` (= length/diameter) > 0 the
+                     two-variable size+slenderness model is used; otherwise the
+                     size-only coefficient.  form="linear" = constant fraction.
     Returns kg.  See _SOLID_STAGE / _SOLID_STAGE_LEWIS for coefficients.
     """
     if source == "lewis":
@@ -602,7 +624,12 @@ def solid_stage_inert(prop_mass_kg: float, casing: str = "steel",
         if form == "linear":                    # constant inert-fraction model
             f = fam["f"]
             mi_lb = f / (1.0 - f) * mp_lb
-        else:                                    # power law (recommended)
+        elif ld_ratio and ld_ratio > 0.0:       # size + slenderness (L/D) model
+            ld = _SOLID_STAGE_LEWIS["ld"]
+            mi_lb = ld["k"] * mp_lb ** ld["b"] * ld_ratio ** ld["c"]
+            if casing == "steel":
+                mi_lb *= ld["steel_mult"]
+        else:                                    # size-only power law
             mi_lb = fam["k"] * mp_lb ** _SOLID_STAGE_LEWIS["exp"]
         return mi_lb / _LB_PER_KG
 
@@ -859,7 +886,8 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
                         hydrolox: bool = False,
                         epsilon: float = 0.0,
                         zeta: float = 0.0,
-                        casing: str = "steel") -> list[MassEstimate]:
+                        casing: str = "steel",
+                        ld_ratio: float = 0.0) -> list[MassEstimate]:
     """Whole-stage aggregate dry-mass estimates.
 
     Returns one MassEstimate per applicable relation.  For solids the
@@ -885,12 +913,24 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
         # Best-in-class cross-check: Lewis (2026) NG-catalog fit.  Runs ~10%
         # lighter than Zandbergen — the lower edge of the inert band, i.e. the
         # fanciest flight-proven US composite/steel motors.
-        lz = _SOLID_STAGE_LEWIS.get(casing, _SOLID_STAGE_LEWIS["composite"])
-        for form, label in (("power", "power-law"), ("linear", "constant-fraction")):
-            m = solid_stage_inert(prop_mass_kg, casing, form, source="lewis")
-            out.append(MassEstimate(
-                f"Aggregate: Lewis 2026 NG-catalog {casing} ({label})", m,
-                notes=[f"best-in-class US motors; RMSPE ≈{lz['rmspe']*100:.0f}%"]))
+        m = solid_stage_inert(prop_mass_kg, casing, "power", source="lewis",
+                              ld_ratio=ld_ratio)
+        if ld_ratio and ld_ratio > 0.0:
+            lab = f"power-law, L/D={ld_ratio:.1f}"
+            note = (f"best-in-class US motors, size+slenderness; "
+                    f"RMSPE ≈{_SOLID_STAGE_LEWIS['ld']['rmspe']*100:.0f}%")
+        else:
+            lab = "power-law, size-only"
+            note = (f"best-in-class US motors; "
+                    f"RMSPE ≈{_SOLID_STAGE_LEWIS[casing]['rmspe']*100:.0f}% "
+                    f"(supply length+diameter for the L/D correction)")
+        out.append(MassEstimate(
+            f"Aggregate: Lewis 2026 NG-catalog {casing} ({lab})", m, notes=[note]))
+        mf = solid_stage_inert(prop_mass_kg, casing, "linear", source="lewis")
+        out.append(MassEstimate(
+            f"Aggregate: Lewis 2026 NG-catalog {casing} (constant-fraction)", mf,
+            notes=[f"best-in-class inert fraction "
+                   f"f={_SOLID_STAGE_LEWIS[casing]['f']:.3f}"]))
         if zeta > 0:
             out.append(MassEstimate(
                 f"Assumed propellant mass fraction ζ={zeta:g}",
@@ -1047,8 +1087,11 @@ def analyse_solid(inp: SolidStageInputs,
                   stated_dry_kg: float = 0.0) -> tuple[list[MassEstimate],
                                                        list[Divergence]]:
     comp = estimate_solid_stage(inp)
+    ld = (inp.length_m / inp.diameter_m
+          if inp.length_m > 0 and inp.diameter_m > 0 else 0.0)
     aggs = aggregate_estimates(inp.prop_mass_kg, is_solid=True,
-                               casing=inp.casing, zeta=inp.mass_fraction)
+                               casing=inp.casing, zeta=inp.mass_fraction,
+                               ld_ratio=ld)
     estimates = [comp] + aggs
     report = (divergence_report(stated_dry_kg, estimates, inp.prop_mass_kg)
               if stated_dry_kg else [])
@@ -1160,6 +1203,8 @@ def main(argv=None):
                     help="optional ASSUMED propellant mass fraction — restates "
                          "your assumption in kg, not a prediction")
     ps.add_argument("--diameter", type=float, default=0.0, help="m")
+    ps.add_argument("--length", type=float, default=0.0,
+                    help="m (with --diameter, enables the Lewis L/D correction)")
     ps.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     ps.add_argument("--no-avionics", action="store_true",
                     help="stage does not carry guidance avionics (booster)")
@@ -1194,7 +1239,8 @@ def main(argv=None):
             prop_mass_kg=args.prop_mass, thrust_n=args.thrust,
             chamber_pressure_pa=args.pc, casing=args.casing,
             mass_fraction=args.zeta,
-            diameter_m=args.diameter, gross_mass_kg=args.gross_mass,
+            diameter_m=args.diameter, length_m=args.length,
+            gross_mass_kg=args.gross_mass,
             include_avionics=not args.no_avionics,
             vehicle_gross_kg=args.vehicle_gross)
         est, rep = analyse_solid(inp, args.stated_dry)
