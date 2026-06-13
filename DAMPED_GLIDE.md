@@ -1,12 +1,21 @@
 # Damped‑Phugoid Glide (`damped_glide`)
 
 A glide‑guidance mode for high‑L/D vehicles that reproduces what a *guided*
-hypersonic glider actually does: a few **decaying** skip oscillations settling
-into equilibrium glide — rather than the two unphysical extremes the tool
-already had (instant‑damped analytical arc, or an undamped phugoid forever).
+hypersonic glider actually does: a pull‑up plus a few **decaying** skips settling
+into equilibrium glide.
 
-It is a **new fifth mode**; the existing `skip_glide`, `skip_to_equilibrium`,
-`equilibrium_glide`, and `equilibrium_glide_acton` are unchanged.
+The primary reentry modes form one physical spectrum in how strongly the
+re‑entry **phugoid** is damped, and `damped_glide` is its tunable middle:
+
+| Reentry mode | Phugoid behavior | Damping |
+|---|---|---|
+| Phugoid / skip‑glide (`skip_glide`) | undamped — oscillates indefinitely (skips out for energetic entries) | ζ = 0 |
+| **Damped phugoid glide (`damped_glide`)** | a pull‑up plus a few decaying skips into equilibrium | ζ ≈ 0.7 |
+| Non‑oscillatory glide (`equilibrium_glide_acton`, "Acton") | analytic capture, no oscillation | ζ → ∞ (limit) |
+
+`damped_glide` is a **new mode**; the existing `skip_glide`,
+`skip_to_equilibrium`, `equilibrium_glide`, and `equilibrium_glide_acton`
+(now surfaced as the primary "Non‑oscillatory glide (Acton)" mode) are unchanged.
 
 ## The control law
 
@@ -81,8 +90,9 @@ equilibrium flight altitude… [that] could be damped by active control of the
 vehicle"* and then model the steady glide (`equilibrium_glide`, "Tracy"). Acton
 (2015) goes further and assumes the oscillation away, *"assuming that the vehicle
 does not oscillate during the transition to equilibrium gliding"* — so his
-closed‑form pull‑up arc (`equilibrium_glide_acton`) is the **infinitely‑damped
-limit** of `damped_glide`. Acton justifies this as design intent (*"the DARPA
+closed‑form pull‑up arc (`equilibrium_glide_acton`, the primary "Non‑oscillatory
+glide (Acton)" mode) is the **infinitely‑damped (ζ → ∞) endpoint** of the
+spectrum above. Acton justifies this as design intent (*"the DARPA
 schematic shows the glider bouncing just once during the pull‑up"*) and notes
 that a model which *permitted* oscillation would lose more speed in the pull‑up —
 which is exactly what a finite ζ does.
