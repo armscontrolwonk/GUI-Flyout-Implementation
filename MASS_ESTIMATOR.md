@@ -250,14 +250,18 @@ When length/diameter are absent the estimator falls back to the size-only
 coefficient above.
 
 > **Feed *motor* L/D, not stage L/D.** The catalogue's length is the motor's
-> overall length (case + nozzle), so the L/D term expects motor geometry. A
-> stage length padded with interstages, skirts, or an aft bay will overstate
-> L/D and over-predict inert mass (the term is monotone increasing in L/D).
-> Example: the AUR first stage at its 5.0 m *stage* length gives L/D ≈ 5.7 and a
-> −11 % gap to its modeled dry mass; at a realistic ~4 m *motor* length
-> (L/D ≈ 4.5) the gap is −7 %, and the estimator has no clean way to subtract
-> skirt length for you. The CLI `--length` and `analyse_solid` take whatever
-> length you supply, so supply the motor's.
+> overall length **including the nozzle**, so the L/D term expects that same
+> envelope — trim only *non-motor* stage structure (interstages, skirts, aft
+> bays), **never the nozzle**. A full stage length padded with that structure
+> overstates L/D and over-predicts inert (the term is monotone in L/D). The
+> effect is usually modest, because the nozzle-inclusive motor length is already
+> close to the stage length: e.g. the AUR first stage at its 5.0 m *stage*
+> length gives L/D ≈ 5.7 and a −11 % gap to its modeled dry mass; trimming only
+> the non-motor structure leaves the motor (case + nozzle) at L/D ≈ 5.1–5.4, so
+> the gap stays near −9 to −11 %. The AUR genuinely sits at the light edge of
+> best-in-class (consistent with its mid-grade Isp), not the −7 % a too-short
+> case-only length would suggest. The estimator can't subtract skirt length for
+> you; `--length` / `analyse_solid` use whatever you supply.
 
 *Note:* the fit is on **propellant** mass, not the dataset
 README's loaded-mass form (RMS 16.6 %) — loaded mass embeds the inert mass being
