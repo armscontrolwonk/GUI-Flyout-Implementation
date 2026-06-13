@@ -2126,6 +2126,10 @@ class RVEditorDialog(tk.Toplevel):
         "damped_glide":            "Damped phugoid glide",
     }
 
+    # Non-selectable divider in the reentry-mode dropdown separating the primary
+    # modes from the legacy/comparison equilibrium-glide laws.
+    _GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
+
     def __init__(self, parent, rv=None, mass_kg=500.0):
         super().__init__(parent)
         self.title("Edit Terminal Vehicle" if rv is not None else "New Terminal Vehicle")
@@ -4170,16 +4174,19 @@ class MissileFlyoutApp(tk.Tk):
         self._glider_main_frame = _gmf
         _gmf.columnconfigure(1, weight=1)
 
-        # Reentry mode combobox — no label needed; the LabelFrame title suffices
+        # Reentry mode combobox — no label needed; the LabelFrame title suffices.
+        # Primary modes first; the analytic equilibrium-glide laws are kept below
+        # a (non-selectable) separator as legacy/comparison modes.
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         self._main_guidance_cb = ttk.Combobox(
             _gmf, textvariable=self._main_guidance_var,
             values=["Ballistic (drag · gravity · rotation)",
+                    "Phugoid / skip-glide",
+                    "Damped phugoid glide",
+                    self._GUIDANCE_SEPARATOR,
                     "Equilibrium glide (Tracy)",
                     "Equilibrium glide (Acton)",
-                    "Phugoid / skip-glide",
-                    "Skip → equilibrium (auto-handoff)",
-                    "Damped phugoid glide"],
+                    "Skip → equilibrium (auto-handoff)"],
             state="readonly", width=32)
         self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
                                      sticky=tk.W, padx=8, pady=(2, 1))
@@ -4915,7 +4922,15 @@ class MissileFlyoutApp(tk.Tk):
             self._main_dive_target_frm.grid_remove()
 
     def _on_glider_guidance_changed(self):
-        label = self._main_guidance_var.get().lower()
+        raw = self._main_guidance_var.get()
+        if raw == self._GUIDANCE_SEPARATOR:
+            # The divider is not a real mode — revert to the previous selection.
+            self._main_guidance_var.set(
+                getattr(self, '_prev_guidance',
+                        "Ballistic (drag · gravity · rotation)"))
+            return
+        self._prev_guidance = raw
+        label = raw.lower()
         is_ballistic  = "ballistic"    in label
         is_skip_to_eq = "auto-handoff" in label
         is_damped     = "damped"       in label
