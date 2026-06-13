@@ -100,9 +100,9 @@ _HIGH_ATM_RHO = np.array([2.53e-10, 6.07e-11, 1.92e-11, 7.06e-12, 2.80e-12,
 # The pull-up is treated analytically following Acton 2015 (Eq. 11):
 # at the moment the vehicle pierces the upper atmosphere on descent,
 # the state is reset to equilibrium-glide initial conditions:
-#     v_4  = v_3 · exp(−(L/D)·θ_2)        (Acton Eq. 11)
+#     v_4  = v_3 · exp(−(D/L)·θ_2)        (Acton Eq. 11)
 #     γ    = 0   (velocity rotated to local horizontal)
-#     h    = h_eq(v_4) from Acton's equilibrium-altitude formula
+#     h    = h_eq(v_4) from the equilibrium-glide relation (Tracy Eq. 7)
 # where v_3, θ_2 are the speed and (positive) descent angle at piercing.
 #
 # After this one-shot reset, the glide and terminal phases are simulated
@@ -1010,7 +1010,7 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
                                                        Acton's Eq. 13).
 
     Velocity along the arc follows Acton Eq. 11:
-        V(γ) = V_3 · exp(−(L/D)·(θ_2 − θ))            with θ = −γ.
+        V(γ) = V_3 · exp(−(D/L)·(θ_2 − θ))            with θ = −γ.
 
     Pull-up duration uses the high-speed-limit form of Acton Eq. 15:
         t_pullup = R · θ_2 / V_3.
