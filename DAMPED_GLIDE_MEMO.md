@@ -14,11 +14,21 @@ the vehicle **pulls up**, overshoots its equilibrium altitude, and oscillates �
 the **phugoid** (or "skip") mode. A *guided* glider damps this oscillation and
 settles into equilibrium glide after a few skips.
 
-The tool previously offered only the two extremes: an **undamped** skip
-(`skip_glide`, which oscillates indefinitely and, for energetic entries, leaves
-the atmosphere on each skip) and an **instantly‑captured** analytic equilibrium
-glide (`equilibrium_glide` / `…_acton`). The `damped_glide` mode fills the
-physical middle with a tunable decay rate.
+The reentry mode is the modeling choice for **how strongly that phugoid is
+damped**. The four primary modes form a single physical spectrum in the damping
+ratio ζ:
+
+| Reentry mode | Phugoid behavior | Damping |
+|---|---|---|
+| Ballistic | no lift, no glide | — |
+| Phugoid / skip‑glide | undamped — oscillates indefinitely (skips out of the atmosphere for energetic entries) | ζ = 0 |
+| **Damped phugoid glide** | a pull‑up plus a few decaying skips into equilibrium | ζ ≈ 0.7 |
+| Non‑oscillatory glide (Acton) | analytic capture, no oscillation | ζ → ∞ (limit) |
+
+`damped_glide` fills the physical middle of this spectrum with a tunable decay
+rate; Acton's analytic model (`equilibrium_glide_acton`) is its no‑oscillation
+endpoint (§6). Two further modes — `equilibrium_glide` (Tracy) and
+`skip_to_equilibrium` — remain available for comparison.
 
 ## 2. The oscillation being damped
 
@@ -122,7 +132,10 @@ just once during the pull‑up,"* and damped by a gradual reorientation that hol
 dV/V = −(D/L)·dγ, depositing the glider directly onto the equilibrium curve of
 Phase 5 (the tool's `equilibrium_glide_acton`, which prepends the
 blunt‑orientation direct‑entry phase, βS). Because no overshoot is permitted,
-**Acton's construction is the infinitely‑damped limit of the present model.**
+**Acton's construction is the infinitely‑damped (ζ → ∞) limit of the present
+model — the no‑oscillation endpoint of the §1 spectrum**, which is why it is now
+a primary reentry mode ("Non‑oscillatory glide (Acton)") rather than a legacy
+one.
 
 Acton himself flags where that idealization fails — a ~10× discrepancy in βS:
 
