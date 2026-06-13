@@ -227,11 +227,31 @@ inert fraction f = 0.092 / 0.132) and converted at the kg boundary. Because
 these are mature, mass-optimised flight motors, this fit runs **~10 % lighter**
 than the broader Zandbergen sample — it is the lower (best-in-class) edge of the
 inert band, the right reference for "fanciest US motor" sizing. Same scope as
-Zandbergen (whole-stage, nozzle included); regressed on case material only
-(nozzle material is not separately modelled — R² = 0.956 without it). Material
-penalty steel/composite ≈ 1.50×, independently matching Zandbergen's 1.52×.
-~20 % (1σ) scatter; steel rests on 3 Castor-IV motors (~20–35 k lbm) — do not
-trust steel outside that band.
+Zandbergen (whole-stage, nozzle included). Material penalty steel/composite
+≈ 1.50× (size-only), independently matching Zandbergen's 1.52×. ~20 % (1σ)
+scatter; steel rests on 3 Castor-IV motors (~20–35 k lbm) — do not trust steel
+outside that band.
+
+**Slenderness (L/D) correction.** When a stage length and diameter are both
+supplied, the Lewis power law adds a slenderness term refit on the 26-motor
+composite group:
+
+    m_inert = 0.24087 · m_prop^0.8832 · (L/D)^0.1834      [lbm]    (composite)
+
+The L/D exponent is **positive** — a more slender motor carries *more* inert per
+unit propellant, because case wall and insulation scale with surface area, not
+enclosed volume. It is significant (p ≈ 0.006) and cuts RMS from 21.6 % to
+18.1 %. This is what makes a catalogue skewed toward stubby launcher motors
+usable on **slender missile stages**, which it otherwise under-predicts. With
+the L/D term in, the steel material penalty drops to **×1.347** (from 1.50): the
+slender steel Castor-IV motors' extra inert was largely geometry, not material.
+Stage type (upper vs first) was tested and is redundant once L/D is present.
+When length/diameter are absent the estimator falls back to the size-only
+coefficient above. *Note:* the fit is on **propellant** mass, not the dataset
+README's loaded-mass form (RMS 16.6 %) — loaded mass embeds the inert mass being
+predicted, so it is circular for a tool that validates a stated inert mass.
+Largest residual remains the Castor 30XL at −26 % (submerged nozzle / advanced
+composite, outside the regressors). Provenance dataset: `mass_data/ng_motors.csv`.
 
 ### Solid — component-level (partial)
 

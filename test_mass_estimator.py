@@ -93,6 +93,38 @@ def test_solid_lewis_ng_catalog():
             < mest.solid_stage_inert(50_000 * LB, "composite", "power"))
 
 
+def test_solid_lewis_ld_correction():
+    LB = 0.45359237
+    # Formula correctness: function == 0.24087·m_prop^0.8832·(L/D)^0.1834 (lbm).
+    mp_lb, ld = 26_801.0, 6.974          # Orion 50S
+    want_lb = 0.24087 * mp_lb ** 0.8832 * ld ** 0.1834
+    got_kg = mest.solid_stage_inert(mp_lb * LB, "composite", "power",
+                                    source="lewis", ld_ratio=ld)
+    _close(got_kg / LB, want_lb, rel=0.001, msg="L/D formula")
+    # Positive L/D exponent: a slender motor is heavier than a stubby one at the
+    # same propellant load (surface-area-to-volume).
+    slim = mest.solid_stage_inert(30_000 * LB, "composite", "power",
+                                  source="lewis", ld_ratio=12.0)
+    fat = mest.solid_stage_inert(30_000 * LB, "composite", "power",
+                                 source="lewis", ld_ratio=2.0)
+    assert slim > fat, "slender motor should carry more inert"
+    # ld_ratio=0 falls back to the size-only coefficient.
+    fb = mest.solid_stage_inert(30_000 * LB, "composite", "power",
+                                source="lewis", ld_ratio=0.0)
+    so = 0.172 * 30_000 ** 0.947
+    _close(fb / LB, so, rel=0.001, msg="L/D fallback to size-only")
+    # Steel = composite × 1.347 at the same propellant and L/D.
+    c = mest.solid_stage_inert(25_000 * LB, "composite", "power",
+                               source="lewis", ld_ratio=9.0)
+    s = mest.solid_stage_inert(25_000 * LB, "steel", "power",
+                               source="lewis", ld_ratio=9.0)
+    _close(s / c, 1.347, rel=0.001, msg="L/D steel multiplier")
+    # Predicts a real catalogue motor (GEM 63) within the fit's RMS band.
+    pred = mest.solid_stage_inert(97_195 * LB, "composite", "power",
+                                  source="lewis", ld_ratio=12.535) / LB
+    _close(pred, 11_586, rel=0.20, msg="GEM 63 within RMS band")
+
+
 def test_structural_coefficient_roundtrip():
     mp, eps = 100_000.0, 0.1
     mi = mest.inert_from_structural_coefficient(mp, eps)
