@@ -613,9 +613,13 @@ def solid_stage_inert(prop_mass_kg: float, casing: str = "steel",
       "zandbergen" — Zandbergen (2026) broad-sample stage regression (default).
       "lewis"      — Lewis (2026) fit to the NG Propulsion Products Catalog
                      (2023); best-in-class US motors, ~10% lighter.  With
-                     form="power", if ``ld_ratio`` (= length/diameter) > 0 the
-                     two-variable size+slenderness model is used; otherwise the
-                     size-only coefficient.  form="linear" = constant fraction.
+                     form="power", if ``ld_ratio`` > 0 the two-variable
+                     size+slenderness model is used; otherwise the size-only
+                     coefficient.  form="linear" = constant fraction.
+                     ``ld_ratio`` is the MOTOR (case+nozzle) length/diameter,
+                     matching the catalogue's "overall length" — NOT a stage
+                     length padded with interstages/skirts, which would inflate
+                     L/D and over-predict inert mass.
     Returns kg.  See _SOLID_STAGE / _SOLID_STAGE_LEWIS for coefficients.
     """
     if source == "lewis":
@@ -1087,6 +1091,11 @@ def analyse_solid(inp: SolidStageInputs,
                   stated_dry_kg: float = 0.0) -> tuple[list[MassEstimate],
                                                        list[Divergence]]:
     comp = estimate_solid_stage(inp)
+    # L/D for the Lewis slenderness correction.  NOTE: this uses the stage
+    # length_m as a proxy for motor length; the Lewis fit wants the MOTOR
+    # (case+nozzle) length, so a stage length padded with interstages/skirts
+    # will overstate L/D and over-predict inert.  Supply motor length for an
+    # accurate correction.
     ld = (inp.length_m / inp.diameter_m
           if inp.length_m > 0 and inp.diameter_m > 0 else 0.0)
     aggs = aggregate_estimates(inp.prop_mass_kg, is_solid=True,
@@ -1204,7 +1213,9 @@ def main(argv=None):
                          "your assumption in kg, not a prediction")
     ps.add_argument("--diameter", type=float, default=0.0, help="m")
     ps.add_argument("--length", type=float, default=0.0,
-                    help="m (with --diameter, enables the Lewis L/D correction)")
+                    help="motor length incl. nozzle, m (with --diameter enables "
+                         "the Lewis L/D correction; use MOTOR length, not a stage "
+                         "length padded with interstages/skirts)")
     ps.add_argument("--gross-mass", type=float, default=0.0, help="kg")
     ps.add_argument("--no-avionics", action="store_true",
                     help="stage does not carry guidance avionics (booster)")

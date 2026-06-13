@@ -247,7 +247,19 @@ the L/D term in, the steel material penalty drops to **×1.347** (from 1.50): th
 slender steel Castor-IV motors' extra inert was largely geometry, not material.
 Stage type (upper vs first) was tested and is redundant once L/D is present.
 When length/diameter are absent the estimator falls back to the size-only
-coefficient above. *Note:* the fit is on **propellant** mass, not the dataset
+coefficient above.
+
+> **Feed *motor* L/D, not stage L/D.** The catalogue's length is the motor's
+> overall length (case + nozzle), so the L/D term expects motor geometry. A
+> stage length padded with interstages, skirts, or an aft bay will overstate
+> L/D and over-predict inert mass (the term is monotone increasing in L/D).
+> Example: the AUR first stage at its 5.0 m *stage* length gives L/D ≈ 5.7 and a
+> −11 % gap to its modeled dry mass; at a realistic ~4 m *motor* length
+> (L/D ≈ 4.5) the gap is −7 %, and the estimator has no clean way to subtract
+> skirt length for you. The CLI `--length` and `analyse_solid` take whatever
+> length you supply, so supply the motor's.
+
+*Note:* the fit is on **propellant** mass, not the dataset
 README's loaded-mass form (RMS 16.6 %) — loaded mass embeds the inert mass being
 predicted, so it is circular for a tool that validates a stated inert mass.
 Largest residual remains the Castor 30XL at −26 % (submerged nozzle / advanced
