@@ -91,7 +91,8 @@ tabbed notebook**.
 - **Dry Mass Estimator** (Analysis menu) — estimates a stage's dry/inert mass
   from its geometry, propellant and thrust using component-level Wilhite-school
   mass estimating relationships (Akin/UMD) and aggregate relations (Pietrobon
-  hydrolox; structural coefficient; Zandbergen solid-stage regressions), and
+  hydrolox; structural coefficient; Zandbergen and Lewis/NG-catalog best-in-class
+  solid-stage regressions), and
   reports how far the missile's stated burnout mass diverges from each. Pulls
   per-stage parameters from the selected missile; works standalone too
   (`python mass_estimator.py --demo`). Full method notes in `MASS_ESTIMATOR.md`.

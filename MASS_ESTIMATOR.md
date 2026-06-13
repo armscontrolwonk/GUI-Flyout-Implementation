@@ -218,6 +218,21 @@ skirts, TVC, avionics, separation). An *assumed* propellant-mass-fraction
 option `m_inert = m_prop·(1/ζ − 1)` is available opt-in (`--zeta`) — like the
 liquid ε, it restates your assumption in kg and is not a prediction.
 
+**Best-in-class cross-check — Lewis 2026 (NG catalog).** A second whole-stage
+fit (`source="lewis"`) is reported alongside Zandbergen: a Lewis regression of
+the *Northrop Grumman Propulsion Products Catalog* (Jan 2023, pp. 9–39), 29
+flight-proven Orion/Castor/GEM motors. Coefficients are in lbm as published
+(power law `m_i = k·m_p^0.947`, k = 0.172 composite / 0.258 steel; or constant
+inert fraction f = 0.092 / 0.132) and converted at the kg boundary. Because
+these are mature, mass-optimised flight motors, this fit runs **~10 % lighter**
+than the broader Zandbergen sample — it is the lower (best-in-class) edge of the
+inert band, the right reference for "fanciest US motor" sizing. Same scope as
+Zandbergen (whole-stage, nozzle included); regressed on case material only
+(nozzle material is not separately modelled — R² = 0.956 without it). Material
+penalty steel/composite ≈ 1.50×, independently matching Zandbergen's 1.52×.
+~20 % (1σ) scatter; steel rests on 3 Castor-IV motors (~20–35 k lbm) — do not
+trust steel outside that band.
+
 ### Solid — component-level (partial)
 
 Open-literature component MERs for solids are sparse. The component view sums:
@@ -294,6 +309,10 @@ hydrolox stages it falls (the Pietrobon `mp^0.848` size dependence).
 9. M. D. Scher & D. North, *The Space Propulsion Sizing Program* (SPSP),
    NIA / Georgia Tech (`10.1.1.588.5523.pdf`) — pressure-vessel tank sizing
    with multi-estimate averaging; validates the physics tank approach.
+10. *Northrop Grumman Propulsion Products Catalog* (Jan 2023, pp. 9–39) — per-motor
+    data sheets for 29 Orion/Castor/GEM solid motors; basis for the "Lewis 2026
+    (NG catalog)" best-in-class solid inert-mass regression. Case-material
+    classification from external Pegasus/Castor/GEM literature.
 10. D. M. Gaspar, *A Tool for Preliminary Design of Rockets*, IST Lisbon, 2014
     (`Thesis.pdf`) — independent confirmation of the Akin MER coefficients.
 11. J. B. Nowell Jr., *Missile Total and Subsection Weight and Size Estimation

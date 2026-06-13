@@ -560,14 +560,47 @@ _SOLID_STAGE = {
                   "rmspe": 0.24},
 }
 
+# "Lewis 2026 (NG catalog)" — Lewis regression of the Northrop Grumman
+# Propulsion Products Catalog (Jan 2023, pp. 9-39): 29 flight-proven
+# Orion/Castor/GEM motors, the best-in-class US composite/steel family.  These
+# are mature, mass-optimised flight motors, so this fit runs ~10% LIGHTER than
+# the broader Zandbergen sample — it is the lower (best-in-class) edge of the
+# whole-stage inert band, useful for "fanciest US motor" sizing.
+#   Power law (recommended):  m_inert = k · m_prop^0.947
+#   Constant fraction:        m_inert = f/(1-f) · m_prop,  f = m_inert/m_loaded
+# COEFFICIENTS ARE IN lbm, exactly as published; converted at the kg boundary.
+# ~20% (1σ) per-motor scatter.  Steel rests on 3 Castor-IV motors (~20-35k lbm
+# loaded); do not trust steel outside that band.  Valid m_prop ~1,700-114,000 lbm.
+_SOLID_STAGE_LEWIS = {
+    "composite": {"k": 0.172, "f": 0.092, "rmspe": 0.22},
+    "steel":     {"k": 0.258, "f": 0.132, "rmspe": 0.22},
+    "exp":       0.947,
+}
+_LB_PER_KG = 2.2046226218
+
 
 def solid_stage_inert(prop_mass_kg: float, casing: str = "steel",
-                      form: str = "power") -> float:
-    """Whole-stage solid inert mass, Zandbergen (2026).
+                      form: str = "power", source: str = "zandbergen") -> float:
+    """Whole-stage solid inert mass.
 
     casing ∈ {"steel", "composite"}; form ∈ {"power", "linear"}.
-    Returns kg.  See _SOLID_STAGE for the coefficients and accuracy.
+    source ∈ {"zandbergen", "lewis"}:
+      "zandbergen" — Zandbergen (2026) broad-sample stage regression (default).
+      "lewis"      — Lewis (2026) fit to the NG Propulsion Products Catalog
+                     (2023); best-in-class US motors, ~10% lighter.  Here
+                     form="linear" uses the constant inert-fraction model.
+    Returns kg.  See _SOLID_STAGE / _SOLID_STAGE_LEWIS for coefficients.
     """
+    if source == "lewis":
+        fam = _SOLID_STAGE_LEWIS.get(casing, _SOLID_STAGE_LEWIS["composite"])
+        mp_lb = max(prop_mass_kg, 0.0) * _LB_PER_KG
+        if form == "linear":                    # constant inert-fraction model
+            f = fam["f"]
+            mi_lb = f / (1.0 - f) * mp_lb
+        else:                                    # power law (recommended)
+            mi_lb = fam["k"] * mp_lb ** _SOLID_STAGE_LEWIS["exp"]
+        return mi_lb / _LB_PER_KG
+
     fam = _SOLID_STAGE.get(casing, _SOLID_STAGE["steel"])
     mp_t = max(prop_mass_kg, 0.0) / 1000.0
     if form == "linear":
@@ -844,6 +877,15 @@ def aggregate_estimates(prop_mass_kg: float, *, is_solid: bool,
             out.append(MassEstimate(
                 f"Aggregate: Zandbergen {casing} stage ({label})", m,
                 notes=[f"whole-stage inert; RMSPE ≈{rmspe*100:.0f}%"]))
+        # Best-in-class cross-check: Lewis (2026) NG-catalog fit.  Runs ~10%
+        # lighter than Zandbergen — the lower edge of the inert band, i.e. the
+        # fanciest flight-proven US composite/steel motors.
+        lz = _SOLID_STAGE_LEWIS.get(casing, _SOLID_STAGE_LEWIS["composite"])
+        for form, label in (("power", "power-law"), ("linear", "constant-fraction")):
+            m = solid_stage_inert(prop_mass_kg, casing, form, source="lewis")
+            out.append(MassEstimate(
+                f"Aggregate: Lewis 2026 NG-catalog {casing} ({label})", m,
+                notes=[f"best-in-class US motors; RMSPE ≈{lz['rmspe']*100:.0f}%"]))
         if zeta > 0:
             out.append(MassEstimate(
                 f"Assumed propellant mass fraction ζ={zeta:g}",
@@ -1107,7 +1149,8 @@ def main(argv=None):
     ps.add_argument("--thrust", type=float, default=0.0, help="N total")
     ps.add_argument("--pc", type=float, default=0.0, help="chamber pressure Pa")
     ps.add_argument("--casing", choices=["steel", "composite"], default="steel",
-                    help="motor case material (Zandbergen 2026 regression)")
+                    help="case material; reported for both the Zandbergen 2026 "
+                         "and Lewis 2026 (NG-catalog, best-in-class) regressions")
     ps.add_argument("--zeta", type=float, default=0.0,
                     help="optional ASSUMED propellant mass fraction — restates "
                          "your assumption in kg, not a prediction")

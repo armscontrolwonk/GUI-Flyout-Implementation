@@ -73,6 +73,26 @@ def test_solid_stage_regressions():
     _close(est, 8533, rel=0.25, msg="Vega P80")
 
 
+def test_solid_lewis_ng_catalog():
+    LB = 0.45359237
+    # Spec sanity check: 30,000 lbm composite → m_inert ≈ 2,950 lbm.
+    est_lb = mest.solid_stage_inert(30_000 * LB, "composite", "power",
+                                    source="lewis") / LB
+    _close(est_lb, 2950, rel=0.03, msg="NG spec sanity (composite 30k lbm)")
+    # Constant-fraction model: inert/loaded = 0.092 (composite).
+    mp_lb = 30_000.0
+    mi_lb = mest.solid_stage_inert(mp_lb * LB, "composite", "linear",
+                                   source="lewis") / LB
+    _close(mi_lb / (mi_lb + mp_lb), 0.092, rel=0.001, msg="composite fraction")
+    # Steel ≈ 1.5× composite at the same load (documented material penalty).
+    c = mest.solid_stage_inert(50_000 * LB, "composite", "power", source="lewis")
+    s = mest.solid_stage_inert(50_000 * LB, "steel", "power", source="lewis")
+    _close(s / c, 1.50, rel=0.01, msg="steel/composite penalty")
+    # Best-in-class runs lighter than the broader Zandbergen sample.
+    assert (mest.solid_stage_inert(50_000 * LB, "composite", "power", source="lewis")
+            < mest.solid_stage_inert(50_000 * LB, "composite", "power"))
+
+
 def test_structural_coefficient_roundtrip():
     mp, eps = 100_000.0, 0.1
     mi = mest.inert_from_structural_coefficient(mp, eps)
