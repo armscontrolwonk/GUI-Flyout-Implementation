@@ -264,9 +264,12 @@ override the global schedule for a specific stage.
 > **Glide vehicles** carry a separate guidance axis (`glider_guidance`). The four
 > **core** reentry models span the phugoid-damping spectrum — `ballistic` (no
 > lift), `skip_glide` (undamped phugoid), `damped_glide` (the realistic guided
-> pull-up), and `equilibrium_glide_acton` (Acton non-oscillatory capture) — plus
-> two **legacy** models kept for comparison: `equilibrium_glide` (Tracy) and
-> `skip_to_equilibrium`.  See `DAMPED_GLIDE.md` for details.
+> pull-up, default ζ≈0.7), and `equilibrium_glide_acton` (Acton non-oscillatory
+> capture) — plus two **legacy** models kept for comparison: `equilibrium_glide`
+> (Tracy) and `skip_to_equilibrium`.  The ζ≈0.7 default is the classical
+> second-order control damping ratio — the desirable ζ=0.4–0.8 band (Ogata §5-3;
+> Franklin §3.4.2, ζ=0.7 → ~5% overshoot) and very nearly settling-time-optimal.
+> See `DAMPED_GLIDE.md` for details.
 
 ---
 
