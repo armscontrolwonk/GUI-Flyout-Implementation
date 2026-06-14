@@ -47,6 +47,23 @@ the vehicle is pushed back up:
 with H_ρ = −ρ/(dρ/dh) the local density scale height. Typically
 ω_p ≈ 0.034 rad/s — a skip period of order 180 s.
 
+This analytical frequency is corroborated empirically by Liu et al. (2025), who
+decompose CAV-H skip-glide trajectories with a higher-order multi-resolution
+dynamic mode decomposition (HMDMD) and measure the skip oscillation's dominant
+frequency directly from the data: **0.0207–0.0374 rad/s** across entry speeds of
+3000–5000 m/s (their Table 9), bracketing the ω_p ≈ 0.034 rad/s used here. Their
+data also show the frequency *falling* as entry speed rises — exactly the
+g_eff = g − V²/r dependence of ω_p (faster ⇒ smaller g_eff ⇒ lower ω_p).
+
+A caveat worth recording: the linearization above treats the phugoid as a
+*neutrally stable* oscillator (ω_p² > 0, no growth term) that guidance then
+damps. Liu et al. find the open-loop altitude mode is in fact mildly
+**unstable** — their DMD eigenvalues lie outside the unit circle (|λ| up to
+1.098; "aperiodic and unstable," their Table 8 / Fig. 25). The open-loop skip
+therefore tends to *grow*, not merely persist, which only strengthens the case
+that a guided glider must actively damp it (§3) — the feedback is removing a
+real (slightly negative-damped) mode, not just shaping a neutral one.
+
 ## 3. The pull‑up is the first half‑cycle — and the damping ratio shapes it
 
 The initial pull‑up is **not a separate event**: it is the leading half‑cycle of
@@ -237,3 +254,12 @@ triples to match the analytic equilibrium glide. See `damped_glide_smoke_test.py
 6. A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
    Hypersonic Glide Vehicles*, M.S. thesis, Georgia Tech, 2024 — SWERVe / C‑HGB
    dimensions (validation body).
+7. Z. Liu, Y. Hu, C. Gao, W. Jing, X. Ji, "Modeling and analysis of maneuver
+   laws based on higher order multi‑resolution dynamic mode decomposition for
+   hypersonic glide vehicles," *Defence Technology* 48 (2025) 34–47
+   (DOI 10.1016/j.dt.2024.12.018) — data‑driven (DMD/Koopman) decomposition of
+   HGV skip‑glide trajectories. Not a guidance/damping law, but independently
+   measures the skip phugoid frequency (0.0207–0.0374 rad/s, their Table 9 —
+   corroborating ω_p ≈ 0.034 rad/s here) and finds the open‑loop altitude mode
+   mildly unstable (|λ| up to 1.098, their Table 8 / Fig. 25). CAV‑H validation
+   body: 907 kg, 0.48 m², 50 km / 5.5 km/s.

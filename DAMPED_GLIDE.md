@@ -163,3 +163,11 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
 - A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
   Hypersonic Glide Vehicles*, M.S. thesis, Georgia Tech, 2024 — SWERVe / C‑HGB
   vehicle dimensions used as the validation glide body.
+- Z. Liu, Y. Hu, C. Gao, W. Jing, X. Ji, "Modeling and analysis of maneuver laws
+  based on higher order multi‑resolution dynamic mode decomposition for
+  hypersonic glide vehicles," *Defence Technology* 48 (2025) 34–47
+  (DOI 10.1016/j.dt.2024.12.018) — data‑driven (DMD/Koopman) decomposition of
+  HGV skip‑glide; independently measures the skip phugoid frequency
+  (0.0207–0.0374 rad/s) corroborating ω_p ≈ 0.034 rad/s, and shows the open‑loop
+  altitude mode is mildly unstable (motivating active damping). Not a source for
+  the ζ = 0.7 default, which remains the classical second‑order control value.
