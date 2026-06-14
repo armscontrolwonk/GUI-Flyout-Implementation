@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thrusty.dev/schema/missile.schema.json",
+  "title": "Thrusty Missile Model",
+  "description": "Canonical, version-stamped interchange format for a Thrusty missile/launch-vehicle model. One file = one model. A thin adapter converts the flat `stages` array into the recursive stage2 chain that missile_from_dict() consumes. Unknown keys are permitted so the format can carry provenance and future fields without breaking older loaders.",
+  "type": "object",
+  "additionalProperties": true,
+
+  "required": ["schema_version", "name", "missile_class", "stages"],
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Bumped on any breaking change to this schema. The loader refuses files whose major version it does not understand."
+    },
+
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name, e.g. 'Minuteman III' or 'DF-21'."
+    },
+
+    "missile_class": {
+      "type": "string",
+      "enum": ["srbm", "mrbm", "irbm", "icbm", "slv", "sounding", "other"],
+      "description": "Classifies the BOOST/DELIVERY vehicle only; selects estimator fallback defaults (typical Isp, mass fraction, default guidance) when source data is missing, and has no effect when those fields are supplied. A hypersonic glide body is NOT a class here — it is modelled on the RV side as rv_kind='glider' riding on a booster of the appropriate ballistic class. Cruise is out of scope. See docs/ingestion/estimators.md."
+    },
+
+    "country": {
+      "type": "string",
+      "description": "Originating country/operator (ISO name). Optional, used for catalog filtering."
+    },
+
+    "source": {
+      "type": "object",
+      "description": "Where the numbers came from. Required for catalog inclusion so community values are auditable.",
+      "additionalProperties": true,
+      "properties": {
+        "citation": { "type": "string", "description": "Free-text citation, e.g. 'Forden (2007), Table 3'." },
+        "url": { "type": "string", "format": "uri" },
+        "author": { "type": "string", "description": "Contributor who built/curated the model." },
+        "date_ingested": { "type": "string", "format": "date" },
+        "license": { "type": "string", "description": "License for redistribution in the catalog, e.g. 'CC-BY-4.0'." }
+      }
+    },
+
+    "completeness": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Computed by the resolver: weighted fraction of fields that are `given` or `derived` (vs `estimated`/`default`). Mirrored into catalog.json. Authors leave this out; the pipeline writes it."
+    },
+
+    "provenance": {
+      "type": "object",
+      "description": "Per-field record of how each value was obtained. Key = dotted field path (e.g. 'stages.0.isp_s'). Never read by the simulation; consumed by the report/UI to surface VERIFY flags.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["given", "derived", "estimated", "default", "unresolved"],
+            "description": "Which rung of the resolution ladder produced this value."
+          },
+          "method": { "type": "string", "description": "Named rule, e.g. 'm0_minus_prop', 'solid_propellant_typical'." },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "unit_in": { "type": "string", "description": "Original source unit before SI normalization, e.g. 'lbf', 'ft', 'nmi'." },
+          "note": { "type": "string" }
+        }
+      }
+    },
+
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "description": "Powered stages, bottom (stage 1) first. Adapter links them into the stage2 chain. Top-level payload/RV/booster/shroud blocks attach to stage 1.",
+      "items": { "$ref": "#/$defs/stage" }
+    },
+
+    "boosters": { "$ref": "#/$defs/boosters" },
+    "shroud":   { "$ref": "#/$defs/shroud" },
+    "payload":  { "$ref": "#/$defs/payload" },
+    "rv":       { "$ref": "#/$defs/rv" }
+  },
+
+  "$defs": {
+
+    "stage": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One powered stage. Six fields are REQUIRED with no fallback; thrust_N and mass_final are derived when omitted.",
+      "required": [
+        "mass_initial",
+        "mass_propellant",
+        "burn_time_s",
+        "isp_s",
+        "diameter_m",
+        "length_m"
+      ],
+      "properties": {
+        "name":            { "type": "string", "description": "Optional per-stage label; defaults to '<name> S<n>'." },
+
+        "mass_initial":    { "type": "number", "exclusiveMinimum": 0, "description": "kg — launch mass of this stage stack (structure + propellant + everything above)." },
+        "mass_propellant": { "type": "number", "exclusiveMinimum": 0, "description": "kg — usable propellant burned by this stage." },
+        "mass_final":      { "type": "number", "exclusiveMinimum": 0, "description": "kg — jettisoned dry hardware mass (debris/staging). DERIVED as mass_initial − mass_propellant when omitted." },
+
+        "diameter_m":      { "type": "number", "exclusiveMinimum": 0, "description": "m — body diameter." },
+        "length_m":        { "type": "number", "exclusiveMinimum": 0, "description": "m — body length. Derivable from L/D ratio × diameter." },
+
+        "burn_time_s":     { "type": "number", "exclusiveMinimum": 0, "description": "s — powered-flight duration." },
+        "isp_s":           { "type": "number", "exclusiveMinimum": 0, "description": "s — vacuum specific impulse. ESTIMATED from propellant/class when omitted (flagged VERIFY)." },
+
+        "thrust_N":        { "type": "number", "exclusiveMinimum": 0, "description": "N — vacuum thrust. NOTE: Thrusty always re-derives thrust from Isp×g0×prop/burn; this field is reference/cross-check only." },
+        "nozzle_exit_area_m2": { "type": "number", "minimum": 0, "description": "m² — for pressure-thrust altitude correction. 0 = legacy 2% back-pressure approximation." },
+        "coast_time_s":    { "type": "number", "minimum": 0, "description": "s — coast between this stage's burnout and next ignition. Ignored on last stage." },
+
+        "propellant_type": {
+          "type": "string",
+          "enum": ["solid_composite", "solid_double_base", "liquid_storable", "liquid_lox_rp1", "liquid_lox_lh2", "liquid_lox_ch4", "unknown"],
+          "description": "Selects the estimator row for Isp/mass-fraction when those are missing. Not consumed by physics directly."
+        },
+        "solid_motor":     { "type": "boolean", "description": "True = cannot throttle/cut off; orbital insertion runs to natural burnout." },
+        "grain_type":      { "type": "string", "enum": ["", "tubular", "rod_tube", "double_anchor", "star", "multi_fin", "dual_composition"] },
+        "thrust_peak_N":   { "type": "number", "minimum": 0, "description": "N — peak vacuum thrust for solids; 0 = derive from average × fill factor." },
+        "thrust_profile":  { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }, "description": "Bespoke [(t_frac, F_frac), ...]; overrides grain_type." },
+
+        "guidance":        { "type": "string", "enum": ["pitch_program", "true_gravity_turn", "orbital_insertion"], "description": "Legacy 'loft'/'gravity_turn' are auto-migrated on load." },
+        "burnout_angle_deg":      { "type": "number", "description": "deg — final elevation (pitch_program) or kick elevation (gravity_turn)." },
+        "loft_angle_rate_deg_s":  { "type": "number", "minimum": 0, "description": "deg/s — pitch/kick rate." },
+        "launch_elevation_deg":   { "type": "number", "minimum": 0, "maximum": 90, "description": "deg — elevation at liftoff (90 = vertical)." },
+        "stage_turn_start_s":     { "type": ["number", "null"] },
+        "stage_turn_stop_s":      { "type": ["number", "null"] },
+        "stage_burnout_angle_deg":{ "type": ["number", "null"] },
+        "stage_yaw_start_s":      { "type": ["number", "null"] },
+        "stage_yaw_stop_s":       { "type": ["number", "null"] },
+        "stage_yaw_final_az_deg": { "type": ["number", "null"] },
+
+        "nose_shape":      { "type": "string", "enum": ["", "cone", "tangent_ogive", "von_karman", "lv_haack", "parabola", "blunt_cylinder"] },
+        "nose_length_m":   { "type": "number", "minimum": 0 },
+        "mach_table":      { "type": "array", "items": { "type": "number" }, "description": "Cd-vs-Mach lookup Mach axis. Empty = Forden (2007) defaults." },
+        "cd_table":        { "type": "array", "items": { "type": "number" }, "description": "Drag coefficients aligned with mach_table." }
+      }
+    },
+
+    "boosters": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Strap-on boosters fired in parallel with stage 1. Omit entirely (or n=0) for none.",
+      "properties": {
+        "n":              { "type": "integer", "minimum": 0 },
+        "thrust_n":       { "type": "number", "minimum": 0, "description": "N — vacuum thrust per booster." },
+        "burn_time_s":    { "type": "number", "minimum": 0 },
+        "inert_kg":       { "type": "number", "minimum": 0, "description": "kg — inert mass per booster." },
+        "prop_kg":        { "type": "number", "minimum": 0, "description": "kg — propellant mass per booster." },
+        "isp_s":          { "type": "number", "minimum": 0 },
+        "nozzle_area_m2": { "type": "number", "minimum": 0 },
+        "diam_m":         { "type": "number", "minimum": 0 },
+        "length_m":       { "type": "number", "minimum": 0, "description": "m — 0 = default 2 × diameter." },
+        "cd":             { "type": "number", "minimum": 0, "description": "Zero-lift drag coefficient; default 0.20." },
+        "core_delay_s":   { "type": "number", "minimum": 0, "description": "s — delay before core ignition. 0 = simultaneous (Soyuz)." }
+      }
+    },
+
+    "shroud": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Payload fairing jettisoned during ascent. Omit (or mass=0) for none.",
+      "properties": {
+        "mass_kg":          { "type": "number", "minimum": 0 },
+        "jettison_alt_km":  { "type": "number", "minimum": 0, "description": "km — default 80." },
+        "length_m":         { "type": "number", "minimum": 0 },
+        "diameter_m":       { "type": "number", "minimum": 0 },
+        "nose_shape":       { "type": "string", "enum": ["", "cone", "tangent_ogive", "von_karman", "lv_haack", "parabola", "blunt_cylinder"] },
+        "nose_length_m":    { "type": "number", "minimum": 0 }
+      }
+    },
+
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "What the vehicle delivers. `terminal_mode` is the discriminator that switches required fields, which estimators run, and which sanity checks apply (see estimators.md §8-9).",
+      "properties": {
+        "terminal_mode": {
+          "type": "string",
+          "enum": ["reentry", "orbital", "suborbital_payload"],
+          "description": "reentry → requires an rv/rv_ref, runs the β/heating estimators, impact-side validation. orbital → a satellite that does NOT reenter: NO rv, NO β/heating (their absence is correct, not a gap); requires payload_kg + final-stage orbital_insertion; orbital-side validation (reaches orbital velocity, perigee, decay lifetime). suborbital_payload → mass to apogee, no orbit claimed. Default: 'orbital' when missile_class='slv', else 'reentry'."
+        },
+        "payload_kg":  { "type": "number", "minimum": 0, "description": "kg — total to burnout. For orbital: the satellite mass to orbit." },
+        "bus_mass_kg": { "type": "number", "minimum": 0, "description": "kg — post-boost vehicle / bus (reentry mode)." },
+        "num_rvs":     { "type": "integer", "minimum": 1, "description": "reentry mode only." },
+        "rv_separates":{ "type": "boolean", "description": "True = empty last stage follows a separate debris arc." },
+        "pbv_diameter_m": { "type": "number", "minimum": 0 },
+        "pbv_length_m":   { "type": "number", "minimum": 0 },
+        "rv_ref":      { "type": "string", "description": "reentry mode: name of an entry in the shared rv_library to attach instead of an inline rv block." },
+        "target_orbit_alt_km": { "type": "number", "minimum": 0, "description": "orbital mode: target circular orbit altitude for orbital_insertion guidance. Omit to report the naturally achieved orbit." }
+      }
+    },
+
+    "rv": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Inline reentry-vehicle definition (mirrors RVParams / rv_from_dict). Alternatively reference one via payload.rv_ref.",
+      "required": ["mass_kg", "beta_kg_m2"],
+      "properties": {
+        "name":            { "type": "string" },
+        "mass_kg":         { "type": "number", "exclusiveMinimum": 0, "description": "kg — single-RV mass." },
+        "beta_kg_m2":      { "type": "number", "exclusiveMinimum": 0, "description": "kg/m² — ballistic coefficient m/(Cd·A). Derivable from mass/shape/diameter." },
+        "separation_mode": { "type": "string", "enum": ["separating_rv", "body"] },
+        "shape":           { "type": "string", "enum": ["", "cone", "tangent_ogive", "von_karman", "lv_haack", "parabola", "blunt_cylinder"] },
+        "diameter_m":      { "type": "number", "minimum": 0 },
+        "length_m":        { "type": "number", "minimum": 0 },
+        "nose_radius_m":   { "type": "number", "minimum": 0, "description": "m — stagnation radius for Sutton-Graves heating; default 0.05." },
+        "emissivity":      { "type": "number", "minimum": 0, "maximum": 1, "description": "Default 0.85." },
+
+        "glider_enabled":      { "type": "boolean" },
+        "glider_LD":           { "type": "number", "minimum": 0 },
+        "glider_guidance":     { "type": "string", "enum": ["equilibrium_glide", "equilibrium_glide_acton", "skip_glide", "skip_to_equilibrium"] },
+        "glider_pullup_g_max": { "type": "number", "minimum": 0, "description": "Default 10." },
+        "glider_terminal_dive":{ "type": "boolean" },
+        "glider_terminal_alt_km": { "type": "number", "minimum": 0, "description": "Default 30." },
+        "glider_beta_entry_kg_m2":{ "type": "number", "minimum": 0 },
+        "glider_skip_count":   { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

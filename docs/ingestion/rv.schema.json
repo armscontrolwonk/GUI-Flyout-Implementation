@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thrusty.dev/schema/rv.schema.json",
+  "title": "Thrusty Reentry Vehicle / Glide Body",
+  "description": "Canonical format for an independently-loadable reentry vehicle (mirrors RVParams / rv_from_dict; stored as rv_library/<name>.rv.json). RVs are shared: a missile attaches one via payload.rv_ref. NOTE: satellites that do not reenter are NOT RVs — they are modelled as an orbital payload on the missile (payload.terminal_mode = 'orbital'), with no entry here.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "name", "rv_kind", "beta_kg_m2"],
+
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "name":           { "type": "string", "minLength": 1 },
+
+    "rv_kind": {
+      "type": "string",
+      "enum": ["ballistic", "marv_body", "glider", "decoy"],
+      "description": "Discriminator. ballistic → separating_rv, glider off (mass_kg required). marv_body → separation_mode='body': mass_kg/diameter_m/length_m are INHERITED from the missile's last-stage burnout state, so their absence here is correct, NOT a gap. glider → glider_enabled, requires glider_LD + glider_guidance. decoy → light, low-β separating object."
+    },
+
+    "source": {
+      "type": "object", "additionalProperties": true,
+      "properties": {
+        "citation": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "author": { "type": "string" },
+        "license": { "type": "string" }
+      }
+    },
+    "completeness": { "type": "number", "minimum": 0, "maximum": 1 },
+    "provenance": { "type": "object", "additionalProperties": true },
+
+    "mass_kg":    { "type": "number", "exclusiveMinimum": 0, "description": "kg — single-RV mass. Required for ballistic/glider/decoy; ignored (inherited) for marv_body." },
+    "beta_kg_m2": { "type": "number", "exclusiveMinimum": 0, "description": "kg/m² — ballistic coefficient m/(Cd·A). The one always-required physics field. Prefer a given value; geometry derivation is low-confidence (hypersonic Cd is uncertain)." },
+
+    "shape":         { "type": "string", "enum": ["", "cone", "tangent_ogive", "von_karman", "lv_haack", "parabola", "blunt_cylinder"] },
+    "diameter_m":    { "type": "number", "minimum": 0 },
+    "length_m":      { "type": "number", "minimum": 0 },
+    "nose_radius_m": { "type": "number", "minimum": 0, "description": "m — stagnation radius for Sutton-Graves heating. Default 0.05 (filled silently)." },
+    "emissivity":    { "type": "number", "minimum": 0, "maximum": 1, "description": "Default 0.85 (filled silently)." },
+    "separation_mode": { "type": "string", "enum": ["separating_rv", "body"], "description": "Derived from rv_kind: marv_body → 'body', else 'separating_rv'." },
+
+    "glider_enabled":         { "type": "boolean" },
+    "glider_LD":              { "type": "number", "minimum": 0, "description": "Required when rv_kind='glider'." },
+    "glider_guidance":        { "type": "string", "enum": ["equilibrium_glide", "equilibrium_glide_acton", "skip_glide", "skip_to_equilibrium"] },
+    "glider_pullup_g_max":    { "type": "number", "minimum": 0, "description": "Default 10." },
+    "glider_terminal_dive":   { "type": "boolean" },
+    "glider_terminal_alt_km": { "type": "number", "minimum": 0, "description": "Default 30." },
+    "glider_aero_model":      { "type": "string", "enum": ["constant_LD", "polar"], "description": "Default constant_LD." },
+    "glider_beta_entry_kg_m2":{ "type": "number", "minimum": 0, "description": "Acton Phase-3 direct-reentry β_S. Required ONLY for glider_guidance='equilibrium_glide_acton'." },
+    "glider_skip_count":      { "type": "integer", "minimum": 0, "description": "skip_to_equilibrium only; default 1." }
+  }
+}
