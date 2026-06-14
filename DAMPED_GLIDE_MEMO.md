@@ -229,8 +229,9 @@ undefined at/above circular speed).
 On the C‑HGB glide body (SWERVe/AHW descendant; Gulan 2024) at sub‑circular entry
 (~5.6 km/s), the undamped skip spends **57 %** of its glide *above* 100 km —
 outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %**
-(the remainder being the legitimate ballistic arc to apogee), and range nearly
-triples to match the analytic equilibrium glide. See `damped_glide_smoke_test.py`.
+(the remainder being the legitimate ballistic arc to apogee), and range rises
+**~2.5×** (2445 → 6187 km) to match the analytic equilibrium glide. See
+`damped_glide_smoke_test.py`.
 
 ## References
 

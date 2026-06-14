@@ -54,8 +54,8 @@ tabbed notebook**.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
-- **Guidance** — two modes (see below), with loft angle, pitch rate, turn
-  start/stop, and optional advanced per-stage pitch and yaw programs.
+- **Guidance** — three powered-flight modes (see below), with loft angle, pitch
+  rate, turn start/stop, and optional advanced per-stage pitch and yaw programs.
 - **Engine Cutoff** — optional early cutoff time (s); blank = full burn.
 - **Target / Range** — optional target lat/lon or slant range for the
   *Aim at Target* function.
@@ -152,7 +152,8 @@ upper stages).  Key fields on the top-level node:
 - `rv_shape`, `rv_diameter_m`, `rv_length_m` — RV aerodynamic geometry
 
 **Guidance (top-level, with optional per-stage overrides)**
-- `guidance`: `gravity_turn` or `orbital_insertion`
+- `guidance`: `pitch_program` (default), `true_gravity_turn`, or
+  `orbital_insertion` (legacy `loft` is auto-migrated to `pitch_program`)
 - `loft_angle_deg` — kick (burnout) elevation angle (°)
 - `loft_angle_rate_deg_s` — pitch-over rate during the kick phase (°/s)
 - Per-stage overrides: `stage_turn_start_s`, `stage_turn_stop_s`,
@@ -233,23 +234,36 @@ with large strap-on boosters.
 
 ### Guidance laws
 
-**Gravity Turn** (`gravity_turn`) — The missile launches at
+**Pitch Program** (`pitch_program`, the default) — The missile launches at
+`launch_elevation_deg`, kicks off vertical to `burnout_angle_deg` at
+`loft_angle_rate_deg_s` (the kick rate), then locks thrust to the velocity
+vector for the remainder of powered flight.  This is the mode used by nearly
+every built-in missile (the SRBM/MRBM/IRBM/ICBM set).  The legacy `loft` mode
+(Forden pitch-over) is auto-migrated to `pitch_program` on load.
+
+**True Gravity Turn** (`true_gravity_turn`) — The missile launches at
 `launch_elevation_deg` and pitches over at `loft_angle_rate_deg_s` from
 `stage_turn_start_s` until reaching `loft_angle_deg` (the burnout elevation),
-then locks thrust to the velocity vector for the remainder of powered flight.
+then thrust follows the velocity vector and gravity does the rotation for the
+remainder of powered flight.  Used by the AUR/Minotaur-class stacks.
+
 Per-stage overrides (`stage_turn_start_s`, `stage_turn_stop_s`,
-`stage_burnout_angle_deg`) allow each stage to follow an independent pitch
+`stage_burnout_angle_deg`) let each stage follow an independent pitch
 program — this is how the built-in missiles replicate their published boost-phase
 pitch schedules.  Azimuth is fixed at launch; optional yaw overrides add
 cross-range steering.
 
-**Orbital Insertion** (`orbital_insertion`) — Identical to gravity turn during
+**Orbital Insertion** (`orbital_insertion`) — Identical to a gravity turn during
 boost, but engine cutoff is commanded when the state vector reaches the target
 orbital energy rather than at a fixed burn time.  Solid stages burn to natural
 burnout regardless.
 
-Both modes support optional advanced per-stage pitch and yaw programs that
+All three modes support optional advanced per-stage pitch and yaw programs that
 override the global schedule for a specific stage.
+
+> **Glide vehicles** carry a separate guidance axis (`glider_guidance`):
+> `equilibrium_glide`, `equilibrium_glide_acton`, `skip_glide`,
+> `skip_to_equilibrium`, and `damped_glide`.  See `DAMPED_GLIDE.md` for details.
 
 ---
 
@@ -329,9 +343,10 @@ the exact Newtonian value for out-of-range angles.
 
 ## Built-in missiles
 
-All built-in missiles use gravity-turn guidance with per-stage pitch overrides
-tuned to replicate published boost-phase pitch programs.  The four Forden (2007)
-Table 1 reference missiles are validated against his Table 3 maximum-range figures.
+Most built-in missiles use `pitch_program` guidance with per-stage pitch overrides
+tuned to replicate published boost-phase pitch programs; the AUR/Minotaur-class
+stacks use `true_gravity_turn`.  The four Forden (2007) Table 1 reference missiles
+are validated against his Table 3 maximum-range figures.
 
 | Missile | Class | Stages | Guidance notes |
 |---|---|---|---|
