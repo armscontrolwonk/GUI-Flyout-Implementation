@@ -61,7 +61,11 @@ k_h = 2·ζ·m·√(g_eff / H_ρ)
 
 `ζ` is the single user knob (`glider_damping_zeta`, default **0.7**). The gain is
 computed *each step* from the current state, so it schedules down naturally as V
-and g_eff change — matching Lu's velocity‑scheduled gain (his Eq. 34).
+and g_eff change — matching Lu's velocity‑scheduled gain (his Eq. 34). The 0.7
+default is the classical second‑order control value: it lies in the desirable
+ζ = 0.4–0.8 band (Ogata §5‑3, p.171; Franklin §3.4.2 / Fig. 3.24, ζ = 0.7 → ~5 %
+overshoot) and is very nearly settling‑time‑optimal (Ogata p.173, t_s minimum at
+ζ ≈ 0.68–0.76). See `DAMPED_GLIDE_MEMO.md` §5 for the full rationale.
 
 ### Three independent groundings of the gain (the curated library)
 
@@ -174,4 +178,11 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
   HGV skip‑glide; independently measures the skip phugoid frequency
   (0.0207–0.0374 rad/s) corroborating ω_p ≈ 0.034 rad/s, and shows the open‑loop
   altitude mode is mildly unstable (motivating active damping). Not a source for
-  the ζ = 0.7 default, which remains the classical second‑order control value.
+  the ζ = 0.7 default.
+- K. Ogata, *Modern Control Engineering*, 5th ed., Prentice Hall, 2010 — §5‑3:
+  desirable damping‑ratio band ζ = 0.4–0.8 (p.171), overshoot Eq. (5‑21), and the
+  settling‑time minimum near ζ = 0.68–0.76 (p.173). Source for the ζ = 0.7 default.
+- G. F. Franklin, J. D. Powell, A. Emami‑Naeini, *Feedback Control of Dynamic
+  Systems*, 8th ed., Pearson, 2019 — §3.4.2 / Fig. 3.24: overshoot Eq. (3.72) and
+  ζ = 0.7 → 5 % overshoot as a "frequently used value." Source for the ζ = 0.7
+  default.

@@ -107,19 +107,31 @@ damping coefficient fixes the gain for a chosen damping ratio:
 current state, so the gain schedules down with V and g_eff (consistent with Lu's
 velocity‑scheduled gain).
 
-**Why 0.7 by default.** ζ = 1/√2 ≈ 0.707 is the classical second‑order control
-default ("maximally flat"). Physically it is the lightest damping that still
-reads as a *guided capture* rather than a skip: the first overshoot is
+**Why 0.7 by default.** ζ ≈ 0.7 is the classical second‑order control default:
+it sits in the middle of the damping‑ratio band (**ζ = 0.4–0.8**) that the
+standard control texts recommend for a *desirable* transient response — below
+0.4 gives excessive overshoot, above 0.8 responds sluggishly (Ogata, *Modern
+Control Engineering*, 5th ed., §5‑3, p.171; Franklin, Powell & Emami‑Naeini,
+*Feedback Control of Dynamic Systems*, 8th ed., §3.4.2 / Fig. 3.24, which lists
+ζ = 0.7 → ~5 % overshoot as a "frequently used value"). Physically it is the
+lightest damping that still reads as a *guided capture* rather than a skip: the
+first overshoot is
 
-    M_p = exp(−πζ/√(1−ζ²)) = e^(−π) ≈ 4.3 %,
+    M_p = exp(−πζ/√(1−ζ²)) ≈ 4.3 % at ζ = 1/√2  (~5 % at ζ = 0.7)
+                                        (Ogata Eq. 5‑21; Franklin Eq. 3.72)
 
-i.e. the vehicle overshoots the equilibrium altitude by only ~4 %, then settles
-within roughly one damped period (t_s ≈ 4/ζω_p ≈ 170 s) — **one pronounced
-pull‑up plus one or two shallow, decaying skips.** It is the fastest settling
-without a sluggish approach. Importantly, **0.7 is a modeling choice describing a
-competently‑guided vehicle, not a physical constant of the airframe** — it is
-freely dialed: ~0.3 gives several lazy skips, ≥ 1.0 collapses to a smooth
-equilibrium capture.
+i.e. the vehicle overshoots the equilibrium altitude by only a few %, then
+settles within roughly one damped period (t_s ≈ 4/ζω_p ≈ 170 s) — **one
+pronounced pull‑up plus one or two shallow, decaying skips.** ζ ≈ 0.7 is also
+very nearly the *settling‑time‑minimizing* damping: Ogata (p.173) finds t_s
+bottoms out around ζ = 0.68 (5 % criterion) / 0.76 (2 % criterion), so 0.7 is the
+fastest settling without a sluggish approach. (Note this is the *time‑domain*
+justification; ζ = 1/√2 is also the "maximally flat" value in the *frequency*
+domain — the 2nd‑order Butterworth response — but that is a separate Butterworth
+characterization, not what the transient‑response texts above argue.) Importantly,
+**0.7 is a modeling choice describing a competently‑guided vehicle, not a physical
+constant of the airframe** — it is freely dialed: ~0.3 gives several lazy skips,
+≥ 1.0 collapses to a smooth equilibrium capture.
 
 ## 6. Relation to Acton and Tracy
 
@@ -264,3 +276,12 @@ outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %*
    corroborating ω_p ≈ 0.034 rad/s here) and finds the open‑loop altitude mode
    mildly unstable (|λ| up to 1.098, their Table 8 / Fig. 25). CAV‑H validation
    body: 907 kg, 0.48 m², 50 km / 5.5 km/s.
+8. K. Ogata, *Modern Control Engineering*, 5th ed., Prentice Hall, 2010 — §5‑3
+   "Second‑Order Systems": standard form Eq. (5‑10); max‑overshoot Eq. (5‑21)
+   M_p = e^(−(ζ/√(1−ζ²))π); the desirable damping‑ratio band ζ = 0.4–0.8 (p.171);
+   settling‑time minimum near ζ = 0.68–0.76 (p.173). Source for the ζ ≈ 0.7
+   default.
+9. G. F. Franklin, J. D. Powell, A. Emami‑Naeini, *Feedback Control of Dynamic
+   Systems*, 8th ed. (Global), Pearson, 2019 — §3.4.2 "Overshoot and Peak Time":
+   overshoot Eq. (3.72) M_p = e^(−πζ/√(1−ζ²)); Fig. 3.24 lists ζ = 0.7 → 5 %
+   overshoot as a "frequently used value." Source for the ζ ≈ 0.7 default.
