@@ -1598,18 +1598,28 @@ that bypasses exo-atmospheric defences.
 The HGV machinery in Thrusty has six interlocking pieces, each documented
 in its own subsection below: a state-machine latch that decides when the
 vehicle is in "glide mode"; two aerodynamic models (constant L/D and a
-drag polar); four guidance modes spanning a spectrum of phugoid
+drag polar); five guidance modes spanning a spectrum of phugoid
 suppression; a bank-to-turn cross-range model; an inverted terminal dive;
 and a JSON-based RV library for shipping or extending vehicle
 definitions.
 
 The trajectory machinery and physical conventions follow
 [Tracy & Wright 2020](#16-references) and
-[Acton 2015](#16-references); the four guidance modes implement (i) the
+[Acton 2015](#16-references); the five guidance modes implement (i) the
 Tracy & Wright equilibrium-glide ansatz, (ii) the Acton three-phase
-analytic pull-up, (iii) a pure phugoid skip-glide, and (iv) a
-Thrusty-original hybrid that lets the vehicle skip phugoidally for a
-user-set number of cycles before settling into equilibrium glide.
+analytic pull-up, (iii) a pure phugoid skip-glide, (iv) a Thrusty-original
+hybrid that lets the vehicle skip phugoidally for a user-set number of
+cycles before settling into equilibrium glide, and (v) a damped-phugoid
+glide ([Lu 2013](#16-references)) that fills the realistic physical middle
+of the spectrum with a single damping knob ζ. The four **core** models —
+ballistic, `skip_glide` (undamped phugoid, ζ = 0), `damped_glide` (a
+guided pull-up plus a few decaying skips, ζ ≈ 0.7), and
+`equilibrium_glide_acton` (Acton non-oscillatory capture, ζ → ∞) — form
+one physical spectrum in how strongly the re-entry phugoid is damped;
+`equilibrium_glide` (Tracy) and `skip_to_equilibrium` are retained as
+**legacy** comparison modes. See [`DAMPED_GLIDE.md`](DAMPED_GLIDE.md) and
+[`DAMPED_GLIDE_MEMO.md`](DAMPED_GLIDE_MEMO.md) for the full damped-glide
+derivation.
 
 ### 12.1 The pierce-altitude latch and glide-mode state machine
 
@@ -1701,23 +1711,26 @@ on the trim solution rather than a precise aerodynamic limit.
 
 ### 12.3 Guidance modes
 
-The `glider_guidance` field on each RV selects one of four guidance laws,
+The `glider_guidance` field on each RV selects one of five guidance laws,
 exposed by the GUI dropdown labelled "Glider guidance":
 
-| GUI label | `glider_guidance` value | Origin |
-|---|---|---|
-| Equilibrium glide (Tracy) | `equilibrium_glide` | Tracy & Wright 2020 |
-| Equilibrium glide (Acton) | `equilibrium_glide_acton` | Acton 2015 |
-| Phugoid / skip-glide | `skip_glide` | Sänger / classical skip-glide |
-| Skip → equilibrium (auto-handoff) | `skip_to_equilibrium` | Lewis (Thrusty-original) |
+| GUI label | `glider_guidance` value | Origin | Phugoid damping |
+|---|---|---|---|
+| Phugoid / skip-glide | `skip_glide` | Sänger / classical skip-glide | ζ = 0 (undamped) |
+| Damped-phugoid glide | `damped_glide` | Lu 2013 (Thrusty default) | ζ ≈ 0.7 |
+| Equilibrium glide (Acton) | `equilibrium_glide_acton` | Acton 2015 | ζ → ∞ (limit) |
+| Equilibrium glide (Tracy) | `equilibrium_glide` | Tracy & Wright 2020 | steady (legacy) |
+| Skip → equilibrium (auto-handoff) | `skip_to_equilibrium` | Lewis (Thrusty-original) | N skips then steady (legacy) |
 
-The four modes form a spectrum of *how aggressively the guidance
-suppresses phugoid amplitude*, ranging from "fully suppress it" (Tracy
-and Acton, mild residual phugoid only) through "let it ride at max-L/D
-α*" (skip-glide, larger-amplitude damped phugoid) to "let it ride for N
-skips, then suppress" (skip-to-equilibrium). Atmospheric drag provides
-natural damping to all of these — they are bounded oscillations, not
-unbounded ones.
+The modes form a spectrum of *how aggressively the guidance suppresses
+phugoid amplitude*, ordered above by damping ratio ζ: from "let it ride at
+max-L/D α*" (`skip_glide`, undamped phugoid, ζ = 0), through the tunable
+middle (`damped_glide`, a guided pull-up plus a few decaying skips,
+ζ ≈ 0.7), to "fully suppress it" (Acton and Tracy, analytic capture with
+mild or no residual phugoid, ζ → ∞). `skip_to_equilibrium` is the discrete
+cousin of `damped_glide` — "let it ride for N skips, then suppress."
+Atmospheric drag provides natural damping to all of these — they are
+bounded oscillations, not unbounded ones.
 
 #### 12.3.1 Equilibrium glide (Tracy)
 
@@ -1892,6 +1905,96 @@ the time, altitude, and speed of the transition. The handoff itself is
 implemented as a one-way mode flag flip — the EOM continues integrating
 the same state vector, only the lift-trim rule changes (`trajectory.py:
 2556`).
+
+#### 12.3.5 Damped-phugoid glide (Lu)
+
+The `damped_glide` mode (the Thrusty default for new glide RVs) fills the
+physical middle of the spectrum between undamped `skip_glide` (ζ = 0) and
+the analytic non-oscillatory capture of Acton (ζ → ∞). It reproduces what
+a *guided* hypersonic glider actually does — a pull-up plus a few
+**decaying** skips settling into equilibrium glide — with the number of
+skips emerging from a single damping knob rather than a hand-set integer.
+
+The vehicle flies the max-L/D trim angle α\* (identical to `skip_glide`)
+plus a feedback term proportional to the altitude-rate error, which bleeds
+energy out of the phugoid ([Lu 2013](#16-references) Eq. 33; equivalently
+Yu & Chen 2011 Eq. 19):
+
+```
+L·cos σ_cmd = L·cos σ_nom − k_h·(ḣ − ḣ_eq)
+```
+
+with `ḣ = V·sin γ` the current altitude rate and `ḣ_eq = V·γ*` the
+command, where `γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)` is the
+quasi-equilibrium-glide flight-path angle (Lu Eq. 31).
+
+**The gain — derived, not fitted.** Linearising the planar
+equilibrium-glide EOM about equilibrium ([Vinh, Busemann & Culp
+1980](#16-references) §7-2) gives a damped harmonic oscillator for the
+altitude perturbation,
+
+```
+δḧ + 2ζω_p·δḣ + ω_p²·δh = 0,    ω_p² = g_eff / H_ρ   (g_eff = g − V²/r)
+```
+
+where `H_ρ = −ρ/(dρ/dh)` is the local density scale height (the restoring
+force is the density lapse). Matching the feedback contribution to `2ζω_p`
+fixes the gain for a target damping ratio ζ:
+
+```
+k_h = 2·ζ·m·√(g_eff / H_ρ)
+```
+
+The gain is recomputed each integration step from the current state, so it
+schedules down naturally as V and g_eff change (matching Lu's
+velocity-scheduled gain, his Eq. 34).
+
+**Why ζ = 0.7.** ζ is the single user knob (`glider_damping_zeta`, default
+**0.7**). The 0.7 default is the classical second-order control value: it
+sits in the desirable ζ = 0.4–0.8 band that the standard control texts
+recommend for transient response — below 0.4 yields excessive overshoot,
+above 0.8 responds sluggishly ([Ogata 2010](#16-references) §5-3, p. 171;
+[Franklin, Powell & Emami-Naeini 2019](#16-references) §3.4.2 / Fig. 3.24,
+which lists ζ = 0.7 → ~5 % overshoot as a "frequently used value"). The
+first overshoot is `M_p = exp(−πζ/√(1−ζ²))` ≈ 4.3 % at ζ = 1/√2 (~5 % at
+ζ = 0.7; Ogata Eq. 5-21, Franklin Eq. 3.72), and ζ ≈ 0.7 is very nearly
+the *settling-time-minimizing* damping (Ogata p. 173 finds t_s bottoms out
+near ζ = 0.68–0.76) — so it is the fastest settling without a sluggish
+approach. (ζ = 1/√2 is also the "maximally flat" 2nd-order Butterworth
+value in the *frequency* domain, but that is a separate characterisation,
+not the time-domain transient-response argument above.) ζ = 0.7 is a
+modelling choice describing a competently-guided vehicle, not a physical
+constant of the airframe; it is freely dialled — ~0.3 gives several lazy
+skips, ≥ 1.0 collapses to a smooth equilibrium capture.
+
+**Nesting (the safety property).** ζ = 0 ⇒ k_h = 0 ⇒ the feedback term
+vanishes ⇒ the lift law is *exactly* `skip_glide`. This is verified
+bit-exact (`max|Δaltitude| = 0.000000 km` over a full integration, both
+aero models) in `damped_glide_smoke_test.py`. Large ζ drives the
+trajectory onto equilibrium glide, so `damped_glide` continuously
+interpolates between the two existing endpoints.
+
+**Validation.** Flying the repo's C-HGB glide body on a sub-circular
+(MRBM-class) boost, entering at ~5.6 km/s:
+
+| mode | fraction of glide above 100 km | range |
+|---|---:|---:|
+| `skip_glide` | 57 % (skips out of the atmosphere) | 2445 km |
+| `damped_glide` ζ = 0 | 57 % (bit-identical to skip_glide) | 2445 km |
+| `damped_glide` ζ = 0.7 | 14 % (glides in the atmosphere) | 6187 km |
+| `equilibrium_glide` | 27 % | 6246 km |
+
+Damping at ζ = 0.7 converts a skip that spends most of its flight *above*
+the atmosphere into a true in-atmosphere glide, nearly tripling range to
+match the analytic equilibrium glide.
+
+**Limits.** Gated, like `skip_glide`, on being below the 100 km pierce
+altitude and on dynamic pressure (`q > 1` Pa) — no aerodynamic control in
+vacuum. The feedback is disabled when `g_eff ≤ 0` (at/above circular speed
+the phugoid restoring force is undefined); the vehicle then flies plain
+α\*. `H_ρ` is finite-differenced from the atmosphere and clamped to
+4–12 km. Lift is bounded by the existing `glider_pullup_g_max` cap, so the
+manoeuvre respects the structural g-limit automatically.
 
 ### 12.4 Bank-to-turn (cross-range manoeuvring)
 
@@ -2574,6 +2677,38 @@ optimisation) should use higher-fidelity tools.
   Hypersonic Glider Tests." *Science & Global Security* 23(3):
   220–229. Source for the Minotaur-IV booster stage parameters in
   `_minotaur_4_htv2` (Section 15.2).
+
+- **Lu, P., Forbes, S. & Baldwin, M.** (2013). "Gliding Guidance of High
+  L/D Hypersonic Vehicles." AIAA 2013-4648. The altitude-rate feedback
+  damping law (Eq. 33), the velocity-scheduled gain (Eq. 34), and the
+  command flight-path angle γ\* (Eq. 31) for the `damped_glide` mode
+  (Section 12.3.5).
+
+- **Yu, W. & Chen, W.** (2011). "Guidance Scheme for Glide Range
+  Maximization of a Hypersonic Vehicle." AIAA 2011-6714. The
+  flight-path-angle feedback (Eq. 19) and the empirical gain / heating /
+  range sweep corroborating the `damped_glide` gain magnitude
+  (Section 12.3.5).
+
+- **Vinh, N. X., Busemann, A. & Culp, R. D.** (1980). *Hypersonic and
+  Planetary Entry Flight Mechanics.* Univ. Michigan Press. §7-2
+  equilibrium-glide linearisation giving the phugoid frequency
+  `ω_p² = g_eff/H_ρ` and the `damped_glide` gain `k_h = 2ζm√(g_eff/H_ρ)`
+  (Section 12.3.5).
+
+### Control theory
+
+- **Ogata, K.** (2010). *Modern Control Engineering*, 5th ed. Prentice
+  Hall. §5-3 "Second-Order Systems": standard form, max-overshoot
+  Eq. (5-21), the desirable damping-ratio band ζ = 0.4–0.8 (p. 171), and
+  the settling-time minimum near ζ = 0.68–0.76 (p. 173). Source for the
+  `damped_glide` ζ ≈ 0.7 default (Section 12.3.5).
+
+- **Franklin, G. F., Powell, J. D. & Emami-Naeini, A.** (2019). *Feedback
+  Control of Dynamic Systems*, 8th ed. (Global). Pearson. §3.4.2
+  "Overshoot and Peak Time": overshoot Eq. (3.72) and Fig. 3.24, which
+  lists ζ = 0.7 → 5 % overshoot as a "frequently used value." Source for
+  the `damped_glide` ζ ≈ 0.7 default (Section 12.3.5).
 
 ### Stagnation heating
 
