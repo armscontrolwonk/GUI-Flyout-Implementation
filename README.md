@@ -7,20 +7,23 @@ It is modelled after Geoffrey Forden's open-source MATLAB tool
 and validated against Forden's Table 3 maximum-range figures for the Scud-B,
 Al Hussein, No-dong, and Taepodong-I.
 
+For the full technical reference — governing equations, algorithms, and primary
+citations for every model — see [`METHODS.md`](METHODS.md).
+
 ---
 
 ## Source files
 
 | File | Lines | Purpose |
 |---|---|---|
-| `thrusty.py` | ~5 860 | GUI application — all Tkinter widgets, dialogs, plotting, export |
-| `trajectory.py` | ~1 720 | 3-DOF integrator, guidance laws, range optimiser, orbital planner |
-| `missile_models.py` | ~1 430 | `MissileParams` dataclass, drag, thrust, mass, staging logic |
+| `thrusty.py` | ~9 200 | GUI application — all Tkinter widgets, dialogs, plotting, export |
+| `trajectory.py` | ~3 300 | 3-DOF integrator, guidance laws, range optimiser, orbital planner, HGV glide |
+| `missile_models.py` | ~2 250 | `MissileParams` dataclass, drag, thrust, mass, staging logic |
 | `coordinates.py` | ~190 | WGS-84 coordinate conversions, Vincenty geodesic, Coriolis/centrifugal |
-| `atmosphere.py` | ~97 | COESA 1976 standard atmosphere (0–86 km), dynamic pressure |
+| `atmosphere.py` | ~270 | NRLMSISE-00 (default) / US Std Atm 1976 (fallback), 0–1000 km, dynamic pressure |
 | `gravity.py` | ~62 | WGS-84 J2 gravity vector in ECEF |
-| `slv_performance.py` | ~287 | Algebraic SLV payload-to-orbit estimation (Schilling/Townsend) |
-| `mass_estimator.py` | ~600 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
+| `slv_performance.py` | ~287 | Algebraic SLV payload-to-orbit estimation (Schilling) |
+| `mass_estimator.py` | ~1 260 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
 | `trajectory.py` glide modes | — | HGV reentry as a phugoid-damping spectrum: skip-glide (undamped, ζ=0) → damped-phugoid glide (ζ≈0.7) → non-oscillatory glide / Acton (no oscillation, ζ→∞); plus equilibrium-glide (Tracy) and skip→equilibrium for comparison. See `DAMPED_GLIDE.md` (implementation) and `DAMPED_GLIDE_MEMO.md` (approach, citations, Acton comparison) |
 
 ---
@@ -315,7 +318,7 @@ geodetic point (Vincenty distance).
 
 ### SLV algebraic estimator (`slv_performance.py`)
 
-Schilling/Townsend method.  No integration required.  Computes the required
+Schilling method.  No integration required.  Computes the required
 ΔV for a circular or elliptical orbit (vis-viva at perigee), applies an
 empirical gravity/drag/steering-loss penalty derived from ascent time, and
 solves for the maximum deliverable payload.  Accuracy ~260 m/s RMS in total
