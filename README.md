@@ -261,9 +261,12 @@ burnout regardless.
 All three modes support optional advanced per-stage pitch and yaw programs that
 override the global schedule for a specific stage.
 
-> **Glide vehicles** carry a separate guidance axis (`glider_guidance`):
-> `equilibrium_glide`, `equilibrium_glide_acton`, `skip_glide`,
-> `skip_to_equilibrium`, and `damped_glide`.  See `DAMPED_GLIDE.md` for details.
+> **Glide vehicles** carry a separate guidance axis (`glider_guidance`). The four
+> **core** reentry models span the phugoid-damping spectrum — `ballistic` (no
+> lift), `skip_glide` (undamped phugoid), `damped_glide` (the realistic guided
+> pull-up), and `equilibrium_glide_acton` (Acton non-oscillatory capture) — plus
+> two **legacy** models kept for comparison: `equilibrium_glide` (Tracy) and
+> `skip_to_equilibrium`.  See `DAMPED_GLIDE.md` for details.
 
 ---
 
