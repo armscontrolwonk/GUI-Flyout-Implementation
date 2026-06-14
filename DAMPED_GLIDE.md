@@ -4,18 +4,22 @@ A glide‑guidance mode for high‑L/D vehicles that reproduces what a *guided*
 hypersonic glider actually does: a pull‑up plus a few **decaying** skips settling
 into equilibrium glide.
 
-The primary reentry modes form one physical spectrum in how strongly the
+The **four core** reentry models form one physical spectrum in how strongly the
 re‑entry **phugoid** is damped, and `damped_glide` is its tunable middle:
 
-| Reentry mode | Phugoid behavior | Damping |
+| Core reentry model | Phugoid behavior | Damping |
 |---|---|---|
+| Ballistic | no lift, no glide | — |
 | Phugoid / skip‑glide (`skip_glide`) | undamped — oscillates indefinitely (skips out for energetic entries) | ζ = 0 |
 | **Damped phugoid glide (`damped_glide`)** | a pull‑up plus a few decaying skips into equilibrium | ζ ≈ 0.7 |
 | Non‑oscillatory glide (`equilibrium_glide_acton`, "Acton") | analytic capture, no oscillation | ζ → ∞ (limit) |
 
-`damped_glide` is a **new mode**; the existing `skip_glide`,
-`skip_to_equilibrium`, `equilibrium_glide`, and `equilibrium_glide_acton`
-(now surfaced as the primary "Non‑oscillatory glide (Acton)" mode) are unchanged.
+`damped_glide` is a **new mode** that fills the physical middle of this spectrum.
+Two further **legacy** models are retained for comparison: `equilibrium_glide`
+(Tracy's steady equilibrium glide) and `skip_to_equilibrium` (skip‑glide with a
+one‑way hand‑off to equilibrium after a set number of skips). The pre‑existing
+modes are otherwise unchanged — `equilibrium_glide_acton` is now surfaced as the
+core "Non‑oscillatory glide (Acton)" mode.
 
 ## The control law
 
