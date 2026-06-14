@@ -669,6 +669,119 @@ into the flight timeline at `t = booster_burn_time_s`. Spent booster
 casings then follow tumbling-cylinder ballistic arcs (Section 14.3)
 until impact, recorded as separate debris-impact rows in the timeline.
 
+### 6.6 Stage dry-mass estimation (independent cross-check)
+
+Thrusty integrates from each stage's **burnout mass**, which the user supplies
+directly (Section 6.1). The dry-mass estimator (`mass_estimator.py`; full
+coefficient tables and sources in [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md)) is a
+separate design-time tool that answers the complementary question — *is that
+stated dry mass physically plausible, or is it an "unobtanium" structure?* It
+never feeds the trajectory; it is a sanity check on the number the trajectory
+trusts.
+
+The governing design choice is to use **two complementary families** rather than
+one relation, because no single relation is trustworthy across the whole
+size/technology range:
+
+| Family | Inputs needed | Best for |
+|---|---|---|
+| **Component-level** (Wilhite-school MERs) | geometry, propellant split, thrust | large LV stages; itemised "where is the mass" breakdown |
+| **Aggregate** (whole-stage relations) | propellant mass (+ thrust) | quick sanity bound; small stages; solids |
+
+The two families are themselves the cross-check: in the small / tactical-scale
+regime the component build-up's fixed terms (engine `+59 kg`, avionics, wiring)
+dominate and **over-predict**, so the aggregate ε estimate is the one to trust
+there — an explicit "use family B to catch family A's failure mode." Solids and
+liquids are split on physics grounds: a solid case is a *pressure-loaded* vessel
+(chamber pressure × grain volume), whereas a liquid's tanks are *near-unloaded*,
+sized by propellant volume.
+
+#### 6.6.1 Liquid stages
+
+The component path (`estimate_liquid_stage`) sums itemised MERs from D. L. Akin's
+*Mass Estimating Relations* (UMD ENAE 791) — the SI compilation descending from
+the Heineman / MacConochie–Klich / Glatt (WAATS) lineage, the same school as
+Wilhite's SSDL relations, and independently corroborated against Rohrschneider /
+SSDL and Gaspar (2014). Tanks, cryogenic insulation, pump-fed engines, thrust
+structure, gimbals, fairing, avionics, and wiring each have their own relation;
+only the **tanks** are scaled by `tank_material` (`material_tank_factor`:
+Al 1.00, Al-Li 0.74, composite 0.45, steel 1.60) — engines, thrust structure and
+avionics are treated as material-independent. Avionics is **one guidance package
+per vehicle**, carried on the upper stage only and sized on vehicle gross
+liftoff mass, not the stage it rides on.
+
+> *Engine-MER decision.* Akin's lecture table lists 373 kg/engine, but his own
+> formula gives ≈ 641 kg at the worked example — which matches the independent
+> Zandbergen (2015) pump-fed-engine fit to ~5 %. The implementation follows the
+> **formula** and treats the 373 kg slide value as an arithmetic slip;
+> `test_mass_estimator.py` pins it against Zandbergen.
+
+A **physics-based tank option** (`tank_structural_mass`, the GT-STRESS method of
+Hutchinson & Olds) can replace the empirical tank MER: it sizes each tank as a
+thin shell under the worse of a max-axial (burnout) and a max-q-α (liftoff, full
+tank + lateral-g) load case, taking thickness as the max over ultimate, yield,
+buckling, and minimum-gauge, times a `TANK_CORRELATION = 1.50` factor. Here
+**material choice is physics, not a multiplier** (ρ, σ, E, gauge from
+`MATERIALS`). Axial load comes from thrust, so no trajectory run is needed;
+refining the loads from a flown trajectory is a flagged follow-on.
+
+The aggregate path deliberately distinguishes *predictions* from *tautologies* —
+a core philosophy of the tool:
+
+- **Engine-mass-ratio** (`engine_mass_ratio_inert`, Shu et al. 2020) is the real
+  predictive aggregate for any liquid: inert = `M_engine·(1 + 1/κ_E)` with
+  `M_engine` predicted from thrust and `κ_E` (`_KAPPA_E_DEFAULT`: lower 0.25,
+  upper 0.12) varying over a much narrower band than ε. This fills the
+  non-hydrolox gap that an assumed ε could not.
+- **Pietrobon** hydrolox stage-mass power law (`pietrobon_stage_mass`) is shown
+  only for LOX/LH₂.
+- An **assumed structural coefficient** (`inert_from_structural_coefficient`) is
+  **opt-in only and explicitly not a prediction** — it merely restates an ε you
+  supply, in kilograms, "carrying no information beyond the assumption itself,"
+  and was deliberately demoted from a default estimate to an opt-in reporting
+  lens.
+
+#### 6.6.2 Solid stages
+
+The headline solid estimate (`solid_stage_inert`) uses the whole-stage
+regressions of Zandbergen (2026), fit to flown stages, because open-literature
+*component* MERs for solids are sparse — nozzle and internal-insulation MERs are
+**intentionally not invented**. A best-in-class cross-check (`source="lewis"`)
+regresses the Northrop Grumman Propulsion Products Catalog (29 Orion / Castor /
+GEM motors); being mature flight motors it runs ~10 % lighter — the lower edge of
+the inert band. When length and diameter are both supplied a **slenderness (L/D)
+correction** is added, with a *positive* exponent: a more slender motor carries
+*more* inert per unit propellant, because case wall and insulation scale with
+surface area, not enclosed volume. The L/D term expects the **motor** length
+*including the nozzle* — trim only non-motor structure (interstages, skirts),
+never the nozzle.
+
+#### 6.6.3 The divergence report
+
+When a stated dry mass is supplied, `divergence_report` leads with the
+**structural coefficient** `ε = dry / (dry + propellant)` it implies (and
+`λ = dry/propellant`), then lists each method's *estimated* ε beside the
+percentage divergence and a verdict: **consistent** (≤ 15 %), **marginal**
+(≤ 35 %), otherwise **optimistic** / **conservative**. Reporting in ε lets a
+design be judged "in the units you think in," and — because tank material moves
+the estimated ε — directly answers *is this dry mass plausible for this
+material?* A large negative divergence means the stated structure is lighter than
+any flown analogue (Peacekeeper-derived motors read "optimistic").
+
+A hard physical bound backstops the report: the **Goldyn et al. (2025)
+feasibility ceiling** `ε_max = 1/exp(Δv/(g₀·I_sp))` (`structural_index_ceiling`).
+Above it the rocket equation drives propellant mass negative, so any stated or
+estimated ε breaching the ceiling is flagged as impossible. This is the same
+estimate-and-flag posture used throughout Thrusty (Section 1.1): give a
+defensible default, surface the assumptions, and flag what is physically out of
+bounds rather than silently accepting it.
+
+> **Provenance note.** The estimator postdates the development-chat transcripts
+> committed to this repo (`chat_transcript*.txt` end before `mass_estimator.py`
+> was created), so its rationale is not in those logs; the authoritative record
+> is the module's own git history and [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md),
+> on which this section is based.
+
 ---
 
 ## 7. Propulsion
@@ -2672,6 +2785,37 @@ optimisation) should use higher-fidelity tools.
   Hypothetical Foreign Space-Launch Vehicles.* International
   Assessment and Strategy Center, working paper. The empirical ΔV
   penalty formulation and `K_3`, `K_4` calibration (Section 11.1).
+
+### Mass estimation
+
+The dry-mass estimator (Section 6.6) draws on a larger source set; the
+principal references are listed here, with the full collection (including the
+underlying Heineman / MacConochie–Klich / Glatt lineage) in
+[`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md).
+
+- **Akin, D. L.** (2016). *Mass Estimating Relations*, ENAE 791, U. Maryland.
+  The primary SI component-level MER set (tanks, engines, thrust structure,
+  avionics, wiring) — the "Wilhite-school" relations of Section 6.6.1.
+- **Rohrschneider, R. R.** (2002; AIAA 2001-4542). *MER Database for Launch
+  Vehicle Conceptual Design*, Georgia Tech / SSDL. Cross-validation of the
+  structure/skirt/thrust-structure forms.
+- **Hutchinson, V. L. & Olds, J. R.** (2004). *Estimation of Launch Vehicle
+  Propellant Tank Structural Weight* (GT-STRESS), AIAA 2004-3661. Basis for the
+  physics-based tank option (Section 6.6.1).
+- **Zandbergen, B. T. C.** (2015, 6th EUCASS). Pump-fed engine mass/size
+  regression — the engine-MER cross-check.
+- **Zandbergen, B. T. C.** (2026, TU Delft). *Simple Parametric Relations for
+  Solid Rocket Stage Inert Mass Estimation* — the headline solid whole-stage
+  estimate (Section 6.6.2).
+- **Pietrobon, S. S.** (2009). *Analysis of Propellant Tank Masses* — hydrolox
+  aggregate stage-mass law and the Al-Li tank factor.
+- **Shu, J.-I., et al.** (2020). *Multistage Liquid Rocket Weight Estimation…*,
+  J. Aerospace Eng. 33(6) — the engine-mass-ratio aggregate (κ_E).
+- **Goldyn, P., et al.** (2025). *Preliminary Design of Expendable and Reusable
+  Mixed-Staged Launch Vehicles*, J. Spacecraft & Rockets — the structural-index
+  feasibility ceiling.
+- **Northrop Grumman Propulsion Products Catalog** (Jan 2023). Per-motor data for
+  the best-in-class solid inert-mass fit (Section 6.6.2).
 
 ### Hypersonic glide vehicles
 
