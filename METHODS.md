@@ -2,9 +2,11 @@
 
 This document is the technical reference for Thrusty's models and algorithms.
 It complements the in-repo [`README.md`](README.md) (overview, source-file
-guide, quick-start) and [`USER_GUIDE.md`](USER_GUIDE.md) (step-by-step usage).
-Each section gives the governing equation(s), a brief description of the
-implementation, and citations to primary sources where one exists.
+guide, quick-start). Each section gives the governing equation(s), a brief
+description of the implementation, and citations to primary sources where one
+exists. Code is referenced by file and symbol name (e.g. `trajectory.py:
+integrate_trajectory`) rather than line number, so the references stay valid
+as the source evolves.
 
 Conventions:
 
@@ -62,7 +64,7 @@ Earth-Fixed (ECEF) frame:
 y(t) = [x, y, z, ẋ, ẏ, ż]ᵀ
 ```
 
-The single ODE integrated by `integrate_trajectory` (`trajectory.py:1316`) is
+The single ODE integrated by `integrate_trajectory` (`trajectory.py`) is
 
 ```
 ẏ = [v,  g_ECEF(r) + a_drag + a_thrust + a_Coriolis + a_centrifugal]
@@ -185,7 +187,7 @@ haversine.
 
 For guidance computations the ECEF velocity is resolved into a local
 East–North–Up (ENU) basis attached to the missile's current latitude and
-longitude (`_enu_frame`, `trajectory.py:301`). The unit vectors are
+longitude (`_enu_frame`, `trajectory.py`). The unit vectors are
 
 ```
 ê_E = [−sin λ,            cos λ,            0       ]
@@ -225,7 +227,7 @@ latitudes. Note that the z-component has a `(3 − 5z²/r²)` factor versus
 `(1 − 5z²/r²)` for the x and y components — that asymmetry is what
 makes the J₂ field oblate-symmetric rather than spherically symmetric.
 
-The constants are the WGS-84 values (`gravity.py:10–13`):
+The constants are the WGS-84 values (`gravity.py–13`):
 
 | Symbol | Value | Description |
 |---|---|---|
@@ -279,20 +281,19 @@ Default conditions (set in `_ATM_CONFIG`):
 | `ap` | 4 | Geomagnetic Ap index (quiet) |
 | `doy` | 80 | Day of year (~vernal equinox) |
 | `ut_sec` | 43 200 | Universal time (noon UT) |
-| `lat`, `lon` | 0, 0 | Geographic location for the MSIS evaluation |
+| `lat_deg`, `lon_deg` | 0, 0 | Geographic location for the MSIS evaluation |
 
 The user can override any of these via `configure_atmosphere(**kwargs)`,
-which rebuilds the lookup table in ~10 ms (measured: 6 ms on a typical
-laptop, with pymsis 0.12). This is the path to model a real launch date
-and site with measured solar indices.
+which rebuilds the lookup table in ~100 ms. This is the path to model a real
+launch date and site with measured solar indices.
 
 #### Design rationale
 
 **Implementation summary.** The NRLMSISE-00 table covers 0–1000 km at
 500 m intervals — `alts_km = np.arange(0.0, 1000.5, 0.5)` — built at
 import time from a single `pymsis.calculate()` call
-(`atmosphere.py:140`). The COESA 1976 code (`_atmosphere_std1976`,
-`atmosphere.py:70`) remains available both as an automatic fallback if
+(`atmosphere.py`). The COESA 1976 code (`_atmosphere_std1976`,
+`atmosphere.py`) remains available both as an automatic fallback if
 `pymsis` is not installed and as an explicit user choice via
 `configure_atmosphere(model='std1976')`. The `atmosphere(altitude_m)`
 function signature is identical in both modes, so no caller in
@@ -431,8 +432,8 @@ with `R = 287.052 87 J/(kg·K)` for dry air. Density is recovered from the
 ideal gas law `ρ = P/(R T)`.
 
 Above 86 km the fallback uses an exponential interpolation between the
-US Std Atm 1976 Table I/II reference points at 91, 100, 110, 120, 150, 200,
-300, 500, and 1000 km.
+US Std Atm 1976 Table I/II reference points at 86, 91, 100, 110, 120, 150,
+200, 300, 500, and 1000 km.
 
 ### 4.3 Dynamic pressure and Mach number
 
@@ -464,7 +465,7 @@ The full equation of motion in ECEF is
 r̈ = g_ECEF(r) + a_thrust + a_drag − 2 ω × ṙ − ω × (ω × r)
 ```
 
-(`_eom`, `trajectory.py:604`). The right-hand side gives acceleration
+(`_eom`, `trajectory.py`). The right-hand side gives acceleration
 in m/s² directly; each of the five terms is an acceleration, not a
 force. Below they are listed in the order they appear in the code.
 
@@ -518,29 +519,35 @@ formulation.
 
 ### 5.6 Integration
 
-`scipy.integrate.solve_ivp` with `method='RK45'`, default relative tolerance
-`1e-8` and absolute tolerance `1e-6` on positions/velocities. Adaptive
-step sizing concentrates evaluations during the boost phase (where mass and
-thrust change rapidly) and stretches them during coast.
+`scipy.integrate.solve_ivp` with `method='RK45'`. Tolerances vary by path:
+the full-fidelity ballistic integration uses relative tolerance `1e-8` and
+absolute tolerance `1e-6`; the faster range-search and glide integrations
+use looser tolerances (as coarse as `~1e-5`/`1e-2`), and the apogee
+pre-finder coarser still. Adaptive step sizing concentrates evaluations
+during the boost phase (where mass and thrust change rapidly) and stretches
+them during coast.
 
-Event functions used:
+Event functions used (passed to `solve_ivp(events=...)`):
 
 | Event | Purpose |
 |---|---|
 | `_hit_ground` | Trajectory termination at altitude ≤ 0 |
-| `_apogee` (sign change of `ṙ·r̂`) | Apogee detection |
+| `_apogee_event` (sign change of `ṙ·r̂`) | Apogee detection |
 | Milestone-altitude crossings | 100 km re-entry, shroud jettison, user-defined queries |
 | `_glider_pierce_atmosphere` | HGV pull-up / equilibrium-glide handoff |
-| Orbital-energy cutoff | Engine cutoff when specific orbital energy meets target |
 
-Detected events become rows in the Flight Timeline output (Section 14).
+Orbital-energy engine cutoff is **not** a `solve_ivp` event — it is applied
+inline inside `_eom` (the thrust is zeroed once the specific orbital energy
+`ε = ½|v_ECI|² − μ/r` reaches the target `ε_target = −μ/(2 r_target)`, for a
+liquid final stage only). Detected events become rows in the Flight Timeline
+output (Section 14).
 
 ---
 
 ## 6. Mass and staging
 
 A missile is represented by a linked-chain `MissileParams` dataclass
-(`missile_models.py:25`). Each stage carries its own propulsive and
+(`missile_models.py`). Each stage carries its own propulsive and
 geometric parameters; the `.stage2` attribute points to the next stage.
 Top-level fields (payload, shroud, RV) apply to the whole vehicle.
 
@@ -555,7 +562,7 @@ m(τ) = m₀ − (m_p / t_b) · τ              0 ≤ τ ≤ t_b
 
 where `τ` is local stage burn time. The burnout mass is `m_f = m₀ − m_p`.
 
-The full-vehicle mass `missile_mass(params, t)` (`missile_models.py:2009`)
+The full-vehicle mass `missile_mass(params, t)` (`missile_models.py`)
 walks the stage chain to determine which stage is active and adds the mass
 of all subsequent stages plus payload. After a stage burns out the spent
 casing is jettisoned and its dry mass is removed from the chain.
@@ -620,7 +627,7 @@ m(t) = m_core(t) + n_boosters · (booster_inert + booster_prop · (1 − t/t_boo
 At separation (`t > booster_burn_time_s`) the booster contribution to
 vehicle mass drops to zero — the casings (now with empty propellant
 tanks) detach from the vehicle (`_booster_mass_addend`,
-`missile_models.py:1976`). The spent casings then follow tumbling-cylinder
+`missile_models.py`). The spent casings then follow tumbling-cylinder
 debris arcs separately (Section 14.3).
 
 **Thrust addition.** During the booster burn window `t ∈ [0, t_booster]`,
@@ -637,7 +644,7 @@ the boosters lift the stack off the pad.
 
 **Drag addition.** Booster aerodynamic drag is computed as a parallel
 cluster of cylinders independent of the core (`booster_drag_vector`,
-`missile_models.py:2205`):
+`missile_models.py`):
 
 ```
 D_booster = n_boosters · C_D,booster · q · π · (d_booster / 2)²
@@ -748,9 +755,11 @@ sentinel disables the grain machinery and produces a flat thrust history.
 Liquid stages can be commanded to cut off early (the user-visible "Engine
 Cutoff" field or, in orbital-insertion mode, the energy-cutoff event). Solid
 stages cannot be shut off and burn to natural propellant exhaustion. The
-`solid_motor` boolean on each stage gates this behaviour:
-`integrate_trajectory` ignores cutoff commands for stages with
-`solid_motor = True`.
+`solid_motor` boolean on each stage gates this behaviour: the
+orbital-insertion energy cutoff (applied inline in `_eom`) only fires for a
+non-solid final stage, and the early-cutoff handling in the range/aim
+solvers likewise applies to liquid stages — a `solid_motor = True` stage
+always burns to natural propellant exhaustion.
 
 This matters operationally because it changes the optimisation surface for
 range maximisation (Section 10): a liquid-motor SCUD can trade burn time
@@ -789,7 +798,7 @@ C_D,total = C_D,wave(shape, M, l/d)
           [+ aerospike correction]                  (if spike present)
 ```
 
-(`_cd_nose_shape`, `missile_models.py:864`). Each component has a
+(`_cd_nose_shape`, `missile_models.py`). Each component has a
 distinct, citable source: nose wave drag from
 [Chin (1961)](#16-references) and the [NACA TN 4201](#16-references)
 comparison report; friction from Chin's combination of Blasius
@@ -830,7 +839,7 @@ standard as the NACA reports.
 
 For a sharp cone with semi-vertex angle σ in *degrees*, valid for
 attached flow (`M ≳ 1.2` for typical missile half-angles, `σ ≲ 50°`)
-(`_chin_pressure_coeff`, `missile_models.py:600`):
+(`_chin_pressure_coeff`, `missile_models.py`):
 
 ```
 Δp/q          = (0.083 + 0.096 / M²) · (σ° / 10)^1.69
@@ -843,7 +852,7 @@ The half-angle is derived from the user-specified fineness ratio
 
 The code applies a transonic linear ramp to avoid the formula's
 behaviour near the shock-attachment limit
-(`_cd_wave_cone`, `missile_models.py:607`):
+(`_cd_wave_cone`, `missile_models.py`):
 
 ```
 M ≤ 0.8:    C_D,wave,cone = 0
@@ -863,7 +872,7 @@ role this simulator fills.
 
 For a tangent-ogive nose with fineness ratio `l/d`, Chin's adaptation of the
 Miles slender-body formula is implemented as
-(`_cd_wave_ogive`, `missile_models.py:618`):
+(`_cd_wave_ogive`, `missile_models.py`):
 
 ```
 σ              = arctan(1 / (2 · l/d))                  [radians; converted to ° for P]
@@ -889,7 +898,7 @@ For the Von Kármán (LD-Haack, C = 0), LV-Haack / Sears-Haack (C = 1/3),
 and parabola (K' = 1) shapes Chin provides no closed-form formula; the
 wave-drag coefficient is obtained from **NACA TN 4201**, which compares
 these shapes side-by-side at a reference fineness ratio
-`l/d_nose = 3` (`_cd_wave_table`, `missile_models.py:634`).
+`l/d_nose = 3` (`_cd_wave_table`, `missile_models.py`).
 
 For other fineness ratios the table is scaled by
 
@@ -926,6 +935,7 @@ The implemented table (at `l/d_nose = 3`):
 | 1.5 | 0.069 | 0.084 | 0.094 |
 | 2.0 | 0.067 | 0.077 | 0.087 |
 | 3.0 | 0.058 | 0.068 | 0.077 |
+| 4.0 | 0.052 | 0.061 | 0.069 |
 | 5.0 | 0.047 | 0.055 | 0.062 |
 
 Above M = 2.0 the table is extrapolated smoothly (no TN 4201 data above
@@ -970,7 +980,7 @@ shape.
 
 The skin-friction coefficient is computed as the Reynolds-number-weighted
 sum of laminar and turbulent contributions, modified by compressibility
-and a roughness allowance (`_cd_friction`, `missile_models.py:711`):
+and a roughness allowance (`_cd_friction`, `missile_models.py`):
 
 ```
 C_D,friction = (S_wet / S_ref) · C_f,mixed · C_compress(M) · 1.10
@@ -1025,7 +1035,7 @@ formula is fit to adiabatic-wall flat-plate data over 0 ≲ M ≲ 5.
 ```
 
 with `μ_ref = 1.716×10⁻⁵ Pa·s`, `T_ref = 273.15 K`, `S = 110.4 K`
-(`_mu_air`, `missile_models.py:690`). Sutherland's law provides
+(`_mu_air`, `missile_models.py`). Sutherland's law provides
 viscosity over the temperature range encountered in atmospheric flight
 to within 1 % accuracy. Combined with `ρ` and `T` from the atmosphere
 model (Section 4) and the missile's instantaneous speed and length,
@@ -1046,7 +1056,7 @@ The friction integral requires the wetted area `S_wet` of each body
 component, taken as the area-weighted sum of nose wetted area and
 cylindrical-body wetted area. The nose contribution is computed by
 numerical integration of the appropriate generator profile
-(`_s_wet_ratio`, `missile_models.py:676`, after [Crowell 1996](#16-references)):
+(`_s_wet_ratio`, `missile_models.py`, after [Crowell 1996](#16-references)):
 
 | Component | Treatment |
 |---|---|
@@ -1087,7 +1097,7 @@ C_D,base = −C_pb · (S_base / S_ref)
 ```
 
 with `C_pb` (the base pressure coefficient, negative — i.e. suction)
-from `_BASE_CPB` (`missile_models.py:517`):
+from `_BASE_CPB` (`missile_models.py`):
 
 | M | C_pb |
 |---|---:|
@@ -1124,7 +1134,7 @@ pressurises the region behind the nozzle and reduces the base suction;
 power-on base drag is therefore *lower* in magnitude than power-off.
 Thrusty does **not** make this distinction — `_cd_base(mach)` is called
 unconditionally in every boost-phase drag evaluation
-(`missile_models.py:933`), so powered flight sees the same `C_pb(M)` as
+(`missile_models.py`), so powered flight sees the same `C_pb(M)` as
 coast. The result is a small but consistent over-estimate of drag
 (under-estimate of range) during boost. Modelling the power-on
 correction properly would require nozzle exit conditions and plume CFD,
@@ -1144,7 +1154,7 @@ reducing the core's `C_D,base`. This interaction is not modelled.
 For finned vehicles (e.g. SCUD-B and other early ballistic missiles)
 two contributions are added:
 
-**Fin lift slope** (`_cl_alpha_fins`, `missile_models.py:758`) — the lift-curve
+**Fin lift slope** (`_cl_alpha_fins`, `missile_models.py`) — the lift-curve
 slope per fin from slender-body theory:
 
 ```
@@ -1154,7 +1164,7 @@ C_Lα,fin = 2π · (S_fin / S_ref) · η_fin
 where `η_fin` is a fin-efficiency factor that depends on the fin planform
 aspect ratio. For preliminary work the slender-body limit is used.
 
-**Fin drag** (`_cd_fins`, `missile_models.py:804`) — flat-plate skin friction
+**Fin drag** (`_cd_fins`, `missile_models.py`) — flat-plate skin friction
 on the fin wetted area plus a thickness pressure-drag correction:
 
 ```
@@ -1177,18 +1187,23 @@ and should be enabled.
 An aerospike is a forward-projecting spike (sometimes terminated in a
 small aerodisk) that creates a slender bow shock to replace the strong
 detached shock of a blunt body, reducing wave drag at supersonic Mach
-(`_aerospike_effective_LD`, `missile_models.py:738`).
+(`_aerospike_effective_LD`, `missile_models.py`).
 
 The implementation replaces the actual nose's wave drag with the
-*minimum* of (actual nose drag) and (effective-body cone drag), where
-the effective body is a cone whose half-angle is determined by the spike
-length-to-diameter ratio:
+*minimum* of (actual nose drag) and (effective-body cone drag), where the
+effective body is a cone whose *fineness ratio* `L/D_eff` is set from the
+spike geometry by a linear fit to the Ahmed & Qin (2011) dividing-streamline
+angles for sharp spikes on hemisphere-cylinder models:
 
 ```
 spike L/D = L_spike / D_body
 spike d/D = D_aerodisk / D_body
-effective half-angle ≈ arctan( 1 / (2 · spike_LD ) )      (sharp spike)
+L/D_eff   = 1.0 + (2/3)·spike_LD + 2.0·spike_dD      (Ahmed & Qin 2011 fit)
 ```
+
+`L/D_eff` is then passed to the cone wave-drag routine `_cd_wave_cone`
+(Section 8.2.1); the half-angle conversion `arctan(1/(2·L/D))` happens
+*inside* that routine, not in the spike model itself.
 
 For a hemispherical aerodisk tip the spike behaves as a blunt protrusion
 that detaches the bow shock at the spike rather than at the body, and
@@ -1237,7 +1252,7 @@ articles can be ~ 10³.
 The GUI provides a Newtonian β calculator (Section 14 of the user guide)
 that estimates β for a cone-shaped RV from its half-angle and bluntness
 ratio using a 4×6 interpolation table of Newtonian C_D values
-(`_cd_blunted_cone_newtonian`, `thrusty.py:130`). For a sharp cone the
+(`_cd_blunted_cone_newtonian`, `thrusty.py`). For a sharp cone the
 exact Newtonian result is `C_D = 2 sin²θ`. For blunted cones (half-angle
 10°–40°, bluntness ratio `ε = r_N/r_b` from 0 to 1) the table is taken
 from a published Newtonian-hypersonic Cd chart cited in the source code
@@ -1270,7 +1285,7 @@ mission-level segments or per-stage overrides.
 
 ### 9.1 Pitch program (Forden / Levinger / Wright convention)
 
-`_gravity_turn_thrust_dir` (`trajectory.py:329`) implements the linear
+`_gravity_turn_thrust_dir` (`trajectory.py`) implements the linear
 pitch program first introduced by Forden (2007) and refined by
 Levinger / Wright. The elevation angle `θ(t)` above local horizontal is:
 
@@ -1296,7 +1311,7 @@ The ENU vector is then transformed back to ECEF for the EOM.
 
 ### 9.2 True gravity turn (Wright 2020 convention)
 
-`_true_gravity_turn_thrust_dir` (`trajectory.py:443`) implements a
+`_true_gravity_turn_thrust_dir` (`trajectory.py`) implements a
 velocity-aligned thrust direction with an optional tilt angle `η` (degrees
 below velocity vector). At each step:
 
@@ -1321,7 +1336,7 @@ pitch-over below pure velocity tracking (Section 9.5).
 
 ### 9.3 Orbital insertion (two-phase)
 
-`_orbital_insertion_thrust_dir` (`trajectory.py:364`) implements a
+`_orbital_insertion_thrust_dir` (`trajectory.py`) implements a
 two-phase program designed for space-launch vehicles:
 
 ```
@@ -1350,7 +1365,7 @@ small thrust or mass-flow errors. Solid stages cannot be commanded off,
 so they burn to natural propellant exhaustion; the orbital-energy
 condition only applies to liquid final stages.
 
-The companion planner `plan_orbital_insertion` (`trajectory.py:2896`)
+The companion planner `plan_orbital_insertion` (`trajectory.py`)
 searches automatically for the `boost_angle_deg` that places the perigee
 closest to the requested orbit altitude, returning success/perigee/apogee
 in a single call.
@@ -1379,7 +1394,7 @@ is `None` the global schedule applies.
 
 ### 9.5 Yaw program (dogleg maneuvers)
 
-`_yaw_program` (`trajectory.py:513`) implements a multi-segment azimuth
+`_yaw_program` (`trajectory.py`) implements a multi-segment azimuth
 schedule. Each segment is a tuple `(start_s, stop_s, final_az_deg)`
 giving start and end times (mission-elapsed) and the commanded final
 azimuth. Between segments the commanded azimuth interpolates linearly
@@ -1412,7 +1427,7 @@ The total vacuum ΔV available from the stage chain is
 ΔV_total = Σ_stages  I_sp · g₀ · ln( m_initial / m_burnout )
 ```
 
-(`_tsiolkovsky_dv`, `trajectory.py:3050`). This is used as a fast estimate
+(`_tsiolkovsky_dv`, `trajectory.py`). This is used as a fast estimate
 of achievable burnout speed before the range-maximisation search — it
 costs no integration calls and provides a tight bound for narrowing
 the search window. The empirical relation
@@ -1436,7 +1451,7 @@ Q      = v_bo² / (g_bo · r_bo)        r_bo = R_E + h_bo,  g_bo = GM/r_bo²
 γ_opt  = ½ · arccos( Q / (2 − Q) )
 ```
 
-(`_wheelon_gamma_opt`, `trajectory.py:3063`). The dimensionless ratio
+(`_wheelon_gamma_opt`, `trajectory.py`). The dimensionless ratio
 `Q` is bounded above by 1 (orbital velocity); for sub-orbital
 trajectories Q < 1 and γ_opt is well-defined and lies between 0° (Q = 1,
 flat orbit) and 45° (Q → 0, throw the rock from a tower).
@@ -1449,7 +1464,7 @@ finishes in seconds for typical missiles.
 
 ### 10.3 Range maximisation algorithm
 
-`maximize_range` (`trajectory.py:3075`) is a two-phase search over
+`maximize_range` (`trajectory.py`) is a two-phase search over
 (burnout angle, turn-stop time):
 
 1. **Coarse parallel grid.** A grid of candidate `(γ, t_stop)` pairs
@@ -1458,9 +1473,10 @@ finishes in seconds for typical missiles.
    (Section 10.2). The turn-stop window covers the powered-flight
    duration, with a 3600 s outer cap to bail out on degenerate cases
    that never impact.
-2. **Brent polish.** The best coarse candidate is refined by
-   `scipy.optimize.minimize_scalar` (Brent's method) over the burnout
-   angle, with the turn-stop fixed at the coarse-grid optimum.
+2. **Bounded polish.** The best coarse candidate is refined by a single
+   `scipy.optimize.minimize_scalar(method='bounded')` pass (bounded Brent
+   over an interval) on the burnout angle, with the turn-stop fixed at the
+   coarse-grid optimum.
 
 The result dictionary returns the maximum range plus the optimal
 `(burnout_angle, turn_stop)` and the full trajectory at the optimum.
@@ -1469,7 +1485,7 @@ evaluations.
 
 ### 10.4 Aim at target
 
-`aim_missile` (`trajectory.py:2840`) finds the engine cutoff time that
+`aim_missile` (`trajectory.py`) finds the engine cutoff time that
 produces a specified range. With burnout angle held fixed, range is a
 monotonic function of cutoff time (more burn ↔ more range), so Brent's
 method on the scalar `cutoff_time` is well-behaved:
@@ -1489,7 +1505,7 @@ then aims for that range.
 
 ### 10.5 Find range
 
-`find_range` (`trajectory.py:2877`) is a trivial wrapper around
+`find_range` (`trajectory.py`) is a trivial wrapper around
 `integrate_trajectory` that returns only the range; used by GUI calls
 that don't need the full trajectory dictionary back.
 
@@ -1499,11 +1515,10 @@ that don't need the full trajectory dictionary back.
 
 For space-launch vehicles the question is *can this rocket put a given
 payload into a given orbit*, not *how far does it fly ballistically*.
-This is answered by the Schilling/Townsend method, an algebraic ΔV
-budget that does not require trajectory integration
-(`slv_performance.py`).
+This is answered by the Schilling method, an algebraic ΔV budget that does
+not require trajectory integration (`slv_performance.py`).
 
-### 11.1 The Schilling/Townsend method
+### 11.1 The Schilling method
 
 The available ΔV from a stack of stages is the Tsiolkovsky sum
 (Section 10.1). The required ΔV to reach a target orbit is
@@ -1512,16 +1527,18 @@ The available ΔV from a stack of stages is the Tsiolkovsky sum
 ΔV_req  = V_inj  +  ΔV_pen  −  V_rot
 V_inj   = √( μ · (2/r_p − 1/a) )                vis-viva at perigee
 a       = (r_p + r_a) / 2                       semi-major axis
-V_rot   = R_E · Ω · cos(lat) · cos(azimuth)     Earth-rotation assist
+V_rot   = R_E · Ω · cos(lat) · sin(azimuth)     Earth-rotation assist
 ```
 
 `V_inj` is the inertial-frame injection speed at perigee from the
 vis-viva equation; for a circular orbit this collapses to
 `√(μ/r)`, the circular orbital speed. For an elliptical transfer the
 formula gives the perigee speed of the target orbit. `V_rot` is the
-ground-frame velocity at the launch site, which is "free" — a launch
-toward the east adds Earth's rotation to the inertial speed at no
-propellant cost.
+eastward ground-frame velocity at the launch site, which is "free" — a
+launch toward the east adds Earth's rotation to the inertial speed at no
+propellant cost. With azimuth measured clockwise from north, `sin(azimuth)`
+picks out the eastward component (maximal due-east, zero for a polar
+launch).
 
 `ΔV_pen` is the empirical Schilling penalty that bundles gravity
 losses, drag losses, and steering losses into a single function of
@@ -1543,21 +1560,18 @@ to fit the calibration data best. `H_p` is the perigee altitude in km.
 The vehicle has *positive ΔV margin* (i.e. can reach the target
 orbit with the stated payload) iff `ΔV_avail > ΔV_req`.
 
-### 11.2 Maximum payload — iterative solve
+### 11.2 Maximum payload — binary search
 
-Computing the maximum deliverable payload is more subtle than checking
-margin at a single payload because payload appears on both sides:
+Payload enters the budget on only one side: it lowers every stage's
+burnout mass and therefore `ΔV_avail` (through the Tsiolkovsky sum). The
+ascent-time term `T_actual` in the penalty is held fixed at the stack's
+nominal burn time, so `ΔV_req` does **not** move with payload — no outer
+fixed-point iteration is needed.
 
-- Payload affects `ΔV_avail` directly through the Tsiolkovsky stage-burnout
-  masses.
-- Payload affects `ΔV_req` indirectly through `T_actual` (heavier
-  payload → longer burn → larger penalty).
-
-The implementation uses a binary search on payload between 0 and an
-upper bound (default 2 × the configured payload), with an outer
-fixed-point iteration to handle the `T_actual ↔ ΔV_pen` coupling. ~5
-outer iterations and ~12 inner binary-search steps converge to <1 kg
-precision.
+The implementation is therefore a single binary search on payload between
+0 and a fixed upper bound of 200 000 kg, bisecting on the sign of the
+margin `ΔV_avail(payload) − ΔV_req` for 50 iterations, which converges to
+sub-kilogram precision.
 
 ### 11.3 Accuracy and use cases
 
@@ -1580,7 +1594,7 @@ The natural division of labour for a complete SLV analysis:
 
 | Question | Tool |
 |---|---|
-| Can the full SLV reach the claimed orbit with the claimed payload? | Schilling/Townsend (Section 11) |
+| Can the full SLV reach the claimed orbit with the claimed payload? | Schilling (Section 11) |
 | What does the stripped-down booster do as a ballistic missile? | 3-DOF simulation (Sections 5–10) |
 
 ---
@@ -1624,8 +1638,11 @@ derivation.
 ### 12.1 The pierce-altitude latch and glide-mode state machine
 
 Glide-mode aero forces are *not* active throughout the flight; they
-activate only when a specific re-entry condition is met. The latch lives
-in `effective_rv()` and the active-glider gate at `trajectory.py:683`:
+activate only when a specific re-entry condition is met. The latch is the
+`_gl_above_pierce` flag and the `_glider_active` gate, both evaluated each
+step inside the EOM (`trajectory.py`); `effective_rv()` (`missile_models.py`)
+separately selects *which* RV is the terminal vehicle (glider, separating
+warhead, or maneuvering body):
 
 ```
 glide_mode = ( RV has separated
@@ -1637,12 +1654,12 @@ glide_mode = ( RV has separated
 The pierce altitude is
 
 ```
-ACTON_PIERCE_ALT_M = 100_000.0          # trajectory.py:113
+ACTON_PIERCE_ALT_M = 100_000.0          # trajectory.py
 ```
 
 — the conventional 100 km Kármán-line value used by Acton 2015 (p. 204) as
 the start of his Phase 3 (direct re-entry). The latch (`_gl_above_pierce`
-at `trajectory.py:647`) requires the vehicle to have first crossed *up*
+at `trajectory.py`) requires the vehicle to have first crossed *up*
 through 100 km, then *back down* through 100 km on descent. Until both
 crossings have occurred, the active "RV" exposed to the EOM is the
 non-glider RV (high-β, zero-lift), so a depressed-trajectory ballistic
@@ -1687,7 +1704,7 @@ C_D(C_L) = C_D0 + k · C_L²
 
 with zero-lift drag coefficient `C_D0`, induced-drag factor `k`, and
 reference area `A_ref` taken from the RV's `glider_CD0`, `glider_k_polar`,
-and a derived reference area (`_aero_polar`, `trajectory.py:554`). The
+and a derived reference area (`_aero_polar`, `trajectory.py`). The
 drag polar lets the EOM see induced-drag rise as the guidance commands
 larger C_L — important for steep pull-ups or aggressive cross-range
 turns, where the constant-L/D approximation under-estimates drag.
@@ -1703,7 +1720,7 @@ particular L/D:
   q.
 
 A `C_L` cap of `2 · (25°·π/180) ≈ 0.873` is applied in both modes
-(`_C_L_lim` at `trajectory.py:727`), representing the slender-body
+(`_C_L_lim` at `trajectory.py`), representing the slender-body
 small-angle relation `C_L ≈ 2α` evaluated at α_max = 25°. At 25° the
 linearization is starting to lose validity — the exact Newtonian value
 `sin 2α` gives 0.766 — so this is best read as a conservative upper bound
@@ -1739,14 +1756,14 @@ is treated as already in equilibrium glide; no pull-up arc is modelled.
 The EOM is integrated with constant L/D (or the polar trim) and a single
 β throughout the glide phase. The integrator's natural dynamics keep the
 vehicle near equilibrium because Tracy's Eq. (7) is satisfied at the
-pierce point by construction (`trajectory.py:108–112`):
+pierce point by construction (`trajectory.py–112`):
 
 ```
 L · cos σ = m · (g − v² / r_e)              [Tracy 2020 Eq. (7)]
 ```
 
 The equivalent statement: lift balances *gravity minus centripetal*. In
-the EOM this appears as the trim condition (`trajectory.py:780`):
+the EOM this appears as the trim condition (`trajectory.py`):
 
 ```python
 _g_perp = g_mag - speed * speed / r_mag
@@ -1763,7 +1780,7 @@ Three caps act in sequence:
    deliver given the local dynamic pressure. Without this cap the
    analytic lift term would still be applied when q is negligible (high
    altitude, thin atmosphere), locking the vehicle at the handoff
-   altitude and producing unrealistically long range (`trajectory.py:738`
+   altitude and producing unrealistically long range (`trajectory.py`
    comment). With it, when `v < v_eq` and the analytic g_⊥ exceeds what
    the aero can supply, the vehicle descends naturally to denser air.
 3. **Structural cap** `n_max · m · g` — the user-set maximum pull-up load
@@ -1810,8 +1827,8 @@ Acton's isothermal-atmosphere fit (his p. 197) over the relevant
 altitude band:
 
 ```
-ACTON_SCALE_HEIGHT_M  = 6970.0                      # trajectory.py:115
-ACTON_SEA_LEVEL_RHO   = 1.46                        # trajectory.py:116
+ACTON_SCALE_HEIGHT_M  = 6970.0                      # trajectory.py
+ACTON_SEA_LEVEL_RHO   = 1.46                        # trajectory.py
 ```
 
 so that h_eq follows from the L/D, β_L, and pierce velocity by
@@ -1829,17 +1846,17 @@ R = (h₃ − h_eq) / (1 − cos θ₂)
 h(θ) = h₃ − R · (cos θ − cos θ₂)
 ```
 
-implemented by `_acton_pullup_arc` (`trajectory.py:945`). The arc is
+implemented by `_acton_pullup_arc` (`trajectory.py`). The arc is
 applied as a one-shot state reset at the Phase 3 → Phase 4 boundary
 (detected by the descending crossing of h₃ via the event function
-`_make_phase3_end_event`, `trajectory.py:931`), after which equilibrium
+`_make_phase3_end_event`, `trajectory.py`), after which equilibrium
 glide proceeds exactly as in Tracy mode.
 
 Implementation detail: Acton mode falls back to Tracy mode if
 `glider_beta_entry_kg_m2 ≤ 0`, since without a positive β_S the Phase 3
 direct-re-entry segment is ill-defined. This guarantees the user always
 gets an analytical pull-up rather than a phugoid in cases where the
-small-β data is missing (`trajectory.py:1517`).
+small-β data is missing (`trajectory.py`).
 
 #### 12.3.3 Phugoid / skip-glide
 
@@ -1847,7 +1864,7 @@ In this mode the guidance does *not* trim to suppress oscillation.
 Instead the vehicle flies at the max-L/D angle of attack throughout, so
 lift is proportional to dynamic pressure and the natural phugoid
 oscillation about the equilibrium altitude is preserved at full
-amplitude (`trajectory.py:760`):
+amplitude (`trajectory.py`):
 
 ```python
 # skip_glide / phugoid: fly at max-L/D AoA (α*)
@@ -1881,7 +1898,7 @@ smooth pull-up and the unsuppressed phugoid of skip-glide. The vehicle
 flies in `skip_glide` (phugoid) mode for a user-specified number of
 *upward crossings of the equilibrium-speed curve*, then transitions
 one-way to `equilibrium_glide` (Tracy) mode for the remainder of the
-flight (`trajectory.py:1521`).
+flight (`trajectory.py`).
 
 The skip count `glider_skip_count` (default 1; GUI spinbox 1–10) gates
 the handoff. With `N = 1` the vehicle pulls up phugoidally once, then
@@ -2007,7 +2024,7 @@ horizontal components:
 F_lift = L · ( cos σ · n̂_up  +  sin σ · n̂_cross )
 ```
 
-(`trajectory.py:800`). This is exactly the Tracy & Wright 2020 EOM
+(`trajectory.py`). This is exactly the Tracy & Wright 2020 EOM
 (their Eq. 2 with the `cos σ` factor and Eq. 3 with the `sin σ` factor).
 Banking simultaneously reduces the vertical lift component to `L · cos σ`
 — which forces the vehicle to fly at a lower equilibrium altitude in
@@ -2026,7 +2043,7 @@ function for ballistic flight (Section 10.4).
 
 When the vehicle approaches the target it transitions to a terminal
 dive by rolling to σ = π (inverted), which puts the lift force pointing
-toward the ground rather than away from it (`trajectory.py:704–722`).
+toward the ground rather than away from it (`trajectory.py–722`).
 The dive is the most efficient way to traverse the dense lower
 atmosphere while preserving as much speed as possible — matching the
 HTV-2 test profile (Tracy & Wright 2020 §"Computational results",
@@ -2117,8 +2134,8 @@ defaults:
 | `glider_terminal_dive` | `false` | Enable inverted terminal dive |
 | `glider_terminal_alt_km` | 30.0 | Altitude trigger for terminal dive |
 
-The full schema lives in `RVParams.from_dict`
-(`missile_models.py:395`).
+The full schema lives in the module-level loader `rv_from_dict`
+(`missile_models.py`).
 
 **Acton mode and β_S.** The shipped JSON RVs leave `glider_beta_entry_kg_m2`
 at zero, since β_S (the high-α drag direct-re-entry ballistic coefficient)
@@ -2127,7 +2144,7 @@ RV with β_S = 0 falls back to Tracy mode (Section 12.3.2). For the
 HTV-2-class built-in missiles defined programmatically rather than via the
 RV library — `Forden_HTV2` and its variants — the code sets
 `glider_beta_entry_kg_m2 = 7.0` based on Acton 2015 Table 3
-(`missile_models.py:1487, 1635`). A user wanting to run Acton mode on a
+(`missile_models.py, 1635`). A user wanting to run Acton mode on a
 custom RV will need to research and set β_S themselves; this is by design,
 since silently fabricating β_S for arbitrary vehicles would be misleading.
 
@@ -2170,7 +2187,7 @@ q̇ = K · √(ρ / R_N) · V³                     [W/m²]
 with `K = 1.7415×10⁻⁴ W·s³/(kg^½·m^(5/2))` for Earth atmosphere,
 `ρ` the free-stream density in kg/m³, `R_N` the nose-tip radius of
 curvature in m, and `V` the free-stream velocity in m/s
-(`trajectory.py:2625`).
+(`trajectory.py`).
 
 The Sutton-Graves correlation is a fit to chemical-equilibrium boundary
 layer calculations across a wide range of base gases, enthalpies (2.3 to
@@ -2184,12 +2201,12 @@ Three implementation conventions:
    to the rotating atmosphere (i.e. the airspeed), not the inertial
    ECI speed. At the equator this differs by ~465 m/s; the difference
    matters at HGV velocities of 3–6 km/s. The relevant comment is at
-   `trajectory.py:2621`.
+   `trajectory.py`.
 
 2. **Per-RV nose-tip radius.** `R_N` is read from the active RV's
-   `nose_radius_m` field (`trajectory.py:2619`), making the stagnation-
+   `nose_radius_m` field (`trajectory.py`), making the stagnation-
    point formula geometry-aware. The default in `RVParams` is 0.05 m
-   (5 cm; `missile_models.py:238`). The shipped library overrides this
+   (5 cm; `missile_models.py`). The shipped library overrides this
    for `C-HGB.rv.json` (2 cm, matching the sharper conical glide body)
    and otherwise inherits the 5 cm default. Two RVs at the same speed
    and density therefore see different stagnation fluxes:
@@ -2217,7 +2234,7 @@ all incoming convective flux is balanced by surface re-radiation:
 
 with `σ = 5.670374419×10⁻⁸ W/(m²·K⁴)` (CODATA 2019, Stefan-Boltzmann
 constant) and `ε` from the RV's `emissivity` field (default 0.85; set
-at `RVParams`, `missile_models.py:330`). The default is consistent with
+at `RVParams`, `missile_models.py`). The default is consistent with
 [Anderson 2006](#16-references) §18.8 (HERMES emissivity example) and
 the upper end of the operational range for reinforced carbon-carbon
 (RCC) materials reported by [Williams & Curry 1992](#16-references) in
@@ -2271,7 +2288,7 @@ published peak-temperature claims.
 ### 13.4 Output and milestone format
 
 When a glide trajectory completes, the code computes `q̇` at every
-glide-phase time step (`trajectory.py:2625`), finds the argmax, and
+glide-phase time step (`trajectory.py`), finds the argmax, and
 emits a flight-events row:
 
 ```
@@ -2298,7 +2315,7 @@ read from the same structure.
 
 ### 14.1 The trajectory dictionary
 
-The canonical return structure (`trajectory.py:2811`):
+The canonical return structure (`trajectory.py`):
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -2328,10 +2345,10 @@ Both are exposed rather than forcing the caller to convert.
 ### 14.2 Milestone catalogue
 
 Milestones are inserted chronologically into the `milestones` list by
-`_insert_chrono()` (`trajectory.py:2243`). Each milestone is a dict with
+`_insert_chrono()` (`trajectory.py`). Each milestone is a dict with
 `{t_s, alt_km, range_km, mass_t, speed_ms, event}` populated by
 interpolation onto the trajectory array (`_interp_milestone`,
-`trajectory.py:274`). The exhaustive set of event labels currently
+`trajectory.py`). The exhaustive set of event labels currently
 emitted:
 
 | Phase | Event |
@@ -2366,7 +2383,7 @@ velocity" or "30 km terminal velocity" claims.
 
 After staging or shroud jettison, each spent body continues on a
 ballistic arc until impact, computed with a tumbling-cylinder ballistic
-coefficient (`tumbling_cylinder_beta`, `missile_models.py:1900`). This
+coefficient (`tumbling_cylinder_beta`, `missile_models.py`). This
 gives a more realistic descent than treating the spent body as a point
 mass:
 
@@ -2432,11 +2449,11 @@ preferred for version control because text diffs are readable.
 
 Three secondary dialogs supplement the main trajectory view:
 
-- **FootprintDialog** (`thrusty.py:3153`). Sweeps the bank-angle schedule
+- **FootprintDialog** (`thrusty.py`). Sweeps the bank-angle schedule
   for an HGV across a range of cross-range maneuvers and computes the
   envelope of reachable terminal points. Output: an impact-zone polygon
   rendered on the map.
-- **RangeRingDialog** (`thrusty.py:2493`). Draws great-circle range
+- **RangeRingDialog** (`thrusty.py`). Draws great-circle range
   rings at user-specified distances from the launch site or any other
   reference point. Useful for visualising the launch vehicle's
   performance envelope against named geographic features.
@@ -2471,7 +2488,7 @@ runtime registration by users who want them visible.
 
 The four missiles from [Forden 2007](#16-references) Table 1 are
 implemented as builder functions `_scud_b`, `_al_hussein`, `_nodong`,
-`_taepodong_i` (`missile_models.py:946–1071`). Each carries the exact
+`_taepodong_i` (`missile_models.py–1071`). Each carries the exact
 mass, Isp, burn time, diameter, and payload values from Forden Table 1
 in its source comment:
 
@@ -2525,8 +2542,8 @@ not original work by Thrusty's authors.
 
 ### 15.3 AUR — Lewis original
 
-The `_aur` builder (`missile_models.py:1405`) and its variant
-`_aur_hgb` (`missile_models.py:1471`) are an original Thrusty
+The `_aur` builder (`missile_models.py`) and its variant
+`_aur_hgb` (`missile_models.py`) are an original Thrusty
 contribution by the author of this document. AUR is a hypothetical
 two-stage solid-propellant ballistic missile assembled from
 open-source body-dimension and propulsion-class data; it is *not* a
@@ -2641,7 +2658,7 @@ optimisation) should use higher-fidelity tools.
 - **Tsiolkovsky, K. E.** (1903). *Issledovanie mirovykh prostranstv
   reaktivnymi priborami* [Exploration of Outer Space by Reaction
   Devices]. The rocket equation, used for the stack ΔV pre-estimate
-  (Section 10.1) and as the basis for the Schilling/Townsend SLV
+  (Section 10.1) and as the basis for the Schilling SLV
   performance method (Section 11.1).
 
 - **Vincenty, T.** (1975). "Direct and Inverse Solutions of Geodesics
