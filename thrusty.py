@@ -2107,6 +2107,12 @@ class MissileDialog(tk.Toplevel):
 # RV editor dialog
 # ---------------------------------------------------------------------------
 
+# Non-selectable divider in the reentry-mode dropdown, separating the primary
+# modes from the legacy/comparison equilibrium-glide laws.  Module-level so both
+# the main control panel (MissileFlyoutApp) and the RV editor can reference it.
+_GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
+
+
 class RVEditorDialog(tk.Toplevel):
     """Modal dialog for creating or editing an RVParams object.
 
@@ -2125,10 +2131,6 @@ class RVEditorDialog(tk.Toplevel):
         "skip_to_equilibrium":     "Skip → equilibrium (auto-handoff)",
         "damped_glide":            "Damped phugoid glide",
     }
-
-    # Non-selectable divider in the reentry-mode dropdown separating the primary
-    # modes from the legacy/comparison equilibrium-glide laws.
-    _GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
         super().__init__(parent)
@@ -4184,7 +4186,7 @@ class MissileFlyoutApp(tk.Tk):
                     "Phugoid / skip-glide",
                     "Damped phugoid glide",
                     "Non-oscillatory glide (Acton)",
-                    self._GUIDANCE_SEPARATOR,
+                    _GUIDANCE_SEPARATOR,
                     "Equilibrium glide (Tracy)",
                     "Skip → equilibrium (auto-handoff)"],
             state="readonly", width=32)
@@ -4923,7 +4925,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _on_glider_guidance_changed(self):
         raw = self._main_guidance_var.get()
-        if raw == self._GUIDANCE_SEPARATOR:
+        if raw == _GUIDANCE_SEPARATOR:
             # The divider is not a real mode — revert to the previous selection.
             self._main_guidance_var.set(
                 getattr(self, '_prev_guidance',
