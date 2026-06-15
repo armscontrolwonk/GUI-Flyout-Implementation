@@ -1,11 +1,16 @@
-"""Lift-authority / damping ceiling for the C-HGB on the AUR (depressed),
-swept over L/D.
+"""How much does an angle-of-attack C_L margin (winglets/elevons) raise the
+C-HGB damping ceiling?
 
-Damping authority is set by the lift HEADROOM at the glide,
-    headroom = a_L,max - g_eff,   a_L,max = min(q*(L/D)/beta, n_max*g),
-which near the lift-margin (Lambda = a_L,max/g_eff ~ 1) is very sensitive to
-L/D.  zeta_max ~ headroom / (2*omega_p*V*|gamma|),  omega_p = sqrt(g_eff/H_rho),
-gamma ~ equilibrium glide angle 2*(L/D)*H_rho*g/V^2.
+The constant-L/D model rigidly ties lift to drag (no AoA margin), so the only
+damping headroom is 'dip into denser air' -> zeta_max ~ 0.2.  A control-surface
+C_L margin M = C_L,max / C_L,trim lets the vehicle pull transient lift up to
+M x its trim value:
+    a_L,max(M) = M * a_L,trim,   a_L,trim = q*(L/D)/beta,
+    headroom(M) = a_L,max(M) - g_eff,
+    zeta_max(M) ~ headroom / (2*omega_p*V*gamma),  omega_p=sqrt(g_eff/H_rho),
+    gamma ~ 2*(L/D)*H_rho*g/V^2.
+Because the glider sits right at the lift margin (headroom is tiny at M=1),
+zeta_max is highly leveraged in M.
 """
 import copy, json
 import numpy as np
@@ -16,58 +21,59 @@ from atmosphere import atmosphere
 CHGB = rv_from_dict(json.load(open("rv_library/C-HGB.rv.json")))
 KICK = 17.0
 G0, RE, HR = 9.80665, 6.378137e6, 7000.0
-BETA = CHGB.beta_kg_m2
-NMAX = getattr(CHGB, "glider_pullup_g_max", 10.0)
+BETA, LD = CHGB.beta_kg_m2, CHGB.glider_LD
 
 
-def fly(ld, zeta=0.5):
+def glide_states():
     p = get_missile("AUR+HGB")
     p.burnout_angle_deg = KICK; p.stage_burnout_angle_deg = KICK
     if p.stage2: p.stage2.stage_burnout_angle_deg = KICK
     rv = copy.deepcopy(CHGB)
-    rv.glider_LD = ld
     rv.glider_guidance = "damped_glide"; rv.glider_aero_model = "constant_LD"
-    rv.glider_damping_zeta = zeta
+    rv.glider_damping_zeta = 0.5
     p.rv = rv
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, burnout_angle_deg=KICK,
                              dt_output=1.0, max_time_s=6000.0)
-    return (np.asarray(r['alt']).ravel(), np.asarray(r['speed']).ravel(),
-            np.asarray(r['range']).ravel())
+    alt = np.asarray(r['alt']).ravel(); spd = np.asarray(r['speed']).ravel()
+    iap = int(np.argmax(alt)); a, v = alt[iap:], spd[iap:]
+    band = (a/1000 >= 28) & (a/1000 <= 42) & (v > 100)
+    return a[band], v[band]
 
 
-def authority(ld):
-    alt, spd, rng = fly(ld)
-    iap = int(np.argmax(alt))
-    a, v = alt[iap:], spd[iap:]
-    band = (a/1000.0 >= 28) & (a/1000.0 <= 42) & (v > 100)   # the glide corridor
-    if not band.any():
-        return None
-    lam_list, zmax_list = [], []
-    for h, V in zip(a[band], v[band]):
+def zeta_max_for_margin(a, v, M):
+    z = []
+    for h, V in zip(a, v):
         rho = atmosphere(h)[2]
         q = 0.5 * rho * V * V
-        a_L = min(q * ld / BETA, NMAX * G0)
+        a_L_trim = q * LD / BETA
         g_eff = G0 - V * V / (RE + h)
         if g_eff <= 0:
             continue
-        lam_list.append(a_L / g_eff)
-        head = a_L - g_eff
-        if head > 0:
-            omega = np.sqrt(g_eff / HR)
-            gamma = 2 * ld * HR * G0 / (V * V)        # equilibrium glide angle
-            zmax_list.append(head / (2 * omega * V * gamma))
-        else:
-            zmax_list.append(0.0)
-    glide_med = float(np.median(a[a/1000.0 < 55]) / 1000.0)
-    return dict(ld=ld, glide=glide_med, rng=float(rng[-1]/1000.0),
-                lam=float(np.median(lam_list)), zmax=float(np.median(zmax_list)))
+        head = M * a_L_trim - g_eff
+        if head <= 0:
+            z.append(0.0); continue
+        omega = np.sqrt(g_eff / HR)
+        gamma = 2 * LD * HR * G0 / (V * V)
+        z.append(head / (2 * omega * V * gamma))
+    return float(np.median(z))
 
 
-print(f"C-HGB (beta={BETA:.0f}, n_max={NMAX}g) on AUR depressed; "
-      f"effect of L/D on glide & damping authority:\n")
-print(f"{'L/D':>5} {'glide km':>9} {'range km':>9} {'Lambda(glide)':>14} {'zeta_max':>9}")
-for ld in (2.0, 2.2, 2.4):
-    d = authority(ld)
-    if d is None:
-        print(f"{ld:>5.1f}  no glide corridor"); continue
-    print(f"{ld:>5.1f} {d['glide']:>8.1f} {d['rng']:>9.0f} {d['lam']:>13.2f} {d['zmax']:>9.2f}")
+a, v = glide_states()
+print(f"C-HGB (beta={BETA:.0f}, L/D={LD}) -- damping ceiling vs C_L margin\n")
+print("C_L margin M   meaning                         zeta_max")
+labels = {1.0: "no margin (= constant-L/D, bare body)",
+          1.1: "+10% C_L (tiny elevon deflection)",
+          1.25: "+25% C_L (modest control surfaces)",
+          1.5: "+50% C_L",
+          2.0: "2x trim C_L (large AoA margin)"}
+for M in (1.0, 1.1, 1.25, 1.5, 2.0):
+    print(f"   {M:>4.2f}        {labels[M]:<34} {zeta_max_for_margin(a, v, M):>6.2f}")
+
+# margin needed to reach target zeta
+Ms = np.linspace(1.0, 2.0, 201)
+zs = np.array([zeta_max_for_margin(a, v, M) for M in Ms])
+for tgt in (0.4, 0.7):
+    i = np.argmax(zs >= tgt)
+    if zs[i] >= tgt:
+        print(f"\n  -> zeta_max = {tgt}: needs C_L margin M ~ {Ms[i]:.2f} "
+              f"(+{(Ms[i]-1)*100:.0f}% lift over trim)")
