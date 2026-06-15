@@ -2098,7 +2098,14 @@ value in the *frequency* domain, but that is a separate characterisation,
 not the time-domain transient-response argument above.) ζ = 0.7 is a
 modelling choice describing a competently-guided vehicle, not a physical
 constant of the airframe; it is freely dialled — ~0.3 gives several lazy
-skips, ≥ 1.0 collapses to a smooth equilibrium capture.
+skips, ≥ 1.0 collapses to a smooth equilibrium capture. In short, ζ is a
+property of the *guidance*, not the airframe — the bare vehicle's skip
+phugoid is essentially undamped and is suppressed only by active control
+([Tracy & Wright 2020](#16-references)) — so the designer chooses it,
+dialling in more damping for a smoother, single-bounce capture
+([Acton 2015](#16-references)) or less for a bouncier, longer-skipping
+profile, with 0.7 the conventional well-guided midpoint
+([Ogata 2010](#16-references); [Franklin et al. 2019](#16-references)).
 
 **Nesting (the safety property).** ζ = 0 ⇒ k_h = 0 ⇒ the feedback term
 vanishes ⇒ the lift law is *exactly* `skip_glide`. This is verified

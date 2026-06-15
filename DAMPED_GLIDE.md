@@ -67,6 +67,13 @@ default is the classical second‑order control value: it lies in the desirable
 overshoot) and is very nearly settling‑time‑optimal (Ogata p.173, t_s minimum at
 ζ ≈ 0.68–0.76). See `DAMPED_GLIDE_MEMO.md` §5 for the full rationale.
 
+Crucially, ζ is a property of the *guidance*, not the airframe: the bare
+vehicle's skip phugoid is essentially undamped — even mildly unstable
+open‑loop (Liu et al. 2025) — and is suppressed only by active control
+(Tracy & Wright 2020), so the designer sets it, dialling in more damping for a
+smoother, single‑bounce capture (Acton 2015) or less for a bouncier,
+longer‑skipping profile, with 0.7 the conventional well‑guided midpoint.
+
 ### Three independent groundings of the gain (the curated library)
 
 1. **First‑principles (Vinh §7‑2):** the derivation above — `k_h = 2ζm√(g_eff/H_ρ)`.
