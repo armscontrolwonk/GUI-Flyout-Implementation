@@ -674,14 +674,22 @@ until impact, recorded as separate debris-impact rows in the timeline.
 Thrusty integrates from each stage's **burnout mass**, which the user supplies
 directly (Section 6.1). The dry-mass estimator (`mass_estimator.py`; full
 coefficient tables and sources in [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md)) is a
-separate design-time tool that answers the complementary question — *is that
-stated dry mass physically plausible, or is it an "unobtanium" structure?* It
-never feeds the trajectory; it is a sanity check on the number the trajectory
-trusts.
+separate design-time tool that helps you assess whether a stated dry mass is
+plausible, using a number of the popular published approaches to mass-estimating
+relationships (MERs). It never feeds the trajectory; it is a sanity check on the
+number the trajectory trusts — *is that dry mass in line with real hardware, or
+have you built an "unobtanium" rocket?*
 
-The governing design choice is to use **two complementary families** rather than
-one relation, because no single relation is trustworthy across the whole
-size/technology range:
+There is no single, authoritative dry-mass equation. The published MERs are a
+*range* of relations — fit to different vehicle datasets, eras, and design
+assumptions — and they do **not** agree perfectly with one another; two
+reasonable relations can differ by tens of percent on the same stage. The tool
+leans into that rather than hiding it: it runs several independent relations side
+by side and reports the spread, so the agreement (or disagreement) between them
+is itself the signal for how trustworthy a stated dry mass is.
+
+These relations fall into two complementary families, chosen so that no part of
+the size/technology range rests on a single equation:
 
 | Family | Inputs needed | Best for |
 |---|---|---|
