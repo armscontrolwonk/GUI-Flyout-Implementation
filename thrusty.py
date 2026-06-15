@@ -3412,6 +3412,189 @@ class FootprintDialog(tk.Toplevel):
             webbrowser.open(f"file://{self._map_path}")
 
 
+def _glide_state_from_result(res):
+    """Mid-glide (V_kms, alt_km) from a trajectory result dict, or None.
+
+    Takes the median speed/altitude over the post-apogee in-atmosphere glide
+    (25-55 km) so the damping estimate can anchor on a flown state."""
+    try:
+        import numpy as _np
+        alt = _np.asarray(res['alt']).ravel() / 1000.0
+        spd = _np.asarray(res['speed']).ravel() / 1000.0
+        if alt.size < 5:
+            return None
+        iap = int(_np.argmax(alt))
+        a, v = alt[iap:], spd[iap:]
+        m = (a >= 25.0) & (a <= 55.0)
+        if not m.any():
+            return None
+        return float(_np.median(v[m])), float(_np.median(a[m]))
+    except Exception:
+        return None
+
+
+class DampingEstimatorDialog(tk.Toplevel):
+    """Suggest a phugoid damping ratio ζ for the active glide RV.
+
+    Wraps damping_estimate.estimate_damping (docs/damping_estimate_spec.md):
+    the achievable ζ ceiling (lift-authority limited) with a modeling-
+    uncertainty band, from β, L/D and a control-surface descriptor.  Pre-filled
+    from the active terminal vehicle; the user may add control-surface area /
+    deflection and a glide state (auto-filled if a trajectory has been flown,
+    with a Restore button).  "Apply" writes the central ζ to the knob and stores
+    the inputs on the RV.  The band is a capability boundary: ζ below it is a
+    free design choice, inside it the authority limit, above it unphysical.
+    """
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._app = app
+        self.title("Estimate damping ratio ζ")
+        self.resizable(False, False)
+        self._result = None
+        rv = getattr(app, "_rv", None)
+        self._flown = None
+        store = getattr(app, "_traj_store", None)
+        if store:
+            try:
+                self._flown = _glide_state_from_result(store[-1][1])
+            except Exception:
+                self._flown = None
+        self._build(rv)
+        self._compute()
+        try:
+            app._center_dialog(self)
+        except Exception:
+            pass
+
+    def _build(self, rv):
+        pad = dict(padx=6, pady=3)
+        frm = ttk.Frame(self)
+        frm.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._r = 0
+
+        def _row(label, default, unit=""):
+            ttk.Label(frm, text=label).grid(row=self._r, column=0, sticky=tk.W, **pad)
+            var = tk.StringVar(value=default)
+            ttk.Entry(frm, textvariable=var, width=10).grid(
+                row=self._r, column=1, sticky=tk.W, **pad)
+            if unit:
+                ttk.Label(frm, text=unit).grid(row=self._r, column=2, sticky=tk.W)
+            self._r += 1
+            return var
+
+        def _sep():
+            ttk.Separator(frm, orient=tk.HORIZONTAL).grid(
+                row=self._r, column=0, columnspan=3, sticky='ew', pady=4)
+            self._r += 1
+
+        ttk.Label(frm, text="Vehicle (from terminal vehicle; editable)",
+                  font=("TkDefaultFont", 9, "bold")).grid(
+            row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
+        self._r += 1
+        beta = getattr(rv, "beta_kg_m2", 0.0) if rv else 0.0
+        ld = getattr(rv, "glider_LD", 0.0) if rv else 0.0
+        nmax = getattr(rv, "glider_pullup_g_max", 10.0) if rv else 10.0
+        self._beta = _row("Ballistic coeff β", f"{beta:g}", "kg/m²")
+        self._ld = _row("Lift-to-drag L/D", f"{ld:g}")
+        self._nmax = _row("Max pull-up", f"{nmax:g}", "g")
+
+        _sep()
+        ttk.Label(frm, text="Control surfaces").grid(
+            row=self._r, column=0, sticky=tk.W, **pad)
+        self._ctrl = tk.StringVar(
+            value=(getattr(rv, "glider_control_surfaces", "unknown") if rv else "unknown"))
+        ttk.Combobox(frm, textvariable=self._ctrl, state="readonly", width=12,
+                     values=["unknown", "none", "small", "substantial"]).grid(
+            row=self._r, column=1, columnspan=2, sticky=tk.W, **pad)
+        self._r += 1
+        far = getattr(rv, "glider_flap_area_ratio", 0.0) if rv else 0.0
+        dfl = getattr(rv, "glider_flap_deflection_deg", 0.0) if rv else 0.0
+        self._far = _row("  Flap area S_flap/S_ref (opt.)", f"{far:g}" if far > 0 else "")
+        self._dfl = _row("  Flap deflection (opt.)", f"{dfl:g}" if dfl > 0 else "", "deg")
+
+        _sep()
+        gl = "from flown trajectory" if self._flown else \
+            "no trajectory flown — blank ⇒ swept 3–5 km/s"
+        ttk.Label(frm, text=f"Glide state ({gl})").grid(
+            row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
+        self._r += 1
+        self._v = _row("  Glide speed (opt.)",
+                       (f"{self._flown[0]:.2f}" if self._flown else ""), "km/s")
+        self._h = _row("  Glide altitude (opt.)",
+                       (f"{self._flown[1]:.0f}" if self._flown else ""), "km")
+        ttk.Button(frm, text="Restore", command=self._restore).grid(
+            row=self._r, column=1, sticky=tk.W, **pad)
+        self._r += 1
+
+        _sep()
+        ttk.Button(frm, text="Compute", command=self._compute).grid(
+            row=self._r, column=0, sticky=tk.W, **pad)
+        ttk.Button(frm, text="Apply ζ to knob", command=self._apply).grid(
+            row=self._r, column=1, columnspan=2, sticky=tk.W, **pad)
+        self._r += 1
+        self._out = ttk.Label(frm, text="", font=("TkDefaultFont", 11, "bold"))
+        self._out.grid(row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
+        self._r += 1
+        self._note = ttk.Label(frm, text="", foreground="#555555",
+                               wraplength=380, justify=tk.LEFT)
+        self._note.grid(row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
+        self._r += 1
+
+    def _restore(self):
+        if self._flown:
+            self._v.set(f"{self._flown[0]:.2f}")
+            self._h.set(f"{self._flown[1]:.0f}")
+        else:
+            self._v.set("")
+            self._h.set("")
+
+    @staticmethod
+    def _fval(var, default=None):
+        s = var.get().strip()
+        if not s:
+            return default
+        try:
+            return float(s)
+        except ValueError:
+            return default
+
+    def _compute(self):
+        from damping_estimate import estimate_damping
+        v = self._fval(self._v, None)
+        h = self._fval(self._h, None)
+        r = estimate_damping(
+            self._fval(self._beta, 0.0) or 0.0,
+            self._fval(self._ld, 0.0) or 0.0,
+            nmax=self._fval(self._nmax, 10.0) or 10.0,
+            control=self._ctrl.get(),
+            flap_area_ratio=self._fval(self._far, 0.0) or 0.0,
+            flap_deflection_deg=self._fval(self._dfl, 0.0) or 0.0,
+            v_glide=(v * 1000.0 if v else None),
+            h_glide=(h * 1000.0 if h else None))
+        self._result = r
+        self._out.config(text=r.text())
+        self._note.config(text=r.notes)
+
+    def _apply(self):
+        if self._result is None:
+            self._compute()
+        r = self._result
+        try:
+            self._app._main_zeta_var.set(f"{r.zeta:.2f}")
+        except Exception:
+            pass
+        rv = getattr(self._app, "_rv", None)
+        if rv is not None:
+            try:
+                rv.glider_control_surfaces = self._ctrl.get()
+                rv.glider_flap_area_ratio = self._fval(self._far, 0.0) or 0.0
+                rv.glider_flap_deflection_deg = self._fval(self._dfl, 0.0) or 0.0
+            except Exception:
+                pass
+        self.destroy()
+
+
 class MassEstimatorDialog(tk.Toplevel):
     """Estimate a stage's dry (inert) mass from parameters and report how far
     the missile's stated burnout mass diverges from known mass relationships.
@@ -4214,6 +4397,8 @@ class MissileFlyoutApp(tk.Tk):
         self._main_zeta_var = tk.StringVar(value="0.7")
         ttk.Entry(_zf, textvariable=self._main_zeta_var, width=5).pack(
             side=tk.LEFT, padx=4)
+        ttk.Button(_zf, text="Estimate…", width=10,
+                   command=self._open_damping_estimator).pack(side=tk.LEFT, padx=(2, 0))
         ttk.Label(_zf, text="(0 = undamped skip-glide; ~0.7 = a few decaying skips)",
                   foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
 
@@ -6769,6 +6954,9 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_mass_estimator(self):
         MassEstimatorDialog(self)
+
+    def _open_damping_estimator(self):
+        DampingEstimatorDialog(self)
 
     def _open_range_ring(self):
         RangeRingDialog(self)
