@@ -4039,10 +4039,15 @@ class MissileFlyoutApp(tk.Tk):
         top = ttk.Frame(self)
         top.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        # Left control panel — fixed width, vertically scrollable
-        LEFT_W = 490
-        left_outer = ttk.Frame(top, width=LEFT_W)
-        left_outer.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
+        # Resizable split — drag the sash to widen the control panel.
+        paned = ttk.PanedWindow(top, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True)
+
+        # Left control panel — vertically scrollable; width is user-adjustable.
+        LEFT_W = 500
+        self._left_hints = []                 # hint labels with dynamic wraplength
+        self._left_wrap = LEFT_W - 28
+        left_outer = ttk.Frame(paned, width=LEFT_W)
         left_outer.pack_propagate(False)
 
         left_canvas = tk.Canvas(left_outer, highlightthickness=0)
@@ -4059,6 +4064,14 @@ class MissileFlyoutApp(tk.Tk):
             left_canvas.configure(scrollregion=left_canvas.bbox("all"))
         def _left_on_canvas(event):
             left_canvas.itemconfig(_left_win, width=event.width)
+            # keep every registered hint label wrapped to the current width so
+            # all text stays visible at any pane size (A + C).
+            self._left_wrap = max(160, event.width - 28)
+            for _lbl in self._left_hints:
+                try:
+                    _lbl.configure(wraplength=self._left_wrap)
+                except tk.TclError:
+                    pass
         left.bind("<Configure>", _left_on_frame)
         left_canvas.bind("<Configure>", _left_on_canvas)
 
@@ -4071,8 +4084,10 @@ class MissileFlyoutApp(tk.Tk):
         self._build_control_panel(left)
 
         # Right panel — tabbed notebook (Plots | Flight Timeline)
-        right = ttk.Frame(top)
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        right = ttk.Frame(paned)
+        paned.add(left_outer, weight=0)
+        paned.add(right, weight=1)
+        self.after_idle(lambda: paned.sashpos(0, LEFT_W))
 
         # Pinned results strip — always visible above the notebook tabs
         self._results_strip_var = tk.StringVar(value="")
@@ -4391,16 +4406,18 @@ class MissileFlyoutApp(tk.Tk):
 
         # Damping ratio ζ — only visible for "Damped phugoid glide"
         _zf = ttk.Frame(_gmf)
-        _zf.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
+        _zf.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=(8, 0), pady=1)
         self._main_zeta_frame = _zf
-        ttk.Label(_zf, text="Damping ratio ζ:").pack(side=tk.LEFT)
+        _zr = ttk.Frame(_zf)
+        _zr.pack(fill=tk.X, anchor=tk.W)
+        ttk.Label(_zr, text="Damping ratio ζ:").pack(side=tk.LEFT)
         self._main_zeta_var = tk.StringVar(value="0.7")
-        ttk.Entry(_zf, textvariable=self._main_zeta_var, width=5).pack(
+        ttk.Entry(_zr, textvariable=self._main_zeta_var, width=5).pack(
             side=tk.LEFT, padx=4)
-        ttk.Button(_zf, text="Estimate…", width=10,
+        ttk.Button(_zr, text="Estimate…", width=10,
                    command=self._open_damping_estimator).pack(side=tk.LEFT, padx=(2, 0))
-        ttk.Label(_zf, text="(0 = undamped skip-glide; ~0.7 = a few decaying skips)",
-                  foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
+        self._mk_hint(_zf, "0 = undamped skip-glide; ~0.7 = a few decaying skips").pack(
+            fill=tk.X, anchor=tk.W, pady=(1, 0))
 
         # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
@@ -6957,6 +6974,18 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_damping_estimator(self):
         DampingEstimatorDialog(self)
+
+    def _mk_hint(self, parent, text):
+        """A greyed hint label that wraps to the control-panel width, so its
+        text is always fully visible (registered for dynamic re-wrapping)."""
+        lbl = ttk.Label(parent, text=text, foreground="#555555", justify=tk.LEFT)
+        try:
+            lbl.configure(wraplength=getattr(self, "_left_wrap", 460))
+        except tk.TclError:
+            pass
+        if hasattr(self, "_left_hints"):
+            self._left_hints.append(lbl)
+        return lbl
 
     def _open_range_ring(self):
         RangeRingDialog(self)
