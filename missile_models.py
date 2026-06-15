@@ -345,6 +345,17 @@ class RVParams:
     # Only used by the "damped_glide" mode.
     glider_damping_zeta:    float = 0.7
 
+    # Control-surface descriptor used only by the damping-ratio estimator
+    # (docs/damping_estimate_spec.md): how much lifting/control-surface area the
+    # vehicle carries, which bounds the achievable ζ.  "unknown" → the estimator
+    # returns its widest band; "none"/"small"/"substantial" select a tier.
+    # glider_flap_area_ratio (S_flap/S_ref) and glider_flap_deflection_deg, when
+    # > 0, override the tier with an explicit Newtonian-flap computation.  These
+    # do not affect the flown trajectory — only the estimate.
+    glider_control_surfaces:   str   = "unknown"
+    glider_flap_area_ratio:    float = 0.0      # 0 ⇒ use the tier default
+    glider_flap_deflection_deg: float = 0.0     # 0 ⇒ use the 12° default
+
     # Surface emissivity used for radiative-equilibrium temperature at the
     # stagnation point: T_eq = (q̇ / (σ·ε))^(1/4).  0.85 matches the value
     # Anderson, "Hypersonic and High-Temperature Gas Dynamics," 2nd ed.,
@@ -392,6 +403,9 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
         'glider_skip_count':     rv.glider_skip_count,
         'glider_damping_zeta':   rv.glider_damping_zeta,
+        'glider_control_surfaces':   rv.glider_control_surfaces,
+        'glider_flap_area_ratio':    rv.glider_flap_area_ratio,
+        'glider_flap_deflection_deg':rv.glider_flap_deflection_deg,
         'separation_mode':       rv.separation_mode,
         'emissivity':            rv.emissivity,
     }
@@ -428,6 +442,9 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
         glider_skip_count=int(d.get('glider_skip_count', 1)),
         glider_damping_zeta=float(d.get('glider_damping_zeta', 0.7)),
+        glider_control_surfaces=str(d.get('glider_control_surfaces', 'unknown')),
+        glider_flap_area_ratio=float(d.get('glider_flap_area_ratio', 0.0)),
+        glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
         emissivity=float(d.get('emissivity', 0.85)),
     )
