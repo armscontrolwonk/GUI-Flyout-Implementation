@@ -2061,18 +2061,21 @@ with `ḣ = V·sin γ` the current altitude rate and `ḣ_eq = V·γ*` the
 command, where `γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)` is the
 quasi-equilibrium-glide flight-path angle (Lu Eq. 31).
 
-**The gain — derived, not fitted.** Linearising the planar
-equilibrium-glide EOM about equilibrium ([Vinh, Busemann & Culp
-1980](#16-references) §7-2) gives a damped harmonic oscillator for the
-altitude perturbation,
+**The gain — derived, not fitted.** Linearising the planar equilibrium-glide
+EOM about equilibrium gives, from first principles, a harmonic oscillator for
+the altitude perturbation. At fixed angle of attack lift ∝ ρ ∝ e^(−h/H_ρ), so a
+displacement δh changes the lift acceleration by `d a_L/dh = −g_eff/H_ρ`, giving
+the open-loop mode
 
 ```
-δḧ + 2ζω_p·δḣ + ω_p²·δh = 0,    ω_p² = g_eff / H_ρ   (g_eff = g − V²/r)
+δḧ + ω_p²·δh = 0,    ω_p² = g_eff / H_ρ   (g_eff = g − V²/r)
 ```
 
-where `H_ρ = −ρ/(dρ/dh)` is the local density scale height (the restoring
-force is the density lapse). Matching the feedback contribution to `2ζω_p`
-fixes the gain for a target damping ratio ζ:
+where `H_ρ = −ρ/(dρ/dh)` is the local density scale height (the restoring force
+is the density lapse); this frequency is corroborated empirically by
+[Liu et al. 2025](#16-references) (measured skip phugoid 0.021–0.037 rad/s). The
+altitude-rate feedback adds the `2ζω_p·δḣ` damping term; matching the feedback
+contribution to `2ζω_p` fixes the gain for a target damping ratio ζ:
 
 ```
 k_h = 2·ζ·m·√(g_eff / H_ρ)
@@ -2861,11 +2864,13 @@ underlying Heineman / MacConochie–Klich / Glatt lineage) in
   range sweep corroborating the `damped_glide` gain magnitude
   (Section 12.3.5).
 
-- **Vinh, N. X., Busemann, A. & Culp, R. D.** (1980). *Hypersonic and
-  Planetary Entry Flight Mechanics.* Univ. Michigan Press. §7-2
-  equilibrium-glide linearisation giving the phugoid frequency
-  `ω_p² = g_eff/H_ρ` and the `damped_glide` gain `k_h = 2ζm√(g_eff/H_ρ)`
-  (Section 12.3.5).
+- **Liu, Z., Hu, Y., Gao, C., Jing, W. & Ji, X.** (2025). "Modeling and analysis
+  of maneuver laws based on higher-order multi-resolution dynamic mode
+  decomposition for hypersonic glide vehicles." *Defence Technology* 48, 34–47.
+  Data-driven (DMD) decomposition of HGV skip-glide; independently measures the
+  skip phugoid frequency (0.0207–0.0374 rad/s), corroborating the first-
+  principles ω_p = √(g_eff/H_ρ) (Section 12.3.5). [The equilibrium-glide phugoid
+  frequency is derived from first principles in §12.3.5, not taken from a text.]
 
 ### Control theory
 

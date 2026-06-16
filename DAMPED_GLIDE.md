@@ -38,22 +38,25 @@ L·cos σ_cmd = L·cos σ_nom − k_h·(ḣ − ḣ_eq)          (Lu 2013, Eq. 3
 - `γ*` = the quasi‑equilibrium‑glide flight‑path angle (Lu Eq. 31, dimensional):
   `γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)` — the small negative descent angle.
 
-## The gain — derived, not fitted (Vinh §7‑2)
+## The gain — derived, not fitted
 
-Linearising the planar equilibrium‑glide EOM about equilibrium (Vinh, Busemann &
-Culp, *Hypersonic and Planetary Entry Flight Mechanics*, 1980, §7‑2; the lift
-balance `L = m(g − V²/r)` and first‑order framework, pp. 109–111) gives a simple
-harmonic oscillator for the altitude perturbation:
+Linearising the planar equilibrium‑glide EOM about equilibrium gives, from first
+principles, a simple harmonic oscillator for the altitude perturbation. At the
+equilibrium glide the (fixed‑α) lift acceleration balances `g_eff = g − V²/r`;
+since lift ∝ ρ ∝ e^(−h/H_ρ), a small displacement δh changes it by
+`d a_L/dh = a_L·(d ln ρ/dh) = −g_eff/H_ρ`, so the open‑loop altitude mode is
 
 ```
-δḧ + 2ζω_p·δḣ + ω_p²·δh = 0,    ω_p² = g_eff / H_ρ      (g_eff = g − V²/r)
+δḧ + ω_p²·δh = 0,    ω_p² = g_eff / H_ρ      (g_eff = g − V²/r)
 ```
 
-where `H_ρ = −ρ/(dρ/dh)` is the local density scale height. The restoring force
+where `H_ρ = −ρ/(dρ/dh)` is the local density scale height — the restoring force
 is the density lapse (drop below equilibrium → denser air → more lift → pushed
-back up — the mechanism Yu & Chen describe explicitly). Adding the feedback term
-contributes the damping coefficient, and matching to `2ζω_p` gives the gain for
-a **target damping ratio ζ**:
+back up, the mechanism Yu & Chen describe explicitly). This frequency is
+corroborated empirically: Liu et al. (2025) measure the skip phugoid at
+0.021–0.037 rad/s, bracketing ω_p ≈ 0.034 rad/s here. The altitude‑rate feedback
+(Lu 2013, Eq. 33) adds the damping term, giving `δḧ + 2ζω_p·δḣ + ω_p²·δh = 0`;
+matching to `2ζω_p` fixes the gain for a **target damping ratio ζ**:
 
 ```
 k_h = 2·ζ·m·√(g_eff / H_ρ)
@@ -76,7 +79,7 @@ longer‑skipping profile, with 0.7 the conventional well‑guided midpoint.
 
 ### Three independent groundings of the gain (the curated library)
 
-1. **First‑principles (Vinh §7‑2):** the derivation above — `k_h = 2ζm√(g_eff/H_ρ)`.
+1. **First‑principles (the linearisation above):** the derivation — `k_h = 2ζm√(g_eff/H_ρ)`.
 2. **Empirical (Yu & Chen 2011, Table 1):** their flight‑path‑angle‑feedback gain
    sweep (k_γ = 0→15) shows strong damping at k_γ ≈ 3–5 with large reductions in
    peak heating/q/load for a few‑% range cost. Evaluating our derived gain at
@@ -164,9 +167,6 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
 - W. Yu, W. Chen, *Guidance Scheme for Glide Range Maximization of a Hypersonic
   Vehicle*, AIAA 2011‑6714 — flight‑path‑angle feedback (Eq. 19) and the
   empirical gain/heating/range sweep (Table 1, Figs. 6–10).
-- N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
-  Mechanics*, Univ. Michigan Press, 1980 — §7‑2 equilibrium‑glide linearisation
-  (phugoid frequency); Ch. 16–17 lift modulation.
 - J. M. Acton, "Hypersonic Boost‑Glide Weapons," *Science & Global Security*
   23:191–219, 2015 (DOI 10.1080/08929882.2015.1087242) — non‑oscillatory pull‑up
   assumption (the infinitely‑damped limit of this mode).

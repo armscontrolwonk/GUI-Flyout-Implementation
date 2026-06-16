@@ -275,7 +275,7 @@ class RVParams:
     #   "damped_glide":            skip_glide plus continuous altitude-rate
     #                              lift feedback (Lu 2013 / Yu & Chen 2011)
     #                              that damps the phugoid to a target ratio
-    #                              ζ = glider_damping_zeta (Vinh §7-2).  ζ=0
+    #                              ζ = glider_damping_zeta.  ζ=0
     #                              ≡ skip_glide; large ζ → equilibrium_glide.
     #                              See DAMPED_GLIDE.md.
     glider_enabled:         bool  = False
@@ -335,9 +335,11 @@ class RVParams:
     # flies at the max-L/D trim angle α* plus a flight-path-angle feedback term
     #     α = α* + k_γ·(γ* − γ)                      (Yu & Chen 2011, Eq. 19)
     # whose gain k_γ is computed each step for this ζ from the phugoid natural
-    # frequency derived by linearising the equilibrium-glide EOM (Vinh,
-    # Busemann & Culp, "Hypersonic and Planetary Entry Flight Mechanics" 1980,
-    # §7-2; equivalent to Lu, Forbes & Baldwin AIAA 2013-4648 Eq. 33):
+    # frequency obtained by linearising the equilibrium-glide EOM from first
+    # principles (lift ∝ ρ ∝ e^(−h/H_ρ) ⇒ d a_L/dh = −g_eff/H_ρ), giving the
+    # control law of Lu, Forbes & Baldwin AIAA 2013-4648 Eq. 33.  The phugoid
+    # frequency is corroborated empirically by Liu et al. 2025 (0.021–0.037
+    # rad/s).  See DAMPED_GLIDE_MEMO.md §2.
     #     ω_p² = g_eff/H_ρ ,  k_γ = ζ·C_L*·V/√(g_eff·H_ρ)
     # with g_eff = g − V²/r and H_ρ the local density scale height.  ζ = 0
     # recovers undamped skip_glide exactly (k_γ = 0); ζ ≈ 0.7 gives a couple of
