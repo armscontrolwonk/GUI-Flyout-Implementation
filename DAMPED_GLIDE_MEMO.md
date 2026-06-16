@@ -32,15 +32,17 @@ endpoint (§6). Two further modes — `equilibrium_glide` (Tracy) and
 
 ## 2. The oscillation being damped
 
-Following Vinh, Busemann & Culp (§7‑2), equilibrium glide balances lift against
-the net normal force:
+Equilibrium glide balances lift against the net normal force (Tracy & Wright
+2020, Eq. 7):
 
     L = m (g − V²/r) ≡ m·g_eff
 
-Linearizing the planar entry equations about this equilibrium gives a simple
+Linearizing about this equilibrium gives, from first principles, a simple
 harmonic oscillator in the altitude perturbation δh, restored by the **density
-lapse** — dip below the equilibrium altitude, the air is denser, lift rises, and
-the vehicle is pushed back up:
+lapse**. At fixed angle of attack lift ∝ ρ ∝ e^(−h/H_ρ), so a displacement δh
+changes the lift acceleration by d a_L/dh = a_L·(d ln ρ/dh) = −g_eff/H_ρ — dip
+below the equilibrium altitude, the air is denser, lift rises, and the vehicle
+is pushed back up:
 
     δḧ + ω_p²·δh = 0 ,     ω_p² = g_eff / H_ρ
 
@@ -253,21 +255,18 @@ outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %*
 2. W. Yu, W. Chen, *Guidance Scheme for Glide Range Maximization of a Hypersonic
    Vehicle*, AIAA 2011‑6714 — angle‑of‑attack feedback (Eq. 19); empirical
    gain/heating/range sweep.
-3. N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
-   Mechanics*, Univ. Michigan Press, 1980 — §7‑2 equilibrium‑glide
-   linearization (phugoid frequency).
-4. J. M. Acton, "Hypersonic Boost‑Glide Weapons," *Science & Global Security*
+3. J. M. Acton, "Hypersonic Boost‑Glide Weapons," *Science & Global Security*
    23:191–219, 2015 (DOI 10.1080/08929882.2015.1087242) — multi‑phase analytical
    trajectory; non‑oscillatory pull‑up assumption (Phase 4; Appendix A); ρ/β‑match
    (Eq. 8); HTV‑2 L/D ≈ 2.6 fit (Table 3).
-5. C. L. Tracy, D. Wright, "Modeling the Performance of Hypersonic Boost‑Glide
+4. C. L. Tracy, D. Wright, "Modeling the Performance of Hypersonic Boost‑Glide
    Missiles," *Science & Global Security* 28, 2020
-   (DOI 10.1080/08929882.2020.1864945) — equilibrium‑glide formulation; phugoid
-   "damped by active control."
-6. A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
+   (DOI 10.1080/08929882.2020.1864945) — equilibrium‑glide formulation (lift
+   balance L = m·g_eff, Eq. 7); phugoid "damped by active control."
+5. A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
    Hypersonic Glide Vehicles*, M.S. thesis, Georgia Tech, 2024 — SWERVe / C‑HGB
    dimensions (validation body).
-7. Z. Liu, Y. Hu, C. Gao, W. Jing, X. Ji, "Modeling and analysis of maneuver
+6. Z. Liu, Y. Hu, C. Gao, W. Jing, X. Ji, "Modeling and analysis of maneuver
    laws based on higher order multi‑resolution dynamic mode decomposition for
    hypersonic glide vehicles," *Defence Technology* 48 (2025) 34–47
    (DOI 10.1016/j.dt.2024.12.018) — data‑driven (DMD/Koopman) decomposition of
@@ -276,12 +275,12 @@ outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %*
    corroborating ω_p ≈ 0.034 rad/s here) and finds the open‑loop altitude mode
    mildly unstable (|λ| up to 1.098, their Table 8 / Fig. 25). CAV‑H validation
    body: 907 kg, 0.48 m², 50 km / 5.5 km/s.
-8. K. Ogata, *Modern Control Engineering*, 5th ed., Prentice Hall, 2010 — §5‑3
+7. K. Ogata, *Modern Control Engineering*, 5th ed., Prentice Hall, 2010 — §5‑3
    "Second‑Order Systems": standard form Eq. (5‑10); max‑overshoot Eq. (5‑21)
    M_p = e^(−(ζ/√(1−ζ²))π); the desirable damping‑ratio band ζ = 0.4–0.8 (p.171);
    settling‑time minimum near ζ = 0.68–0.76 (p.173). Source for the ζ ≈ 0.7
    default.
-9. G. F. Franklin, J. D. Powell, A. Emami‑Naeini, *Feedback Control of Dynamic
+8. G. F. Franklin, J. D. Powell, A. Emami‑Naeini, *Feedback Control of Dynamic
    Systems*, 8th ed. (Global), Pearson, 2019 — §3.4.2 "Overshoot and Peak Time":
    overshoot Eq. (3.72) M_p = e^(−πζ/√(1−ζ²)); Fig. 3.24 lists ζ = 0.7 → 5 %
    overshoot as a "frequently used value." Source for the ζ ≈ 0.7 default.
