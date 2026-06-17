@@ -143,6 +143,14 @@ higher F_p; Figs. 12-12/12-13).
 > authority — Lu's QEGC / Vinh-Coppola), and Chapman's corridor applies to the
 > near-/super-circular boost-glide cases (e.g. HTV-2-class).
 
+*Future extension (TR R-55 §"Guidance Requirements"):* the corridor width also
+sets the **entry-state precision** needed to capture — Chapman converts Δh_p into
+allowable (V, γ) errors (a 10-mile Earth corridor ⇒ ≈ ±0.01° flight-path-angle
+accuracy at 10 R⊕ for supercircular entry). The boost-glide analog — how
+sensitively capture depends on burnout/insertion γ — quantifies the lofted-vs-
+shallow-insertion sensitivity that this whole investigation turned on, and could
+later feed a "deliverability" check on the boost.
+
 **Diagnostic (exact, speed-agnostic — recommended to build first).** Thrusty
 integrates the full trajectory, so it can read the regime off it directly, using
 Chapman's own criterion (Vinh p. 209: skip ⇔ Z̄_f = Z̄_i; descend/capture ⇔
@@ -176,9 +184,16 @@ insertion), regenerated against the rebuilt law.
    second-order entry ODE (Eq. 21); Z_II equilibrium glide (Eq. 41 = Sänger =
    our ρ_eq); skip/descent criterion. Read pp. 14, 15, 21, 22, 24, 25.
 2. **Chapman, D. R.**, *An Analysis of the Corridor and Guidance Requirements for
-   Supercircular Entry into Planetary Atmospheres*, NASA TR R-55 (1960). The
-   entry-corridor formulation (overshoot/undershoot, periapsis parameter F_p).
-   Read via Vinh Ch. 12 (its definitive textbook treatment).
+   Supercircular Entry into Planetary Atmospheres*, NASA TR R-55 (1959/1960).
+   The entry-corridor formulation (overshoot/undershoot, perigee parameter F_p);
+   corridor width ∝ F_p,un/F_p,ov; lift widens the corridor (Earth V̄_i=1.4, 10 g:
+   7 mi at L/D=0 → 51 mi at L/D=1 → 65 mi modulated); multi-planet tables;
+   cross-validates its undershoot boundary against Lees, Hartwig & Cohen. The
+   second half — **guidance requirements** — converts corridor width into
+   allowable entry (V, γ) errors (Eqs. 20–22): a 10-mile Earth corridor needs
+   ≈ ±0.01° flight-path-angle accuracy at 10 R⊕. **Read directly** (main text:
+   abstract, perigee-parameter, corridor-width, guidance-requirements, lifting
+   boundaries; appendices not read). Supercircular only (V̄_i ≥ 1.05).
 3. **Vinh, N. X., Busemann, A. & Culp, R. D.**, *Hypersonic and Planetary Entry
    Flight Mechanics*, Univ. of Michigan Press (1980). Ch. 7 (first-order
    solutions, pp. 123–126); Ch. 10 (Yaroshevskii, pp. 158–162, 172–176);
