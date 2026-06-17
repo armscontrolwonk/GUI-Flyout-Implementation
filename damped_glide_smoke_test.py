@@ -106,6 +106,51 @@ def test_damping_improves_capture_constant_ld():
     print(f"  ok  damping improves capture (constant_LD range {rngs[0]:.0f}→{rngs[2]:.0f} km, ζ=0→2)")
 
 
+def _fly_aur_shallow(mode, zeta=None, aero="polar"):
+    """AUR on a *depressed* (shallow) insertion — the adv-pitch program from a
+    saved AUR guidance file (stage 1 → 27°, stage 2 → 0° flat, launch elev 80°,
+    az 103°, cutoff 117 s).  Apogee ~110 km, high horizontal speed: a capturable
+    insertion (contrast the lofted C-HGB above)."""
+    p = copy.deepcopy(get_missile("AUR+HGB"))
+    p.stage_turn_start_s, p.stage_turn_stop_s, p.stage_burnout_angle_deg = 1.0, 30.0, 27.0
+    if getattr(p, "stage2", None) is not None:
+        p.stage2.stage_turn_start_s = 54.0
+        p.stage2.stage_turn_stop_s = 90.0
+        p.stage2.stage_burnout_angle_deg = 0.0
+    p.launch_elevation_deg = 80.0
+    from missile_models import effective_rv
+    rv = copy.deepcopy(effective_rv(p))
+    rv.glider_guidance = mode
+    rv.glider_aero_model = aero
+    if zeta is not None:
+        rv.glider_damping_zeta = zeta
+    node = p
+    while node is not None:
+        if node.rv is not None:
+            node.rv = rv
+            break
+        node = node.stage2
+    r = integrate_trajectory(p, 28.458, -80.5286, 103.0, guidance="pitch_program",
+                             burnout_angle_deg=25.0, cutoff_time_s=117.0,
+                             gt_turn_start_s=5.0, launch_elevation_deg=80.0,
+                             max_time_s=8000.0, dt_output=2.0)
+    return r, rv
+
+
+def test_shallow_insertion_captures():
+    # Capturability is entry-geometry dependent: where the lofted C-HGB plunges,
+    # a shallow depressed insertion is captured by the same polar EOM law, with
+    # ζ damping — and still no free lift (range ≤ analytic equilibrium glide).
+    r_eq, rv_eq = _fly_aur_shallow("equilibrium_glide")
+    eq_km = _range_km(r_eq)
+    r_d, rv_d = _fly_aur_shallow("damped_glide", zeta=0.7, aero="polar")
+    g = regime_from_result(r_d, rv=rv_d)
+    assert g.verdict == "capture", f"polar damped_glide should capture the shallow insertion, got {g}"
+    assert _range_km(r_d) <= eq_km * 1.02, "captured glide exceeds equilibrium (free lift!)"
+    print(f"  ok  shallow insertion captures (polar damped ζ=0.7 → {_range_km(r_d):.0f} km, "
+          f"≤ equilibrium {eq_km:.0f} km)")
+
+
 def test_no_zoom_climb():
     for aero in ("polar", "constant_LD"):
         for z in (0.0, 0.7, 2.0):
@@ -121,6 +166,7 @@ def main():
         test_no_free_lift_bound,
         test_polar_lofted_plunges,
         test_damping_improves_capture_constant_ld,
+        test_shallow_insertion_captures,
         test_no_zoom_climb,
     ]
     for t in tests:

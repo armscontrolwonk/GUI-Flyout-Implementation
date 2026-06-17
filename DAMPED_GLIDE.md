@@ -164,12 +164,17 @@ law (5/5 checks). Key results on a **lofted** sub‑circular boost (~5.6 km/s):
 - **No free lift:** a captured glide never out‑ranges the analytic equilibrium
   glide (effective L/D ≤ vehicle L/D). The old law glided ~20 % *too far*
   (effective L/D ≈ 2.4 on an L/D = 2 vehicle); that artifact is gone.
-- **Honest plunge (polar aero):** the C‑HGB on a *lofted* ballistic boost
-  **plunges at every ζ** (verdict `plunge`). The thin‑air lift ceiling
+- **Honest plunge (polar aero, lofted entry):** the C‑HGB on a *lofted* ballistic
+  boost **plunges at every ζ** (verdict `plunge`). The thin‑air lift ceiling
   (max lift ∝ q·A·C_L,max) is too small high up to arrest the steep entry —
   independent of L/D and launch angle. This matches Lu's deep‑dive ballistic
-  launch and the observed real C‑HGB falling deeply. **A glider must be inserted
-  shallow** (depressed/equilibrium‑glide insertion), not lofted, to glide.
+  launch and the observed real C‑HGB falling deeply.
+- **Capture on a shallow insertion (polar aero):** on a *depressed* AUR insertion
+  (apogee ~110 km, high horizontal speed) the same polar EOM law **captures**
+  with ζ damping (ζ = 0.4 → 1.0 gives 3413 → 4204 km), bounded below the analytic
+  equilibrium glide. **Capturability is entry‑geometry dependent:** same law,
+  lofted → plunge, shallow → capture. Real boost‑glide vehicles are inserted
+  shallow, not lofted.
 - **Damping improves capture (constant_LD):** the lumped model has no aero lift
   ceiling, so it *can* pull out; range grows with ζ (2550 → 5606 km, ζ = 0 → 2)
   and captures at high ζ. It **over‑predicts capturability** — the polar model

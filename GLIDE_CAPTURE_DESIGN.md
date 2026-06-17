@@ -267,14 +267,19 @@ with `γ* = −2H_ρg/(V²cosσ·(L/D))`, `k_h = 2ζm√(g_eff/H_ρ)`. **No free
 
 **Validated behaviour (C-HGB, lofted sub-circular boost; `damped_glide_smoke_test.py`):**
 
-- **polar (physical aero): PLUNGES at every ζ.** The thin-air lift ceiling
-  (max lift ∝ q·A·C_L,max) is too small high up to arrest a steep lofted entry —
-  independent of L/D (tested to L/D=8) and launch angle. This is the honest
-  dynamic result and matches Lu's deep-dive ballistic-launch case and the
-  observed real C-HGB falling deeply. *To glide, a glider needs a shallow /
-  depressed insertion (Lu's equilibrium-glide-insertion), not a lofted ballistic
-  arc — a boost-trajectory capability Thrusty's gravity-turn boost does not
-  currently expose.*
+- **polar (physical aero), LOFTED entry: PLUNGES at every ζ.** The thin-air lift
+  ceiling (max lift ∝ q·A·C_L,max) is too small high up to arrest a steep lofted
+  entry — independent of L/D (tested to L/D=8) and launch angle. Honest dynamic
+  result; matches Lu's deep-dive ballistic launch and the real C-HGB falling
+  deeply.
+- **polar, SHALLOW (depressed) insertion: CAPTURES + damps.** On a depressed AUR
+  insertion (adv-pitch stage 1 → 27°, stage 2 → 0° flat, apogee ~110 km, high
+  horizontal speed → small g_eff), the same polar EOM law **captures**, with
+  ζ‑dependent range (ζ = 0.4 → 0.7 → 1.0 gives 3413 → 4053 → 4204 km) bounded
+  below the analytic equilibrium glide (5834 km, no free lift). **This is the
+  demonstration that capturability is entry‑geometry dependent:** same dynamic
+  law, lofted → plunge, shallow → capture. (Real boost-glide vehicles are
+  inserted shallow/depressed, not lofted.)
 - **constant_LD (lumped): captures, ζ-dependent** (range 2550→5606 km as
   ζ=0→2, `glide_frac` 0→0.94). The lumped model has **no aerodynamic lift
   ceiling**, so it can pull out where the physical polar model cannot — it
@@ -293,5 +298,6 @@ with `γ* = −2H_ρg/(V²cosσ·(L/D))`, `k_h = 2ζm√(g_eff/H_ρ)`. **No free
 plunges to ζ=30) — so the nominal must be the equilibrium trim.
 
 **Pending:** GUI surfacing of the classifier verdict + mode-gating (judge verdict
-vs selected-mode intent, §5); regenerating the headline validation tables; and a
-depressed/shaped-insertion boost capability to exercise polar capture.
+vs selected-mode intent, §5); and regenerating any remaining headline validation
+tables. (Polar capture *is* now exercised — via a depressed AUR adv-pitch
+insertion — in `damped_glide_smoke_test.py`.)
