@@ -730,9 +730,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # equiv. Yu & Chen 2011 Eq. 19).  The gain k_h is
                             # sized for the target damping ratio ζ from the
                             # equilibrium-glide phugoid frequency
-                            #   ω_p² = g_eff/H_ρ   (linearisation of Yaroshevskii's
-                            #                       eq., Vinh Ch. 10 Eq. 10-55,
-                            #                       about equilibrium glide Eq. 10-61)
+                            #   ω_p² = g_eff/H_ρ   (linearisation of the 2nd-order
+                            #                       entry ODE — Chapman NACA TN 4276
+                            #                       / NASA TR R-11 Eq. 21 (primary);
+                            #                       Yaroshevskii / Vinh Ch. 10
+                            #                       Eq. 10-55 special case — about
+                            #                       equilibrium glide)
                             #   k_h  = 2·ζ·m·√(g_eff/H_ρ)
                             # with the command altitude-rate ḣ_eq = V·γ*, where
                             #   γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)   (Lu Eq. 31).

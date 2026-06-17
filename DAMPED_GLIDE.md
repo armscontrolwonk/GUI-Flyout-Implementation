@@ -54,13 +54,19 @@ where `H_ρ = −ρ/(dρ/dh)` is the local density scale height — the restorin
 is the density lapse (drop below equilibrium → denser air → more lift → pushed
 back up, the mechanism Yu & Chen describe explicitly). This linearisation is not
 ad hoc: the planar entry equations collapse to a single second‑order nonlinear
-ODE — **Yaroshevskii's equation** (Vinh, Busemann & Culp, Ch. 10, Eq. 10‑55,
-`y″ = −K + (e^{2x}−1)/y`, with `y ∝ ρ`, `K = √(βr₀)·C_L/C_D`) — whose
-quasi‑steady particular solution (`y″ ≈ 0`) is the **equilibrium glide**
-(Eq. 10‑61, `y_eq = (e^{2x}−1)/K`, the Sänger condition). Linearising (10‑55)
-about `y_eq` gives precisely the oscillator above; Vinh shows the resulting
-oscillation about equilibrium glide numerically (Fig. 10‑10) but leaves the
-closed‑form oscillator — the one‑line step taken here — to the reader. The
+ODE whose **primary source is Chapman** (NACA TN 4276 / NASA TR R‑11, 1958–59,
+Eq. 21), reducing the two motion equations to one ODE in a density‑like variable
+`Z(ū)` (`ū = V/V_circ`, `Z ∝ ρ`). Its truncation neglecting vertical acceleration
+is the **equilibrium glide** — Chapman's `Z_II` solution, in his words
+"equilibrium gliding flight originally discussed by Sänger" — and the *full*
+equation produces, for higher L/D, the oscillation Chapman calls "numerous skips
+of sizable intensity" (Fig. 6). **Yaroshevskii's equation** (Vinh, Busemann &
+Culp, Ch. 10, Eq. 10‑55, `y″ = −K + (e^{2x}−1)/y`, `y ∝ ρ`, `K = √(βr₀)·C_L/C_D`)
+is a special case of Chapman's, with the same equilibrium‑glide solution
+(Eq. 10‑61, the Sänger condition) and the same numerically‑shown oscillation
+(Fig. 10‑10). Linearising the second‑order ODE about equilibrium glide gives
+precisely the oscillator above; **all three sources exhibit the oscillation but
+none writes the closed‑form oscillator** — that one‑line step is taken here. The
 frequency is also corroborated empirically: Liu et al. (2025) measure the skip
 phugoid at 0.021–0.037 rad/s, bracketing ω_p ≈ 0.034 rad/s here. The altitude‑rate feedback
 (Lu 2013, Eq. 33) adds the damping term, giving `δḧ + 2ζω_p·δḣ + ω_p²·δh = 0`;
@@ -183,15 +189,23 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
   — equilibrium‑glide formulation; phugoid "damped by active control."
 - N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
   Mechanics*, University of Michigan Press, 1980 — Ch. 10 (Yaroshevskii's
-  theory): the second‑order nonlinear entry ODE (Eq. 10‑55) and its
-  equilibrium‑glide reference state (Eq. 10‑61, the Sänger condition); the
-  oscillation about equilibrium glide is exhibited numerically (Fig. 10‑10). Our
-  `δḧ + ω_p²·δh = 0` oscillator is the small‑perturbation linearisation of
-  Eq. 10‑55 about Eq. 10‑61. (Read and verified pp. 158–162, 172–176; the §7‑2
-  first‑order solution is steady equilibrium glide and contains no oscillator —
-  the linearisation lives in the Ch. 10 second‑order theory.)
-- D. R. Chapman, NACA TN 4276 / NASA TR R‑11 (1958–59); H. J. Allen &
-  A. J. Eggers, NACA Report 1381 (1958) — independent phugoid/skip grounding.
+  theory): the second‑order nonlinear entry ODE (Eq. 10‑55, a special case of
+  Chapman's Eq. 21) and its equilibrium‑glide reference state (Eq. 10‑61, the
+  Sänger condition); the oscillation about equilibrium glide is exhibited
+  numerically (Fig. 10‑10). Our `δḧ + ω_p²·δh = 0` oscillator is the
+  small‑perturbation linearisation of Eq. 10‑55 about Eq. 10‑61. (Read and
+  verified pp. 158–162, 172–176; the §7‑2 first‑order solution is steady
+  equilibrium glide and contains no oscillator — the linearisation lives in the
+  Ch. 10 second‑order theory.)
+- D. R. Chapman, *An Approximate Analytical Method for Studying Entry Into
+  Planetary Atmospheres*, NACA TN 4276 (1958) / NASA TR R‑11 (1959) — the
+  **primary** second‑order nonlinear entry ODE (Eq. 21, in the density‑like
+  variable `Z(ū)`); the equilibrium‑glide `Z_II` truncation, attributed to
+  Sänger; and the lift‑driven transition from non‑oscillatory glide to "numerous
+  skips of sizable intensity" (Fig. 6) — the phugoid, shown numerically. Yaroshevskii
+  (Vinh Ch. 10) is a special case of this equation. (Read and verified pp. 14, 15,
+  22, 24, 25.) H. J. Allen & A. J. Eggers, NACA Report 1381 (1958) — companion
+  ballistic/skip grounding (Chapman's `Z_I`/`Z_III` truncations).
 - A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
   Hypersonic Glide Vehicles*, M.S. thesis, Georgia Tech, 2024 — SWERVe / C‑HGB
   vehicle dimensions used as the validation glide body.

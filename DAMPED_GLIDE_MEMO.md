@@ -49,22 +49,27 @@ is pushed back up:
 with H_ρ = −ρ/(dρ/dh) the local density scale height. Typically
 ω_p ≈ 0.034 rad/s — a skip period of order 180 s.
 
-This linearization is the textbook second-order entry theory in closed form.
-Vinh, Busemann & Culp (Ch. 10) reduce the planar entry equations to a single
-second-order nonlinear ODE — **Yaroshevskii's equation** (Eq. 10-55,
-`y″ = −K + (e^{2x}−1)/y`, where `y ∝ ρ` is the density variable, `x` a
-log-velocity variable, and `K = √(βr₀)·C_L/C_D`). Its quasi-steady particular
-solution (`y″ ≈ 0`) is the equilibrium glide, Eq. 10-61
-`y_eq = (e^{2x}−1)/K` — the Sänger condition, the same primary source as the
-first-order equilibrium-glide relation in Vinh §7-2. Linearizing (10-55) about
-`y_eq` gives δ″ + k²δ = 0 with k² = (e^{2x}−1)/y_eq² > 0, i.e. precisely the
-oscillator above re-expressed in Yaroshevskii's variables. Vinh exhibits this
-oscillation about equilibrium glide numerically (Fig. 10-10, the over/undershoot
-of the lifting solutions) but does not write the closed-form oscillator — that
-one-line step is taken here. (Note: Vinh §7-2 and §7-5 are the *first-order*
-steady-glide and skip solutions and contain no oscillator; the perturbation
-oscillation lives in the Ch. 10 second-order theory. Read and verified
-pp. 158-162, 172-176.)
+This linearization is the second-order entry theory in closed form. The primary
+source is **Chapman** (NACA TN 4276 / NASA TR R-11, 1958–59), who reduces the two
+planar motion equations to a single second-order nonlinear ODE (Eq. 21) in a
+density-like variable `Z(ū)` (`ū = V/V_circ`, `Z ∝ ρ`):
+
+    ū·d/dū(Z′ − Z/ū) − (1−ū²)cos⁴φ/(ūZ) + √(βr)·(L/D)·cos³φ = 0   (Chapman Eq. 21)
+
+Its truncation neglecting vertical acceleration is the equilibrium glide —
+Chapman's `Z_II` solution, "equilibrium gliding flight originally discussed by
+Sänger" — the same Sänger root as the first-order relation in Vinh §7-2. The
+*full* equation produces, for higher L/D, the oscillation Chapman calls "numerous
+skips of sizable intensity" (Fig. 6). **Yaroshevskii's equation** (Vinh, Busemann
+& Culp, Ch. 10, Eq. 10-55, `y″ = −K + (e^{2x}−1)/y`, `y ∝ ρ`, `K = √(βr₀)·C_L/C_D`)
+is a special case of Chapman's, whose quasi-steady solution is the same Sänger
+equilibrium glide (Eq. 10-61) and which shows the same oscillation numerically
+(Fig. 10-10). Linearizing the second-order ODE about equilibrium glide gives
+δ″ + k²δ = 0 with k² > 0 — precisely the oscillator above. **All three sources
+(Chapman, Yaroshevskii, Vinh) exhibit the oscillation but none writes the
+closed-form oscillator** — that one-line step is taken here. (Vinh §7-2/§7-5 are
+the *first-order* steady-glide/skip solutions and contain no oscillator. Read and
+verified: Chapman pp. 14, 15, 22, 24, 25; Vinh pp. 158-162, 172-176.)
 
 This analytical frequency is corroborated empirically by Liu et al. (2025), who
 decompose CAV-H skip-glide trajectories with a higher-order multi-resolution
@@ -309,3 +314,11 @@ outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %*
    `δḧ + ω_p²·δh = 0` oscillator (§2) is the small‑perturbation linearization of
    Eq. 10‑55 about Eq. 10‑61. (§7‑2 / §7‑5 are first‑order steady‑glide / skip
    solutions with no oscillator; read and verified pp. 158‑162, 172‑176.)
+10. D. R. Chapman, *An Approximate Analytical Method for Studying Entry Into
+    Planetary Atmospheres*, NACA TN 4276 (1958) / NASA TR R‑11 (1959) — the
+    **primary** second‑order nonlinear entry ODE (Eq. 21, in the density‑like
+    variable `Z(ū)`, `ū = V/V_circ`); the equilibrium‑glide `Z_II` truncation
+    attributed to Sänger; and the lift‑driven transition from non‑oscillatory
+    glide to "numerous skips of sizable intensity" (Fig. 6). Yaroshevskii (ref. 9)
+    is a special case of this equation; the §2 oscillator is its linearization.
+    (Read and verified pp. 14, 15, 22, 24, 25.)
