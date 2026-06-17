@@ -142,6 +142,15 @@ rationale, and the when‑to‑use comparison.
 
 ## Validation
 
+> **⚠ Under revision.** The range/“matches equilibrium glide” numbers in this
+> section rest on a now-identified **free-lift artifact** in the entry pull-up
+> (the feedback added lift without an induced-drag penalty), and the lofted-boost
+> scenario itself cannot physically glide with honest aero. The γ\* correction
+> (L/D in the denominator) is committed; the capture classifier and a two-phase
+> capture glide law are pending. See **`GLIDE_CAPTURE_DESIGN.md`** for the full
+> verified analysis and the corrected architecture. Treat the figures below as
+> historical until regenerated against the rebuilt law.
+
 `damped_glide_smoke_test.py` flies the repo's **C‑HGB** glide body
 (`rv_library/C-HGB.rv.json`) — the SWERVe/AHW‑descendant Common Hypersonic Glide
 Body (Gulan, Georgia Tech, 2024; SWERVe is the publicly‑available C‑HGB
