@@ -80,6 +80,15 @@ The entry-corridor literature (§5) prescribes the capture maneuver exactly.
 > this point the lift-to-drag ratio is modulated to maintain the flight inside the
 > atmosphere in order to complete entry in a single pass."*
 
+**Lees, Hartwig & Cohen (1959)** quantify exactly this program for entry from
+orbital/escape speed: fly positive lift (constant or modulated) up to peak G,
+then **modulate the lift beyond peak G** — only a small, possibly *negative*
+(downward) C_L/C_D, bounded by `|C_L/C_D| ≤ 1/(−V/g)` — to hold G ≤ G\* and
+**eliminate the skip phase entirely**. (Their objective is controlled descent to
+landing, so they then cut lift; a boost-glide vehicle instead transitions to the
+sustained equilibrium glide — but the capture maneuver itself is identical, and
+they too warn that a constant high L/D skips.)
+
 This dictates a **two-phase** glide law:
 
 1. **Pull-out:** fly the max-L/D trim α\* with **aerodynamically-limited** lift
@@ -184,9 +193,13 @@ insertion), regenerated against the rebuilt law.
 5. **Lu, P., Forbes, S. & Baldwin, M.**, *Gliding Guidance of High L/D Hypersonic
    Vehicles*, AIAA 2013-4648. γ_QEGC (Eq. 31, the corrected γ\*); altitude-rate
    feedback (Eq. 33); equilibrium-glide-insertion. Read in full; Eq. 31 verified.
-6. **Lees, L., Hartwig, F. W. & Cohen, C. B.**, *The Use of Aerodynamic Lift
-   During Entry Into the Earth's Atmosphere*, STL Report GM-TR-0165-00519 (1958).
-   Lift modulation to extend the undershoot boundary (via Vinh Ch. 12).
+6. **Lees, L., Hartwig, F. W. & Cohen, C. B.**, *Use of Aerodynamic Lift During
+   Entry Into the Earth's Atmosphere*, ARS Journal 29(9):633–641 (Sept. 1959;
+   STL Report GM-TR-0165-00519, 1958). The quantified two-phase capture maneuver:
+   positive lift to peak G (Eqs. 8–24), then lift modulation beyond peak G to
+   hold G ≤ G\* and eliminate skip (`|C_L/C_D| ≤ 1/(−V/g)`; Figs. 7, 8, 16);
+   L/D = 2 widens the 10 g entry-angle limit from < 3° to 9.5° (12.5° modulated).
+   Read in full (pp. 633–641).
 7. **de-Olivé Ferreira, L., Vinh, N. X. & Greenwood, D. T.**, *Critical Cases of
    Ballistic Entry: New, Guidance-Oriented, Higher-Order Analytic Solutions*,
    J. Spacecraft & Rockets 37(5):630–637 (2000). Chapman-variable framework;
