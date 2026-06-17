@@ -2889,7 +2889,7 @@ underlying Heineman / MacConochie–Klich / Glatt lineage) in
   and the lift-driven transition from non-oscillatory glide to "numerous skips of
   sizable intensity" (Fig. 6) — the phugoid, shown numerically. The §12.3.5
   oscillator is the small-perturbation linearisation of this ODE about
-  equilibrium glide. (Pages 14, 15, 22, 24, 25 read and verified.)
+  equilibrium glide. (Pages 14, 15, 21, 22, 24, 25 read and verified.)
 
 - **Vinh, N. X., Busemann, A. & Culp, R. D.** (1980). *Hypersonic and Planetary
   Entry Flight Mechanics.* University of Michigan Press. Ch. 10 (Yaroshevskii's

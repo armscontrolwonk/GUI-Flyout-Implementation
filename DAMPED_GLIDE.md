@@ -200,11 +200,12 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
 - D. R. Chapman, *An Approximate Analytical Method for Studying Entry Into
   Planetary Atmospheres*, NACA TN 4276 (1958) / NASA TR R‑11 (1959) — the
   **primary** second‑order nonlinear entry ODE (Eq. 21, in the density‑like
-  variable `Z(ū)`); the equilibrium‑glide `Z_II` truncation, attributed to
-  Sänger; and the lift‑driven transition from non‑oscillatory glide to "numerous
+  variable `Z(ū)`); the equilibrium‑glide `Z_II` truncation (Eq. 41,
+  `Z_II = (1−ū²)/(ū√(βr)·L/D)`, which reduces to our `ρ_eq = 2β·g_eff/(V²·L/D)`),
+  attributed to Sänger; and the lift‑driven transition from non‑oscillatory glide to "numerous
   skips of sizable intensity" (Fig. 6) — the phugoid, shown numerically. Yaroshevskii
   (Vinh Ch. 10) is a special case of this equation. (Read and verified pp. 14, 15,
-  22, 24, 25.) H. J. Allen & A. J. Eggers, NACA Report 1381 (1958) — companion
+  21, 22, 24, 25.) H. J. Allen & A. J. Eggers, NACA Report 1381 (1958) — companion
   ballistic/skip grounding (Chapman's `Z_I`/`Z_III` truncations).
 - A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for
   Hypersonic Glide Vehicles*, M.S. thesis, Georgia Tech, 2024 — SWERVe / C‑HGB
