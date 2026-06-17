@@ -291,10 +291,6 @@ class RVParams:
     # equilibrium-glide formula cannot represent banked maneuvers.
     glider_bank_schedule:   list  = field(default_factory=list)
     # Aerodynamic model used in the numerical EOM during glide:
-    #   "constant_LD" — lift = drag · L/D with L/D from glider_LD, β-derived
-    #                   drag.  Implicitly assumes the vehicle always flies
-    #                   at trim (max-L/D angle of attack).  Default;
-    #                   matches the closed-form Tracy/Acton solution.
     #   "polar"       — slender-body drag polar (Munk 1924, Ashley & Landahl
     #                   §6-7, §9-8): C_L = 2α with C_L referenced to the
     #                   base area, C_D = C_D0 + k·C_L².  C_D0 is derived
@@ -303,10 +299,17 @@ class RVParams:
     #                   glider_LD so (L/D)_max matches input exactly.
     #                   Vehicle trims for the lift required to balance the
     #                   centripetal deficit (m·(g − V²/r) / cos σ); off-
-    #                   trim banking and pull-up incur the correct drag
-    #                   penalty.  At trim the polar reproduces the
-    #                   constant_LD model exactly.
-    glider_aero_model:      str   = "constant_LD"
+    #                   trim banking and pull-up incur the correct induced-
+    #                   drag penalty.  DEFAULT — the realistic model.
+    #   "constant_LD" — idealized fixed-L/D upper bound: lift = drag · L/D
+    #                   with L/D from glider_LD, β-derived drag.  Implicitly
+    #                   assumes the vehicle always flies at max-L/D AoA and
+    #                   never pays induced drag off-design, so it over-ranges
+    #                   relative to the polar.  Kept for cross-checking the
+    #                   closed-form Sänger/Tracy/Acton range solutions, which
+    #                   assume constant L/D.  At its trim point (C_L = C_L*)
+    #                   the polar reproduces this model exactly.
+    glider_aero_model:      str   = "polar"
     # Target-based dive trigger.  When glider_dive_target_radius_km > 0 the
     # vehicle starts the terminal dive (bank = π) as soon as its great-circle
     # distance to the target (lat/lon) drops below the radius — in addition
@@ -437,7 +440,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
-        glider_aero_model=str(d.get('glider_aero_model', 'constant_LD')),
+        glider_aero_model=str(d.get('glider_aero_model', 'polar')),
         glider_dive_target_lat_deg=float(d.get('glider_dive_target_lat_deg', 0.0)),
         glider_dive_target_lon_deg=float(d.get('glider_dive_target_lon_deg', 0.0)),
         glider_dive_target_radius_km=float(d.get('glider_dive_target_radius_km', 0.0)),

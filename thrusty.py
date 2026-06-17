@@ -4432,10 +4432,10 @@ class MissileFlyoutApp(tk.Tk):
             side=tk.LEFT, padx=2)
         ttk.Label(_r2, text="km").pack(side=tk.LEFT)
         ttk.Label(_r2, text="   Aero:").pack(side=tk.LEFT, padx=(8, 0))
-        self._main_aero_var = tk.StringVar(value="Constant L/D (trim)")
+        self._main_aero_var = tk.StringVar(value="Drag polar (realistic)")
         ttk.Combobox(_r2, textvariable=self._main_aero_var,
-                     values=["Constant L/D (trim)",
-                             "Slender-body polar"],
+                     values=["Drag polar (realistic)",
+                             "Fixed L/D (idealized)"],
                      state="readonly", width=20).pack(side=tk.LEFT, padx=2)
 
         # Bank schedule separator + checkbox
@@ -5036,9 +5036,9 @@ class MissileFlyoutApp(tk.Tk):
                     _bvars['bank'].set('')
             if hasattr(self, '_main_aero_var'):
                 self._main_aero_var.set(
-                    "Slender-body polar"
-                    if getattr(_p_erv, 'glider_aero_model', 'constant_LD') == 'polar'
-                    else "Constant L/D (trim)")
+                    "Drag polar (realistic)"
+                    if getattr(_p_erv, 'glider_aero_model', 'polar') == 'polar'
+                    else "Fixed L/D (idealized)")
             if hasattr(self, '_main_dive_target_var'):
                 _dt_r = float(getattr(_p_erv, 'glider_dive_target_radius_km', 0.0) or 0.0)
                 self._main_dive_target_var.set(_dt_r > 0.0)
@@ -7655,7 +7655,7 @@ class MissileFlyoutApp(tk.Tk):
                 for v in getattr(self, '_main_bank_vars', [])
             ],
             'glider_aero': getattr(self, '_main_aero_var',
-                                    tk.StringVar(value='Constant L/D (trim)')).get(),
+                                    tk.StringVar(value='Drag polar (realistic)')).get(),
             'glider_dive_target_on': getattr(self, '_main_dive_target_var',
                                              tk.BooleanVar()).get(),
             'glider_dt_lat':    getattr(self, '_main_dt_lat_var',    tk.StringVar(value='0.0')).get(),
@@ -7748,8 +7748,12 @@ class MissileFlyoutApp(tk.Tk):
                 _bvars['end'].set(_bd.get('end', ''))
                 _bvars['bank'].set(_bd.get('bank', ''))
             if hasattr(self, '_main_aero_var'):
+                # Normalize legacy labels ("Constant L/D (trim)" /
+                # "Slender-body polar") onto the current combobox values.
+                _aero_meta = str(meta.get('glider_aero', 'Drag polar (realistic)'))
                 self._main_aero_var.set(
-                    meta.get('glider_aero', 'Constant L/D (trim)'))
+                    "Drag polar (realistic)" if "polar" in _aero_meta.lower()
+                    else "Fixed L/D (idealized)")
             if hasattr(self, '_main_dive_target_var'):
                 self._main_dive_target_var.set(
                     bool(meta.get('glider_dive_target_on', False)))

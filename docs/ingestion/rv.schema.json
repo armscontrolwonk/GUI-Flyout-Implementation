@@ -45,7 +45,7 @@
     "glider_pullup_g_max":    { "type": "number", "minimum": 0, "description": "Default 10." },
     "glider_terminal_dive":   { "type": "boolean" },
     "glider_terminal_alt_km": { "type": "number", "minimum": 0, "description": "Default 30." },
-    "glider_aero_model":      { "type": "string", "enum": ["constant_LD", "polar"], "description": "Default constant_LD." },
+    "glider_aero_model":      { "type": "string", "enum": ["polar", "constant_LD"], "description": "Glide drag model. 'polar' (DEFAULT) — slender-body drag polar C_D = C_D0 + k·C_L²; charges induced drag off the max-L/D trim point, so it is the realistic model. 'constant_LD' — idealized fixed-L/D upper bound (always flies at max-L/D AoA, never pays induced drag); over-ranges the polar by ~15%, kept for cross-checking the closed-form Sänger/Tracy/Acton range solutions which assume constant L/D." },
     "glider_beta_entry_kg_m2":{ "type": "number", "minimum": 0, "description": "Acton Phase-3 direct-reentry β_S. Required ONLY for glider_guidance='equilibrium_glide_acton'." },
     "glider_skip_count":      { "type": "integer", "minimum": 0, "description": "skip_to_equilibrium only; default 1." },
     "glider_damping_zeta":    { "type": "number", "minimum": 0, "description": "damped_glide only; target phugoid damping ratio ζ. Default 0.7. ζ=0 is bit-identical to skip_glide; large ζ → equilibrium glide." }

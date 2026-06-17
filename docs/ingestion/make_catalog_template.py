@@ -33,7 +33,7 @@ ENUMS = {
     "rv_kind":         ["ballistic", "marv_body", "glider", "decoy"],
     "glider_guidance": ["skip_glide", "damped_glide", "equilibrium_glide_acton",
                         "equilibrium_glide", "skip_to_equilibrium"],
-    "glider_aero_model": ["constant_LD", "polar"],
+    "glider_aero_model": ["polar", "constant_LD"],
     "shape":           ["cone", "tangent_ogive", "von_karman", "lv_haack",
                         "parabola", "blunt_cylinder"],
 }

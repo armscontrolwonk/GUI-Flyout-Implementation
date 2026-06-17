@@ -206,6 +206,21 @@ result as `glide_regime`): {`skip`, `capture`, `plunge`}.
   4–12 km for robustness.
 - Lift is bounded by the existing `pullup_g_max` cap, so the maneuver respects
   the structural g‑limit automatically (unlike the analytical arc).
+- **Aero model (`polar` is now the default).** `polar` charges induced drag
+  (`C_D = C_D0 + k·C_L²`) and only realizes the vehicle's full `(L/D)_max` at
+  the trim point `C_L = C_L*`; the equilibrium‑trim lift command generally sits
+  *off* that point, so the realized L/D — and hence range — is below nominal.
+  `constant_LD` is the idealized fixed‑L/D upper bound: it asserts full L/D at
+  all times and never pays the off‑design induced‑drag penalty, so it
+  over‑ranges the polar by ~15% on the same insertion. `constant_LD` is kept
+  for cross‑checking the closed‑form Sänger/Tracy/Acton range solutions (which
+  assume constant L/D), but the default is now `polar` so the out‑of‑the‑box
+  number is the realistic one. The two coincide exactly at `C_L = C_L*`.
+  *Range ordering on the same shallow insertion:* `damped_glide` (skip/boost‑
+  glide, lofts through thin air at max‑L/D AoA) > `dynamic_equilibrium_glide`
+  (steady equilibrium descent, the range floor of the family); the gap closes
+  as ζ→large damps the skips — i.e. it is the physical Sänger–Bredt skip premium,
+  not free lift.
 
 ## Sources
 

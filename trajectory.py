@@ -736,7 +736,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # there is NO free lift.  On an uncapturable (lofted)
                             # entry it plunges, like skip_glide.  (For a smooth,
                             # non-oscillatory capture see dynamic_equilibrium_glide.)
-                            _polar = (getattr(_erv,'glider_aero_model','constant_LD')=='polar')
+                            _polar = (getattr(_erv,'glider_aero_model','polar')=='polar')
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
                             _cos_b = max(abs(float(np.cos(bank_rad))), 0.05)
                             _g_eff = max(g_mag - speed*speed/r_mag, 0.0)
@@ -789,7 +789,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # captures via the closed-form arc).  See
                             # GLIDE_CAPTURE_DESIGN.md §8.
                             _polar = (getattr(_erv, 'glider_aero_model',
-                                              'constant_LD') == 'polar')
+                                              'polar') == 'polar')
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
                             _cos_b = max(abs(float(np.cos(bank_rad))), 0.05)
                             _g_eff = max(g_mag - speed * speed / r_mag, 0.0)
@@ -832,7 +832,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 f_drag = -drag_mag * v_hat
                             else:
                                 lift_mag = 0.0
-                        elif getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':
+                        elif getattr(_erv, 'glider_aero_model', 'polar') == 'polar':
                             _CD0, _kp, _Aref = _aero_polar(_erv)
                             _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
@@ -880,7 +880,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # Override drag with the polar-derived value
                             f_drag = -drag_mag * v_hat
                         else:
-                            # constant_LD (default): lift is drag × L/D unless
+                            # constant_LD (idealized fixed-L/D): lift is drag × L/D unless
                             # equilibrium-glide guidance is selected, in which
                             # case we trim to L·cos σ = m·g⊥ (suppresses the
                             # phugoid, matching the closed-form Tracy/Acton soln).
