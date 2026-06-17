@@ -770,10 +770,16 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     drag_mag = q * _Aref * (_CD0 + _kp * _C_L * _C_L)
                                     lift_mag = q * _Aref * _C_L
                                 else:
-                                    # lumped model: no aero C_L,max ceiling, so the
-                                    # only bound is the structural pull-up cap, and
-                                    # drag tracks lift at the fixed L/D.
-                                    lift_mag = min(max(_L_target, 0.0), _L_max)
+                                    # lumped model: drag tracks lift at the fixed
+                                    # L/D.  Cap at the β-based available lift
+                                    # (q/β)·m·(L/D) (as equilibrium_glide) — this
+                                    # shrinks as the vehicle slows, so once captured
+                                    # it descends to denser air instead of
+                                    # zoom-climbing on the growing m·g_eff term
+                                    # (the lumped model has no aerodynamic C_L,max
+                                    # ceiling to do this on its own).
+                                    _beta_cap = (q / float(_erv.beta_kg_m2)) * rv_mass * _erv.glider_LD
+                                    lift_mag = min(max(_L_target, 0.0), _beta_cap, _L_max)
                                     drag_mag = lift_mag / max(_erv.glider_LD, 1e-6)
                                 f_drag = -drag_mag * v_hat
                             else:

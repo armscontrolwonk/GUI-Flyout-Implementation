@@ -280,11 +280,24 @@ with `γ* = −2H_ρg/(V²cosσ·(L/D))`, `k_h = 2ζm√(g_eff/H_ρ)`. **No free
   demonstration that capturability is entry‑geometry dependent:** same dynamic
   law, lofted → plunge, shallow → capture. (Real boost-glide vehicles are
   inserted shallow/depressed, not lofted.)
-- **constant_LD (lumped): captures, ζ-dependent** (range 2550→5606 km as
-  ζ=0→2, `glide_frac` 0→0.94). The lumped model has **no aerodynamic lift
-  ceiling**, so it can pull out where the physical polar model cannot — it
-  **over-predicts capturability**. Polar is the trustworthy aero model for
-  capture; constant_LD is a lumped approximation.
+- **constant_LD (lumped):** capped at the **β-available lift** `(q/β)·m·(L/D)`
+  (as `equilibrium_glide`), which shrinks as the vehicle slows. With that cap it
+  is **consistent with the polar model** — plunges the lofted entry, captures the
+  shallow insertion (ζ-dependent), and does **not zoom-climb**. *Without* the
+  β-cap the lumped model has no aerodynamic ceiling, so on a captured glide the
+  growing `m·g_eff` term drives an unphysical **zoom-climb** (≈47 km at ζ=0); the
+  β-cap is what prevents it (the polar model gets this for free from its C_L,max
+  ceiling, which also `∝ q`).
+- **Pull-up is a monotonic dive-arrest, not a climbing skip.** At capture the
+  descent is arrested onto the (descending) equilibrium glide *from below* — the
+  altitude does **not** climb back up, at any ζ or lift authority (verified to
+  ζ=3, 30 g). This is inherent to the equilibrium-trim nominal: it commands lift
+  to *balance* g_eff, and the ζ feedback drives ḣ up *to* ḣ_eq, never past it.
+  Contrast `skip_glide` (α* lift ∝ q exceeds balance in denser air → climbs/skips,
+  but cannot capture) and the analytic `equilibrium_glide` (a small ~3 km bounce).
+  The rebuilt mode therefore does **not** reproduce the "decaying skips" picture —
+  it captures smoothly. (Restoring a climbing pull-up would require a transient
+  lift-excess and reopens the capture-vs-oscillation trade.)
 - **No free lift:** a captured glide never out-ranges the analytic equilibrium
   glide (effective L/D ≤ vehicle L/D) — the ~20 % overshoot of the old free-lift
   law is gone.

@@ -72,38 +72,40 @@ def test_serialization_roundtrip():
 
 def test_no_free_lift_bound():
     # A captured damped glide must not out-range a true equilibrium glide
-    # (effective L/D ≤ vehicle L/D).  Use constant_LD, which captures here.
-    r_eq, _ = _fly("equilibrium_glide", aero="constant_LD")
+    # (effective L/D ≤ vehicle L/D).  Use the shallow insertion, which captures.
+    r_eq, _ = _fly_aur_shallow("equilibrium_glide", aero="constant_LD")
     eq_km = _range_km(r_eq)
     for z in (0.7, 1.0, 2.0):
-        r_d, _ = _fly("damped_glide", zeta=z, aero="constant_LD")
+        r_d, _ = _fly_aur_shallow("damped_glide", zeta=z, aero="constant_LD")
         d_km = _range_km(r_d)
         assert d_km <= eq_km * 1.02, \
             f"ζ={z}: damped range {d_km:.0f} exceeds equilibrium {eq_km:.0f} (free lift!)"
     print(f"  ok  no free lift: damped ≤ equilibrium-glide range ({eq_km:.0f} km)")
 
 
-def test_polar_lofted_plunges():
-    # Physical polar aero: a lofted ballistic entry cannot be dynamically pulled
-    # out of (thin-air lift ceiling) → plunge, at every ζ.
-    for z in (0.0, 0.7, 2.0):
-        r, rv = _fly("damped_glide", zeta=z, aero="polar")
-        g = regime_from_result(r, rv=rv)
-        assert g.verdict == "plunge", f"ζ={z} polar: expected plunge, got {g}"
-    print("  ok  polar lofted entry plunges at every ζ (honest dynamic capture)")
+def test_lofted_plunges_both_aero():
+    # A lofted ballistic entry cannot be dynamically pulled out of (the lift the
+    # air can supply high up is too small) → plunge, at every ζ, for BOTH aero
+    # models (the β-cap makes constant_LD consistent with the physical polar).
+    for aero in ("polar", "constant_LD"):
+        for z in (0.0, 0.7, 2.0):
+            r, rv = _fly("damped_glide", zeta=z, aero=aero)
+            g = regime_from_result(r, rv=rv)
+            assert g.verdict == "plunge", f"ζ={z} {aero} lofted: expected plunge, got {g}"
+    print("  ok  lofted entry plunges at every ζ (both aero models)")
 
 
-def test_damping_improves_capture_constant_ld():
-    # Lumped constant_LD (no aero lift ceiling) can pull out: range is
-    # non-decreasing in ζ and captures at high ζ.
+def test_damping_improves_capture_shallow():
+    # On the capturable shallow insertion, damping improves the capture: range is
+    # non-decreasing in ζ and the glide is captured at moderate+ ζ (constant_LD).
     rngs = []
-    for z in (0.0, 0.7, 2.0):
-        r, _ = _fly("damped_glide", zeta=z, aero="constant_LD")
+    for z in (0.4, 0.7, 1.0):
+        r, _ = _fly_aur_shallow("damped_glide", zeta=z, aero="constant_LD")
         rngs.append(_range_km(r))
     assert rngs[0] <= rngs[1] + 1.0 <= rngs[2] + 2.0, f"range not non-decreasing in ζ: {rngs}"
-    r_hi, rv_hi = _fly("damped_glide", zeta=2.0, aero="constant_LD")
-    assert regime_from_result(r_hi, rv=rv_hi).verdict == "capture", "ζ=2 constant_LD should capture"
-    print(f"  ok  damping improves capture (constant_LD range {rngs[0]:.0f}→{rngs[2]:.0f} km, ζ=0→2)")
+    r_hi, rv_hi = _fly_aur_shallow("damped_glide", zeta=1.0, aero="constant_LD")
+    assert regime_from_result(r_hi, rv=rv_hi).verdict == "capture", "ζ=1 shallow should capture"
+    print(f"  ok  damping improves capture (shallow constant_LD {rngs[0]:.0f}→{rngs[-1]:.0f} km, ζ=0.4→1.0)")
 
 
 def _fly_aur_shallow(mode, zeta=None, aero="polar"):
@@ -152,20 +154,26 @@ def test_shallow_insertion_captures():
 
 
 def test_no_zoom_climb():
-    for aero in ("polar", "constant_LD"):
-        for z in (0.0, 0.7, 2.0):
-            r, _ = _fly("damped_glide", zeta=z, aero=aero)
-            rc = _post_apogee_reclimb_km(r)
-            assert rc < 1.0, f"{aero} ζ={z}: post-apogee zoom-climb {rc:.1f} km"
-    print("  ok  no post-apogee zoom-climb (equilibrium trim descends cleanly)")
+    # Check BOTH the lofted boost (plunge) and the shallow insertion (capture).
+    # The zoom-climb artifact only appears once the vehicle *captures* and slows
+    # (g_eff grows → m·g_eff lift grows): the β-cap must prevent it for
+    # constant_LD, which lacks an aerodynamic C_L,max ceiling.
+    for fly in (_fly, _fly_aur_shallow):
+        for aero in ("polar", "constant_LD"):
+            for z in (0.0, 0.7, 2.0):
+                r, _ = fly("damped_glide", zeta=z, aero=aero)
+                rc = _post_apogee_reclimb_km(r)
+                assert rc < 1.0, (f"{fly.__name__} {aero} ζ={z}: "
+                                  f"post-apogee zoom-climb {rc:.1f} km")
+    print("  ok  no post-apogee zoom-climb (lofted + shallow, both aero models)")
 
 
 def main():
     tests = [
         test_serialization_roundtrip,
         test_no_free_lift_bound,
-        test_polar_lofted_plunges,
-        test_damping_improves_capture_constant_ld,
+        test_lofted_plunges_both_aero,
+        test_damping_improves_capture_shallow,
         test_shallow_insertion_captures,
         test_no_zoom_climb,
     ]

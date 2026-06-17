@@ -175,11 +175,18 @@ law (5/5 checks). Key results on a **lofted** sub‑circular boost (~5.6 km/s):
   equilibrium glide. **Capturability is entry‑geometry dependent:** same law,
   lofted → plunge, shallow → capture. Real boost‑glide vehicles are inserted
   shallow, not lofted.
-- **Damping improves capture (constant_LD):** the lumped model has no aero lift
-  ceiling, so it *can* pull out; range grows with ζ (2550 → 5606 km, ζ = 0 → 2)
-  and captures at high ζ. It **over‑predicts capturability** — the polar model
-  is the trustworthy one.
-- **ζ = 0** is the equilibrium‑trim baseline; **no zoom‑climb**.
+- **Consistent across aero models:** `constant_LD` is capped at the β‑available
+  lift `(q/β)·m·(L/D)` (as `equilibrium_glide`), so it matches the polar model —
+  plunges lofted, captures the shallow insertion (ζ‑dependent), no zoom‑climb.
+  (Without that cap the lumped model zoom‑climbs ≈47 km at ζ=0 as `m·g_eff` grows
+  while it slows; the polar model avoids this via its `C_L,max ∝ q` ceiling.)
+- **The pull‑up is a monotonic dive‑arrest, not a climbing skip:** at capture the
+  descent is arrested onto the (descending) equilibrium glide from below — the
+  altitude does *not* climb, at any ζ. This is inherent to the equilibrium‑trim
+  nominal (it commands *balance*, never excess). `skip_glide` (α\* lift) would
+  climb/skip but can't capture; the rebuilt mode captures smoothly instead of
+  the old "decaying skips" picture.
+- **ζ = 0** is the equilibrium‑trim baseline.
 
 Whether a given boost produces capture is read off by the diagnostic
 **glide‑regime classifier** (`glide_regime.py`, attached to each trajectory
