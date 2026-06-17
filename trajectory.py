@@ -2866,6 +2866,28 @@ def integrate_trajectory(params: MissileParams,
         # Show pitch during burns and inter-stage coasts; blank after final burnout
         _pitch_cmd.append(_pitch_val if _t_gp <= _final_burn_end else float('nan'))
 
+    # Diagnostic glide-regime verdict (skip / capture / plunge) for lifting
+    # glide RVs.  See glide_regime.py and GLIDE_CAPTURE_DESIGN.md.
+    _glide_regime = None
+    try:
+        _rv_gr = effective_rv(params)
+        _GLIDE_MODES = ('skip_glide', 'damped_glide', 'equilibrium_glide',
+                        'equilibrium_glide_acton', 'skip_to_equilibrium')
+        if (_rv_gr is not None and not orbital
+                and getattr(_rv_gr, 'glider_guidance', None) in _GLIDE_MODES):
+            from glide_regime import classify_glide_regime
+            _gr = classify_glide_regime(
+                np.asarray(alts) / 1000.0, np.asarray(speeds), np.asarray(t_arr),
+                g_limit_g=float(getattr(_rv_gr, 'glider_pullup_g_max', 10.0)))
+            _glide_regime = {
+                'verdict': _gr.verdict, 'a_max_g': _gr.a_max_g,
+                'n_reascents': _gr.n_reascents, 'above_frac': _gr.above_frac,
+                'glide_frac': _gr.glide_frac, 'min_alt_km': _gr.min_alt_km,
+                'notes': _gr.notes,
+            }
+    except Exception:
+        _glide_regime = None
+
     return {
         't':                  t_arr,
         'lat':                lats,
@@ -2892,6 +2914,7 @@ def integrate_trajectory(params: MissileParams,
         'orbital_elements':      _orb_elements,
         'pitch_cmd_deg':         _pitch_cmd,
         'az_cmd_deg':            _az_cmd,
+        'glide_regime':          _glide_regime,
     }
 
 
