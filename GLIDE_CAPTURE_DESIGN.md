@@ -162,9 +162,20 @@ Z̄ > Z̄_i; with deceleration setting undershoot):
 | **capture** | ρ grows monotonically toward ρ_eq and a sustained glide is held (ḣ arrested, γ → γ\*) |
 | **plunge** | peak deceleration exceeds the structural limit, or steep impact without ever holding a glide |
 
-The classifier's verdict should **gate the glide modes**: apply
-`damped_glide`/`equilibrium_glide` only when capture is detected; otherwise report
-skip / plunge honestly.
+The classifier's verdict should **gate the glide modes against the selected
+mode's intent** — a `skip` is *not* inherently a failure. Skipping is a
+legitimate, guided flight regime (Sänger skip-glide for range; deliberate
+skip-entry for landing-site access — Tigges et al. 2006), and capture can occur
+on a *later* entry after a Kepler coast. So:
+
+- `skip_glide` (the ζ=0 phugoid endpoint) + `skip` verdict → **expected** (the
+  point of the mode);
+- `equilibrium_glide` / `damped_glide` + `skip` or `plunge` verdict → **mismatch**
+  to flag: the vehicle cannot hold the sustained glide the user asked for on this
+  entry (wrong insertion geometry / insufficient lift authority).
+
+The verdict reports *trajectory shape*; whether that shape is the desired one
+depends on the selected mode.
 
 ## 6. Implications for validation
 
@@ -219,3 +230,12 @@ insertion), regenerated against the rebuilt law.
    Ballistic Entry: New, Guidance-Oriented, Higher-Order Analytic Solutions*,
    J. Spacecraft & Rockets 37(5):630–637 (2000). Chapman-variable framework;
    ballistic critical cases. Read in full.
+8. **Tigges, M. A., Crull, T., Rea, J. & Johnson, W.**, *Numerical Skip-Entry
+   Guidance*, AAS 06-080 (2006). Orion/CEV lunar-return low-L/D (0.3–0.4)
+   deliberate skip-entry: EI → lift-up skip → Kepler coast → second entry →
+   Apollo final phase. Confirms the overshoot/undershoot corridor with bank
+   modulation, and the supercircular-skip vs sub-circular-plunge energy
+   distinction; establishes that **skip is a legitimate guided regime** (range/
+   site access), capture occurring on a later entry. Its predictor-corrector,
+   target-seeking guidance is beyond Thrusty's open-loop trajectory scope but is
+   the reference for any future "guided skip-entry to target" mode. Read in full.
