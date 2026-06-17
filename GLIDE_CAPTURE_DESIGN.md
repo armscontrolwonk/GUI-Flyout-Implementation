@@ -161,9 +161,9 @@ Z̄ > Z̄_i; with deceleration setting undershoot):
 
 | verdict | test on the integrated trajectory |
 |---|---|
-| **skip** | after the first dip, altitude climbs back above the entry interface (ρ returns toward ρ_i) |
-| **capture** | ρ grows monotonically toward ρ_eq and a sustained glide is held (ḣ arrested, γ → γ\*) |
-| **plunge** | peak deceleration exceeds the structural limit, or steep impact without ever holding a glide |
+| **skip** | altitude re-ascends above the entry interface, **or** shows large in-atmosphere phugoid re-climbs after a dip (re-climb > ~15 km, even if it never crosses the interface — `skip_glide`'s undamped phugoid oscillates e.g. 40↔85 km) |
+| **capture** | ρ grows monotonically toward ρ_eq and a sustained glide is held (ḣ arrested, γ → γ\*); re-climb ≈ 0 |
+| **plunge** | peak deceleration exceeds the structural limit, or steep penetration without a sustained glide and without skipping |
 
 The classifier's verdict should **gate the glide modes against the selected
 mode's intent** — a `skip` is *not* inherently a failure. Skipping is a

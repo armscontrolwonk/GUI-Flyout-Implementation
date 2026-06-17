@@ -40,6 +40,10 @@ ENTRY_INTERFACE_KM = 100.0
 DECEL_LIMIT_G = 10.0
 # Flight-path angle (deg) below which flight is considered "gliding" (shallow).
 GLIDE_GAMMA_DEG = 3.0
+# Post-dip re-climb (km) above which the motion is a skip/phugoid loft even if it
+# never crosses the entry interface (distinguishes a real skip from the small
+# capture overshoot a damped glide may show).
+SKIP_RECLIMB_KM = 15.0
 
 
 @dataclass
@@ -52,17 +56,20 @@ class GlideRegime:
     glide_frac: float       # fraction of in-atmosphere descent at shallow γ
     min_alt_km: float       # lowest altitude reached on the descent
     notes: str = ""
+    max_reclimb_km: float = 0.0   # largest post-dip re-climb (skip amplitude)
 
     def __str__(self) -> str:  # pragma: no cover - cosmetic
         return (f"{self.verdict.upper()}  (a_max={self.a_max_g:.1f}g, "
-                f"re-ascents={self.n_reascents}, glide={self.glide_frac:.0%}, "
-                f"above-interface={self.above_frac:.0%}, min_alt={self.min_alt_km:.0f} km)")
+                f"re-ascents={self.n_reascents}, re-climb={self.max_reclimb_km:.0f} km, "
+                f"glide={self.glide_frac:.0%}, above-interface={self.above_frac:.0%}, "
+                f"min_alt={self.min_alt_km:.0f} km)")
 
 
 def classify_glide_regime(alt_km, speed_ms, t_s, *,
                           entry_alt_km: float = ENTRY_INTERFACE_KM,
                           g_limit_g: float = DECEL_LIMIT_G,
                           glide_gamma_deg: float = GLIDE_GAMMA_DEG,
+                          skip_reclimb_km: float = SKIP_RECLIMB_KM,
                           g0: float = G0) -> GlideRegime:
     """Classify the post-entry regime of an integrated trajectory.
 
@@ -126,10 +133,16 @@ def classify_glide_regime(alt_km, speed_ms, t_s, *,
     vsafe = np.where(np.abs(Vmid) > 1.0, Vmid, np.nan)
     gamma_deg[good] = np.degrees(np.arcsin(np.clip(dh[good] / dt[good] / vsafe[good], -1.0, 1.0)))
 
-    # Re-ascents above the entry interface after first dropping below it = skip.
+    # Re-ascents above the entry interface after first dropping below it.
     first_below = int(np.argmax(~above)) if (~above).any() else 0
     after = above[first_below:]
     n_reascents = int(np.sum((~after[:-1]) & (after[1:]))) if after.size > 1 else 0
+
+    # Largest post-apogee re-climb (altitude regained above a running minimum).
+    # A *skip* (phugoid loft) shows a large re-climb even when it never crosses
+    # the entry interface (an in-atmosphere phugoid oscillates, e.g. 40↔85 km);
+    # a captured glide descends monotonically (re-climb ≈ 0).
+    max_reclimb_km = float(np.max(A - np.minimum.accumulate(A)))
 
     # Sustained shallow glide: fraction of in-atmosphere descent at small |γ|.
     in_atm = (A[1:] <= entry_alt_km) & good
@@ -138,17 +151,24 @@ def classify_glide_regime(alt_km, speed_ms, t_s, *,
     else:
         glide_frac = 0.0
 
+    is_skip = (n_reascents >= 1) or (max_reclimb_km > skip_reclimb_km)
+
     # --- Decision (order matters; see GLIDE_CAPTURE_DESIGN.md §5) -------------
     if a_max_g > g_limit_g:
         verdict, note = "plunge", f"peak deceleration {a_max_g:.1f}g exceeds {g_limit_g:.0f}g (undershoot)"
-    elif n_reascents >= 1:
-        verdict, note = "skip", f"re-ascended above the {entry_alt_km:.0f} km interface {n_reascents}× (lofts back out)"
+    elif is_skip:
+        if n_reascents >= 1:
+            note = f"re-ascended above the {entry_alt_km:.0f} km interface {n_reascents}× (lofts back out)"
+        else:
+            note = f"phugoid skips: re-climbs up to {max_reclimb_km:.0f} km after dips (in-atmosphere)"
+        verdict = "skip"
     elif glide_frac > 0.5:
         verdict, note = "capture", f"sustained glide: {glide_frac:.0%} of in-atmosphere descent at |γ|<{glide_gamma_deg:.0f}°"
     else:
         verdict, note = "plunge", f"penetrated to {min_alt:.0f} km without a sustained glide and without skipping out"
 
-    return GlideRegime(verdict, a_max_g, n_reascents, above_frac, glide_frac, min_alt, note)
+    return GlideRegime(verdict, a_max_g, n_reascents, above_frac, glide_frac, min_alt, note,
+                       max_reclimb_km=max_reclimb_km)
 
 
 def regime_from_result(result: dict, *,

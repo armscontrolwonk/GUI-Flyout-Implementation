@@ -57,6 +57,18 @@ def test_synthetic_skip():
     print("  ok  synthetic skip →", r)
 
 
+def test_synthetic_inatmosphere_skip():
+    # Phugoid skips that oscillate *below* the 100 km interface (never re-ascend
+    # above it) are still skips — caught by the re-climb criterion, not re-ascent.
+    dip = [95, 75, 55, 75, 92]
+    alt = dip + dip + [88, 70, 50, 30]   # ~40 km re-climbs, all < 100 km
+    spd = list(np.linspace(6000, 5200, len(alt)))   # gentle → low decel
+    r = classify_glide_regime(*_traj(alt, spd, dt=10.0))
+    assert r.verdict == "skip", r
+    assert r.n_reascents == 0 and r.max_reclimb_km > 15.0, r
+    print("  ok  synthetic in-atmosphere skip →", r)
+
+
 def test_synthetic_plunge_decel():
     # Steep monotonic dive; large deceleration as it slams into dense air.
     alt = list(np.linspace(120, 5, 40))
@@ -120,6 +132,7 @@ def test_skip_glide_near_orbital_is_skip():
 def main():
     tests = [
         test_synthetic_capture, test_synthetic_skip,
+        test_synthetic_inatmosphere_skip,
         test_synthetic_plunge_decel, test_synthetic_no_entry,
         test_skip_glide_lofted_is_plunge, test_equilibrium_glide_is_capture,
         test_skip_glide_near_orbital_is_skip,
