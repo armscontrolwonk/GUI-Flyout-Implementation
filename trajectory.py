@@ -723,61 +723,59 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 bank_rad = np.pi
 
                         if _erv.glider_guidance == 'damped_glide':
-                            # Damped-phugoid glide: fly the max-L/D trim (α*) —
-                            # identical to skip_glide — plus a vertical-lift
-                            # feedback proportional to the altitude-rate error
-                            # (Lu, Forbes & Baldwin AIAA 2013-4648 Eq. 33;
-                            # equiv. Yu & Chen 2011 Eq. 19).  The gain k_h is
-                            # sized for the target damping ratio ζ from the
-                            # equilibrium-glide phugoid frequency
-                            #   ω_p² = g_eff/H_ρ   (linearisation of the 2nd-order
-                            #                       entry ODE — Chapman NACA TN 4276
-                            #                       / NASA TR R-11 Eq. 21 (primary);
-                            #                       Yaroshevskii / Vinh Ch. 10
-                            #                       Eq. 10-55 special case — about
-                            #                       equilibrium glide)
-                            #   k_h  = 2·ζ·m·√(g_eff/H_ρ)
-                            # with the command altitude-rate ḣ_eq = V·γ*, where
-                            #   γ* = −2·H_ρ·g / (V²·cos σ·(L/D))   (Lu Eq. 31;
-                            #   L/D in the DENOMINATOR — higher L/D ⇒ shallower glide).
-                            # ζ = 0 ⇒ k_h = 0 ⇒ exactly skip_glide.
+                            # Damped-phugoid glide -- PURE DYNAMIC EOM (see
+                            # GLIDE_CAPTURE_DESIGN.md).  NOMINAL = equilibrium
+                            # trim L.cos(sigma) = m.(g - V^2/r), the force-balance
+                            # command; plus zeta altitude-rate damping of the
+                            # residual phugoid (Lu Eq. 33):
+                            #   gamma* = -2.H_rho.g / (V^2.cos(sigma).(L/D))  (Lu 31)
+                            #   hdot_eq = V.gamma* ;  k_h = 2.zeta.m.sqrt(g_eff/H_rho)
+                            #   omega_p^2 = g_eff/H_rho  (Chapman TN 4276 Eq. 21;
+                            #     Vinh Ch.10 Eq. 10-55).
+                            # Lift is bounded by the AERODYNAMIC ceiling and drag
+                            # is coupled to the actual commanded lift, so there is
+                            # no "free" lift: a steep entry the dynamic lift cannot
+                            # pull out of in thin air PLUNGES (honest); capturable
+                            # (shallower) entries capture, with zeta damping the
+                            # phugoid.  Capturability is entry-geometry dependent
+                            # and aero-model dependent (the lumped constant_LD model
+                            # lacks a true lift ceiling -- see notes below).
                             _polar = (getattr(_erv, 'glider_aero_model',
                                               'constant_LD') == 'polar')
                             _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
-                            if q > 1.0:
+                            _cos_b = max(abs(float(np.cos(bank_rad))), 0.05)
+                            _g_eff = max(g_mag - speed * speed / r_mag, 0.0)
+                            if q > 1.0 and _g_eff > 1e-3:
+                                _dh = 200.0
+                                _rho0 = atmosphere(max(alt, 0.0))[2]
+                                _rho1 = atmosphere(max(alt, 0.0) + _dh)[2]
+                                _Hrho = (_dh / np.log(_rho0 / _rho1)
+                                         if (_rho1 > 0.0 and _rho0 > _rho1)
+                                         else 7000.0)
+                                _Hrho = min(max(_Hrho, 4000.0), 12000.0)
+                                _hdot = speed * float(np.dot(v_hat, r_hat))
+                                _gstar = (-2.0 * _Hrho * g_mag
+                                          / (speed * speed * _cos_b
+                                             * _erv.glider_LD))
+                                _k_h = (2.0 * max(float(_erv.glider_damping_zeta), 0.0)
+                                        * rv_mass * np.sqrt(_g_eff / _Hrho))
+                                # equilibrium trim + phugoid damping:
+                                _L_target = (rv_mass * _g_eff / _cos_b
+                                             - _k_h * (_hdot - speed * _gstar))
                                 if _polar:
                                     _CD0, _kp, _Aref = _aero_polar(_erv)
-                                    _C_L = min(np.sqrt(_CD0 / _kp),
+                                    # aerodynamic lift ceiling: C_L <= C_L,max
+                                    _C_L = min(max(_L_target / (q * _Aref), 0.0),
                                                2.0 * np.radians(25.0))
-                                    _C_D = _CD0 + _kp * _C_L * _C_L
-                                    drag_mag = q * _Aref * _C_D
-                                    f_drag = -drag_mag * v_hat
-                                    lift_nom = q * _Aref * _C_L
+                                    drag_mag = q * _Aref * (_CD0 + _kp * _C_L * _C_L)
+                                    lift_mag = q * _Aref * _C_L
                                 else:
-                                    lift_nom = drag_mag * _erv.glider_LD
-                                _g_eff = g_mag - speed * speed / r_mag
-                                if _g_eff > 1e-3:
-                                    _dh = 200.0
-                                    _rho0 = atmosphere(max(alt, 0.0))[2]
-                                    _rho1 = atmosphere(max(alt, 0.0) + _dh)[2]
-                                    _Hrho = (_dh / np.log(_rho0 / _rho1)
-                                             if (_rho1 > 0.0 and _rho0 > _rho1)
-                                             else 7000.0)
-                                    _Hrho = min(max(_Hrho, 4000.0), 12000.0)
-                                    _cos_b = max(abs(float(np.cos(bank_rad))),
-                                                 0.05)
-                                    _hdot = speed * float(np.dot(v_hat, r_hat))
-                                    _gstar = (-2.0 * _Hrho * g_mag
-                                              / (speed * speed * _cos_b
-                                                 * _erv.glider_LD))
-                                    _k_h = (2.0 * max(float(
-                                        _erv.glider_damping_zeta), 0.0)
-                                        * rv_mass * np.sqrt(_g_eff / _Hrho))
-                                    lift_mag = lift_nom - _k_h * (
-                                        _hdot - speed * _gstar)
-                                else:
-                                    lift_mag = lift_nom
-                                lift_mag = min(max(lift_mag, 0.0), _L_max)
+                                    # lumped model: no aero C_L,max ceiling, so the
+                                    # only bound is the structural pull-up cap, and
+                                    # drag tracks lift at the fixed L/D.
+                                    lift_mag = min(max(_L_target, 0.0), _L_max)
+                                    drag_mag = lift_mag / max(_erv.glider_LD, 1e-6)
+                                f_drag = -drag_mag * v_hat
                             else:
                                 lift_mag = 0.0
                         elif getattr(_erv, 'glider_aero_model', 'constant_LD') == 'polar':

@@ -23,21 +23,34 @@ core "Non‑oscillatory glide (Acton)" mode.
 
 ## The control law
 
-The vehicle flies the max‑L/D trim angle α\* (identical to `skip_glide`) plus a
-feedback term proportional to the altitude‑rate error, which bleeds energy out
-of the phugoid:
+> **Rebuilt as a pure dynamic EOM law** (see `GLIDE_CAPTURE_DESIGN.md` §8 for the
+> full rationale and verification). The earlier law used the α\* (skip) lift as
+> its nominal with an *uncapped, drag‑decoupled* feedback term — which gave a
+> non‑physical "free" pull‑up (effective L/D above the vehicle's). That is fixed.
+
+The nominal is the **equilibrium‑glide trim** `L·cos σ = m·(g − V²/r)` — the
+force‑balance command that actually *captures* the glide — plus a feedback term
+proportional to the altitude‑rate error that damps the residual phugoid:
 
 ```
-L·cos σ_cmd = L·cos σ_nom − k_h·(ḣ − ḣ_eq)          (Lu 2013, Eq. 33;
-                                                     equiv. Yu & Chen 2011, Eq. 19)
+L·cos σ_cmd = m·(g − V²/r)/cos σ − k_h·(ḣ − ḣ_eq)    (trim: Tracy 2020 Eq. 7;
+                                                     damping: Lu 2013 Eq. 33)
 ```
 
-- `L_nom` = the α\* lift (β·L/D for the constant‑L/D aero model; q·A·C_L\* for the
-  slender‑body polar) — i.e. exactly the `skip_glide` lift.
 - `ḣ = V·sin γ` is the current altitude rate; `ḣ_eq = V·γ*` is the command.
 - `γ*` = the quasi‑equilibrium‑glide flight‑path angle (Lu Eq. 31, dimensional):
   `γ* = −2·H_ρ·g / (V²·cos σ·(L/D))` — the small negative descent angle
   (L/D in the denominator: higher L/D glides shallower).
+- **Lift is bounded by the aerodynamic ceiling and drag is coupled to the actual
+  commanded lift** — no free lift. For the slender‑body **polar**: `C_L` is
+  capped at `C_L,max` and `C_D = C_D0 + k·C_L²` (induced drag). For the lumped
+  **constant_LD** model: `drag = L/(L/D)` (the lumped model has no aerodynamic
+  C_L,max ceiling, so it over‑predicts capturability — the polar model is the
+  trustworthy one).
+
+An α\*/max‑L/D nominal was tried and **verified unable to capture at any ζ** (it
+targets a kinematic ḣ unachievable in thin air and plunges even at ζ=30), so the
+nominal must be the equilibrium trim.
 
 ## The gain — derived, not fitted
 
@@ -105,15 +118,16 @@ longer‑skipping profile, with 0.7 the conventional well‑guided midpoint.
 
 All three agree on the magnitude, which is why ζ≈0.7 is a defensible default.
 
-## Nesting (the safety property)
+## Nesting
 
-`ζ = 0` ⇒ `k_h = 0` ⇒ the feedback term vanishes ⇒ the lift law is **exactly**
-`skip_glide`. This is verified bit‑exact (`max|Δaltitude| = 0.000000 km` over a
-full integration, for both aero models) in `damped_glide_smoke_test.py`. Large ζ
-drives the trajectory onto equilibrium glide. So `damped_glide` continuously
-interpolates between the two existing endpoints, with ζ controlling how many
-decaying skips occur — the count *emerges* from the damping rather than being a
-hand‑set integer (the limitation of `skip_to_equilibrium`, which is retained).
+`ζ = 0` ⇒ `k_h = 0` ⇒ the law reduces to the **equilibrium‑glide trim**
+(`L·cos σ = m·g⊥`) with no damping — the baseline this mode damps about. (It no
+longer reduces to `skip_glide`; that was the old α\*‑nominal law. `skip_glide`
+remains the separate ζ = 0 *undamped‑phugoid* endpoint, selected explicitly.)
+Increasing ζ adds damping of the residual phugoid. Whether the vehicle *captures*
+a glide at all is set by the entry geometry and the aero model, not by ζ — see
+**Validation** and `GLIDE_CAPTURE_DESIGN.md` §8 — and is reported by the
+diagnostic glide‑regime classifier (`glide_regime.py`).
 
 ## Relation to the analytic equilibrium modes (Acton / Tracy)
 
@@ -142,35 +156,29 @@ rationale, and the when‑to‑use comparison.
 
 ## Validation
 
-> **⚠ Under revision.** The range/“matches equilibrium glide” numbers in this
-> section rest on a now-identified **free-lift artifact** in the entry pull-up
-> (the feedback added lift without an induced-drag penalty), and the lofted-boost
-> scenario itself cannot physically glide with honest aero. The γ\* correction
-> (L/D in the denominator) is committed; the capture classifier and a two-phase
-> capture glide law are pending. See **`GLIDE_CAPTURE_DESIGN.md`** for the full
-> verified analysis and the corrected architecture. Treat the figures below as
-> historical until regenerated against the rebuilt law.
-
 `damped_glide_smoke_test.py` flies the repo's **C‑HGB** glide body
 (`rv_library/C-HGB.rv.json`) — the SWERVe/AHW‑descendant Common Hypersonic Glide
-Body (Gulan, Georgia Tech, 2024; SWERVe is the publicly‑available C‑HGB
-predecessor) — on a sub‑circular (MRBM‑class) boost, where it genuinely glides
-*in* the atmosphere. Entering at ~5.6 km/s:
+Body (Gulan, Georgia Tech, 2024) — and pins the honest behaviour of the rebuilt
+law (5/5 checks). Key results on a **lofted** sub‑circular boost (~5.6 km/s):
 
-| mode | fraction of glide **above 100 km** (no air) | range |
-|---|---|---|
-| `skip_glide` | 57 % — skips out of the atmosphere | 2445 km |
-| `damped_glide` ζ=0 | 57 % — **bit‑identical to skip_glide** | 2445 km |
-| `damped_glide` ζ=0.7 | **14 %** — glides in the atmosphere | 6187 km |
-| `equilibrium_glide` | 27 % | 6246 km |
+- **No free lift:** a captured glide never out‑ranges the analytic equilibrium
+  glide (effective L/D ≤ vehicle L/D). The old law glided ~20 % *too far*
+  (effective L/D ≈ 2.4 on an L/D = 2 vehicle); that artifact is gone.
+- **Honest plunge (polar aero):** the C‑HGB on a *lofted* ballistic boost
+  **plunges at every ζ** (verdict `plunge`). The thin‑air lift ceiling
+  (max lift ∝ q·A·C_L,max) is too small high up to arrest the steep entry —
+  independent of L/D and launch angle. This matches Lu's deep‑dive ballistic
+  launch and the observed real C‑HGB falling deeply. **A glider must be inserted
+  shallow** (depressed/equilibrium‑glide insertion), not lofted, to glide.
+- **Damping improves capture (constant_LD):** the lumped model has no aero lift
+  ceiling, so it *can* pull out; range grows with ζ (2550 → 5606 km, ζ = 0 → 2)
+  and captures at high ζ. It **over‑predicts capturability** — the polar model
+  is the trustworthy one.
+- **ζ = 0** is the equilibrium‑trim baseline; **no zoom‑climb**.
 
-Damping at ζ=0.7 converts a skip that spends most of its flight *above* the
-atmosphere into a true in‑atmosphere glide (the residual 14 % is the legitimate
-ballistic arc to apogee), nearly tripling range to match the analytic
-equilibrium glide. (The undamped near‑orbital HTV‑2‑on‑Minotaur built‑in is a
-poor glide test — at ~7.6 km/s it really is skip‑entry, reaching 200 + km where
-there is no atmosphere to glide on, and no atmosphere‑gated lift law can hold it
-down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
+Whether a given boost produces capture is read off by the diagnostic
+**glide‑regime classifier** (`glide_regime.py`, attached to each trajectory
+result as `glide_regime`): {`skip`, `capture`, `plunge`}.
 
 ## Limits & notes
 

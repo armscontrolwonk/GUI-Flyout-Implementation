@@ -1,12 +1,15 @@
 # Glide Capture & the Two-Phase Glide Law — Design Memo
 
-**Status:** design record + build spec. Supersedes the *capture* behaviour of the
-current `damped_glide` mode (see `DAMPED_GLIDE.md` / `DAMPED_GLIDE_MEMO.md`, which
-describe the as-built law). The γ\* correction described in §2 is **committed**;
-the capture classifier (§5) and the two-phase glide rebuild (§4) are **pending**.
+**Status:** design record + build log. The γ\* correction (§2) is **committed**;
+the diagnostic capture classifier (§5) is **built** (`glide_regime.py`); and the
+`damped_glide` rebuild is **built** as a **pure dynamic EOM** law (§8 — the
+*decided* approach, which supersedes §4's literature-derived two-phase plan after
+verification showed the EOM cannot capture a lofted entry and the user chose
+honest dynamic behaviour over analytical-arc capture).
 
 This memo records a long, primary-source-verified investigation. Every equation
-below is cited to a page that was read directly (see §7).
+below is cited to a page that was read directly (see §7). §1–§7 are the analysis
+and literature; **§8 is the implemented result.**
 
 ---
 
@@ -239,3 +242,56 @@ insertion), regenerated against the rebuilt law.
    site access), capture occurring on a later entry. Its predictor-corrector,
    target-seeking guidance is beyond Thrusty's open-loop trajectory scope but is
    the reference for any future "guided skip-entry to target" mode. Read in full.
+
+---
+
+## 8. Implementation status (decided & built)
+
+**Decision (user):** `damped_glide` is a **pure dynamic EOM** law — *honest
+plunge*, no analytical-arc capture; capturability is **entry-geometry (and
+aero-model) dependent**, read off by the diagnostic classifier (§5), not forced.
+
+**Built law** (`trajectory.py`, `damped_glide` branch):
+
+```
+g_eff = max(g − V²/r, 0)
+L_target = m·g_eff/cosσ  −  k_h·(ḣ − V·γ*)        # equilibrium trim + ζ damping
+  polar:        C_L = clip(L_target/(q·A), 0, C_L,max);  L = q·A·C_L
+                drag = q·A·(C_D0 + k·C_L²)             # induced drag (coupled)
+  constant_LD:  L = clip(L_target, 0, pull-up g cap);  drag = L/(L/D)
+```
+
+with `γ* = −2H_ρg/(V²cosσ·(L/D))`, `k_h = 2ζm√(g_eff/H_ρ)`. **No free lift**
+(drag follows the actual commanded lift), and lift is bounded by the
+*aerodynamic* ceiling (polar C_L,max), not the structural cap.
+
+**Validated behaviour (C-HGB, lofted sub-circular boost; `damped_glide_smoke_test.py`):**
+
+- **polar (physical aero): PLUNGES at every ζ.** The thin-air lift ceiling
+  (max lift ∝ q·A·C_L,max) is too small high up to arrest a steep lofted entry —
+  independent of L/D (tested to L/D=8) and launch angle. This is the honest
+  dynamic result and matches Lu's deep-dive ballistic-launch case and the
+  observed real C-HGB falling deeply. *To glide, a glider needs a shallow /
+  depressed insertion (Lu's equilibrium-glide-insertion), not a lofted ballistic
+  arc — a boost-trajectory capability Thrusty's gravity-turn boost does not
+  currently expose.*
+- **constant_LD (lumped): captures, ζ-dependent** (range 2550→5606 km as
+  ζ=0→2, `glide_frac` 0→0.94). The lumped model has **no aerodynamic lift
+  ceiling**, so it can pull out where the physical polar model cannot — it
+  **over-predicts capturability**. Polar is the trustworthy aero model for
+  capture; constant_LD is a lumped approximation.
+- **No free lift:** a captured glide never out-ranges the analytic equilibrium
+  glide (effective L/D ≤ vehicle L/D) — the ~20 % overshoot of the old free-lift
+  law is gone.
+- **ζ = 0** is the equilibrium-trim baseline (no damping); it no longer nests to
+  `skip_glide`. `skip_glide` (α* lift, undamped) remains the separate
+  phugoid/skip endpoint.
+- **No zoom-climb** (the equilibrium trim descends monotonically).
+
+**Why not the α\*-nominal (verified):** flying α\*/max-L/D lift + damping
+*cannot capture at any ζ* (it targets a kinematic ḣ unachievable in thin air and
+plunges to ζ=30) — so the nominal must be the equilibrium trim.
+
+**Pending:** GUI surfacing of the classifier verdict + mode-gating (judge verdict
+vs selected-mode intent, §5); regenerating the headline validation tables; and a
+depressed/shaped-insertion boost capability to exercise polar capture.
