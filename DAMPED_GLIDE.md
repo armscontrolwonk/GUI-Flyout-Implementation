@@ -52,9 +52,17 @@ since lift ∝ ρ ∝ e^(−h/H_ρ), a small displacement δh changes it by
 
 where `H_ρ = −ρ/(dρ/dh)` is the local density scale height — the restoring force
 is the density lapse (drop below equilibrium → denser air → more lift → pushed
-back up, the mechanism Yu & Chen describe explicitly). This frequency is
-corroborated empirically: Liu et al. (2025) measure the skip phugoid at
-0.021–0.037 rad/s, bracketing ω_p ≈ 0.034 rad/s here. The altitude‑rate feedback
+back up, the mechanism Yu & Chen describe explicitly). This linearisation is not
+ad hoc: the planar entry equations collapse to a single second‑order nonlinear
+ODE — **Yaroshevskii's equation** (Vinh, Busemann & Culp, Ch. 10, Eq. 10‑55,
+`y″ = −K + (e^{2x}−1)/y`, with `y ∝ ρ`, `K = √(βr₀)·C_L/C_D`) — whose
+quasi‑steady particular solution (`y″ ≈ 0`) is the **equilibrium glide**
+(Eq. 10‑61, `y_eq = (e^{2x}−1)/K`, the Sänger condition). Linearising (10‑55)
+about `y_eq` gives precisely the oscillator above; Vinh shows the resulting
+oscillation about equilibrium glide numerically (Fig. 10‑10) but leaves the
+closed‑form oscillator — the one‑line step taken here — to the reader. The
+frequency is also corroborated empirically: Liu et al. (2025) measure the skip
+phugoid at 0.021–0.037 rad/s, bracketing ω_p ≈ 0.034 rad/s here. The altitude‑rate feedback
 (Lu 2013, Eq. 33) adds the damping term, giving `δḧ + 2ζω_p·δḣ + ω_p²·δh = 0`;
 matching to `2ζω_p` fixes the gain for a **target damping ratio ζ**:
 
@@ -173,6 +181,15 @@ down. Use a sub‑circular boost‑glide vehicle to exercise this mode.)
 - C. L. Tracy, D. Wright, "Modeling the Performance of Hypersonic Boost‑Glide
   Missiles," *Science & Global Security* 28, 2020 (DOI 10.1080/08929882.2020.1864945)
   — equilibrium‑glide formulation; phugoid "damped by active control."
+- N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
+  Mechanics*, University of Michigan Press, 1980 — Ch. 10 (Yaroshevskii's
+  theory): the second‑order nonlinear entry ODE (Eq. 10‑55) and its
+  equilibrium‑glide reference state (Eq. 10‑61, the Sänger condition); the
+  oscillation about equilibrium glide is exhibited numerically (Fig. 10‑10). Our
+  `δḧ + ω_p²·δh = 0` oscillator is the small‑perturbation linearisation of
+  Eq. 10‑55 about Eq. 10‑61. (Read and verified pp. 158–162, 172–176; the §7‑2
+  first‑order solution is steady equilibrium glide and contains no oscillator —
+  the linearisation lives in the Ch. 10 second‑order theory.)
 - D. R. Chapman, NACA TN 4276 / NASA TR R‑11 (1958–59); H. J. Allen &
   A. J. Eggers, NACA Report 1381 (1958) — independent phugoid/skip grounding.
 - A. E. Gulan, *Conceptual, Trajectory‑Based Structural Sizing Method for

@@ -2072,10 +2072,16 @@ the open-loop mode
 ```
 
 where `H_ρ = −ρ/(dρ/dh)` is the local density scale height (the restoring force
-is the density lapse); this frequency is corroborated empirically by
-[Liu et al. 2025](#16-references) (measured skip phugoid 0.021–0.037 rad/s). The
-altitude-rate feedback adds the `2ζω_p·δḣ` damping term; matching the feedback
-contribution to `2ζω_p` fixes the gain for a target damping ratio ζ:
+is the density lapse). This linearisation is the textbook second-order entry
+theory: Vinh, Busemann & Culp (Ch. 10) reduce the planar entry equations to
+Yaroshevskii's second-order nonlinear ODE (Eq. 10-55, `y″ = −K + (e^{2x}−1)/y`,
+`y ∝ ρ`), whose quasi-steady solution is the equilibrium glide (Eq. 10-61,
+the Sänger condition) and whose linearisation about it is the oscillator above —
+the oscillation Vinh shows numerically in Fig. 10-10. The frequency is also
+corroborated empirically by [Liu et al. 2025](#16-references) (measured skip
+phugoid 0.021–0.037 rad/s). The altitude-rate feedback adds the `2ζω_p·δḣ`
+damping term; matching the feedback contribution to `2ζω_p` fixes the gain for a
+target damping ratio ζ:
 
 ```
 k_h = 2·ζ·m·√(g_eff / H_ρ)
@@ -2869,8 +2875,18 @@ underlying Heineman / MacConochie–Klich / Glatt lineage) in
   decomposition for hypersonic glide vehicles." *Defence Technology* 48, 34–47.
   Data-driven (DMD) decomposition of HGV skip-glide; independently measures the
   skip phugoid frequency (0.0207–0.0374 rad/s), corroborating the first-
-  principles ω_p = √(g_eff/H_ρ) (Section 12.3.5). [The equilibrium-glide phugoid
-  frequency is derived from first principles in §12.3.5, not taken from a text.]
+  principles ω_p = √(g_eff/H_ρ) (Section 12.3.5).
+
+- **Vinh, N. X., Busemann, A. & Culp, R. D.** (1980). *Hypersonic and Planetary
+  Entry Flight Mechanics.* University of Michigan Press. Ch. 10 (Yaroshevskii's
+  theory) gives the second-order nonlinear entry ODE (Eq. 10-55) and its
+  equilibrium-glide reference state (Eq. 10-61, the Sänger condition), and shows
+  the oscillation about equilibrium glide numerically (Fig. 10-10). The
+  `δḧ + ω_p²·δh = 0` oscillator in §12.3.5 is the small-perturbation
+  linearisation of Eq. 10-55 about Eq. 10-61. (Vinh §7-2 / §7-5 are the
+  first-order steady-glide and skip solutions and contain no oscillator; the
+  perturbation oscillation lives in the Ch. 10 second-order theory. Pages
+  158-162 and 172-176 read and verified.)
 
 ### Control theory
 

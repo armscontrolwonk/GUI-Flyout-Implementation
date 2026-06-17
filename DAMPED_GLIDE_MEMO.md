@@ -49,6 +49,23 @@ is pushed back up:
 with H_ρ = −ρ/(dρ/dh) the local density scale height. Typically
 ω_p ≈ 0.034 rad/s — a skip period of order 180 s.
 
+This linearization is the textbook second-order entry theory in closed form.
+Vinh, Busemann & Culp (Ch. 10) reduce the planar entry equations to a single
+second-order nonlinear ODE — **Yaroshevskii's equation** (Eq. 10-55,
+`y″ = −K + (e^{2x}−1)/y`, where `y ∝ ρ` is the density variable, `x` a
+log-velocity variable, and `K = √(βr₀)·C_L/C_D`). Its quasi-steady particular
+solution (`y″ ≈ 0`) is the equilibrium glide, Eq. 10-61
+`y_eq = (e^{2x}−1)/K` — the Sänger condition, the same primary source as the
+first-order equilibrium-glide relation in Vinh §7-2. Linearizing (10-55) about
+`y_eq` gives δ″ + k²δ = 0 with k² = (e^{2x}−1)/y_eq² > 0, i.e. precisely the
+oscillator above re-expressed in Yaroshevskii's variables. Vinh exhibits this
+oscillation about equilibrium glide numerically (Fig. 10-10, the over/undershoot
+of the lifting solutions) but does not write the closed-form oscillator — that
+one-line step is taken here. (Note: Vinh §7-2 and §7-5 are the *first-order*
+steady-glide and skip solutions and contain no oscillator; the perturbation
+oscillation lives in the Ch. 10 second-order theory. Read and verified
+pp. 158-162, 172-176.)
+
 This analytical frequency is corroborated empirically by Liu et al. (2025), who
 decompose CAV-H skip-glide trajectories with a higher-order multi-resolution
 dynamic mode decomposition (HMDMD) and measure the skip oscillation's dominant
@@ -284,3 +301,11 @@ outside the atmosphere, where it cannot glide. At ζ = 0.7 that falls to **14 %*
    Systems*, 8th ed. (Global), Pearson, 2019 — §3.4.2 "Overshoot and Peak Time":
    overshoot Eq. (3.72) M_p = e^(−πζ/√(1−ζ²)); Fig. 3.24 lists ζ = 0.7 → 5 %
    overshoot as a "frequently used value." Source for the ζ ≈ 0.7 default.
+9. N. X. Vinh, A. Busemann, R. D. Culp, *Hypersonic and Planetary Entry Flight
+   Mechanics*, University of Michigan Press, 1980 — Ch. 10 (Yaroshevskii's
+   theory): the second‑order nonlinear entry ODE (Eq. 10‑55) and its
+   equilibrium‑glide reference state (Eq. 10‑61, the Sänger condition); the
+   oscillation about equilibrium glide is shown numerically (Fig. 10‑10). The
+   `δḧ + ω_p²·δh = 0` oscillator (§2) is the small‑perturbation linearization of
+   Eq. 10‑55 about Eq. 10‑61. (§7‑2 / §7‑5 are first‑order steady‑glide / skip
+   solutions with no oscillator; read and verified pp. 158‑162, 172‑176.)
