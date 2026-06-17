@@ -247,11 +247,25 @@ insertion), regenerated against the rebuilt law.
 
 ## 8. Implementation status (decided & built)
 
-**Decision (user):** `damped_glide` is a **pure dynamic EOM** law — *honest
-plunge*, no analytical-arc capture; capturability is **entry-geometry (and
-aero-model) dependent**, read off by the diagnostic classifier (§5), not forced.
+> **Final resolution — TWO dynamic glide modes** (both pure dynamic EOM, drag
+> coupled to commanded lift, lift bounded by the aerodynamic ceiling → no free
+> lift; both plunge an uncapturable lofted entry):
+>
+> - **`damped_glide`** = **α\* (skip) lift nominal + ζ damping** → preserves the
+>   phugoid, so ζ genuinely *damps the skips*: **ζ = 0 ≡ skip_glide**, larger ζ →
+>   fewer/smaller **decaying skips** (verified: re-climb 43 → 8 → 3 → 0 km as
+>   ζ = 0 → 2 on a capturable insertion). This is the realistic guided pull-up.
+> - **`dynamic_equilibrium_glide`** = **equilibrium-trim nominal + ζ tracking
+>   gain** → captures **smoothly, no oscillation** (the law described in the rest
+>   of this section). ζ is a tracking gain, not a damping ratio.
+>
+> Earlier this section described the equilibrium-trim law as `damped_glide`; that
+> law is now the separate `dynamic_equilibrium_glide` mode (it doesn't damp a
+> phugoid — it captures monotonically), and `damped_glide` reverted to the
+> α\*+damping law that actually produces decaying skips. constant_LD is β-capped
+> in both modes for consistency with the physical polar model.
 
-**Built law** (`trajectory.py`, `damped_glide` branch):
+**`dynamic_equilibrium_glide` law** (`trajectory.py`):
 
 ```
 g_eff = max(g − V²/r, 0)

@@ -1667,6 +1667,7 @@ class MissileDialog(tk.Toplevel):
                         else "Acton"   if _g == "equilibrium_glide_acton"
                         else "skip→eq" if _g == "skip_to_equilibrium"
                         else "damped"  if _g == "damped_glide"
+                        else "dyn-eq"  if _g == "dynamic_equilibrium_glide"
                         else "skip")
                 parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
             self._rv_summary_var.set(" — ".join(parts))
@@ -2130,6 +2131,7 @@ class RVEditorDialog(tk.Toplevel):
         "skip_glide":              "Phugoid / skip-glide",
         "skip_to_equilibrium":     "Skip → equilibrium (auto-handoff)",
         "damped_glide":            "Damped phugoid glide",
+        "dynamic_equilibrium_glide": "Dynamic equilibrium glide",
     }
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
@@ -4383,6 +4385,7 @@ class MissileFlyoutApp(tk.Tk):
             values=["Ballistic (drag · gravity · rotation)",
                     "Phugoid / skip-glide",
                     "Damped phugoid glide",
+                    "Dynamic equilibrium glide",
                     "Non-oscillatory glide (Acton)",
                     _GUIDANCE_SEPARATOR,
                     "Equilibrium glide (Tracy)",
@@ -5009,6 +5012,8 @@ class MissileFlyoutApp(tk.Tk):
                 if _guid in ("skip_glide", "azimuth_command")
                 else "Damped phugoid glide"
                 if _guid == "damped_glide"
+                else "Dynamic equilibrium glide"
+                if _guid == "dynamic_equilibrium_glide"
                 else "Skip → equilibrium (auto-handoff)"
                 if _guid == "skip_to_equilibrium"
                 else "Non-oscillatory glide (Acton)"
@@ -5138,6 +5143,7 @@ class MissileFlyoutApp(tk.Tk):
         is_ballistic  = "ballistic"    in label
         is_skip_to_eq = "auto-handoff" in label
         is_damped     = "damped"       in label
+        is_dynamic    = "dynamic"      in label   # dynamic_equilibrium_glide
 
         # Skip-count row: only for skip_to_equilibrium
         if hasattr(self, '_main_skip_frame'):
@@ -5145,9 +5151,10 @@ class MissileFlyoutApp(tk.Tk):
                 self._main_skip_frame.grid()
             else:
                 self._main_skip_frame.grid_remove()
-        # Damping-ratio row: only for damped_glide (shares the row with skips)
+        # ζ row: damped_glide (damping ratio) and dynamic_equilibrium_glide
+        # (tracking gain) both use it.
         if hasattr(self, '_main_zeta_frame'):
-            if is_damped:
+            if is_damped or is_dynamic:
                 self._main_zeta_frame.grid()
             else:
                 self._main_zeta_frame.grid_remove()
@@ -6885,11 +6892,12 @@ class MissileFlyoutApp(tk.Tk):
             _g_guid_label = self._main_guidance_var.get()
             _g_guid_lower = _g_guid_label.lower()
             _g_guid_key = (
-                "ballistic"               if "ballistic"    in _g_guid_lower else
-                "damped_glide"            if "damped"       in _g_guid_lower else
-                "skip_to_equilibrium"     if "auto-handoff" in _g_guid_lower else
-                "skip_glide"              if "skip"         in _g_guid_lower else
-                "equilibrium_glide_acton" if "acton"        in _g_guid_lower else
+                "ballistic"                 if "ballistic"    in _g_guid_lower else
+                "damped_glide"              if "damped"       in _g_guid_lower else
+                "dynamic_equilibrium_glide" if "dynamic"      in _g_guid_lower else
+                "skip_to_equilibrium"       if "auto-handoff" in _g_guid_lower else
+                "skip_glide"                if "skip"         in _g_guid_lower else
+                "equilibrium_glide_acton"   if "acton"        in _g_guid_lower else
                 "equilibrium_glide"
             )
             if _g_guid_key == "ballistic":
@@ -6903,7 +6911,7 @@ class MissileFlyoutApp(tk.Tk):
                     except (ValueError, AttributeError):
                         _g_skip_count = 1
                 _g_zeta = 0.7
-                if _g_guid_key == "damped_glide":
+                if _g_guid_key in ("damped_glide", "dynamic_equilibrium_glide"):
                     try:
                         _g_zeta = max(0.0, float(self._main_zeta_var.get()))
                     except (ValueError, AttributeError):
