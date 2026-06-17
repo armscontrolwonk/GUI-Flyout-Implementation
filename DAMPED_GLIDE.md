@@ -221,6 +221,21 @@ result as `glide_regime`): {`skip`, `capture`, `plunge`}.
   (steady equilibrium descent, the range floor of the family); the gap closes
   as ζ→large damps the skips — i.e. it is the physical Sänger–Bredt skip premium,
   not free lift.
+- **Dynamic vs. analytic equilibrium glide — capture loss.** The dynamic modes
+  generally range shorter than the analytic `equilibrium_glide` /
+  `equilibrium_glide_acton`, but **not** because the analytic models neglect the
+  pull‑up energy loss — they account for it analytically. Acton (2015, Eq. 11)
+  treats the speed bled during the pull‑up as the closed‑form turn‑loss integral
+  `v₄ = v₃·exp(−θ₂/(L/D))` (descent angle θ₂ at atmospheric piercing), then seeds
+  the glide at the equilibrium altitude `h_eq(v₄)`; our `_acton_pullup_arc`
+  implements this for both analytic modes (the Acton‑specific addition is the
+  Phase‑3 β_S direct‑reentry descent that sets v₃, h₃). The residual gap is
+  therefore *idealized* vs *dynamic* capture loss: Acton's relation is the
+  efficient lower bound — a perfect constant‑L/D arc arriving exactly at `h_eq`
+  with γ=0, which always captures — whereas the dynamic EOM integrates the real
+  density profile, typically overshoots `h_eq` into denser air (extra drag loss),
+  and for a steep enough entry fails to capture at all (plunge). So the analytic
+  models bound the capture loss optimistically; they do not ignore it.
 
 ## Sources
 
