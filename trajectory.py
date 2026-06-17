@@ -738,7 +738,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             #                       equilibrium glide)
                             #   k_h  = 2·ζ·m·√(g_eff/H_ρ)
                             # with the command altitude-rate ḣ_eq = V·γ*, where
-                            #   γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)   (Lu Eq. 31).
+                            #   γ* = −2·H_ρ·g / (V²·cos σ·(L/D))   (Lu Eq. 31;
+                            #   L/D in the DENOMINATOR — higher L/D ⇒ shallower glide).
                             # ζ = 0 ⇒ k_h = 0 ⇒ exactly skip_glide.
                             _polar = (getattr(_erv, 'glider_aero_model',
                                               'constant_LD') == 'polar')
@@ -766,8 +767,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     _cos_b = max(abs(float(np.cos(bank_rad))),
                                                  0.05)
                                     _hdot = speed * float(np.dot(v_hat, r_hat))
-                                    _gstar = (-2.0 * _erv.glider_LD * _Hrho
-                                              * g_mag / (speed * speed * _cos_b))
+                                    _gstar = (-2.0 * _Hrho * g_mag
+                                              / (speed * speed * _cos_b
+                                                 * _erv.glider_LD))
                                     _k_h = (2.0 * max(float(
                                         _erv.glider_damping_zeta), 0.0)
                                         * rv_mass * np.sqrt(_g_eff / _Hrho))

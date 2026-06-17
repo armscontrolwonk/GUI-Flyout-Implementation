@@ -2058,8 +2058,10 @@ L·cos σ_cmd = L·cos σ_nom − k_h·(ḣ − ḣ_eq)
 ```
 
 with `ḣ = V·sin γ` the current altitude rate and `ḣ_eq = V·γ*` the
-command, where `γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)` is the
-quasi-equilibrium-glide flight-path angle (Lu Eq. 31).
+command, where `γ* = −2·H_ρ·g / (V²·cos σ·(L/D))` is the
+quasi-equilibrium-glide flight-path angle (Lu Eq. 31 — L/D in the
+denominator, so higher L/D glides shallower; matches Vinh, Coppola &
+de-Olivé Ferreira 1996 and the classic γ = −1/(L/D)).
 
 **The gain — derived, not fitted.** Linearising the planar equilibrium-glide
 EOM about equilibrium gives, from first principles, a harmonic oscillator for

@@ -36,7 +36,8 @@ L·cos σ_cmd = L·cos σ_nom − k_h·(ḣ − ḣ_eq)          (Lu 2013, Eq. 3
   slender‑body polar) — i.e. exactly the `skip_glide` lift.
 - `ḣ = V·sin γ` is the current altitude rate; `ḣ_eq = V·γ*` is the command.
 - `γ*` = the quasi‑equilibrium‑glide flight‑path angle (Lu Eq. 31, dimensional):
-  `γ* = −2·(L/D)·H_ρ·g / (V²·cos σ)` — the small negative descent angle.
+  `γ* = −2·H_ρ·g / (V²·cos σ·(L/D))` — the small negative descent angle
+  (L/D in the denominator: higher L/D glides shallower).
 
 ## The gain — derived, not fitted
 

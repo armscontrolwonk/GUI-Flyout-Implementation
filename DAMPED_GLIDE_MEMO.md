@@ -128,7 +128,7 @@ equivalently the angle‑of‑attack feedback of Yu & Chen (Eq. 19):
 with ḣ = V·sin γ, the commanded altitude rate ḣ_eq = V·γ\*, and the
 quasi‑equilibrium flight‑path angle (Lu, Eq. 31)
 
-    γ\* = − 2·(L/D)·H_ρ·g / (V²·cos σ).
+    γ\* = − 2·H_ρ·g / (V²·cos σ·(L/D)).
 
 ## 5. The gain, and why ζ = 0.7
 
