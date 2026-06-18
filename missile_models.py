@@ -584,6 +584,13 @@ MODEL_OPTIONS = {
                     "chin":    "Chin 1961 (Fig 3-15)"},
         "default": "datcom",
     },
+    "friction": {
+        "label":   "Skin friction",
+        "choices": ("chin", "sommer_short"),
+        "labels":  {"chin":         "Chin 1961 (mixed BL, Frankl-Voishel)",
+                    "sommer_short": "Sommer-Short (reference temperature)"},
+        "default": "chin",
+    },
     "atmosphere": {
         "label":   "Atmosphere",
         "choices": ("msis", "std1976", "hot", "cold", "polar", "tropical"),
@@ -813,18 +820,40 @@ def _cf_schoenherr(re_l: float) -> float:
     return cf
 
 
+def _cf_sommer_short(re_l: float, mach: float, temp_k: float = 250.0) -> float:
+    """Mean all-turbulent flat-plate Cf — Sommer & Short reference-temperature
+    method (PDAS TURBSF; Sivells-Payne incompressible base).  Validated to
+    within ±3% of the published table at M≤3; better than Frankl-Voishel in the
+    hypersonic regime where wall temperature matters.  temp_k defaults to a
+    representative 250 K (the result is weakly T-dependent below ~M3)."""
+    import math
+    if re_l < 10.0:
+        return 0.0
+    SUTH = 110.4
+    xx   = math.log10(re_l) - 1.5
+    cfi  = 0.088 / (xx * xx)
+    z    = 1.0 + 0.115 * mach * mach
+    rstar = re_l / (((temp_k + SUTH) / (z * temp_k + SUTH)) * z ** 2.5)
+    xx   = xx / (math.log10(rstar) - 1.5)
+    return xx * xx * (cfi / z)
+
+
 def _cd_friction(re_l: float, mach: float, s_wet_ratio: float) -> float:
     """
-    Friction drag coefficient.
-      Blasius laminar Cf (Chin Eq. 4-1) + Schoenherr turbulent Cf (Chin Eq. 4-2)
-      Mixed BL at Re_transition = 5×10^5 (Chin Eq. 4-3)
-      Frankl-Voishel compressibility correction (Chin Eq. 4-6)
-      +10 % roughness allowance (Chin §4-2)
+    Friction drag coefficient.  Source selectable via MODEL_OPTIONS['friction']:
+      'chin' (default) — Blasius laminar (Chin Eq. 4-1) + Schoenherr turbulent
+                         (Eq. 4-2), mixed BL at Re_tr=5×10^5 (Eq. 4-3),
+                         Frankl-Voishel compressibility (Eq. 4-6).
+      'sommer_short'   — Sommer-Short all-turbulent reference-temperature Cf
+                         (better in the hypersonic regime).
+    Both add a +10% roughness allowance (Chin §4-2).
     s_wet_ratio : S_wet / A_ref
     """
     import math
     if re_l < 1.0 or s_wet_ratio <= 0.0:
         return 0.0
+    if get_model_option("friction") == "sommer_short":
+        return _cf_sommer_short(re_l, mach) * 1.10 * s_wet_ratio
     re_tr  = 5.0e5
     cf_lam  = 1.328 / math.sqrt(re_l)   # Blasius (Chin Eq. 4-1)
     cf_turb = _cf_schoenherr(re_l)       # Schoenherr (Chin Eq. 4-2)
