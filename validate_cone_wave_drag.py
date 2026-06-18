@@ -85,11 +85,58 @@ def _cone_from_shock(M1, beta):
 
 
 def cone_wave_cd_exact(M1, sigma_deg):
-    """Exact cone wave-drag coefficient (ref. base area) at Mach M1."""
+    """Exact cone wave-drag coefficient (= surface Cp, ref. base area) at M1.
+
+    The cone half-angle increases monotonically with shock angle up to
+    detachment, so we scan from just above the Mach angle to find the bracket
+    [lo, hi] straddling the target half-angle, then root-find within it.  This
+    is robust for slender cones (narrow root near the Mach angle) and blunt
+    cones at low Mach (shock angle well above 60 deg)."""
     target = np.radians(sigma_deg)
-    f = lambda b: (_cone_from_shock(M1, b) or (1e9, 0.0))[0] - target
-    beta = brentq(f, np.arcsin(1 / M1) + 1e-4, np.radians(60), xtol=1e-8)
+    # f(beta) = cone half-angle - target.  At the Mach angle the shock is
+    # infinitely weak (half-angle -> 0), so treat the weak-shock limit (no
+    # attached solution returned) as half-angle 0; f is then negative there and
+    # rises monotonically with beta until the target is reached.
+    f = lambda b: (_cone_from_shock(M1, b) or (0.0, 0.0))[0] - target
+    mach_angle = np.arcsin(1.0 / M1)
+    hi = None
+    for b in np.radians(np.linspace(np.degrees(mach_angle) + 0.05, 89.0, 1000)):
+        if f(b) > 0:
+            hi = b
+            break
+    if hi is None:
+        raise RuntimeError(f"no attached cone solution: M={M1}, sigma={sigma_deg} deg")
+    beta = brentq(f, mach_angle + 1e-9, hi, xtol=1e-10)
     return _cone_from_shock(M1, beta)[1]
+
+
+# Sims, NASA SP-3004, Table 9 — surface pressure coefficient Cp (= cone wave-drag
+# CD ref. base area).  A representative span transcribed from the report, used as
+# an authoritative third-party anchor for the exact solver above.
+#   theta_c [deg] -> { M_inf : Cp }
+_SIMS_TABLE9 = {
+    2.5:  {1.5: .0123382, 2.0: .0107862, 3.0: .00913541, 4.0: .00814929,
+           5.0: .00746199, 10.0: .00573592},
+    5.0:  {1.5: .0396615, 2.0: .0339457, 3.0: .02824024, 5.0: .02304657,
+           10.0: .01871810},
+    10.0: {1.5: .1237983, 2.0: .1044583, 3.0: .08747518, 5.0: .07475691,
+           10.0: .06670277},
+    15.0: {2.0: .2022339, 3.0: .17310135, 5.0: .15423167},
+    20.0: {2.0: .3255312, 2.5: .29915906},
+}
+
+
+def _sims_check():
+    """Compare the exact solver against Sims SP-3004 Table 9 anchors."""
+    errs = []
+    for thc in sorted(_SIMS_TABLE9):
+        for M in sorted(_SIMS_TABLE9[thc]):
+            cp_s = _SIMS_TABLE9[thc][M]
+            cp_m = cone_wave_cd_exact(M, thc)
+            errs.append(abs(100 * (cp_m - cp_s) / cp_s))
+    print(f"Sims SP-3004 Table 9 check ({len(errs)} anchors, theta_c 2.5-20 deg, "
+          f"M 1.5-10): mean |%diff|={np.mean(errs):.3f}%, max={np.max(errs):.3f}%  "
+          f"({'OK' if np.max(errs) < 0.5 else 'CHECK'})")
 
 
 def _naca1135_check():
@@ -125,6 +172,7 @@ def _naca1135_check():
 
 def main():
     _naca1135_check()
+    _sims_check()
     print("\nCone wave drag CD (ref base area): Taylor-Maccoll exact vs _cd_wave_cone")
     worst = 0.0
     for ld in (2.0, 3.0, 5.0):
