@@ -236,6 +236,24 @@ result as `glide_regime`): {`skip`, `capture`, `plunge`}.
   density profile, typically overshoots `h_eq` into denser air (extra drag loss),
   and for a steep enough entry fails to capture at all (plunge). So the analytic
   models bound the capture loss optimistically; they do not ignore it.
+- **Reconciliation with Tracy's 10–20% pull‑up penalty.** Tracy & Wright (2020)
+  assert a 10–20% range penalty for the pull‑up maneuver. Our dynamic
+  `damped_glide` at ζ=0.4 on the shallow AUR insertion reproduces this from first
+  principles: pull‑up velocity loss (v₃ at the 100 km descending pierce → speed at
+  glide onset) is **14%** for `constant_LD` (Tracy's modeling assumption) and 19%
+  for `polar`, with corresponding range penalties of **14%** and 20% vs the
+  analytic equilibrium glide (5834 km → 5002 / 4643 km). Equivalently, knocking
+  Tracy's 10–20% off the idealized glide gives [4667, 5251] km, which brackets
+  both dynamic results. **Crucially, this penalty is the dynamic capture
+  *overshoot* loss, not Acton's idealized turn loss.** For this geometry θ₂ at
+  piercing is only 3.5°, so Acton Eq. 11 alone gives `exp(−θ₂/(L/D)) = 0.967` —
+  just **3.3%**. The remaining ~11–16% comes from the vehicle plunging below its
+  eventual glide altitude (to ~36 km `polar` / ~26 km `constant_LD`, vs a ~44–48 km
+  glide) and bleeding speed through that dense‑air excursion and the climb back.
+  The dynamic EOM captures this; the closed‑form turn integral by itself
+  under‑counts it for shallow entries. The exact figure is ζ‑ and
+  geometry‑dependent (deeper entries and lower ζ → larger overshoot loss); ζ=0.4
+  on this insertion happens to sit mid‑band.
 
 ## Sources
 
