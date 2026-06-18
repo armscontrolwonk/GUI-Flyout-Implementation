@@ -384,6 +384,11 @@ class RVParams:
     # RCC is above its working temperature anyway (surface ablates, no
     # longer at equilibrium); the constant-ε model is a lower bound there.
     emissivity:             float = 0.85
+    # TPS material class for the heating survivability figure of merit (see
+    # heating.py TPS_MATERIALS): '' / 'aluminum' / 'titanium' / 'steel' /
+    # 'silica_tile' / 'rcc' / 'uhtc' / 'carbon_ablator'.  '' → physical heating
+    # numbers only, no pass/fail verdict.
+    tps_material:           str   = ""
 
 
 def rv_to_dict(rv: RVParams) -> dict:
@@ -414,6 +419,7 @@ def rv_to_dict(rv: RVParams) -> dict:
         'glider_flap_deflection_deg':rv.glider_flap_deflection_deg,
         'separation_mode':       rv.separation_mode,
         'emissivity':            rv.emissivity,
+        'tps_material':          rv.tps_material,
     }
 
 
@@ -453,6 +459,7 @@ def rv_from_dict(d: dict) -> RVParams:
         glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
         emissivity=float(d.get('emissivity', 0.85)),
+        tps_material=str(d.get('tps_material', '')),
     )
 
 

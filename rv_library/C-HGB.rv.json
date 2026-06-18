@@ -12,5 +12,6 @@
   "glider_pullup_g_max": 10,
   "glider_terminal_dive": true,
   "glider_terminal_alt_km": 30,
-  "glider_skip_count": 1
+  "glider_skip_count": 1,
+  "tps_material": "rcc"
 }

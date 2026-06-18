@@ -68,6 +68,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gravity import gravity_ecef, GM, RE
 from atmosphere import atmosphere
+import heating
 from coordinates import (
     geodetic_to_ecef, ecef_to_geodetic,
     coriolis_acceleration, centrifugal_acceleration,
@@ -2628,6 +2629,7 @@ def integrate_trajectory(params: MissileParams,
     #   • Max-G          (peak structural load factor during glide)
     #   • Terminal dive  (downward crossing of the user-set dive altitude)
     _erv_ms = effective_rv(params)
+    _heating_fom = None
     if _erv_ms is not None and _erv_ms.glider_enabled and _erv_ms.glider_LD > 0:
         # For trajectories that reach space use the 100 km descent crossing;
         # for sub-100 km HGV profiles use apogee as the glide-phase start.
@@ -2745,6 +2747,24 @@ def integrate_trajectory(params: MissileParams,
                                  f"({_q_dot[_ipk]/1e6:.1f} MW/m², "
                                  f"T_eq ≈ {_T_eq:.0f} K)")
                 _insert_chrono(_row)
+
+            # Heating survivability figure of merit (heating.py): peak-surface,
+            # oxidation-soak, and lumped heat-sink criteria → margins,
+            # compromise point, and verdict (stored in result['heating_fom']).
+            if len(_glide_v) > 1:
+                _diam = float(getattr(_erv_ms, 'diameter_m', 0.0) or 0.0)
+                _heating_fom = heating.heating_figure_of_merit(
+                    t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
+                    nose_radius_m=_RN, body_radius_m=_diam / 2.0,
+                    emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
+                    material=str(getattr(_erv_ms, 'tps_material', '') or ''),
+                    mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
+                    frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
+                _cmp = _heating_fom.get('compromise')
+                if _cmp is not None:
+                    _row = _milestone(_cmp['t_s'])
+                    _row['event'] = "TPS compromise — " + _cmp['mode']
+                    _insert_chrono(_row)
 
             # Max structural load factor n = |a_proper| / g0, where
             # a_proper = d v_inertial / d t − local gravity.  Captures
@@ -2946,6 +2966,7 @@ def integrate_trajectory(params: MissileParams,
         'lat':                lats,
         'lon':                lons,
         'alt':                alts,
+        'heating_fom':        _heating_fom,     # heating survivability (heating.py)
         'speed':              speeds,          # ECEF-frame (ground speed), m/s
         'inertial_speed':     inertial_speeds, # ECI-frame (inertial speed), m/s
         'accel':              accels,
