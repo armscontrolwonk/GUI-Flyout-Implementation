@@ -2063,23 +2063,60 @@ def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
             + _booster_mass_addend(params, max(0.0, t)))
 
 
-def missile_area(params: MissileParams, altitude_m: float = None,
-                 top_params: 'MissileParams' = None) -> float:
-    """Reference cross-sectional area (m^2).
+def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
+                          altitude_m: float = None):
+    """Front-end geometry exposed to the airstream during powered flight.
 
-    When top_params carries a shroud and altitude_m is below the jettison
-    altitude, returns the shroud frontal area instead of the body area.
+    Returns (nose_shape, diameter_m, nose_length_m, body_length_m, is_shroud).
+
+    During boost the drag is set by whatever caps the front of the stack:
+    the payload shroud/fairing while it is still attached, and the RV/payload
+    nose once the shroud is gone.  The SAME body supplies both the reference
+    area and the nose-shape Cd, so the two can never disagree (previously the
+    area read the inline `rv_diameter_m` while the Cd read the RVParams
+    diameter, which could differ).
+
+    The front end sets the nose SHAPE (Cd); the reference DIAMETER is the
+    widest body actually flying — normally the stage body, since an RV/payload
+    rides atop a booster that is as wide or wider.  Using max(nose, stage)
+    keeps the area correct during lower-stage burn (the fat booster, not the
+    little RV, is what plows through the dense air) and also covers the rare
+    case of an RV flared wider than its final stage.  When the diameters are
+    equal — the usual nose-caps-body case — the choice is moot.
+
+    The "warhead does not separate" case is handled by effective_rv(): a
+    body-mode RV (separation_mode='body') inherits the body's own diameter, so
+    the front end is the full body width rather than a narrower notional RV.
+    The RV nose is the front end whether or not it later separates —
+    separation happens at/after burnout, so it does not affect boost geometry.
     """
     if (top_params is not None
             and top_params.shroud_diameter_m > 0
             and altitude_m is not None
             and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
-        d = top_params.shroud_diameter_m
-    elif top_params is not None and top_params.rv_separates and top_params.rv_diameter_m > 0:
-        d = top_params.rv_diameter_m
-    elif top_params is not None and top_params.payload_diameter_m > 0:
-        d = top_params.payload_diameter_m
-    else:
+        return (top_params.shroud_nose_shape, top_params.shroud_diameter_m,
+                top_params.shroud_nose_length_m, top_params.shroud_length_m, True)
+    rv = effective_rv(top_params) if top_params is not None else None
+    if rv is not None and rv.diameter_m > 0:
+        return (rv.shape, max(rv.diameter_m, params.diameter_m),
+                rv.length_m, params.length_m, False)
+    if top_params is not None and top_params.payload_diameter_m > 0:
+        return (top_params.nose_shape,
+                max(top_params.payload_diameter_m, params.diameter_m),
+                top_params.nose_length_m, params.length_m, False)
+    return (params.nose_shape, params.diameter_m,
+            params.nose_length_m, params.length_m, False)
+
+
+def missile_area(params: MissileParams, altitude_m: float = None,
+                 top_params: 'MissileParams' = None) -> float:
+    """Reference cross-sectional area (m^2) of the exposed front end.
+
+    Tracks the same front-end body as the nose-shape drag model: the shroud
+    while attached, otherwise the RV/payload nose (see _boost_front_geometry).
+    """
+    _, d, _, _, _ = _boost_front_geometry(top_params, params, altitude_m)
+    if d <= 0:
         d = params.diameter_m
     return np.pi * (d / 2) ** 2
 
@@ -2133,42 +2170,22 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     re_l  = rho * speed * L_ref / mu if mu > 0.0 else 5e6
 
     # Choose Cd source: decomposed nose-shape model or Forden mach_table.
-    # Shroud nose shape takes priority while shroud is still attached.
-    _shroud_on = (top_params is not None
-                  and top_params.shroud_diameter_m > 0
-                  and altitude_m < top_params.shroud_jettison_alt_km * 1000.0)
-    if _shroud_on and top_params.shroud_nose_shape not in ('', 'forden'):
-        _sd = (top_params.shroud_diameter_m if top_params.shroud_diameter_m > 0
-               else params.diameter_m)
-        _ld = (top_params.shroud_nose_length_m / _sd
-               if top_params.shroud_nose_length_m > 0 and _sd > 0 else 3.0)
-        _ld_body = (top_params.shroud_length_m / _sd
-                    if top_params.shroud_length_m > 0 and _sd > 0 else None)
-        cd = _cd_nose_shape(top_params.shroud_nose_shape, _ld, mach,
-                            re_l=re_l, ld_body=_ld_body,
-                            aerospike_LD=top_params.aerospike_LD,
-                            aerospike_dD=top_params.aerospike_dD)
-    elif top_params is not None and (
-            (top_params.rv_separates
-             and _rv_nose_shape(top_params) not in ('', 'forden')
-             and _rv_diameter(top_params) > 0)
-            or (not top_params.rv_separates
-                and top_params.nose_shape not in ('', 'forden'))):
-        # After shroud jettison: use RV geometry when rv_separates, else payload nose.
-        if top_params.rv_separates and _rv_nose_shape(top_params) not in ('', 'forden'):
-            _shape  = _rv_nose_shape(top_params)
-            _diam   = _rv_diameter(top_params)
-            _length = _rv_length(top_params)
+    # The front-end body (shroud while attached, else RV/payload nose) sets
+    # both the nose shape and the reference diameter — the same selector used
+    # by missile_area() — so Cd and reference area always agree.
+    _shape, _diam, _nose_len, _body_len, _is_shroud = _boost_front_geometry(
+        top_params, params, altitude_m)
+    if top_params is not None and _shape not in ('', 'forden') and _diam > 0:
+        _ld = (_nose_len / _diam if _nose_len > 0 and _diam > 0 else 3.0)
+        _ld_body = (_body_len / _diam if _body_len > 0 and _diam > 0 else None)
+        if _is_shroud:
+            cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
+                                aerospike_LD=top_params.aerospike_LD,
+                                aerospike_dD=top_params.aerospike_dD)
         else:
-            _shape  = top_params.nose_shape
-            _diam   = (top_params.payload_diameter_m if top_params.payload_diameter_m > 0
-                       else params.diameter_m)
-            _length = top_params.nose_length_m
-        _ld = (_length / _diam if _length > 0 and _diam > 0 else 3.0)
-        _ld_body = (params.length_m / _diam if params.length_m > 0 and _diam > 0 else None)
-        # Aerospike is attached to the shroud, so it stops working once
-        # the shroud is jettisoned — no aerospike effect on this branch.
-        cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
+            # Aerospike is attached to the shroud, so it stops working once
+            # the shroud is jettisoned — no aerospike effect on this branch.
+            cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
     else:
         cd = drag_coefficient(params, mach)
 
