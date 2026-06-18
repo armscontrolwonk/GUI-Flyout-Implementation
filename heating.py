@@ -58,10 +58,15 @@ TPS_MATERIALS = {
 # 19820015618): windward tiles ~5 Btu/ft²·s (≈0.06 MW/m²), RCC nose-cap /
 # wing-leading-edge stagnation peak ~50 Btu/ft²·s (≈0.6 MW/m², surface ~1650 °C);
 # we anchor on the RCC stagnation peak.  No clean public integrated-load value,
-# so Q_MJ stays None.  ICBM-RV peak flux still lacks a clean public primary
-# (Bunn 1984 not machine-readable) — order-of-magnitude only, flagged 'rough'.
+# so Q_MJ stays None.  ICBM-RV: Bunn 1984 (MIT STIS) pins the regime — V≳7 km/s,
+# γ≈20–22°, β≈1800–2000 lb/ft² (Mk4/Mk12A), >50 g, "thousands of °C", small
+# ablating nosetip — but gives no flux number.  Our own Sutton-Graves model at
+# those parameters (Allen-Eggers peak-heating density, V_pk≈5.9 km/s) gives
+# ≈45–100 MW/m² for a 2–10 cm nosetip; we anchor at 50 MW/m² (~5–8 cm).  It is a
+# correlation estimate from primary trajectory data, not a CFD/flight value, so
+# it stays 'rough'.  Q_MJ omitted (steep entry → very short, ~few-second pulse).
 _BENCHMARKS = {
-    "ICBM RV":  dict(q_MW=30.0, Q_MJ=None,  conf="rough"),
+    "ICBM RV":  dict(q_MW=50.0, Q_MJ=None,  conf="rough"),
     "Stardust": dict(q_MW=9.4,  Q_MJ=276.0, conf="solid"),
     "Apollo":   dict(q_MW=7.9,  Q_MJ=468.0, conf="solid"),
     "MSL":      dict(q_MW=2.0,  Q_MJ=55.0,  conf="solid"),

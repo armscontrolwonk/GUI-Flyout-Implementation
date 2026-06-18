@@ -161,10 +161,17 @@ These four were read directly and their key results confirmed:
   ~1650 °C).  **Shuttle benchmark now pinned to 0.6 MW/m² (RCC stagnation),
   conf='solid'.** https://ntrs.nasa.gov/citations/19820036242
 - STS-3 windward analysis, NTRS 19820020699. https://ntrs.nasa.gov/citations/19820020699
-- ICBM-RV peak flux: canonical source is Bunn, *Technology of Ballistic Missile
-  Reentry Vehicles* (MIT STIS, 1984) — not machine-readable via current egress;
-  benchmark kept at 30 MW/m² order-of-magnitude, conf='rough', pending a
-  pinnable primary. https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
+- ⭐ Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
+  1984) — read from the primary.  Pins the RV **regime, not a flux**: reentry
+  V≳7 km/s at γ≈20–22°, drag deceleration >50 g, surface "thousands of °C",
+  nosetip the most severely heated point (small, ablating), β≈1800 lb/ft² (Mk4)
+  / ≈2000 lb/ft² (Mk12A), Soviet RVs 1500–1800 lb/ft².  No peak-flux number is
+  given.  We therefore derive the benchmark with our own Sutton-Graves model at
+  these parameters (Allen-Eggers ballistic peak-heating density ρ≈0.16 kg/m³,
+  V_pk≈5.9 km/s): q_stag ≈ 45–100 MW/m² for a 2–10 cm nosetip, so the old
+  30 MW/m² placeholder was *low*.  **ICBM-RV anchored at 50 MW/m² (~5–8 cm
+  nosetip), conf='rough'** — a correlation estimate from primary trajectory
+  data, not CFD/flight.  https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
 
 ## 6. Policy / survivability framing (independent corroboration)
 
@@ -193,8 +200,10 @@ NACA 1381, Sims SP-3004. Still outstanding:
 1. **Sutton-Graves TR R-376** — K constant & validity range (NTRS 19720003329).
 2. ~~STS-1/STS-3 Shuttle peak heat flux~~ — RESOLVED: pinned to 0.6 MW/m²
    (RCC nose-cap/leading-edge stagnation, STS-1 benchmark NTRS 19820036242),
-   conf='solid'.  Still outstanding: a pinnable ICBM-RV peak-flux primary
-   (Bunn 1984 not machine-readable) and a sourced Shuttle integrated load.
+   conf='solid'.  ~~ICBM-RV primary~~ — Bunn 1984 read; it pins the regime
+   (V≳7 km/s, γ≈20–22°, β≈2000 lb/ft², >50 g) but no flux, so ICBM-RV is a
+   Sutton-Graves estimate at those params (≈50 MW/m²), conf='rough'.  Still
+   outstanding: a sourced Shuttle integrated load and a measured/CFD RV flux.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).
 5. **NTRS 19940030739** — RCC oxidation/coating reuse limits.
