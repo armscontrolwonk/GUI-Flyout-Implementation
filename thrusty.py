@@ -4089,7 +4089,25 @@ class MissileFlyoutApp(tk.Tk):
         right = ttk.Frame(paned)
         paned.add(left_outer, weight=0)
         paned.add(right, weight=1)
-        self.after_idle(lambda: paned.sashpos(0, LEFT_W))
+
+        # Set the initial sash position only once the paned window actually has
+        # a width.  On macOS (and whenever the toplevel isn't mapped yet) the
+        # first after_idle fires while winfo_width() is still ~1 px, and Tk
+        # *clamps* sashpos(0, LEFT_W) down to that width — collapsing the left
+        # control panel to zero.  Retry until the pane is realized, then set it.
+        def _init_sash(attempt=0):
+            if not paned.winfo_exists():
+                return
+            w = paned.winfo_width()
+            if w <= 1 and attempt < 50:          # not realized yet — wait
+                self.after(30, lambda: _init_sash(attempt + 1))
+                return
+            # On a normal window w >> LEFT_W so the sash sits at LEFT_W; on a
+            # very narrow window degrade gracefully (leave ~80 px for the right
+            # pane) instead of letting Tk clamp the left pane to zero.
+            target = min(LEFT_W, w - 80) if w > 1 else LEFT_W
+            paned.sashpos(0, max(120, target))
+        self.after_idle(_init_sash)
 
         # Pinned results strip — always visible above the notebook tabs
         self._results_strip_var = tk.StringVar(value="")
