@@ -1,0 +1,21 @@
+{
+  "name": "HTV-2",
+  "mass_kg": 1000,
+  "beta_kg_m2": 13000,
+  "shape": "cone",
+  "diameter_m": 2.0,
+  "length_m": 5.0,
+  "nose_radius_m": 0.01,
+  "glider_enabled": true,
+  "glider_LD": 2.6,
+  "glider_guidance": "dynamic_equilibrium_glide",
+  "glider_aero_model": "polar",
+  "glider_damping_zeta": 0.7,
+  "glider_beta_entry_kg_m2": 17.0,
+  "glider_pullup_g_max": 10,
+  "glider_terminal_dive": false,
+  "glider_terminal_alt_km": 30,
+  "glider_skip_count": 1,
+  "source": "Acton, 'Hypersonic Boost-Glide Weapons', Science & Global Security 23 (2015): 191-219, Table 3 (A-flight fit).",
+  "notes": "DARPA HTV-2 waverider. Glide ballistic coefficient beta_L = 13,000 kg/m^2 (Acton: 'very similar to modern ICBM RVs' - this is NOT a low-beta vehicle). L/D = 2.6 (Acton Table 3). mass = 1000 kg (Wright, companion article). Body modeled by Acton as an isosceles triangle ~5 m x 2 m (length/diameter here). glider_beta_entry_kg_m2 = 17 is Acton's Eq.(8) entry beta_S for the high-AoA broadside direct-reentry phase; it is only used by the equilibrium_glide_acton mode and Acton explicitly flags his fitted beta_S (7-10) as physically unreliable (his Newtonian flat-plate estimate, Eq.22, gives >100). Default guidance here is dynamic_equilibrium_glide (gentle capture into force-balance equilibrium, no hard skip/pull-up) to model the hypothesis that HTV-2 entered gently; switch to equilibrium_glide_acton to exercise the explicit three-phase pull-up (the AHW-style entry)."
+}
