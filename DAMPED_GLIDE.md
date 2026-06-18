@@ -254,6 +254,33 @@ result as `glide_regime`): {`skip`, `capture`, `plunge`}.
   under‑counts it for shallow entries. The exact figure is ζ‑ and
   geometry‑dependent (deeper entries and lower ζ → larger overshoot loss); ζ=0.4
   on this insertion happens to sit mid‑band.
+- **Relationship between the two ζ knobs (damped_glide ↔ dynamic_equilibrium_glide).**
+  The two control laws are *identical* except for the nominal lift they damp
+  toward; the feedback term is the same:
+
+  ```
+  damped_glide              : L = L_skip(α*)   − k_h·(ḣ − V·γ*)
+  dynamic_equilibrium_glide : L = m·g_eff/cosσ − k_h·(ḣ − V·γ*)
+                                  └─ anchor ──┘   └── same feedback ──┘
+  ```
+
+  Both use the **same gain** `k_h = 2ζ·m·√(g_eff/H_ρ)` and the **same target**
+  descent rate `V·γ*`. The only difference is the nominal anchor: `damped_glide`
+  anchors on the skip / max‑L/D lift (which is what makes ζ=0 reduce exactly to
+  `skip_glide`), while `dynamic_equilibrium_glide` anchors on the exact
+  force‑balance equilibrium lift `m·g_eff/cosσ`. At the settled glide
+  `damped_glide`'s lift is `m·g_eff/cosσ + (L_skip − L_eq)/k_h`, so its
+  off‑equilibrium error decays only as **1/ζ**. Consequently **`dynamic_equilibrium_glide`
+  is the ζ→∞ limit of `damped_glide`**, but anchored directly so it reaches that
+  limit at any gain instead of asymptotically. In practice the convergence is
+  slow: on the shallow AUR insertion (`constant_LD`, dyn‑eq ≈ 4878 km) the damped
+  range plateaus near 5003 km at ζ=32 (+125), 4971 at ζ=100 (+93), 4922 at ζ=300
+  (+44) — closing roughly as 1/ζ, so bit‑level convergence needs ζ in the
+  thousands. (`polar` converges faster and crosses slightly below dyn‑eq near
+  ζ≈16 because of the additional C_L↔L/D coupling.) This is the intended
+  behavior — not free lift and not a bug — which is exactly why the two are
+  offered as separate modes: dyn‑eq hands you the equilibrium endpoint cleanly,
+  rather than requiring an impractically large damping ratio to approach it.
 
 ## Sources
 
