@@ -2089,6 +2089,17 @@ def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
     the front end is the full body width rather than a narrower notional RV.
     The RV nose is the front end whether or not it later separates —
     separation happens at/after burnout, so it does not affect boost geometry.
+
+    Deliberately omitted: slim-forebody "shielding" (a slender RV/payload on a
+    wider body creating a shock the base rides in, the way our aerospike model
+    reduces a blunt body's wave drag).  It is real physics, but for a launch
+    where the RV is shrouded through the dense atmosphere and only exposed at
+    high altitude (low q), the effect was measured at ~0.01% of burnout speed
+    for the Minotaur-IV + HTV-2 case — two-to-three orders of magnitude below
+    ordinary propulsion (~3%) and glide-model (~3%) error.  Treating the
+    widest diameter as an unshielded nose is therefore close enough; the
+    shielding term would only matter for an unshrouded slim body exposed in
+    dense air, a different vehicle class.
     """
     if (top_params is not None
             and top_params.shroud_diameter_m > 0
