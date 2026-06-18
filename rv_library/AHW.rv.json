@@ -1,0 +1,21 @@
+{
+  "name": "AHW",
+  "mass_kg": 500,
+  "beta_kg_m2": 15000,
+  "shape": "cone",
+  "diameter_m": 0.6,
+  "length_m": 2.0,
+  "nose_radius_m": 0.05,
+  "glider_enabled": true,
+  "glider_LD": 2.0,
+  "glider_guidance": "equilibrium_glide_acton",
+  "glider_aero_model": "polar",
+  "glider_damping_zeta": 0.7,
+  "glider_beta_entry_kg_m2": 20.0,
+  "glider_pullup_g_max": 10,
+  "glider_terminal_dive": true,
+  "glider_terminal_alt_km": 30,
+  "glider_skip_count": 1,
+  "source": "Advanced Hypersonic Weapon (Sandia SWERVE biconic glide body with improved TPS; productionized as the Common Hypersonic Glide Body). Aero per the C-HGB library entry; entry model per Acton, Science & Global Security 23 (2015): 191-219.",
+  "notes": "Conical/biconic glide body of the SWERVE -> AHW -> C-HGB lineage. Blunter and lower-L/D (2.0) than the HTV-2 waverider (2.6); the production C-HGB shares these numbers (beta 15,000, L/D 2.0). Companion to the HTV-2 RV for comparing entry styles: this one defaults to equilibrium_glide_acton, i.e. Acton's explicit three-phase entry (high-AoA broadside direct-reentry at beta_S -> pull-up -> equilibrium glide), whereas HTV-2 defaults to the gentle dynamic_equilibrium_glide capture. glider_beta_entry_kg_m2 = 20 is an Acton-style entry beta_S (no published AHW fit exists; Acton only fit HTV-2, where Eq.8 gave beta_S ~ 17) and only affects the equilibrium_glide_acton path. NOTE Acton's own reading: after the pull-up the HTV-2 and AHW trajectories are 'probably quite similar'; the per-RV difference here is the entry/capture maneuver, not the glide."
+}
