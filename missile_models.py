@@ -556,9 +556,50 @@ _WAVE_LVH    = [0.000, 0.000, 0.010, 0.030, 0.070, 0.082, 0.085, 0.084, 0.077, 0
 _WAVE_PARA   = [0.000, 0.000, 0.010, 0.040, 0.090, 0.100, 0.100, 0.094, 0.087, 0.077, 0.069, 0.062]
 _WAVE_LD_REF = 3.0
 
-# Base pressure coefficient (Cpb < 0) vs Mach, power-off — Chin Fig. 3-15.
-_BASE_MACH = [0.0,    0.8,   1.0,   1.2,   1.5,   2.0,   2.5,   3.0,   4.0,   5.0]
-_BASE_CPB  = [0.000, -0.13, -0.20, -0.18, -0.14, -0.10, -0.08, -0.06, -0.05, -0.04]
+# Base-drag coefficient (referenced to base area) vs Mach, power-off.
+# Two selectable empirical sources (see MODEL_OPTIONS below):
+#   'datcom' — Missile DATCOM 2014, Fig 4.2.3.1-60 (verbatim DATA D4360) for the
+#              supersonic table; the subsonic (M<1) portion is retained from
+#              Chin because DATCOM's subsonic body base drag is a shape-dependent
+#              correlation, not a Mach-only table.
+#   'chin'   — Chin (1961) Fig 3-15 base-pressure coefficient (CD_base = -Cpb).
+_BASE_MACH_CHIN = [0.0,   0.8,  1.0,  1.2,  1.5,  2.0,  2.5,  3.0,  4.0,  5.0]
+_BASE_CDB_CHIN  = [0.000, 0.13, 0.20, 0.18, 0.14, 0.10, 0.08, 0.06, 0.05, 0.04]
+_BASE_MACH_DATCOM = [0.0,  0.8,  0.9,   1.0,   1.125, 1.25, 1.5,  2.0,  2.5,
+                     3.0,  3.5,  4.0,   4.5,   5.0,   5.5,  6.0]
+_BASE_CDB_DATCOM  = [0.000, 0.13, 0.15, 0.178, 0.215, 0.20, 0.178, 0.144, 0.118,
+                     0.097, 0.080, 0.068, 0.057, 0.049, 0.042, 0.037]
+
+
+# ── Swappable reference-data / model sources ────────────────────────────────
+# Lets the user pick the empirical source behind a model term, surfaced in the
+# GUI under Analysis ▸ Reference Data.  Future toggles (atmosphere, etc.) are
+# added as new entries with the same shape; the menu builds itself from this.
+MODEL_OPTIONS = {
+    "base_drag": {
+        "label":   "Base drag",
+        "choices": ("datcom", "chin"),
+        "labels":  {"datcom": "DATCOM 2014 (Fig 4.2.3.1-60)",
+                    "chin":    "Chin 1961 (Fig 3-15)"},
+        "default": "datcom",
+    },
+}
+_MODEL_SELECTION = {k: v["default"] for k, v in MODEL_OPTIONS.items()}
+
+
+def get_model_option(key: str) -> str:
+    """Currently selected source for model option *key*."""
+    return _MODEL_SELECTION.get(key, MODEL_OPTIONS[key]["default"])
+
+
+def set_model_option(key: str, value: str) -> None:
+    """Select source *value* for model option *key* (validated)."""
+    if key not in MODEL_OPTIONS:
+        raise KeyError(f"unknown model option '{key}'")
+    if value not in MODEL_OPTIONS[key]["choices"]:
+        raise ValueError(f"'{value}' not a choice for '{key}' "
+                         f"({MODEL_OPTIONS[key]['choices']})")
+    _MODEL_SELECTION[key] = value
 
 
 # ---------------------------------------------------------------------------
@@ -774,9 +815,17 @@ def _cd_friction(re_l: float, mach: float, s_wet_ratio: float) -> float:
 
 
 def _cd_base(mach: float, base_area_ratio: float = 1.0) -> float:
-    """Base pressure drag — Chin Fig. 3-15, power-off."""
-    cpb = _lin_interp(mach, _BASE_MACH, _BASE_CPB)
-    return -cpb * base_area_ratio   # Cpb < 0 → Cd_base > 0
+    """Base drag coefficient (ref. base area), power-off.
+
+    Source selectable via MODEL_OPTIONS['base_drag']:
+      'datcom' (default) — Missile DATCOM 2014 Fig 4.2.3.1-60
+      'chin'             — Chin (1961) Fig 3-15
+    """
+    if get_model_option("base_drag") == "chin":
+        cdb = _lin_interp(mach, _BASE_MACH_CHIN, _BASE_CDB_CHIN)
+    else:
+        cdb = _lin_interp(mach, _BASE_MACH_DATCOM, _BASE_CDB_DATCOM)
+    return cdb * base_area_ratio
 
 
 def _aerospike_effective_LD(spike_LD: float, spike_dD: float) -> float:

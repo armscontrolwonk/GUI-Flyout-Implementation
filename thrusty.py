@@ -28,6 +28,7 @@ from matplotlib.figure import Figure
 
 import matplotlib.ticker
 
+import missile_models as mm
 from missile_models import (MISSILE_DB, get_missile,
                            missile_to_dict, missile_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
@@ -3984,6 +3985,23 @@ class MissileFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
+
+        # Reference Data — swap the empirical source behind a model term.
+        # Built automatically from missile_models.MODEL_OPTIONS so new toggles
+        # (atmosphere, etc.) appear here without touching this code.
+        ref_menu = tk.Menu(analysis_menu, tearoff=0)
+        self._model_option_vars = {}
+        for _key, _spec in mm.MODEL_OPTIONS.items():
+            _sub = tk.Menu(ref_menu, tearoff=0)
+            _var = tk.StringVar(value=mm.get_model_option(_key))
+            self._model_option_vars[_key] = _var
+            for _choice in _spec["choices"]:
+                _sub.add_radiobutton(
+                    label=_spec["labels"][_choice], value=_choice, variable=_var,
+                    command=lambda k=_key, v=_var: self._set_model_option(k, v.get()))
+            ref_menu.add_cascade(label=_spec["label"], menu=_sub)
+        analysis_menu.add_separator()
+        analysis_menu.add_cascade(label="Reference Data", menu=ref_menu)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         # Plots menu mirrors the matplotlib navigation toolbar so the icon
@@ -7027,6 +7045,14 @@ class MissileFlyoutApp(tk.Tk):
 
     def _open_mass_estimator(self):
         MassEstimatorDialog(self)
+
+    def _set_model_option(self, key, value):
+        """Switch the empirical source behind a model term (Analysis ▸ Reference
+        Data) and prompt a re-run, since results depend on it."""
+        mm.set_model_option(key, value)
+        label = mm.MODEL_OPTIONS[key]["labels"].get(value, value)
+        self._status_var.set(
+            f"{mm.MODEL_OPTIONS[key]['label']} source → {label}. Re-run to apply.")
 
     def _open_damping_estimator(self):
         DampingEstimatorDialog(self)
