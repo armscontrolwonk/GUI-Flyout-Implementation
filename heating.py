@@ -49,16 +49,30 @@ TPS_MATERIALS = {
     "carbon_ablator": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Ablative carbon-carbon"),
 }
 
-# Representative peak stagnation flux (MW/m²) — HEATING_TPS_REFERENCES.md §3.
-# (Shuttle peak flux is disputed/rough; flagged in the references.)
-_BENCHMARKS = (("Shuttle", 0.4), ("MSL", 2.0), ("Apollo", 7.9), ("Stardust", 9.4))
+# Reentry heating benchmarks — HEATING_TPS_REFERENCES.md §3.  Per entry:
+#   q_MW : peak stagnation flux (MW/m²);  Q_MJ : integrated load (MJ/m², per
+#   unit area, = ∫q̇ dt);  conf : 'solid' (CFD reconstruction) or 'rough'.
+# Apollo (793 W/cm², 46,792 J/cm²), Stardust (942 W/cm², 27.6 kJ/cm²) and MSL
+# (197 W/cm² design, 5,477 J/cm²) are CFD-solid.  The Shuttle peak flux is
+# disputed (0.14 illustrative … ~1; STS-1/STS-3 not yet pinned) and ICBM-RV has
+# no clean public source — both flagged 'rough'.
+_BENCHMARKS = {
+    "ICBM RV":  dict(q_MW=30.0, Q_MJ=None,  conf="rough"),
+    "Stardust": dict(q_MW=9.4,  Q_MJ=276.0, conf="solid"),
+    "Apollo":   dict(q_MW=7.9,  Q_MJ=468.0, conf="solid"),
+    "MSL":      dict(q_MW=2.0,  Q_MJ=55.0,  conf="solid"),
+    "Shuttle":  dict(q_MW=0.4,  Q_MJ=None,  conf="rough"),
+}
 
 
-def _benchmark_label(q_peak_MW):
-    if q_peak_MW <= 0:
+def _nearest_benchmark(value, key):
+    """Nearest benchmark to *value* by log-distance on field *key* ('q_MW' or
+    'Q_MJ'), as a ratio string; '(rough)' appended for flagged anchors."""
+    cands = [(n, b[key], b["conf"]) for n, b in _BENCHMARKS.items() if b.get(key)]
+    if value <= 0 or not cands:
         return "n/a"
-    name, val = min(_BENCHMARKS, key=lambda b: abs(np.log(q_peak_MW / b[1])))
-    return f"{q_peak_MW / val:.1f}× {name}"
+    n, v, conf = min(cands, key=lambda c: abs(np.log(value / c[1])))
+    return f"{value / v:.1f}× {n}" + (" (rough)" if conf == "rough" else "")
 
 
 def _stag_flux(rho, V, radius_m):
@@ -90,7 +104,8 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         "q_peak_MW_m2": q_peak / 1e6,
         "T_eq_peak_K": T_peak,
         "integrated_load_MJ_m2": Q_area / 1e6,
-        "benchmark": _benchmark_label(q_peak / 1e6),
+        "benchmark": _nearest_benchmark(q_peak / 1e6, "q_MW"),
+        "benchmark_load": _nearest_benchmark(Q_area / 1e6, "Q_MJ"),
         "material": material,
         "criteria": {},
         "compromise": None,
