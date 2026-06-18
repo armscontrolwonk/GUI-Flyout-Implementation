@@ -152,10 +152,19 @@ These four were read directly and their key results confirmed:
   (197 W/cm² design, 5,477 J/cm²). https://ntrs.nasa.gov/citations/20070016625
 - MSL heatshield aerothermo design, NTRS 20090024218 (entry-angle flux trade).
   https://ntrs.nasa.gov/citations/20090024218
-- ⭐ STS-1 entry heating, NTRS 19820015618 — **primary Shuttle windward-flux
-  reconstruction (re-verify the disputed peak value here).**
-  https://ntrs.nasa.gov/citations/19820015618
+- ⭐ STS-1 entry heating & TPS response, NTRS 19820015618 — primary Shuttle
+  windward-flux reconstruction. https://ntrs.nasa.gov/citations/19820015618
+- ⭐ *Benchmark aerodynamic heat-transfer data from the first flight of the
+  Space Shuttle Orbiter*, NTRS 19820036242 — flight-reconstructed convective
+  rates: windward mid-body tiles ~5 Btu/ft²·s (≈0.06 MW/m²); RCC nose-cap /
+  wing-leading-edge stagnation peak ~50 Btu/ft²·s (≈0.6 MW/m², surface
+  ~1650 °C).  **Shuttle benchmark now pinned to 0.6 MW/m² (RCC stagnation),
+  conf='solid'.** https://ntrs.nasa.gov/citations/19820036242
 - STS-3 windward analysis, NTRS 19820020699. https://ntrs.nasa.gov/citations/19820020699
+- ICBM-RV peak flux: canonical source is Bunn, *Technology of Ballistic Missile
+  Reentry Vehicles* (MIT STIS, 1984) — not machine-readable via current egress;
+  benchmark kept at 30 MW/m² order-of-magnitude, conf='rough', pending a
+  pinnable primary. https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
 
 ## 6. Policy / survivability framing (independent corroboration)
 
@@ -182,8 +191,10 @@ Done (read from primary): Fay-Riddell 1958, Tauber-Sutton 1991, Allen-Eggers
 NACA 1381, Sims SP-3004. Still outstanding:
 
 1. **Sutton-Graves TR R-376** — K constant & validity range (NTRS 19720003329).
-2. **STS-1/STS-3 reconstructions** — the disputed Shuttle peak heat flux
-   (NTRS 19820015618 / 19820020699).
+2. ~~STS-1/STS-3 Shuttle peak heat flux~~ — RESOLVED: pinned to 0.6 MW/m²
+   (RCC nose-cap/leading-edge stagnation, STS-1 benchmark NTRS 19820036242),
+   conf='solid'.  Still outstanding: a pinnable ICBM-RV peak-flux primary
+   (Bunn 1984 not machine-readable) and a sourced Shuttle integrated load.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).
 5. **NTRS 19940030739** — RCC oxidation/coating reuse limits.
