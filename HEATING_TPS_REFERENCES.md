@@ -11,7 +11,24 @@ research pass.
 > canonical primary sources — verify exact figures/wording against them before
 > formal citation. ⭐ marks the highest-value primaries to verify first.
 
+## Obtained & verified from primary PDFs (Drive "Heating" folder)
+
+These four were read directly and their key results confirmed:
+
+- **Fay & Riddell (1958)** — equilibrium stagnation-point heat transfer, their Eq. 63:
+  `q̇ = 0.76·Pr^-0.6·(ρ_s μ_s)^0.4 (ρ_w μ_w)^0.1·[1+(Le^0.52−1)(h_D/h_s)]·(h_s−h_w)·√(du_e/dx)_s`,
+  with modified-Newtonian `(du_e/dx)_s ∝ 1/R_N` ⇒ the q̇∝1/√R law. Coefficient
+  **0.76 sphere / 0.53 swept cylinder (leading edge)**; Lewis exponent 0.52
+  equilibrium, 0.63 frozen; Pr=0.71. (Sutton–Graves is its engineering reduction.)
+- **Tauber & Sutton (1991)** — radiative heating tabulated only for V=9–16 km/s
+  (air); **negligible below ~9 km/s** ⇒ ignored for boost-glide (~6 km/s).
+- **Allen & Eggers, NACA Report 1381** (= NTRS 19930091020) — blunt-body
+  principle; convective heating minimized by high-drag shapes (heat load ∝ 1/drag).
+- **ADA396928.pdf = Sims SP-3004** — the same DTIC scan already used to validate
+  the cone wave drag (`validate_cone_wave_drag.py`); duplicate, not re-processed.
+
 ---
+
 
 ## 1. Heating correlations & entry-heating methods
 
@@ -146,6 +163,9 @@ research pass.
 ---
 
 ## Verify-first shortlist (load-bearing numbers)
+
+Done (read from primary): Fay-Riddell 1958, Tauber-Sutton 1991, Allen-Eggers
+NACA 1381, Sims SP-3004. Still outstanding:
 
 1. **Sutton-Graves TR R-376** — K constant & validity range (NTRS 19720003329).
 2. **STS-1/STS-3 reconstructions** — the disputed Shuttle peak heat flux
