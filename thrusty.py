@@ -5191,16 +5191,17 @@ class MissileFlyoutApp(tk.Tk):
                     self._main_zeta_hint.configure(
                         text="feedback gain on altitude-rate error; "
                              "~0.4 captures, ≳1 saturates (no extra range). "
-                             "This mode is the ζ→∞ limit of damped glide, "
-                             "anchored to equilibrium so it gets there at any gain.")
+                             "A distinct equilibrium-trim capture maneuver — "
+                             "~2–3% shorter than damped glide, not just damped "
+                             "at high ζ.")
                     self._main_zeta_est_btn.pack_forget()
                 else:
                     self._main_zeta_label.configure(text="Damping ratio ζ:")
                     self._main_zeta_hint.configure(
-                        text="0 = undamped skip-glide; "
-                             "~0.7 = a few decaying skips. Same feedback as "
-                             "dynamic equilibrium glide; converges to it as ζ→∞ "
-                             "(slowly, ~1/ζ).")
+                        text="0 = undamped skip-glide; ~0.7 = a few decaying "
+                             "skips. Damps the phugoid toward the glide; range "
+                             "stays ~2–3% above dynamic equilibrium glide at any "
+                             "usable ζ (different capture maneuver).")
                     # idempotent: re-packing keeps it last in the row
                     self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(2, 0))
             else:

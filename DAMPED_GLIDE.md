@@ -268,19 +268,31 @@ result as `glide_regime`): {`skip`, `capture`, `plunge`}.
   descent rate `V·γ*`. The only difference is the nominal anchor: `damped_glide`
   anchors on the skip / max‑L/D lift (which is what makes ζ=0 reduce exactly to
   `skip_glide`), while `dynamic_equilibrium_glide` anchors on the exact
-  force‑balance equilibrium lift `m·g_eff/cosσ`. At the settled glide
-  `damped_glide`'s lift is `m·g_eff/cosσ + (L_skip − L_eq)/k_h`, so its
-  off‑equilibrium error decays only as **1/ζ**. Consequently **`dynamic_equilibrium_glide`
-  is the ζ→∞ limit of `damped_glide`**, but anchored directly so it reaches that
-  limit at any gain instead of asymptotically. In practice the convergence is
-  slow: on the shallow AUR insertion (`constant_LD`, dyn‑eq ≈ 4878 km) the damped
-  range plateaus near 5003 km at ζ=32 (+125), 4971 at ζ=100 (+93), 4922 at ζ=300
-  (+44) — closing roughly as 1/ζ, so bit‑level convergence needs ζ in the
-  thousands. (`polar` converges faster and crosses slightly below dyn‑eq near
-  ζ≈16 because of the additional C_L↔L/D coupling.) This is the intended
-  behavior — not free lift and not a bug — which is exactly why the two are
-  offered as separate modes: dyn‑eq hands you the equilibrium endpoint cleanly,
-  rather than requiring an impractically large damping ratio to approach it.
+  force‑balance equilibrium lift `m·g_eff/cosσ`.
+
+  Two distinct things converge at different rates, and it matters which you mean:
+
+  1. **Steady‑glide *tracking* error.** At the settled glide `damped_glide`'s lift
+     is `m·g_eff/cosσ + (L_skip − L_eq)/k_h`, so the off‑equilibrium error in
+     descent rate / lift decays as **1/ζ** — doubling ζ halves it. In this
+     (steady‑state, force‑balance) sense `dynamic_equilibrium_glide` is the exact
+     ζ→∞ limit of `damped_glide`, anchored directly so it sits there at any gain.
+
+  2. **Range.** The *range* difference does **not** follow 1/ζ and does **not**
+     close at usable ζ. It is dominated by a **ζ‑independent capture‑transient
+     offset**: `damped_glide`'s max‑L/D skip nominal pulls out of the first dip
+     higher and banks a roughly fixed capture‑energy advantage. On the shallow AUR
+     insertion (`constant_LD`, dyn‑eq ≈ 4878 km) the damped range is **flat at
+     ~5010 km (gap ~131 km, ≈2.7%) for ζ = 1…16**, and only begins eroding above
+     ζ≈32 (5003 @ ζ=32, 4988 @ 64, 4963 @ 128, 4928 @ 256 — a log‑log slope of
+     about −0.3, far shallower than 1/ζ). So bit‑level range convergence would need
+     ζ in the hundreds–thousands.
+
+  The practical consequence: **at any usable damping ratio `dynamic_equilibrium_glide`
+  is a genuinely distinct, ~2–3% shorter capture maneuver — not "damped_glide at
+  high ζ."** The two are correctly separate modes. (For `polar` the gap closes
+  somewhat faster and crosses slightly below dyn‑eq near ζ≈16 via the additional
+  C_L↔L/D coupling.) This is intended behavior — not free lift and not a bug.
 
 ## Sources
 
