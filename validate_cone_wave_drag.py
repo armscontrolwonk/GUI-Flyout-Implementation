@@ -92,8 +92,40 @@ def cone_wave_cd_exact(M1, sigma_deg):
     return _cone_from_shock(M1, beta)[1]
 
 
+def _naca1135_check():
+    """Verify the solver's oblique-shock relations against the canonical
+    NACA Report 1135 forms (Eq 138 theta-beta-M deflection, Eq 132 downstream
+    Mach).  These are the building blocks feeding the Taylor-Maccoll ODE; the
+    NACA-1135 equations are also implemented in PDAS VUCALC (naca1135.pas).
+    NACA 1135 itself has no conical-flow tables, so it anchors the inputs, not
+    the cone result."""
+    g = GAMMA
+    def eq138_delta(M1, th):
+        cot = np.tan(th) * ((g + 1) * M1**2 /
+                            (2 * (M1**2 * np.sin(th)**2 - 1)) - 1)
+        return np.arctan(1.0 / cot)
+    def eq132_M2(M1, th):
+        s = np.sin(th)**2
+        num = (g + 1)**2 * M1**4 * s - 4 * (M1**2 * s - 1) * (g * M1**2 * s + 1)
+        den = (2 * g * M1**2 * s - (g - 1)) * ((g - 1) * M1**2 * s + 2)
+        return np.sqrt(num / den)
+    worst_d = worst_m = 0.0
+    for M1 in (2.0, 3.0, 5.0):
+        for beta in np.radians((25.0, 35.0, 45.0)):
+            delta = _deflection(M1, beta)
+            Vr, Vt = _post_shock_vr_vt(M1, beta, delta)
+            Vp = np.hypot(Vr, Vt)
+            M2 = np.sqrt(Vp**2 / ((g - 1) / 2 * (1 - Vp**2)))
+            worst_d = max(worst_d, abs(delta - eq138_delta(M1, beta)))
+            worst_m = max(worst_m, abs(M2 - eq132_M2(M1, beta)))
+    print(f"NACA-1135 building-block check: max |delta-Eq138|={worst_d:.1e} rad, "
+          f"max |M2-Eq132|={worst_m:.1e}  "
+          f"({'OK' if worst_d < 1e-9 and worst_m < 1e-9 else 'DIFFER'})")
+
+
 def main():
-    print("Cone wave drag CD (ref base area): Taylor-Maccoll exact vs _cd_wave_cone")
+    _naca1135_check()
+    print("\nCone wave drag CD (ref base area): Taylor-Maccoll exact vs _cd_wave_cone")
     worst = 0.0
     for ld in (2.0, 3.0, 5.0):
         sigma = np.degrees(np.arctan(1 / (2 * ld)))
