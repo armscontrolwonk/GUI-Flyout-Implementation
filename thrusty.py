@@ -4425,20 +4425,27 @@ class MissileFlyoutApp(tk.Tk):
         ttk.Label(_skf, text="(1 = first upward crossing)",
                   foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
 
-        # Damping ratio ζ — only visible for "Damped phugoid glide"
+        # ζ knob — shared by damped_glide (phugoid DAMPING RATIO) and
+        # dynamic_equilibrium_glide (a TRACKING GAIN); the label, hint and the
+        # damping-estimator button are retargeted by _on_glider_guidance_changed
+        # since the knob means different things in the two modes.
         _zf = ttk.Frame(_gmf)
         _zf.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=(8, 0), pady=1)
         self._main_zeta_frame = _zf
         _zr = ttk.Frame(_zf)
         _zr.pack(fill=tk.X, anchor=tk.W)
-        ttk.Label(_zr, text="Damping ratio ζ:").pack(side=tk.LEFT)
+        self._main_zeta_label = ttk.Label(_zr, text="Damping ratio ζ:")
+        self._main_zeta_label.pack(side=tk.LEFT)
         self._main_zeta_var = tk.StringVar(value="0.7")
         ttk.Entry(_zr, textvariable=self._main_zeta_var, width=5).pack(
             side=tk.LEFT, padx=4)
-        ttk.Button(_zr, text="Estimate…", width=10,
-                   command=self._open_damping_estimator).pack(side=tk.LEFT, padx=(2, 0))
-        self._mk_hint(_zf, "0 = undamped skip-glide; ~0.7 = a few decaying skips").pack(
-            fill=tk.X, anchor=tk.W, pady=(1, 0))
+        self._main_zeta_est_btn = ttk.Button(
+            _zr, text="Estimate…", width=10,
+            command=self._open_damping_estimator)
+        self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(2, 0))
+        self._main_zeta_hint = self._mk_hint(
+            _zf, "0 = undamped skip-glide; ~0.7 = a few decaying skips")
+        self._main_zeta_hint.pack(fill=tk.X, anchor=tk.W, pady=(1, 0))
 
         # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
@@ -5170,10 +5177,28 @@ class MissileFlyoutApp(tk.Tk):
             else:
                 self._main_skip_frame.grid_remove()
         # ζ row: damped_glide (damping ratio) and dynamic_equilibrium_glide
-        # (tracking gain) both use it.
+        # (tracking gain) both use it — but the knob means different things, so
+        # retarget the label, hint and estimator button by mode.
         if hasattr(self, '_main_zeta_frame'):
             if is_damped or is_dynamic:
                 self._main_zeta_frame.grid()
+                if is_dynamic:
+                    # Tracking gain on the altitude-rate error — NOT a phugoid
+                    # damping ratio (this mode captures smoothly, it does not
+                    # oscillate), so the phugoid-damping estimator does not
+                    # apply; hide it.
+                    self._main_zeta_label.configure(text="Tracking gain ζ:")
+                    self._main_zeta_hint.configure(
+                        text="feedback gain on altitude-rate error; "
+                             "~0.4 captures, ≳1 saturates (no extra range)")
+                    self._main_zeta_est_btn.pack_forget()
+                else:
+                    self._main_zeta_label.configure(text="Damping ratio ζ:")
+                    self._main_zeta_hint.configure(
+                        text="0 = undamped skip-glide; "
+                             "~0.7 = a few decaying skips")
+                    # idempotent: re-packing keeps it last in the row
+                    self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(2, 0))
             else:
                 self._main_zeta_frame.grid_remove()
 
