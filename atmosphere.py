@@ -109,6 +109,51 @@ def _atmosphere_std1976(altitude_m):
 
 
 # ---------------------------------------------------------------------------
+# MIL-STD-210A non-standard atmospheres (hot / cold / polar / tropical)
+# ---------------------------------------------------------------------------
+# Temperature vs geometric altitude (0–100 kft), ported from PDAS ATMOS
+# hotcold.f90 (MODULE MILSTD210A, Ralph Carmichael / public domain) and
+# converted to SI (kft→m, °R→K).  Per MIL-STD-210A the PRESSURE equals the
+# US Std 1976 value and density follows from the perfect-gas law (ρ = P/RT).
+# The tables stop at 100 kft (30.48 km); above that the temperature offset
+# from standard is tapered to zero by 32 km so the profile reverts smoothly
+# to US Std 1976 aloft (weather variations do not persist into the upper
+# atmosphere, and density there is negligible for trajectory work anyway).
+_MIL_ALT_M = [0.0, 304.8, 609.6, 914.4, 1219.2, 1524.0, 1828.8, 2133.6, 2438.4, 2743.2, 3048.0, 3352.8, 3657.6, 3962.4, 4267.2, 4572.0, 4876.8, 5181.6, 5486.4, 5791.2, 6096.0, 6400.8, 6705.6, 7010.4, 7315.2, 7620.0, 7924.8, 8229.6, 8534.4, 8839.2, 9144.0, 9448.8, 9753.6, 10058.4, 10363.2, 10668.0, 10972.8, 11277.6, 11582.4, 11887.2, 12192.0, 12496.8, 12801.6, 13106.4, 13411.2, 13716.0, 14020.8, 14325.6, 14630.4, 14935.2, 15240.0, 15544.8, 15849.6, 16154.4, 16459.2, 16764.0, 17068.8, 17373.6, 17678.4, 18288.0, 18897.6, 19507.2, 20116.8, 20726.4, 21336.0, 21945.6, 22555.2, 23164.8, 23774.4, 24384.0, 24993.6, 25603.2, 26212.8, 26822.4, 27432.0, 28041.6, 28651.2, 29260.8, 29870.4, 30480.0]
+_MIL_HOT_K = [312.611, 310.5, 308.389, 306.222, 304.056, 301.889, 299.722, 297.5, 295.278, 293.056, 290.889, 288.833, 286.722, 284.611, 282.5, 280.333, 278.167, 276.0, 273.778, 271.611, 269.556, 267.5, 265.389, 263.333, 261.222, 259.111, 257.0, 254.833, 252.667, 250.556, 248.556, 246.556, 244.556, 242.5, 240.5, 238.667, 236.833, 235.0, 233.111, 231.222, 230.5, 230.778, 231.0, 231.222, 231.444, 231.722, 232.0, 232.222, 232.5, 232.778, 233.056, 233.222, 233.333, 233.444, 233.556, 233.667, 233.722, 233.833, 233.944, 234.167, 234.389, 234.611, 234.778, 235.333, 236.111, 236.889, 237.667, 238.444, 239.222, 240.0, 240.889, 241.722, 242.611, 243.556, 244.389, 245.222, 246.056, 247.0, 247.944, 248.944]
+_MIL_COLD_K = [222.056, 229.556, 237.056, 244.667, 247.056, 247.056, 247.056, 247.056, 247.056, 247.056, 247.056, 246.611, 244.778, 242.944, 241.111, 239.222, 237.389, 235.5, 233.611, 231.667, 229.778, 227.833, 225.833, 223.889, 221.889, 219.889, 217.889, 215.889, 213.833, 211.722, 209.667, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 208.167, 206.389, 203.556, 200.611, 197.667, 194.667, 191.667, 189.167, 187.111, 185.944, 185.944, 185.944, 185.944, 185.944, 185.944, 185.944, 185.944, 185.944, 187.556, 190.944, 194.056, 196.889, 199.556, 202.0, 203.0, 202.722, 202.444, 202.111, 201.722, 201.278, 200.833, 200.444, 200.0, 199.556, 199.111, 198.667, 198.167, 197.667]
+_MIL_POLAR_K = [246.667, 248.333, 250.056, 251.722, 251.944, 251.667, 251.333, 251.056, 250.722, 250.444, 250.0, 248.444, 246.833, 245.278, 243.722, 242.167, 240.556, 239.0, 237.444, 235.833, 234.278, 232.667, 231.111, 229.5, 227.944, 226.333, 224.722, 223.167, 221.556, 219.944, 218.333, 218.056, 217.889, 217.778, 217.611, 217.444, 217.333, 217.167, 217.056, 216.889, 216.722, 216.611, 216.444, 216.333, 216.167, 216.0, 215.889, 215.722, 215.611, 215.444, 215.278, 215.167, 215.0, 214.889, 214.722, 214.556, 214.444, 214.278, 214.167, 213.889, 213.556, 213.278, 213.0, 212.722, 212.444, 212.167, 211.889, 211.611, 211.278, 211.0, 210.722, 210.444, 210.167, 210.167, 210.167, 210.167, 210.167, 210.167, 210.167, 210.167]
+_MIL_TROP_K = [305.278, 303.111, 300.944, 298.778, 296.667, 294.5, 292.333, 290.167, 288.0, 285.889, 283.722, 281.556, 279.389, 277.278, 275.111, 272.944, 270.833, 268.667, 266.5, 264.333, 262.222, 260.056, 257.889, 255.778, 253.611, 251.5, 249.333, 247.167, 245.389, 242.889, 240.778, 238.611, 236.444, 234.333, 232.167, 230.056, 227.889, 225.778, 223.667, 221.556, 219.5, 217.444, 215.389, 213.389, 211.389, 209.389, 207.444, 205.5, 203.611, 201.667, 199.778, 197.944, 196.056, 194.222, 193.667, 194.833, 196.056, 197.278, 198.444, 200.944, 203.389, 205.944, 208.5, 211.056, 213.444, 214.889, 216.333, 217.833, 219.278, 220.778, 222.278, 223.778, 225.278, 226.778, 228.278, 229.778, 231.278, 232.722, 234.222, 235.722]
+_MIL_DAYS    = {'hot': _MIL_HOT_K, 'cold': _MIL_COLD_K,
+                'polar': _MIL_POLAR_K, 'tropical': _MIL_TROP_K}
+_MIL_TOP_M       = _MIL_ALT_M[-1]   # 30.48 km — table top (100 kft)
+_MIL_TAPER_TOP_M = 32000.0          # ΔT tapered to zero by here
+
+
+def _atmosphere_nonstd(altitude_m, day):
+    """MIL-STD-210A hot/cold/polar/tropical atmosphere (geometric altitude, m).
+
+    T is taken from the MIL-210 table, pressure equals US Std 1976, and
+    ρ = P/(R·T).  The temperature offset from standard is tapered to zero
+    between 30.48 and 32 km so the profile reverts to US Std 1976 above the
+    table top.  Returns (T_K, P_Pa, rho_kg_m3, a_m_s).
+    """
+    scalar = np.ndim(altitude_m) == 0
+    h = np.atleast_1d(np.asarray(altitude_m, dtype=float))
+    T_std, P, _rho_std, _a = _atmosphere_std1976(h)
+    T_std = np.atleast_1d(T_std); P = np.atleast_1d(P)
+    T_mil = np.interp(np.clip(h, 0.0, _MIL_TOP_M), _MIL_ALT_M, _MIL_DAYS[day])
+    taper = np.clip((_MIL_TAPER_TOP_M - h) / (_MIL_TAPER_TOP_M - _MIL_TOP_M),
+                    0.0, 1.0)
+    T   = T_std + (T_mil - T_std) * taper
+    rho = P / (_R * T)
+    a   = np.sqrt(_GAMMA * _R * T)
+    if scalar:
+        return float(T[0]), float(P[0]), float(rho[0]), float(a[0])
+    return T, P, rho, a
+
+
+# ---------------------------------------------------------------------------
 # NRLMSISE-00 via pymsis — precomputed lookup table
 # ---------------------------------------------------------------------------
 
@@ -166,9 +211,11 @@ def _build_msis_table(cfg):
 
 def _init_atmosphere():
     global _ATM_TABLE, _ATM_SOURCE
-    if _ATM_CONFIG['model'] != 'msis':
+    model = _ATM_CONFIG['model']
+    if model != 'msis':
+        # 'std1976' or a MIL-STD-210A day ('hot'/'cold'/'polar'/'tropical')
         _ATM_TABLE  = None
-        _ATM_SOURCE = 'std1976'
+        _ATM_SOURCE = model if model in _MIL_DAYS else 'std1976'
         return
     try:
         _ATM_TABLE  = _build_msis_table(_ATM_CONFIG)
@@ -185,7 +232,9 @@ def configure_atmosphere(**kwargs):
     Parameters
     ----------
     model : str
-        'msis' (default) or 'std1976'.
+        'msis' (default), 'std1976', or a MIL-STD-210A non-standard day
+        'hot' / 'cold' / 'polar' / 'tropical' (US Std 1976 pressure with the
+        MIL-210 temperature profile below 30.5 km).
     f107, f107a : float
         Daily and 81-day-average F10.7 solar flux.  Default 150.
     ap : float
@@ -250,6 +299,8 @@ def atmosphere(altitude_m):
             return float(T[0]), float(P[0]), float(rho[0]), float(a[0])
         return T, P, rho, a
 
+    if _ATM_SOURCE in _MIL_DAYS:
+        return _atmosphere_nonstd(altitude_m, _ATM_SOURCE)
     return _atmosphere_std1976(altitude_m)
 
 

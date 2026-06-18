@@ -11,7 +11,8 @@ Loft angle / loft angle rate for Scud-B taken from Figure 3 of the same paper.
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
-from atmosphere import atmosphere, dynamic_pressure
+from atmosphere import (atmosphere, dynamic_pressure,
+                        configure_atmosphere, atmosphere_source)
 
 _G0 = 9.80665   # standard gravity (m/s²)
 
@@ -583,8 +584,24 @@ MODEL_OPTIONS = {
                     "chin":    "Chin 1961 (Fig 3-15)"},
         "default": "datcom",
     },
+    "atmosphere": {
+        "label":   "Atmosphere",
+        "choices": ("msis", "std1976", "hot", "cold", "polar", "tropical"),
+        "labels":  {"msis":     "NRLMSISE-00 (mean)",
+                    "std1976":  "US Std 1976",
+                    "hot":      "MIL-STD-210A hot day",
+                    "cold":     "MIL-STD-210A cold day",
+                    "polar":    "MIL-STD-210A polar day",
+                    "tropical": "MIL-STD-210A tropical day"},
+        "default": "msis",
+        # Atmosphere model lives in atmosphere.py; reconfigure it on change.
+        "apply":   lambda v: configure_atmosphere(model=v),
+    },
 }
 _MODEL_SELECTION = {k: v["default"] for k, v in MODEL_OPTIONS.items()}
+# Reflect the atmosphere model actually active (msis may have fallen back to
+# std1976 if pymsis is unavailable) so the menu shows the true state.
+_MODEL_SELECTION["atmosphere"] = atmosphere_source()
 
 
 def get_model_option(key: str) -> str:
@@ -600,6 +617,9 @@ def set_model_option(key: str, value: str) -> None:
         raise ValueError(f"'{value}' not a choice for '{key}' "
                          f"({MODEL_OPTIONS[key]['choices']})")
     _MODEL_SELECTION[key] = value
+    _apply = MODEL_OPTIONS[key].get("apply")
+    if _apply is not None:
+        _apply(value)
 
 
 # ---------------------------------------------------------------------------
