@@ -26,6 +26,20 @@ These four were read directly and their key results confirmed:
   principle; convective heating minimized by high-drag shapes (heat load ∝ 1/drag).
 - **ADA396928.pdf = Sims SP-3004** — the same DTIC scan already used to validate
   the cone wave drag (`validate_cone_wave_drag.py`); duplicate, not re-processed.
+- **Reynerson, C.M. (2006), AIAA 2006-6275** — *Reentry Envelope Determination
+  Part II: Structural Failure Due to Atmospheric Heating* (Boeing). The
+  reentry-debris-survival "burn-up" method and **the cleanest figure of merit
+  for the "does it burn up / at what point" question**:
+  - heating rate (Detra–Kemp–Riddell / Bertin p.258):
+    `q̇ = (11030/√R_n)·(ρ/ρ_sl)^0.5·(V/V_c)^3.15`  (V_c = circular orbital
+    velocity; **verify the 11030 constant's units — Bertin's is W/cm² with R_n
+    in ft, Reynerson writes R_n in m**);
+  - accumulated heat `Q = Σ q̇·A_p·Δt`;
+  - **melt/burn-up criterion `Q ≥ m·c·(T_melt − T₀)`** (lumped heat sink) ⇒
+    heat-sink margin `= m·c·(T_melt−T₀)/Q_absorbed`; burn-up point = first
+    crossing. Aluminum c=0.22 BTU/lb/°F; melt: 2024-T3 940 °F, 6061-T6 1080 °F,
+    7079-T6 900 °F. This is the whole-body (unprotected / heat-sink) criterion,
+    complementary to surface-T_eq (TPS surface) and time-at-temperature (TPS soak).
 
 ---
 
