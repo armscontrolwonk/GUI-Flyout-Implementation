@@ -107,6 +107,17 @@ These four were read directly and their key results confirmed:
 
 ## 3. TPS sizing & failure criteria (bondline, load, recession)
 
+- ⭐ Myers, Martin & Blosser, *Parametric Weight Comparison of Current and
+  Proposed Thermal Protection System (TPS) Concepts*, AIAA 99-3459 / NTRS
+  20040086853 (NASA LaRC) — 1-D thermal-FE TPS sizing for metallic-panel,
+  ceramic-tile and ceramic-blanket concepts over two reusable-vehicle entry
+  profiles (Access-to-Space SSTO, RLV).  Uses **peak heat flux (Btu/ft²·s) and
+  total unit heat load (Btu/ft²) as the sizing drivers** — corroborating the
+  FOM's peak-flux + integrated-load pair — and an aluminium-structure limit of
+  300 °F.  Corroborates the §2 tile ladder: RCG-coated tile operational
+  2300 °F (=1533 K, our silica_tile continuous limit), AETB+TUFI tile 2500 °F.
+  Heat-flux/load magnitudes are plotted, not tabulated, so it adds no new
+  anchor.  https://ntrs.nasa.gov/citations/20040086853
 - ⭐ *An Approximate Ablative TPS Sizing Tool*, NASA NTRS 20060004824 — 250 °C
   bondline criterion, recession+insulation split. https://ntrs.nasa.gov/citations/20060004824
 - Beck, R., *Ablative TPS Fundamentals*, TFAWS 2017 / NTRS 20170011453 — sizing
