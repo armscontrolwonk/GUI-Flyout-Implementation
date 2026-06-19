@@ -61,6 +61,12 @@ These four were read directly and their key results confirmed:
   load ∝ 1/C_D. https://digital.library.unt.edu/ark:/67531/metadc65613/
 - NASA TFAWS Aerothermodynamics Course (Sutton-Graves/Fay-Riddell forms).
   https://tfaws.nasa.gov/TFAWS12/Proceedings/Aerothermodynamics%20Course.pdf
+- Regan & Anandakrishnan, *Dynamics of Atmospheric Re-Entry* (AIAA Education
+  Series, 1993), Ch. 11 "Flowfield Description" — foundational reentry-
+  aerothermo text (governing equations, laminar/turbulent boundary layers,
+  surface-temperature/reradiation coupling).  Corroborates the framework; the
+  stagnation-heating correlations themselves are the Sutton-Graves/Fay-Riddell
+  forms above.
 - NASA Mars aeroheating correlations, NTRS 20200002354.
   https://ntrs.nasa.gov/citations/20200002354
 - NASA SP-4201 ch.3-3 (blunt-body history; RV shock-layer ~12,000 °F).
@@ -134,9 +140,18 @@ These four were read directly and their key results confirmed:
   https://ceramics.onlinelibrary.wiley.com/doi/10.1111/jace.12108
 - US Patent 12,491,700 — *Shielded multi-layer ablative/insulative material for
   hypersonic flight* (glide thermal-load ~20× longer; thicker-ablator limits).
-- *Optimal trajectory and heat load analysis of different shape lifting reentry
-  vehicles*, ScienceDirect S2214914715000471 (waverider ~10× lifting-body load).
-  https://www.sciencedirect.com/science/article/pii/S2214914715000471
+- ⭐ Rizvi, He & Xu, *Optimal trajectory and heat load analysis of different
+  shape lifting reentry vehicles for medium range application*, Defence
+  Technology 11(4), 2015 (ScienceDirect S2214914715000471) — **read from
+  primary**; verbatim: the waverider integrated heat load is "approximately an
+  order of magnitude higher than that of a lifting-body configuration and 5
+  times that of a wing-body configuration."  Confirms our glide heat-load
+  ordering and the heat-rate ∝ 1/√(nose/LE-radius) dependence under a
+  heat-rate-constrained trajectory.  https://www.sciencedirect.com/science/article/pii/S2214914715000471
+- GE Re-entry Systems (AIAA Historic Aerospace Site brochure) — qualitative RV
+  history corroborating the heat-sink→ablative progression (Atlas Mk 2 heat
+  sink, 1958 → Mk 3 first operational ablative sphere-cone → Titan II Mk 6),
+  consistent with Bunn 1984.  No quantitative heating data.
 - AIAA-2008-2539, *The DARPA/AF Falcon Program: HTV-2 Flight Demonstration Phase*.
   https://arc.aiaa.org/doi/10.2514/6.2008-2539
 - DARPA ERB / HTV-2 Flight-2 cause ("unexpected aeroshell degradation").
@@ -208,9 +223,29 @@ These four were read directly and their key results confirmed:
   ρ≈0.16 kg/m³, V_pk≈5.9 km/s) gives ≈45–100 MW/m² for a 2–10 cm nosetip —
   consistent with the Reentry F flight value scaled from 2.5 mm to cm-class
   tips.  https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
+- Ogasawara & Nishioka (MHI), *Proposal of the Reentry Vehicle Design Index to
+  Minimize Integrated Heat Load*, AIAA 2001-1109 — integrated-heat-load design
+  methodology: stagnation heating via a reference-sphere correlation
+  (Detra–Kemp–Riddell), an **equivalent nose radius** for shape comparison, and
+  the result that blunter shapes minimise stagnation heating.  Corroborates our
+  ∫q̇dt-over-trajectory integrated-load approach and the shape→nose-radius→flux
+  link, but reports a *normalised* index (no absolute MJ/m²), so it does not pin
+  Q_MJ.
+- Nikaido, D'Souza & Hays, *Pterodactyl: Aerodynamic and Aeroheating Database
+  … Mechanically Deployed Entry Vehicle*, NASA Ames (AIAA 2020) — uses the same
+  two metrics our FOM does (peak heat rate + integrated heat load over the
+  nominal trajectory, CBAero-anchored).  Notes a carbon-fabric-TPS arc-jet
+  heat-rate limit of **<250 W/cm² (2.5 MW/m²)**; vehicle class (deployable
+  decelerator) differs from our RV/glider focus, so it is methodological
+  corroboration, not a benchmark anchor.
 
 ## 6. Policy / survivability framing (independent corroboration)
 
+- National Research Council, *U.S. Conventional Prompt Global Strike: Issues
+  for 2008 and Beyond* (2008), Appendix G "The Why and How of Boost-Glide
+  Systems" — semiquantitative boost-glide framing (range extension, dogleg
+  maneuver, defense penetration); corroborates the glide-vehicle framing.
+  https://doi.org/10.17226/12061
 - ⭐ CBO, *U.S. Hypersonic Weapons and Alternatives* (Jan 2023) — heating caps
   boost-glide range ~10,000 km; sustained T ~3000 °F.
   https://www.cbo.gov/system/files/2023-01/58255-hypersonic.pdf
