@@ -2621,16 +2621,22 @@ def integrate_trajectory(params: MissileParams,
             row['event'] = "Re-entry (100 km)"
             _insert_chrono(row)
 
-    # Glider mode — emit the full glide-phase event set:
+    # Re-entry event set for the terminal vehicle (ballistic RV *or* glider).
+    #   • Peak heating   (Sutton-Graves stagnation rate at the RV nose radius)
+    #   • Heating FOM    (peak-surface / oxidation-soak / heat-sink survivability)
+    #   • Max-G          (peak structural load factor on the descent arc)
+    # Glide-only events (gated on _is_glider below):
     #   • Pull-up start  (first altitude minimum after re-entry)
     #   • Glide start    (first altitude maximum after pull-up start)
     #   • Skip N pull-up / Skip N apex (subsequent extrema for skip-glide)
-    #   • Peak heating   (Sutton-Graves stagnation rate, RN = 5 cm convention)
-    #   • Max-G          (peak structural load factor during glide)
     #   • Terminal dive  (downward crossing of the user-set dive altitude)
+    # Heating is evaluated for ANY re-entering RV — a steep ballistic RV is the
+    # high-flux regime (cf. the ICBM-RV benchmark in heating.py), so excluding
+    # it would skip the very case the survivability FOM most needs to score.
     _erv_ms = effective_rv(params)
     _heating_fom = None
-    if _erv_ms is not None and _erv_ms.glider_enabled and _erv_ms.glider_LD > 0:
+    if _erv_ms is not None:
+        _is_glider = bool(_erv_ms.glider_enabled and _erv_ms.glider_LD > 0)
         # For trajectories that reach space use the 100 km descent crossing;
         # for sub-100 km HGV profiles use apogee as the glide-phase start.
         if np.max(alts) > REENTRY_ALT_M:
@@ -2673,9 +2679,12 @@ def integrate_trajectory(params: MissileParams,
                 _row['event'] = f"→ Equilibrium glide ({alts[_igs]/1000:.0f} km)"
                 _insert_chrono(_row)
 
-            if not _emitted_pullup_glide:
+            if _is_glider and not _emitted_pullup_glide:
                 # Altitude extrema after re-entry: alternating minima
                 # (pull-ups) and maxima (apexes / glide tops).
+                # Glide-only: a ballistic descent is monotone (no extrema),
+                # and this guard keeps stray numerical wiggles from being
+                # mislabelled as pull-ups on a non-gliding RV.
                 _post = alts[_re_idx:]
                 _dh   = np.diff(_post)
                 _sign = np.sign(_dh)
@@ -2787,7 +2796,8 @@ def integrate_trajectory(params: MissileParams,
                     _row = _milestone(t_arr[_re_idx + _img])
                     _row['event'] = f"Max-G ({_n[_img]:.1f} g)"
                     _insert_chrono(_row)
-        if (_erv_ms.glider_terminal_dive and _erv_ms.glider_terminal_alt_km > 0):
+        if (_is_glider and _erv_ms.glider_terminal_dive
+                and _erv_ms.glider_terminal_alt_km > 0):
             _td_m = _erv_ms.glider_terminal_alt_km * 1000.0
             if np.max(alts) > _td_m:
                 _td_t = _alt_crossing(_td_m, ascending=False)
