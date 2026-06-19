@@ -57,7 +57,8 @@ TPS_MATERIALS = {
 # STS-1 flight reconstruction (NASA LaRC benchmark, NTRS 19820036242 /
 # 19820015618): windward tiles ~5 Btu/ft²·s (≈0.06 MW/m²), RCC nose-cap /
 # wing-leading-edge stagnation peak ~50 Btu/ft²·s (≈0.6 MW/m², surface ~1650 °C);
-# we anchor on the RCC stagnation peak.  No clean public integrated-load value,
+# we anchor on the RCC stagnation peak.  Heat pulse is long (~1350 s, Olynick &
+# Tam 1997, NS vs STS-2) but no clean absolute integrated-load value is public
 # so Q_MJ stays None.  ICBM-RV is now pinned to the Reentry F flight experiment
 # (NASA TM X-2584; Berry white paper; Thompson et al. 1989) — a 5° half-angle
 # cone, R_n=2.54 mm (0.10 in), Mach ~20, V≈6.1 km/s, flight-measured stagnation

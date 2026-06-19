@@ -173,6 +173,20 @@ These four were read directly and their key results confirmed:
   multi-flight validation of the radiative-equilibrium T_eq = (q̇/εσ)^¼ method
   the FOM uses; RCC nose/LE confirmed as the hot region.  **Neither HYTHIRM
   paper pins peak flux or integrated load — Shuttle Q_MJ stays open.**
+- Olynick & Tam, *Trajectory-Based Validation of the Shuttle Heating
+  Environment*, J. Spacecraft & Rockets 34(2), 1997 — 3-D reacting Navier–
+  Stokes over the orbiter vs the STS-2 flight database at 8 trajectory points;
+  computes surface/bond-line T, heating profiles and **integrated heat loads**,
+  validated against flight.  Pins the **heat-pulse duration ≈1350 s** (75,140→
+  76,490 s; entry V 7.44 km/s @ 79 km) — i.e. the long-soak character — but
+  reports heat loads *normalised by a reference q_ref* (no absolute MJ/m² in
+  the text), so it still does not give a clean absolute Shuttle Q_MJ.
+- Naved, Hermann & McGilvray, *Numerical Simulation of Transpiration Cooling
+  for a High-Speed Vehicle with Substructure*, AIAA J. 59(8), 2021 — applies
+  the **space shuttle reentry trajectory** (first ~900 s) to a 15° wing-leading-
+  edge, 0.1 m nose radius, via Sutton–Graves; a transpiration-cooling study,
+  so it confirms the trajectory/duration but reports no clean absolute Shuttle
+  integrated load either.  **Shuttle Q_MJ remains the one open benchmark item.**
 - ⭐⭐ **Reentry F** flight experiment (1968) — the ICBM-RV peak-flux pin.
   5° half-angle slender cone, 156 in long, **R_n = 2.54 mm (0.10 in)** ablative
   ATJ-graphite nosetip, Mach ~20, V≈20,000 ft/s (6.1 km/s), ballistic.
