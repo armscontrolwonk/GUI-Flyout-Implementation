@@ -154,11 +154,16 @@ These four were read directly and their key results confirmed:
 - ⭐ Rizvi, He & Xu, *Optimal trajectory and heat load analysis of different
   shape lifting reentry vehicles for medium range application*, Defence
   Technology 11(4), 2015 (ScienceDirect S2214914715000471) — **read from
-  primary**; verbatim: the waverider integrated heat load is "approximately an
-  order of magnitude higher than that of a lifting-body configuration and 5
-  times that of a wing-body configuration."  Confirms our glide heat-load
-  ordering and the heat-rate ∝ 1/√(nose/LE-radius) dependence under a
-  heat-rate-constrained trajectory.  https://www.sciencedirect.com/science/article/pii/S2214914715000471
+  primary, incl. Table 3**.  Stagnation model is q̇ = C·W·R⁻⁰·⁵·V³·⁰⁵ (Scott
+  et al.) with Q = ∫q̇dt — our exact peak-flux + integrated-load forms — under a
+  4 MW/m² (=2900 K) heat-rate limit.  Table 3 absolute integrated loads
+  (1600 km medium-range, β≈400 kg/m², burn-out 3.7 km/s): **waverider
+  ≈1.66–1.86 GJ/m²** (22–26 min glide), wing-body ≈0.32–0.44, lifting-body
+  ≈0.21–0.27, **bi-conic (conventional) ≈0.20 GJ/m² with a 14 MW/m² peak**.
+  Confirms the cited ordering (waverider ≈8× bi-conic, ≈4–5× wing-body) and the
+  glide long-soak physics (load grows ~exponentially with L/D / glide time).
+  These are medium-range design-study configs, not flown-vehicle anchors, so
+  they corroborate but are not added to _BENCHMARKS.  https://www.sciencedirect.com/science/article/pii/S2214914715000471
 - GE Re-entry Systems (AIAA Historic Aerospace Site brochure) — qualitative RV
   history corroborating the heat-sink→ablative progression (Atlas Mk 2 heat
   sink, 1958 → Mk 3 first operational ablative sphere-cone → Titan II Mk 6),
