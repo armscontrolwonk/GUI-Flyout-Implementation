@@ -2214,9 +2214,12 @@ class RVEditorDialog(tk.Toplevel):
         self._len_entry = _entry(6, self._len_var, width=10)
 
         # Nose-tip radius — drives Sutton-Graves stagnation heating (∝ 1/√RN).
+        # Shown as the EFFECTIVE radius: an explicit value, else the
+        # shape/diameter screening default (so the field is never a misleading
+        # 0.000 for an auto RV).
         _lbl(7, "Nose radius (m):")
         self._nose_var = tk.StringVar(
-            value=f"{rv.nose_radius_m:.3f}" if rv else "0.050")
+            value=f"{rv.effective_nose_radius_m():.3f}" if rv else "0.050")
         self._nose_entry = _entry(7, self._nose_var, width=10)
 
         # Sync the read-only state of mass/diameter/length to separation mode

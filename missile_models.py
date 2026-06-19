@@ -233,10 +233,12 @@ class RVParams:
     shape:      str   = ""    # key from NOSE_SHAPES; "" → Forden Cd fallback
     diameter_m: float = 0.0
     length_m:   float = 0.0
-    # Nose-tip radius of curvature (m), used for Sutton-Graves stagnation
-    # heating q̇ ∝ 1/√R_N.  Default 0.05 m (5 cm) matches the conventional
-    # placeholder used in preliminary heating analysis.
-    nose_radius_m: float = 0.05
+    # Nose-tip (stagnation) radius of curvature (m), used for Sutton-Graves
+    # stagnation heating q̇ ∝ 1/√R_N.  0.0 = AUTO: derive a screening default
+    # from the nose shape + base diameter (see nose_tip_radius / the
+    # effective_nose_radius_m() accessor).  A positive value is authoritative
+    # and overrides the derived default.
+    nose_radius_m: float = 0.0
 
     # Separation mode — does the terminal vehicle separate from the missile
     # body, or IS the missile body the terminal vehicle?
@@ -390,6 +392,14 @@ class RVParams:
     # numbers only, no pass/fail verdict.
     tps_material:           str   = ""
 
+    def effective_nose_radius_m(self) -> float:
+        """Stagnation radius (m) for Sutton-Graves heating: the explicit
+        nose_radius_m when set (>0), otherwise the shape/diameter screening
+        default from nose_tip_radius()."""
+        if self.nose_radius_m and self.nose_radius_m > 0.0:
+            return float(self.nose_radius_m)
+        return nose_tip_radius(self.shape, self.diameter_m)
+
 
 def rv_to_dict(rv: RVParams) -> dict:
     return {
@@ -439,7 +449,7 @@ def rv_from_dict(d: dict) -> RVParams:
         shape=str(d.get('shape', '')),
         diameter_m=float(d.get('diameter_m', 0.0)),
         length_m=float(d.get('length_m', 0.0)),
-        nose_radius_m=float(d.get('nose_radius_m', 0.05)),
+        nose_radius_m=float(d.get('nose_radius_m', 0.0)),   # 0 = auto (shape)
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_guidance=_g,
@@ -790,6 +800,42 @@ def _nose_profile(shape: str, ld: float, n: int = 200):
 
     rs[0] = 0.0
     return xs, rs
+
+
+# Shape bluntness multipliers for the screening nose-tip-radius default,
+# relative to a sharp cone (=1.0), ordered by how rounded each profile runs
+# near the tip (cone sharpest → Haack series bluntest; a blunt cylinder has a
+# near-hemispherical cap).  These are deliberately MODEST, transparent factors,
+# NOT a geometric tip curvature: the idealised nose profiles are all
+# geometrically sharp at the very tip (R→0), and real nose-tip bluntness is a
+# design choice the outer shape does not fix — every RV in rv_library/ is a
+# "cone" yet spans 1–5 cm tips.  An explicit nose_radius_m therefore overrides
+# this default (see RVParams.effective_nose_radius_m).
+_NOSE_BLUNTNESS = {
+    'cone':           1.0,
+    'tangent_ogive':  1.25,
+    'parabola':       1.25,
+    'von_karman':     1.5,
+    'lv_haack':       1.75,
+    'blunt_cylinder': 3.0,
+}
+
+
+def nose_tip_radius(shape: str, diameter_m: float) -> float:
+    """Screening default for the Sutton-Graves stagnation radius R_n (m) when an
+    RV does not set nose_radius_m explicitly.
+
+    R_n ≈ 0.10·R_body for a sharp cone — mid the 0.1–0.2 R_n/R_base range
+    typical of blunted re-entry bodies — scaled up for blunter profiles via
+    _NOSE_BLUNTNESS, clamped to [5 mm, R_body].  This is a transparent
+    bluntness heuristic, not a geometric derivation; an explicit nose_radius_m
+    is authoritative and overrides it.
+    """
+    R_body = 0.5 * max(0.0, float(diameter_m or 0.0))
+    if R_body <= 0.0:
+        return 0.05                       # legacy 5 cm fallback (no diameter)
+    f = _NOSE_BLUNTNESS.get(_SHAPE_ALIAS.get(shape, shape), 1.0)
+    return float(min(max(0.10 * R_body * f, 0.005), R_body))
 
 
 def _s_wet_ratio(shape: str, ld: float) -> float:

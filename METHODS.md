@@ -2258,7 +2258,7 @@ defaults:
 | `diameter_m` | 0.5 | Reference diameter |
 | `length_m` | (optional) | Used for slender-body checks |
 | `shape` | `"cone"` | Nose-shape selector |
-| `nose_radius_m` | 0.05 | Used for stagnation heating (Section 13.1) |
+| `nose_radius_m` | 0.0 = auto | Stagnation radius for heating (Section 13.1); 0 ⇒ derived from nose shape + diameter, a positive value overrides |
 | `emissivity` | 0.85 | Surface emissivity for T_eq calculation |
 | `beta_kg_m2` | 10000 | β_L — equilibrium-glide ballistic coefficient |
 | `glider_beta_entry_kg_m2` | 0.0 | β_S — Acton direct-re-entry β; 0 disables Acton mode |
@@ -2342,24 +2342,33 @@ Three implementation conventions:
    matters at HGV velocities of 3–6 km/s. The relevant comment is at
    `trajectory.py`.
 
-2. **Per-RV nose-tip radius.** `R_N` is read from the active RV's
-   `nose_radius_m` field (`trajectory.py`), making the stagnation-
-   point formula geometry-aware. The default in `RVParams` is 0.05 m
-   (5 cm; `missile_models.py`). The shipped library overrides this
-   for `C-HGB.rv.json` (2 cm, matching the sharper conical glide body)
-   and otherwise inherits the 5 cm default. Two RVs at the same speed
-   and density therefore see different stagnation fluxes:
-   `q̇ ∝ 1/√R_N`, so the C-HGB nose sees about 1.58× the stagnation
-   flux of an HGB-class nose. The peak-heating *time* is independent
-   of `R_N`; only the peak *magnitude* changes.
+2. **Per-RV nose-tip radius.** `R_N` is the active RV's effective
+   stagnation radius (`RVParams.effective_nose_radius_m`, used in
+   `trajectory.py`), making the stagnation-point formula geometry-aware.
+   An explicit `nose_radius_m` is authoritative; when it is 0/absent the
+   value is a screening default derived from the nose shape and base
+   diameter (`nose_tip_radius`, `missile_models.py`): `R_N ≈ 0.10·R_body`
+   for a sharp cone, scaled up for blunter profiles (von Kármán, LV-Haack),
+   clamped to [5 mm, R_body]. This is a transparent bluntness heuristic,
+   not a geometric tip-curvature — the idealised profiles are all
+   geometrically sharp at the tip, and real bluntness is a design choice
+   the outer shape does not fix (every shipped library RV is a `cone` yet
+   spans 1–5 cm tips). The shipped library sets explicit radii where known
+   (HTV-2 1 cm, C-HGB 2 cm, AHW 5 cm). Two RVs at the same speed and
+   density see different stagnation fluxes: `q̇ ∝ 1/√R_N`, so a 1 cm nose
+   sees about 2.2× the flux of a 5 cm nose. The peak-heating *time* is
+   independent of `R_N`; only the peak *magnitude* changes.
 
-3. **Glide phase only.** Heating is computed and reported only during
-   the post-pierce glide phase (after the 100 km descent crossing of
-   Section 12.1). The boost and ascent heating is not separately
-   reported because for typical operational vehicles the boost phase
-   stagnation flux is much smaller than the glide-phase peak — and
-   because the booster nose is not the surface that matters for
-   payload survival.
+3. **Re-entry/descent phase.** Heating is computed for any re-entering
+   terminal vehicle — a ballistic RV as well as a glider — over the
+   descent arc after the 100 km crossing (Section 12.1; for sub-100 km
+   profiles, after apogee). A steep ballistic RV is the high-flux regime
+   the survivability FOM most needs to score, so it is no longer excluded.
+   Glide-specific milestones (pull-up / glide-start / skips / terminal
+   dive) remain gated on a lifting vehicle. Boost and ascent heating is
+   not separately reported because for typical operational vehicles the
+   boost-phase stagnation flux is much smaller than the descent peak, and
+   the booster nose is not the surface that matters for payload survival.
 
 ### 13.2 Radiative-equilibrium wall temperature
 

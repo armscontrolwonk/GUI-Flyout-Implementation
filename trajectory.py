@@ -2734,10 +2734,13 @@ def integrate_trajectory(params: MissileParams,
                         if not _is_ste:
                             break  # only emit the primary pull-up/glide pair
 
-            # Peak heating: Sutton-Graves stagnation-point rate using the
-            # RV's nose-tip radius of curvature (default 0.05 m).  Peak time
+            # Peak heating: Sutton-Graves stagnation-point rate using the RV's
+            # nose-tip radius — explicit nose_radius_m, else a shape/diameter
+            # screening default (RVParams.effective_nose_radius_m).  Peak time
             # is independent of RN; the reported MW/m² scales as 1/√RN.
-            _RN = float(getattr(_erv_ms, 'nose_radius_m', 0.05) or 0.05)
+            _RN = (_erv_ms.effective_nose_radius_m()
+                   if hasattr(_erv_ms, 'effective_nose_radius_m')
+                   else float(getattr(_erv_ms, 'nose_radius_m', 0.05) or 0.05))
             _glide_a = alts[_re_idx:]
             # Sutton-Graves uses airspeed (ECEF), not inertial speed,
             # because the atmosphere co-rotates with Earth.

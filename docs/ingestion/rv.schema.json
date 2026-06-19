@@ -35,7 +35,7 @@
     "shape":         { "type": "string", "enum": ["", "cone", "tangent_ogive", "von_karman", "lv_haack", "parabola", "blunt_cylinder"] },
     "diameter_m":    { "type": "number", "minimum": 0 },
     "length_m":      { "type": "number", "minimum": 0 },
-    "nose_radius_m": { "type": "number", "minimum": 0, "description": "m — stagnation radius for Sutton-Graves heating. Default 0.05 (filled silently)." },
+    "nose_radius_m": { "type": "number", "minimum": 0, "description": "m — stagnation radius for Sutton-Graves heating. 0 (or absent) = auto: derived from nose shape + diameter (nose_tip_radius). A positive value overrides." },
     "emissivity":    { "type": "number", "minimum": 0, "maximum": 1, "description": "Default 0.85 (filled silently)." },
     "separation_mode": { "type": "string", "enum": ["separating_rv", "body"], "description": "Derived from rv_kind: marv_body → 'body', else 'separating_rv'." },
 
