@@ -57,9 +57,14 @@ TPS_MATERIALS = {
 # STS-1 flight reconstruction (NASA LaRC benchmark, NTRS 19820036242 /
 # 19820015618): windward tiles ~5 Btu/ft²·s (≈0.06 MW/m²), RCC nose-cap /
 # wing-leading-edge stagnation peak ~50 Btu/ft²·s (≈0.6 MW/m², surface ~1650 °C);
-# we anchor on the RCC stagnation peak.  Heat pulse is long (~1350 s, Olynick &
-# Tam 1997, NS vs STS-2) but no clean absolute integrated-load value is public
-# so Q_MJ stays None.  ICBM-RV is now pinned to the Reentry F flight experiment
+# we anchor q_MW on the RCC stagnation peak (the hot spot).  Q_MJ≈66 MJ/m² is
+# the integrated load at the windward centerline x/L=0.4 — the acreage/tile
+# location where the soak and TPS mass live, the right place for the load metric
+# — obtained by integrating the STS-1 flight-data heat-flux history (radiation-
+# equilibrium reduction, Ried et al. NTRS 19820015618 Fig. 11: peak ~6 W/cm²
+# over a ~1500 s pulse → ∫q̇dt ≈ 6.6 kJ/cm²; ±~20% from digitizing the plot).
+# So the Shuttle's two metrics intentionally reference their most-relevant
+# locations (peak→RCC nose, load→windward acreage).  ICBM-RV is pinned to Reentry F
 # (NASA TM X-2584; Berry white paper; Thompson et al. 1989) — a 5° half-angle
 # cone, R_n=2.54 mm (0.10 in), Mach ~20, V≈6.1 km/s, flight-measured stagnation
 # heating 9,000–28,000 Btu/ft²·s (≈102–318 MW/m²) over the 50–100 kft window;
@@ -72,7 +77,7 @@ _BENCHMARKS = {
     "Stardust": dict(q_MW=9.4,  Q_MJ=276.0, conf="solid"),
     "Apollo":   dict(q_MW=7.9,  Q_MJ=468.0, conf="solid"),
     "MSL":      dict(q_MW=2.0,  Q_MJ=55.0,  conf="solid"),
-    "Shuttle":  dict(q_MW=0.6,  Q_MJ=None,  conf="solid"),
+    "Shuttle":  dict(q_MW=0.6,  Q_MJ=66.0,  conf="solid"),
 }
 
 

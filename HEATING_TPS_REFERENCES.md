@@ -184,10 +184,13 @@ These four were read directly and their key results confirmed:
   centerline (x/L=0.4) surface-heat-flux **history** vs entry time (axis
   0–20 W/cm², pulse ~0–1600 s), with flight data derived by **radiation
   equilibrium** — directly validating the FOM's q̇↔T_eq inversion — plus
-  bondline/surface-T comparisons (Figs 13–15).  Confirms the peak-flux anchor
-  lineage and pulse timescale, but the integrated heat load is *not tabulated*;
-  it exists only implicitly in the raster q̇(t) plot, so this does **not** hand
-  us an absolute Shuttle Q_MJ either.  https://ntrs.nasa.gov/citations/19820015618
+  bondline/surface-T comparisons (Figs 13–15).  The integrated load is not
+  tabulated, but the Fig. 11 flight curve has an **absolute** W/cm² axis, so we
+  digitised and integrated it: peak ≈6 W/cm² (0.06 MW/m²) over a ~1500 s pulse →
+  **∫q̇dt ≈ 6.6 kJ/cm² ≈ 66 MJ/m²** (±~20% reading error).  **This pins the
+  Shuttle Q_MJ = 66 MJ/m²** at the windward-centerline acreage (the right
+  location for the load metric; the q_MW=0.6 anchor remains the RCC-nose hot
+  spot).  https://ntrs.nasa.gov/citations/19820015618
 - ⭐ *Benchmark aerodynamic heat-transfer data from the first flight of the
   Space Shuttle Orbiter*, NTRS 19820036242 — flight-reconstructed convective
   rates: windward mid-body tiles ~5 Btu/ft²·s (≈0.06 MW/m²); RCC nose-cap /
@@ -213,14 +216,19 @@ These four were read directly and their key results confirmed:
   computes surface/bond-line T, heating profiles and **integrated heat loads**,
   validated against flight.  Pins the **heat-pulse duration ≈1350 s** (75,140→
   76,490 s; entry V 7.44 km/s @ 79 km) — i.e. the long-soak character — but
-  reports heat loads *normalised by a reference q_ref* (no absolute MJ/m² in
-  the text), so it still does not give a clean absolute Shuttle Q_MJ.
+  reports its Table 3 integrated loads *normalised by q_ref*, in **units of
+  seconds** (Q/q_ref; e.g. windward HRSI 99,341 = 535.6 s for STS-2), with
+  q_ref never printed — so it corroborates the long soak and the load
+  methodology but cannot itself give an absolute MJ/m².  The absolute Shuttle
+  Q_MJ instead comes from integrating the STS-1 Fig. 11 flight curve (≈66 MJ/m²,
+  above).
 - Naved, Hermann & McGilvray, *Numerical Simulation of Transpiration Cooling
   for a High-Speed Vehicle with Substructure*, AIAA J. 59(8), 2021 — applies
   the **space shuttle reentry trajectory** (first ~900 s) to a 15° wing-leading-
   edge, 0.1 m nose radius, via Sutton–Graves; a transpiration-cooling study,
   so it confirms the trajectory/duration but reports no clean absolute Shuttle
-  integrated load either.  **Shuttle Q_MJ remains the one open benchmark item.**
+  integrated load either.  (The Shuttle Q_MJ was ultimately pinned by
+  integrating the STS-1 Fig. 11 flight curve → ≈66 MJ/m², windward centerline.)
 - ⭐⭐ **Reentry F** flight experiment (1968) — the ICBM-RV peak-flux pin.
   5° half-angle slender cone, 156 in long, **R_n = 2.54 mm (0.10 in)** ablative
   ATJ-graphite nosetip, Mach ~20, V≈20,000 ft/s (6.1 km/s), ballistic.
@@ -293,8 +301,11 @@ NACA 1381, Sims SP-3004. Still outstanding:
    conf='solid'.  ~~ICBM-RV peak flux~~ — RESOLVED: pinned to the **Reentry F**
    flight experiment, 318 MW/m² peak (9k–28k Btu/ft²·s, R_n=2.54 mm, Mach 20;
    NASA TM X-2584 / Berry white paper / Thompson 1989), conf='solid'.  Both
-   former 'rough' anchors are now flight-pinned.  Still outstanding: a sourced
-   *integrated load* (∫q̇dt) for either the Shuttle or an RV.
+   former 'rough' anchors are now flight-pinned.  ~~Shuttle integrated load~~ —
+   RESOLVED: Q_MJ≈66 MJ/m² from integrating the STS-1 Fig. 11 flight curve
+   (windward centerline, ±~20%).  Still outstanding: an integrated load (∫q̇dt)
+   for a ballistic RV — Reentry F gives instantaneous flux only (steep,
+   short ablative pulse); the Reentry F Q_MJ remains the sole blank.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).
 5. **NTRS 19940030739** — RCC oxidation/coating reuse limits.
