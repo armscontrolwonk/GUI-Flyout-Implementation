@@ -167,8 +167,16 @@ These four were read directly and their key results confirmed:
   (197 W/cm² design, 5,477 J/cm²). https://ntrs.nasa.gov/citations/20070016625
 - MSL heatshield aerothermo design, NTRS 20090024218 (entry-angle flux trade).
   https://ntrs.nasa.gov/citations/20090024218
-- ⭐ STS-1 entry heating & TPS response, NTRS 19820015618 — primary Shuttle
-  windward-flux reconstruction. https://ntrs.nasa.gov/citations/19820015618
+- ⭐ Ried, Goodrich, Li, Scott, Derry & Maraia, *Space Shuttle Orbiter Entry
+  Heating and TPS Response: STS-1 Predictions and Flight Data*, NTRS
+  19820015618 — **read from primary** (JSC).  Fig. 11 gives the STS-1 windward-
+  centerline (x/L=0.4) surface-heat-flux **history** vs entry time (axis
+  0–20 W/cm², pulse ~0–1600 s), with flight data derived by **radiation
+  equilibrium** — directly validating the FOM's q̇↔T_eq inversion — plus
+  bondline/surface-T comparisons (Figs 13–15).  Confirms the peak-flux anchor
+  lineage and pulse timescale, but the integrated heat load is *not tabulated*;
+  it exists only implicitly in the raster q̇(t) plot, so this does **not** hand
+  us an absolute Shuttle Q_MJ either.  https://ntrs.nasa.gov/citations/19820015618
 - ⭐ *Benchmark aerodynamic heat-transfer data from the first flight of the
   Space Shuttle Orbiter*, NTRS 19820036242 — flight-reconstructed convective
   rates: windward mid-body tiles ~5 Btu/ft²·s (≈0.06 MW/m²); RCC nose-cap /
