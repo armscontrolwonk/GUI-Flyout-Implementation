@@ -161,6 +161,18 @@ These four were read directly and their key results confirmed:
   ~1650 °C).  **Shuttle benchmark now pinned to 0.6 MW/m² (RCC stagnation),
   conf='solid'.** https://ntrs.nasa.gov/citations/19820036242
 - STS-3 windward analysis, NTRS 19820020699. https://ntrs.nasa.gov/citations/19820020699
+- Horvath et al., *Shuttle Entry Imaging Using Infrared Thermography*, AIAA
+  2007-4267 (NASA LaRC HYTHIRM) — flight IR thermography: windward acreage
+  (excl. nose/wing-LE) surface T generally **600–1100 K** over Mach 25→6;
+  imagery saturates ~1480–1500 K.  Corroborates the *temperature* (T_eq) side,
+  not flux: 1100 K at RCG ε≈0.89 back-computes via εσT⁴ to ≈0.07 MW/m² —
+  consistent with the ~0.06 MW/m² windward-tile benchmark above.
+- Taylor et al., *Global Thermography of the Space Shuttle During Hypersonic
+  Re-entry*, AIAA 2011-xxxx (HYTHIRM) — 3-D windward surface-T maps for
+  STS-119/125/128/132/133 near closest approach (Mach 8.4–14.3).  Independent
+  multi-flight validation of the radiative-equilibrium T_eq = (q̇/εσ)^¼ method
+  the FOM uses; RCC nose/LE confirmed as the hot region.  **Neither HYTHIRM
+  paper pins peak flux or integrated load — Shuttle Q_MJ stays open.**
 - ⭐ Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
   1984) — read from the primary.  Pins the RV **regime, not a flux**: reentry
   V≳7 km/s at γ≈20–22°, drag deceleration >50 g, surface "thousands of °C",
