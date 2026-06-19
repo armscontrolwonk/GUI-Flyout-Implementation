@@ -58,15 +58,16 @@ TPS_MATERIALS = {
 # 19820015618): windward tiles ~5 Btu/ft²·s (≈0.06 MW/m²), RCC nose-cap /
 # wing-leading-edge stagnation peak ~50 Btu/ft²·s (≈0.6 MW/m², surface ~1650 °C);
 # we anchor on the RCC stagnation peak.  No clean public integrated-load value,
-# so Q_MJ stays None.  ICBM-RV: Bunn 1984 (MIT STIS) pins the regime — V≳7 km/s,
-# γ≈20–22°, β≈1800–2000 lb/ft² (Mk4/Mk12A), >50 g, "thousands of °C", small
-# ablating nosetip — but gives no flux number.  Our own Sutton-Graves model at
-# those parameters (Allen-Eggers peak-heating density, V_pk≈5.9 km/s) gives
-# ≈45–100 MW/m² for a 2–10 cm nosetip; we anchor at 50 MW/m² (~5–8 cm).  It is a
-# correlation estimate from primary trajectory data, not a CFD/flight value, so
-# it stays 'rough'.  Q_MJ omitted (steep entry → very short, ~few-second pulse).
+# so Q_MJ stays None.  ICBM-RV is now pinned to the Reentry F flight experiment
+# (NASA TM X-2584; Berry white paper; Thompson et al. 1989) — a 5° half-angle
+# cone, R_n=2.54 mm (0.10 in), Mach ~20, V≈6.1 km/s, flight-measured stagnation
+# heating 9,000–28,000 Btu/ft²·s (≈102–318 MW/m²) over the 50–100 kft window;
+# we anchor on the 318 MW/m² peak (very sharp tip → 1/√R_N makes this far above
+# a blunter 1–5 cm operational RV, which scales to ~70–160 MW/m², consistent
+# with the Bunn-parameter Sutton-Graves estimate).  conf='solid' (flight data).
+# Q_MJ omitted (steep, ~few-second ablative pulse; no clean ∫q̇dt value).
 _BENCHMARKS = {
-    "ICBM RV":  dict(q_MW=50.0, Q_MJ=None,  conf="rough"),
+    "ICBM RV":  dict(q_MW=318.0, Q_MJ=None, conf="solid"),
     "Stardust": dict(q_MW=9.4,  Q_MJ=276.0, conf="solid"),
     "Apollo":   dict(q_MW=7.9,  Q_MJ=468.0, conf="solid"),
     "MSL":      dict(q_MW=2.0,  Q_MJ=55.0,  conf="solid"),

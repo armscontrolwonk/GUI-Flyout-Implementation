@@ -173,17 +173,27 @@ These four were read directly and their key results confirmed:
   multi-flight validation of the radiative-equilibrium T_eq = (q̇/εσ)^¼ method
   the FOM uses; RCC nose/LE confirmed as the hot region.  **Neither HYTHIRM
   paper pins peak flux or integrated load — Shuttle Q_MJ stays open.**
-- ⭐ Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
-  1984) — read from the primary.  Pins the RV **regime, not a flux**: reentry
-  V≳7 km/s at γ≈20–22°, drag deceleration >50 g, surface "thousands of °C",
-  nosetip the most severely heated point (small, ablating), β≈1800 lb/ft² (Mk4)
-  / ≈2000 lb/ft² (Mk12A), Soviet RVs 1500–1800 lb/ft².  No peak-flux number is
-  given.  We therefore derive the benchmark with our own Sutton-Graves model at
-  these parameters (Allen-Eggers ballistic peak-heating density ρ≈0.16 kg/m³,
-  V_pk≈5.9 km/s): q_stag ≈ 45–100 MW/m² for a 2–10 cm nosetip, so the old
-  30 MW/m² placeholder was *low*.  **ICBM-RV anchored at 50 MW/m² (~5–8 cm
-  nosetip), conf='rough'** — a correlation estimate from primary trajectory
-  data, not CFD/flight.  https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
+- ⭐⭐ **Reentry F** flight experiment (1968) — the ICBM-RV peak-flux pin.
+  5° half-angle slender cone, 156 in long, **R_n = 2.54 mm (0.10 in)** ablative
+  ATJ-graphite nosetip, Mach ~20, V≈20,000 ft/s (6.1 km/s), ballistic.
+  Flight-measured **stagnation-point heating 9,000–28,000 Btu/ft²·s
+  (≈102–318 MW/m²)** over the 50,000–100,000 ft test window (stag. pressures
+  5–60 atm, enthalpy ~8,000 Btu/lbm).  **ICBM-RV anchored at the 318 MW/m²
+  peak, conf='solid'.**  The very sharp tip makes this far above a blunter
+  operational RV (q̇∝1/√R_N → a 1–5 cm nose scales to ~70–160 MW/m²).
+  Sources: NASA TM X-2584 (flight data); Berry, *Deep Dive of Reentry F Nose
+  Tip Step and Gap* (NASA LaRC white paper, the 9k–28k Btu/ft²·s figures);
+  Thompson, Zoby, Wurster & Gnoffo, *Aerothermodynamic Study of Slender
+  Conical Vehicles*, J. Thermophysics 3(4), 1989 (VSL/engineering validation
+  vs the Reentry F laminar & turbulent flight heating).
+- Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
+  1984) — regime context for the above (not a flux source): reentry V≳7 km/s
+  at γ≈20–22°, >50 g, surface "thousands of °C", small ablating nosetip the
+  most severely heated point, β≈1800 lb/ft² (Mk4) / ≈2000 lb/ft² (Mk12A).  A
+  Sutton-Graves estimate at these parameters (Allen-Eggers peak-heating density
+  ρ≈0.16 kg/m³, V_pk≈5.9 km/s) gives ≈45–100 MW/m² for a 2–10 cm nosetip —
+  consistent with the Reentry F flight value scaled from 2.5 mm to cm-class
+  tips.  https://scholar.harvard.edu/matthew_bunn/publications/technology-ballistic-missile-reentry-vehicles
 
 ## 6. Policy / survivability framing (independent corroboration)
 
@@ -212,10 +222,11 @@ NACA 1381, Sims SP-3004. Still outstanding:
 1. **Sutton-Graves TR R-376** — K constant & validity range (NTRS 19720003329).
 2. ~~STS-1/STS-3 Shuttle peak heat flux~~ — RESOLVED: pinned to 0.6 MW/m²
    (RCC nose-cap/leading-edge stagnation, STS-1 benchmark NTRS 19820036242),
-   conf='solid'.  ~~ICBM-RV primary~~ — Bunn 1984 read; it pins the regime
-   (V≳7 km/s, γ≈20–22°, β≈2000 lb/ft², >50 g) but no flux, so ICBM-RV is a
-   Sutton-Graves estimate at those params (≈50 MW/m²), conf='rough'.  Still
-   outstanding: a sourced Shuttle integrated load and a measured/CFD RV flux.
+   conf='solid'.  ~~ICBM-RV peak flux~~ — RESOLVED: pinned to the **Reentry F**
+   flight experiment, 318 MW/m² peak (9k–28k Btu/ft²·s, R_n=2.54 mm, Mach 20;
+   NASA TM X-2584 / Berry white paper / Thompson 1989), conf='solid'.  Both
+   former 'rough' anchors are now flight-pinned.  Still outstanding: a sourced
+   *integrated load* (∫q̇dt) for either the Shuttle or an RV.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).
 5. **NTRS 19940030739** — RCC oxidation/coating reuse limits.
