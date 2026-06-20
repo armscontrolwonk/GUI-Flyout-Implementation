@@ -247,6 +247,20 @@ These four were read directly and their key results confirmed:
   Thompson, Zoby, Wurster & Gnoffo, *Aerothermodynamic Study of Slender
   Conical Vehicles*, J. Thermophysics 3(4), 1989 (VSL/engineering validation
   vs the Reentry F laminar & turbulent flight heating).
+  **Integrated load (Q_MJ) — still open.**  NASA TM X-2253 (Wright & Zoby,
+  NTRS 19770076296; read from primary) gives the measured *cone-flank*
+  turbulent heating (15–50 Btu/ft²·s ≈ 0.17–0.57 MW/m² — the body, not the
+  nose tip), the trajectory (Mach 18–20, alt 40–200 kft, t≈438–462 s), and
+  transition Tables I/II — but **no stagnation integrated load**, and its
+  Tables I/II carry the boundary-layer-thickness unit error Berry flags
+  (ft↔in, ×12; we use none of it).  Two complications block a clean
+  stagnation Q_MJ: the descent is third-stage **powered** (Mach *rises* to
+  20.2 mid-window, so Allen-Eggers ballistic analytics don't apply) and the
+  nose **recesses/blunts** from 2.54 mm during flight.  The stagnation q̇(t)
+  curve lives in **NASA LWP-460** (Berry Fig. 6); a rough integration of it
+  gives an order-of-magnitude **~1 GJ/m²** stagnation load (huge flux × short
+  pulse — why the tip must ablate), but it is too congested/preflight to pin.
+  Q_MJ left None pending LWP-460 or a measured stagnation q̇(t).
 - Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
   1984) — regime context for the above (not a flux source): reentry V≳7 km/s
   at γ≈20–22°, >50 g, surface "thousands of °C", small ablating nosetip the
