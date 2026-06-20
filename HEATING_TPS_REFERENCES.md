@@ -237,9 +237,14 @@ These four were read directly and their key results confirmed:
 - ⭐⭐ **Reentry F** flight experiment (1968) — the ICBM-RV peak-flux pin.
   5° half-angle slender cone, 156 in long, **R_n = 2.54 mm (0.10 in)** ablative
   ATJ-graphite nosetip, Mach ~20, V≈20,000 ft/s (6.1 km/s), ballistic.
-  Flight-measured **stagnation-point heating 9,000–28,000 Btu/ft²·s
-  (≈102–318 MW/m²)** over the 50,000–100,000 ft test window (stag. pressures
-  5–60 atm, enthalpy ~8,000 Btu/lbm).  **ICBM-RV anchored at the 318 MW/m²
+  **Preflight-predicted** nominal **stagnation-point heating 9,000–28,000
+  Btu/ft²·s (≈102–318 MW/m²)** (NASA LWP-460, via Berry Fig. 6) over the
+  50,000–100,000 ft window (stag. pressures 5–60 atm, enthalpy ~8,000 Btu/lbm).
+  NOTE: this is a *prediction* — the ablating tip was not calorimetered, so the
+  flight-MEASURED data is the cone-flank heating (15–50 Btu/ft²·s, TM X-2253)
+  and the nose recession; the flight flew near-nominal and the methods were
+  validated against the flank data (Thompson 1989).  **ICBM-RV anchored at the
+  318 MW/m²
   peak, conf='solid'.**  The very sharp tip makes this far above a blunter
   operational RV (q̇∝1/√R_N → a 1–5 cm nose scales to ~70–160 MW/m²).
   Sources: NASA TM X-2584 (flight data); Berry, *Deep Dive of Reentry F Nose
@@ -317,13 +322,16 @@ NACA 1381, Sims SP-3004. Still outstanding:
 1. **Sutton-Graves TR R-376** — K constant & validity range (NTRS 19720003329).
 2. ~~STS-1/STS-3 Shuttle peak heat flux~~ — RESOLVED: pinned to 0.6 MW/m²
    (RCC nose-cap/leading-edge stagnation, STS-1 benchmark NTRS 19820036242),
-   conf='solid'.  ~~ICBM-RV peak flux~~ — RESOLVED: pinned to the **Reentry F**
-   flight experiment, 318 MW/m² peak (9k–28k Btu/ft²·s, R_n=2.54 mm, Mach 20;
-   NASA TM X-2584 / Berry white paper / Thompson 1989), conf='solid'.  Both
-   former 'rough' anchors are now flight-pinned.  ~~Shuttle integrated load~~ —
-   RESOLVED: Q_MJ≈66 MJ/m² from integrating the STS-1 Fig. 11 flight curve
-   (windward centerline, ±~20%).  Still outstanding: an integrated load (∫q̇dt)
-   for a ballistic RV — Reentry F gives instantaneous flux only (steep,
+   conf='solid' (flight reconstruction).  ~~ICBM-RV peak flux~~ — pinned to the
+   **Reentry F** 318 MW/m² stagnation peak (R_n=2.54 mm, Mach 20), but this is
+   the NASA *preflight-predicted* nominal (LWP-460), method-validated against
+   the flight cone-flank data (Thompson 1989) — a flight-validated PREDICTION,
+   not a flight measurement (the ablating tip was not calorimetered).  Shuttle
+   peak is a true flight reconstruction; Reentry-F peak is a prediction — the
+   two 'solid' anchors are not the same epistemic class.  ~~Shuttle integrated
+   load~~ — RESOLVED: Q_MJ≈66 MJ/m² from integrating the STS-1 Fig. 11 flight
+   curve (windward centerline, ±~20%).  Still outstanding: an integrated load
+   (∫q̇dt) for a ballistic RV — Reentry F gives instantaneous flux only (steep,
    short ablative pulse); the Reentry F Q_MJ remains the sole blank.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).

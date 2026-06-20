@@ -64,13 +64,16 @@ TPS_MATERIALS = {
 # equilibrium reduction, Ried et al. NTRS 19820015618 Fig. 11: peak ~6 W/cm²
 # over a ~1500 s pulse → ∫q̇dt ≈ 6.6 kJ/cm²; ±~20% from digitizing the plot).
 # So the Shuttle's two metrics intentionally reference their most-relevant
-# locations (peak→RCC nose, load→windward acreage).  ICBM-RV is pinned to Reentry F
-# (NASA TM X-2584; Berry white paper; Thompson et al. 1989) — a 5° half-angle
-# cone, R_n=2.54 mm (0.10 in), Mach ~20, V≈6.1 km/s, flight-measured stagnation
-# heating 9,000–28,000 Btu/ft²·s (≈102–318 MW/m²) over the 50–100 kft window;
-# we anchor on the 318 MW/m² peak (very sharp tip → 1/√R_N makes this far above
-# a blunter 1–5 cm operational RV, which scales to ~70–160 MW/m², consistent
-# with the Bunn-parameter Sutton-Graves estimate).  conf='solid' (flight data).
+# locations (peak→RCC nose, load→windward acreage).  ICBM-RV is anchored on
+# Reentry F (5° half-angle cone, R_n=2.54 mm initial, Mach ~20, V≈6.1 km/s).
+# Its stagnation heating 9,000–28,000 Btu/ft²·s (≈102–318 MW/m²) is the NASA
+# PREFLIGHT-predicted nominal (LWP-460, via Berry Fig. 6) — the ablating
+# graphite tip was not calorimetered, so the flight-MEASURED data is the
+# cone-flank turbulent heating (15–50 Btu/ft²·s, TM X-2253) and the nose
+# recession.  The flight flew near-nominal and the prediction methods were
+# validated against the flank flight data (Thompson et al. 1989), so we keep
+# the 318 MW/m² peak but it is a flight-validated PREDICTION, not a measurement;
+# blunter 1–5 cm operational tips scale to ~70–160 MW/m² (1/√R_N).  conf='solid'.
 # Q_MJ omitted (steep, ~few-second ablative pulse; no clean ∫q̇dt value).
 _BENCHMARKS = {
     "ICBM RV":  dict(q_MW=318.0, Q_MJ=None, conf="solid"),
