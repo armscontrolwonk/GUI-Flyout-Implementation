@@ -274,6 +274,16 @@ These four were read directly and their key results confirmed:
   consequence: *every* Reentry-F flight heating report (X-2253, X-2560, and the
   X-2282/X-2308/X-2335 data reports) is cone-flank; a stagnation Q_MJ can only
   be preflight/model (≈1 GJ/m²) or recession-inferred, never directly measured.
+  **DECISION — Q_MJ stays None.**  NASA TM X-2282 (Howard, NTRS 19710072028;
+  read from primary) supplies the measured wall-temperature histories; treating
+  the 15.24 mm beryllium wall as a calorimeter (∫q̇dt = ρL∫c·dT, ρL=28.3 kg/m²)
+  gives the flank load: ΔT≈1010 K at the hottest *forward* station (peak wall
+  T≈2300–2366 °R ≈ 1280–1314 K, initial ≈290 K) → **≈60 MJ/m²**, falling to
+  **≈5 MJ/m²** aft.  So the flank load is real flight data but strongly
+  station-dependent (5–60 MJ/m²) AND a different location than the 318 MW/m²
+  stagnation peak — there is no single well-defined Reentry-F integrated load
+  to anchor, so the cell is left blank (the four other anchors carry the
+  load-comparison).
 - Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
   1984) — regime context for the above (not a flux source): reentry V≳7 km/s
   at γ≈20–22°, >50 g, surface "thousands of °C", small ablating nosetip the
@@ -338,9 +348,12 @@ NACA 1381, Sims SP-3004. Still outstanding:
    peak is a true flight reconstruction; Reentry-F peak is a prediction — the
    two 'solid' anchors are not the same epistemic class.  ~~Shuttle integrated
    load~~ — RESOLVED: Q_MJ≈66 MJ/m² from integrating the STS-1 Fig. 11 flight
-   curve (windward centerline, ±~20%).  Still outstanding: an integrated load
-   (∫q̇dt) for a ballistic RV — Reentry F gives instantaneous flux only (steep,
-   short ablative pulse); the Reentry F Q_MJ remains the sole blank.
+   curve (windward centerline, ±~20%).  ~~Reentry-F integrated load~~ — CLOSED
+   (leave None): X-2282 calorimeter analysis shows the flight-measured flank
+   load is station-dependent (~5–60 MJ/m²) and a different location than the
+   stagnation peak; the stagnation load is only preflight/model (~1 GJ/m²).
+   No single well-defined value exists, so the cell stays blank by decision —
+   not an outstanding item.
 3. **Cedillos-Barraza 2016** — UHTC melting points (PMC5131352).
 4. **Jacobson/Harder 2013** — SiC passive→active transition (jace.12108).
 5. **NTRS 19940030739** — RCC oxidation/coating reuse limits.
