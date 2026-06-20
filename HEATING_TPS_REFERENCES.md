@@ -265,7 +265,15 @@ These four were read directly and their key results confirmed:
   curve lives in **NASA LWP-460** (Berry Fig. 6); a rough integration of it
   gives an order-of-magnitude **~1 GJ/m²** stagnation load (huge flux × short
   pulse — why the tip must ablate), but it is too congested/preflight to pin.
-  Q_MJ left None pending LWP-460 or a measured stagnation q̇(t).
+  Q_MJ left None pending LWP-460 or a measured stagnation q̇(t).  NASA TM
+  X-2560 (Stainback, Johnson, Boney & Wicker, 1972; NTRS 19790075398; read
+  from primary) compares predicted vs measured laminar/transitional/turbulent
+  heating — but its flight data are explicitly "downstream of the stagnation
+  point" (cone flank), confirming there is **no flight-measured stagnation
+  heating** for Reentry F (the ablating tip was never calorimetered).  Key
+  consequence: *every* Reentry-F flight heating report (X-2253, X-2560, and the
+  X-2282/X-2308/X-2335 data reports) is cone-flank; a stagnation Q_MJ can only
+  be preflight/model (≈1 GJ/m²) or recession-inferred, never directly measured.
 - Bunn, M., *Technology of Ballistic Missile Reentry Vehicles* (MIT STIS,
   1984) — regime context for the above (not a flux source): reentry V≳7 km/s
   at γ≈20–22°, >50 g, surface "thousands of °C", small ablating nosetip the
