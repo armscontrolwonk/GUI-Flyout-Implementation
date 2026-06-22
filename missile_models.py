@@ -1886,12 +1886,16 @@ def _strypi_viii_r():
         isp_s=224.0,
         nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
         guidance="pitch_program",
-        burnout_angle_deg=32.0,                  # SWERVE flight-3 loft (Kauai launch elev ~40 deg)
+        # SWERVE flight-3 trajectory is flown by passing launch_elevation_deg~40
+        # and burnout_angle_deg~32 to integrate_trajectory (Kauai->Johnston,
+        # ~1,180 km, ~160 s reentry, Mach ~12).  These factory defaults are the
+        # generic lofted-suborbital starting values.
+        burnout_angle_deg=80.0,
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=25.0,
-        stage_burnout_angle_deg=32.0,
-        coast_time_s=120.0,                      # exo-atmospheric coast before Alcor
+        stage_burnout_angle_deg=80.0,
+        coast_time_s=120.0,
         payload_kg=_swerve.mass_kg,
         rv_separates=True,
         rv=_swerve,
