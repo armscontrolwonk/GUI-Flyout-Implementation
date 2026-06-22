@@ -32,7 +32,10 @@ import numpy as np
 SIGMA = 5.670374419e-8            # Stefan-Boltzmann, W/m²/K⁴
 _SG_K = 1.7415e-4                 # Sutton-Graves constant (SI, W/m²), Earth air
 _T0   = 298.0                     # reference temperature, K
-NOTHING_SURVIVES_K = 4000.0       # above all usable materials
+NOTHING_SURVIVES_K = 4000.0       # T_eq above all usable materials → the
+                                  # no-ablation equilibrium model is invalid here
+                                  # (ablators survive by recession/blowing, not by
+                                  # staying below a fixed surface limit)
 
 # TPS material ladder — HEATING_TPS_REFERENCES.md §2 (peak vs continuous limits).
 #   peak_K       : short-duration surface limit (melt / ablation onset)
@@ -101,11 +104,15 @@ def _stag_flux(rho, V, radius_m):
 def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                             body_radius_m=0.0, emissivity=0.85, material="",
                             mass_kg=0.0, frontal_area_m2=0.0, soak_dwell_s=120.0):
-    """Evaluate the heating survivability figure of merit over a reentry arc.
+    """Evaluate the heating-survivability SCREENING figure of merit over a
+    reentry arc.  This is a stagnation-point convective indicator, not a
+    through-wall TPS response model; verdicts are screening flags (see the
+    "warnings" key), not survival guarantees.
 
     t, rho, V, alt, rng : 1-D arrays over the reentry/glide phase (SI).
-    Returns a dict (peak flux, peak T_eq, integrated load, per-criterion
-    margins, compromise point, verdict, benchmark ratio).
+    Returns a dict: q_peak (NOSE-STAGNATION reference flux), peak T_eq,
+    integrated load, per-criterion margins, compromise point, verdict,
+    benchmark ratios, and screening-validity 'warnings'.
     """
     t = np.asarray(t, float); rho = np.asarray(rho, float); V = np.asarray(V, float)
     alt = np.asarray(alt, float); rng = np.asarray(rng, float)
@@ -131,14 +138,34 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         "verdict": "",
     }
 
+    # Validity guards — this is a screening indicator, NOT a through-wall TPS
+    # response model; the labels below keep callers from over-reading it.
+    out["warnings"] = [
+        "Screening model: nose-stagnation Sutton-Graves convective flux + "
+        "radiative-equilibrium wall temperature.  No ablation/recession/pyrolysis, "
+        "backface conduction, or off-stagnation (shoulder/leading-edge/acreage) "
+        "heating.  Verdicts are screening flags, not TPS-survival guarantees.",
+        "q_peak is a NOSE-STAGNATION reference flux, not the heat over the whole "
+        "vehicle.",
+        "Benchmark ratios are single-scalar (flux or load) matches; entry regime, "
+        "heating location (stagnation/acreage/leading-edge), beta, lift and TPS "
+        "type are not matched.",
+    ]
+    _Vmax = float(np.max(V)) if V.size else 0.0
+    if _Vmax > 9000.0:
+        out["warnings"].append(
+            f"Convective-only model; radiative gas heating NOT assessed "
+            f"(peak V {_Vmax/1000:.1f} km/s exceeds the ~9 km/s screening envelope).")
+
     if T_peak >= NOTHING_SURVIVES_K:
-        out["verdict"] = f"nothing survives (peak T_eq ≈ {T_peak:.0f} K ≥ {NOTHING_SURVIVES_K:.0f} K)"
+        out["verdict"] = (f"outside no-ablation model validity (peak T_eq ≈ {T_peak:.0f} K "
+                          f"≥ {NOTHING_SURVIVES_K:.0f} K) — requires ablation/material-response analysis")
         return out
 
     mat = TPS_MATERIALS.get(material)
     if not mat:
         out["verdict"] = ("physical numbers only — set the RV's tps_material "
-                          "for a survivability verdict")
+                          "for a screening verdict")
         return out
 
     crossings = []   # (index, mode label)
@@ -158,7 +185,9 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     time_above = float(cum_above[-1]) if cum_above.size else 0.0
     out["criteria"]["soak"] = {
         "margin": time_above / soak_dwell_s, "time_above_s": time_above,
-        "limit_K": mat["continuous_K"], "dwell_s": soak_dwell_s}
+        "limit_K": mat["continuous_K"], "dwell_s": soak_dwell_s,
+        "basis": "empirical dwell-above-continuous-limit damage surrogate "
+                 "(not an oxidation-kinetics closure)"}
     js = np.where(cum_above >= soak_dwell_s)[0]
     if js.size:
         crossings.append((int(js[0]), "TPS oxidation soak (glide)"))
@@ -190,5 +219,5 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                           f"{alt[ci]/1000:.0f} km, {V[ci]/1000:.1f} km/s "
                           f"({mat['label']})")
     else:
-        out["verdict"] = f"survives ({mat['label']})"
+        out["verdict"] = f"no screened thermal failure ({mat['label']})"
     return out
