@@ -44,6 +44,7 @@
 
   {"name": "Cape Canaveral (SLC-40)",    "country": "USA",         "lat":  28.5619, "lon":  -80.5772},
   {"name": "Cape Canaveral (SLC-41)",    "country": "USA",         "lat":  28.5835, "lon":  -80.5830},
+  {"name": "Kauai Test Facility (PMRF)", "country": "USA",         "lat":  22.0228, "lon": -159.7850},
   {"name": "Vandenberg (SLC-4E)",        "country": "USA",         "lat":  34.6320, "lon": -120.6130},
   {"name": "Wallops Island",             "country": "USA",         "lat":  37.9402, "lon":  -75.4664},
   {"name": "White Sands",                "country": "USA",         "lat":  32.3799, "lon": -106.4823}
