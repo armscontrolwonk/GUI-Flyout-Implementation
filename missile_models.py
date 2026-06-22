@@ -1834,12 +1834,98 @@ def _minotaur_4_htv2():
     )
 
 
+def _strypi_viii_r():
+    # STRYPI VIII R — Sandia reentry-vehicle carrier (SWERVE flights, 1979-1985,
+    # Kauai Test Facility; flight 3 reentered near Johnston Island, ~1,180 km).
+    # Two propulsive stages + two strap-on boosters:
+    #   Stage 1 (core): Thiokol TX-33-39 Castor I sustainer, fin-stabilized, 31" body.
+    #   Strap-ons:      2x Thiokol TE-M-29 Recruit, light at liftoff, jettison ~3 s.
+    #   Stage 2:        Aerojet Alcor IB (= the Strypi VII R 2nd stage; VIII R omits
+    #                   the VII R's BE-3B-1 third stage per Sandia layout, Fig. 3).
+    #   Payload:        SWERVE RV (rv_library/SWERVE.rv.json).
+    # Propulsion from Wente, "The Strypi VII R Launch Vehicle" (Sandia, 1982),
+    # Table 5 + motor descriptions.  Masses lbm->kg x0.453592, thrust lbf->N
+    # x4.4482; burn times set to conserve each motor's published total impulse
+    # at its average thrust.  The guidance/coast/launch angles below are STARTING
+    # values to be tuned against the known ~1,180 km Johnston range.
+    import json as _json, os as _os
+    _swerve = rv_from_dict(_json.load(open(
+        _os.path.join(_os.path.dirname(__file__), 'rv_library', 'SWERVE.rv.json'))))
+
+    # Stage 2 — Aerojet Alcor IB: 257,900 lb-sec vac, ~26.5 s, ~9,634 lbf, Isp ~283.
+    stage2 = MissileParams(
+        name="Alcor IB (Strypi 2nd stage)",
+        mass_initial=501.4 + _swerve.mass_kg,    # Alcor loaded 1105.4 lbm + SWERVE RV
+        mass_propellant=413.8,                   # 912.3 lbm
+        mass_final=87.6,                         # Alcor inert 193.1 lbm, jettisoned
+        diameter_m=0.512,                        # 20.15 in
+        length_m=2.0,
+        thrust_N=42_852,                         # 9,634 lbf
+        burn_time_s=26.5,
+        isp_s=283.0,
+        nozzle_exit_area_m2=0.141,               # 1.5175 ft^2
+        guidance="pitch_program",
+        burnout_angle_deg=5.0,
+        stage_burnout_angle_deg=5.0,
+        coast_time_s=0.0,
+        mach_table=[], cd_table=[],
+    )
+
+    # Stage 1 core dry = Castor empty 1427 + fins 605.3 + adapter 101.5 + Recruit
+    # track 113.9 lbm.  (Recruit motor inert/prop handled by the booster_* fields.)
+    core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * 0.453592   # ~= 1019 kg
+    return MissileParams(
+        name="Strypi VIII R",
+        mass_initial=(3324.0 + core_dry_kg) + stage2.mass_initial,  # core wet + (S2+RV); boosters added separately
+        mass_propellant=3324.0,                  # 7328 lbm Castor I
+        mass_final=core_dry_kg,                  # jettisoned after Castor burnout
+        diameter_m=0.787,                        # 31 in
+        length_m=8.2,                            # Castor + Alcor + SWERVE stack (approx)
+        thrust_N=239_925,                        # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
+        burn_time_s=30.5,
+        isp_s=224.0,
+        nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
+        guidance="pitch_program",
+        burnout_angle_deg=80.0,                  # lofted suborbital — TUNE to ~1,180 km
+        loft_angle_rate_deg_s=2.0,
+        stage_turn_start_s=0.0,
+        stage_turn_stop_s=25.0,
+        stage_burnout_angle_deg=80.0,
+        coast_time_s=120.0,                      # exo-atmospheric coast before Alcor — TUNE
+        payload_kg=_swerve.mass_kg,
+        rv_separates=True,
+        rv=_swerve,
+        stage2=stage2,
+        # Strap-on Recruits (2x TE-M-29): 59,723 lb-sec each, ~1.7 s, 35,222 lbf, Isp 223.
+        n_boosters=2,
+        booster_thrust_n=156_680,                # 35,222 lbf each
+        booster_burn_time_s=1.7,
+        booster_inert_kg=47.5,                   # 104.65 lbm each
+        booster_prop_kg=121.5,                   # 267.8 lbm each
+        booster_isp_s=223.0,
+        booster_diam_m=0.229,                    # 9 in
+        booster_nozzle_area_m2=0.02,             # estimate (not in Wente)
+        booster_core_delay_s=0.0,                # core + boosters light together
+        # Fins — 4 single-wedge on the Castor stage (Wente: LE sweep 45 deg,
+        # root chord 50", exposed span 44"; tip chord ~31.4" derived).
+        has_fins=True,
+        n_fins=4,
+        fin_root_chord_m=1.270,                  # 50 in
+        fin_tip_chord_m=0.798,                   # 31.4 in (derived)
+        fin_span_m=1.118,                        # 44 in exposed semi-span
+        fin_sweep_deg=45.0,
+        fin_thickness_m=0.102,                   # ~4 in (estimate)
+        mach_table=[], cd_table=[],
+    )
+
+
 MISSILE_DB = {
     # Packaged defaults — always available.
     # Additional missiles are loaded at runtime from custom_missiles.json
     # via _load_custom_missiles() and overlay any same-name entries.
     "AUR+HGB":           _aur_hgb,
     "Minotaur-IV + HTV-2": _minotaur_4_htv2,
+    "Strypi VIII R":     _strypi_viii_r,
 }
 
 
