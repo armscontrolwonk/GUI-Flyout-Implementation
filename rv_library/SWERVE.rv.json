@@ -1,14 +1,14 @@
 {
   "name": "SWERVE",
-  "mass_kg": 350,
+  "mass_kg": 185,
   "beta_kg_m2": 15250,
   "shape": "cone",
   "diameter_m": 0.476,
   "length_m": 2.6,
   "nose_radius_m": 0.0167,
   "glider_enabled": true,
-  "glider_LD": 1.5,
-  "glider_guidance": "equilibrium_glide_acton",
+  "glider_LD": 0.6,
+  "glider_guidance": "damped_glide",
   "glider_aero_model": "polar",
   "glider_damping_zeta": 0.7,
   "glider_beta_entry_kg_m2": 20.0,
@@ -18,6 +18,6 @@
   "glider_skip_count": 1,
   "emissivity": 0.85,
   "tps_material": "carbon_ablator",
-  "source": "Sandia Winged Energetic Re-entry Vehicle (SWERVE). Three flights 1979-1985 from the Kauai Test Facility on STRYPI boosters; flight 3 reentered near Johnston Island (~1,180 km). Spherically blunted 5.25-deg half-angle cone, 'a little over 100 in' long (~2.6 m), with small wings/elevons for lift and control, Mach 2-14 maneuvering. Nose-tip/heat-shield ablative. (Primary: Sandia hypersonics descriptions; the AHW conical glide body is described as 'SWERVE with improved TPS'.)",
-  "notes": "GEOMETRY is sourced: 5.25-deg sphere-cone, nose_radius from the published R_n/R_base = 0.07 (R_base = L*tan(5.25) ~ 0.238 m -> R_n ~ 0.0167 m, sharper than the AHW model's 0.05 placeholder). base diameter 0.476 m is the CONE base; the ~0.61 m (2 ft) factsheet 'diameter' includes the wings. MASS ~400 kg is ESTIMATED from beta = m/(Cd*A): beta = 15,250 kg/m2 (published flight-vehicle value, same-size 2.75 m SWERVE-derived Mars vehicle) x Cd*A (cone base area 0.178 m2, Cd ~0.10-0.20) -> 270-540 kg, central ~400. CALIBRATED to ~350 kg by flying Strypi VIII R to the known ~1,180 km Kauai->Johnston range (350 kg -> ~1,130 km, 300 kg -> ~1,250 km on a flat loft; implies Cd ~0.12). Mass is coupled to the assumed loft shape, so treat as ~300-400 kg. L/D 1.5 is a representative winged-cone value (same airframe as the AHW model, per the SWERVE->AHW heritage). tps_material = carbon_ablator (the ORIGINAL ablative heat shield); the SWERVE->AHW claim is that the airframe was reused with an improved heat shield for the longer AHW range, so the AHW RV should differ from this mainly in TPS, not airframe."
+  "source": "Sandia Winged Energetic Re-entry Vehicle (SWERVE). Three flights 1979-1985 from the Kauai Test Facility on STRYPI boosters; flight 3 reentered near Johnston Island (~1,180 km). Spherically blunted 5.25-deg half-angle cone, 'a little over 100 in' long (~2.6 m), with small wings/elevons for lift and control, Mach 2-14 maneuvering. Nose-tip/heat-shield ablative. Flight-3 maneuver (Williamson, AIAA 92-3989, Fig. 20): ~-10 deg AoA push-over at 20 s/Mach 12, +10-15 deg pull-ups, ~4 deg control deflection; all flight data (Figs 20/23/24) end at ~160 s. (The AHW conical glide body is described as 'SWERVE with improved TPS'.)",
+  "notes": "GEOMETRY sourced: 5.25-deg sphere-cone, nose_radius from published R_n/R_base=0.07 (R_base=L*tan(5.25)~0.238 m -> R_n~0.0167 m). base diameter 0.476 m is the CONE base; the ~0.61 m (2 ft) factsheet 'diameter' includes the wings. MASS 185 kg and L/D 0.6 are CALIBRATED against four flight observables of flight 3 on Strypi VIII R (Kauai launch): (1) ~160 s reentry->impact window (Figs 20/23/24), (2) peak reentry ~Mach 12 (Fig 20), (3) ~1,180 km Kauai->Johnston range, (4) apogee in the documented 400,000-600,000 ft band (model ~630 kft, ~6% high). This supersedes an earlier 350 kg / L/D 1.5 guess that was calibrated to GLIDE range only and gave a 406 s descent (2.5x too long) and only Mach 10: SWERVE did NOT sustain a long equilibrium glide -- it reentered fast (~160 s) with maneuvers. The 185 kg is also consistent with beta=15,250 and a realistic sharp-5.25-deg-cone Cd~0.068 (m=beta*Cd*A). L/D 0.6 reflects the 'small wings', NOT the AHW model's 1.5. guidance=damped_glide models the maneuvering pull-up/push-over phugoid (Thrusty has no prescribed-AoA-schedule mode, so the exact Fig-20 alpha program is documented here, not flown). tps_material=carbon_ablator is the ORIGINAL ablative heat shield; the SWERVE->AHW claim is airframe reuse with an improved shield for AHW's much longer (~3,770 km) range -- AHW differs mainly in TPS and booster (STARS), not airframe."
 }
