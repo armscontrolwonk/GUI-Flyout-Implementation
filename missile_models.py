@@ -1923,6 +1923,74 @@ def _strypi_viii_r():
     )
 
 
+def _stars_1():
+    # STARS-1 (Strategic Target System) — the AHW Flight-1 carrier from KTF
+    # (PMRF Barking Sands, Kauai) to Illeginni Islet, Kwajalein (~2,500 mi).
+    # Three solid stages: surplus Polaris A3 1st + 2nd stages + an Orbus 1a 3rd
+    # stage, carrying the AHW Hypersonic Glide Body.  Source: 2011 AHW Program
+    # Environmental Assessment (PMRF/USASMDC), Sec. 2.1.2 -- "Polaris A3 first
+    # and second stages with an Orbus 1a third stage motor," total booster
+    # propellant 30,541 lb (13,853 kg), ~75,000 lbf liftoff thrust.  Per-stage
+    # propellant: S2 (Polaris 2nd, 9,000 lb) and Orbus 1a (~992 lb) at published
+    # values; S1 (Polaris 1st) set to close the EA total.  Inert masses and Isp
+    # from Polaris A3 / Orbus public data; burn times reconciled from
+    # thrust/Isp/propellant (TUNE against the ~2,500 mi range).
+    import json as _json, os as _os
+    _hgb = rv_from_dict(_json.load(open(
+        _os.path.join(_os.path.dirname(__file__), 'rv_library', 'AHW.rv.json'))))
+
+    # Stage 3 — Orbus 1a (Thiokol): ~88 kN, Isp ~290 s, ~450 kg propellant.
+    stage3 = MissileParams(
+        name="Orbus 1a (STARS 3rd stage)",
+        mass_initial=500.0 + _hgb.mass_kg,       # Orbus loaded (500 kg) + HGB
+        mass_propellant=450.0,
+        mass_final=50.0,                         # Orbus inert
+        diameter_m=0.71,
+        length_m=1.3,
+        thrust_N=88_000,
+        burn_time_s=14.6,
+        isp_s=290.0,
+        guidance="pitch_program",
+        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0, coast_time_s=0.0,
+        mach_table=[], cd_table=[],
+    )
+    # Stage 2 — Polaris A3 2nd (Hercules X-260): 9,000 lb prop, Isp 280 s.
+    stage2 = MissileParams(
+        name="Polaris A3 2nd (STARS 2nd stage)",
+        mass_initial=(4082.0 + 816.0) + stage3.mass_initial,  # S2 loaded + (S3+HGB)
+        mass_propellant=4082.0,                  # 9,000 lb
+        mass_final=816.0,                        # 1,800 lb inert
+        diameter_m=1.37,
+        length_m=2.3,
+        thrust_N=172_500,                        # reconciled (Isp 280, ~65 s)
+        burn_time_s=65.0,
+        isp_s=280.0,
+        guidance="pitch_program",
+        burnout_angle_deg=8.0, stage_burnout_angle_deg=8.0, coast_time_s=5.0,
+        stage2=stage3,
+        mach_table=[], cd_table=[],
+    )
+    # Stage 1 — Polaris A3 1st (Aerojet): prop set to close the EA total
+    # (30,541 lb - 9,000 - 992 = 20,549 lb); ~75,000 lbf liftoff thrust.
+    return MissileParams(
+        name="STARS-1",
+        mass_initial=(9322.0 + 1270.0) + stage2.mass_initial,  # S1 loaded + (S2+S3+HGB)
+        mass_propellant=9322.0,                  # 20,549 lb
+        mass_final=1270.0,                       # 2,800 lb inert
+        diameter_m=1.37,                         # 54 in
+        length_m=9.5,                            # full STARS stack (approx)
+        thrust_N=333_600,                        # 75,000 lbf (EA)
+        burn_time_s=68.5,                        # reconciled (Isp 250, prop/thrust)
+        isp_s=250.0,
+        guidance="pitch_program",
+        burnout_angle_deg=45.0, loft_angle_rate_deg_s=1.5,
+        stage_turn_start_s=2.0, stage_turn_stop_s=55.0,
+        stage_burnout_angle_deg=45.0, coast_time_s=5.0,
+        payload_kg=_hgb.mass_kg, rv_separates=True, rv=_hgb, stage2=stage2,
+        mach_table=[], cd_table=[],
+    )
+
+
 MISSILE_DB = {
     # Packaged defaults — always available.
     # Additional missiles are loaded at runtime from custom_missiles.json
@@ -1930,6 +1998,7 @@ MISSILE_DB = {
     "AUR+HGB":           _aur_hgb,
     "Minotaur-IV + HTV-2": _minotaur_4_htv2,
     "Strypi VIII R":     _strypi_viii_r,
+    "STARS-1":           _stars_1,
 }
 
 
