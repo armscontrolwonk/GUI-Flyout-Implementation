@@ -180,6 +180,8 @@ class MissileParams:
     grid_fin_chord_m:         float = 0.0   # streamwise lattice depth
     grid_fin_web_thickness_m: float = 0.0   # cell wall (web) thickness
     grid_fin_cell_pitch_m:    float = 0.0   # cell centre-to-centre spacing
+    grid_fin_solidity:        float = 0.0   # σ = blocked frontal fraction; if >0
+    #   used directly (approximation for web+pitch), else derived from them.
     grid_fin_edge_factor:     float = 1.0   # 1.0 blunt webs; ~0.6-0.85 shaped
     # Deployment schedule: list of [deploy_time_s, n_fins] batches (absolute
     # mission time).  n fins become aerodynamically active at deploy_time_s;
@@ -1185,16 +1187,72 @@ def _gridfin_start_mach(contraction_ratio: float, gamma: float = 1.4) -> float:
     return 0.5 * (lo + hi)
 
 
+# ---------------------------------------------------------------------------
+# Grid-fin SOLIDITY (σ)
+# ---------------------------------------------------------------------------
+# Solidity σ is the fraction of the grid fin's frontal frame area that is
+# blocked by the lattice webs (σ = 1 − porosity φ).  It is the single physical
+# quantity that drives grid-fin drag, and it stands in for TWO geometric
+# details that are very hard to obtain from open sources — the web (wall)
+# thickness t and the cell pitch (centre-to-centre spacing) p.
+#
+# If you DO know t and p, compute σ exactly for a square lattice from:
+#
+#       σ = 1 − ((p − t) / p)²        (≈ 2·t/p for thin webs)
+#
+# If you DON'T, estimate σ directly from imagery (how "filled in" the lattice
+# looks): open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30.
+# Supplying σ avoids having to guess t and p separately; grid_fin_solidity()
+# below converts t,p → σ when you have them.
+
+# Representative cells-across-frame used to estimate the (secondary) friction
+# wetted area when σ is given but the cell pitch is not.
+_GRIDFIN_DEFAULT_CELLS = 10.0
+
+
+def grid_fin_solidity(web_thickness_m: float, cell_pitch_m: float) -> float:
+    """
+    Grid-fin solidity σ (blocked frontal fraction) from web thickness and cell
+    pitch, assuming a square lattice:
+
+        σ = 1 − ((p − t) / p)²
+
+    Returns σ clamped to (0, 1).  Use this to convert a known web/pitch pair
+    into the σ that the drag model consumes; if web/pitch are unknown, estimate
+    σ directly from imagery instead (see the section header above).
+    """
+    p = float(cell_pitch_m)
+    t = float(web_thickness_m)
+    if p <= 0.0:
+        return 0.0
+    t = min(max(t, 0.0), p)                       # web cannot exceed the pitch
+    sigma = 1.0 - ((p - t) / p) ** 2
+    return min(max(sigma, 1e-3), 0.999)
+
+
 def _gridfin_geometry(width_m: float, height_m: float, chord_m: float,
-                      web_thickness_m: float, cell_pitch_m: float):
+                      web_thickness_m: float, cell_pitch_m: float,
+                      solidity: float = 0.0):
     """
     Derived lattice geometry for one grid fin.  Returns
     (A_frame, porosity φ, A_block, web_wetted_area).  Square cells assumed.
+
+    Blockage source: if `solidity` (σ) > 0 it is used directly (the
+    approximation path — σ stands in for web thickness + cell pitch); otherwise
+    σ is derived from web_thickness_m and cell_pitch_m via grid_fin_solidity().
+    The friction wetted area needs an absolute cell pitch; when only σ is given
+    (no pitch), a representative pitch (frame / _GRIDFIN_DEFAULT_CELLS) is used,
+    which affects only the secondary friction term.
     """
     a_frame = max(width_m * height_m, 0.0)
-    pitch = max(cell_pitch_m, web_thickness_m + 1e-4)
-    phi = ((pitch - web_thickness_m) / pitch) ** 2     # open-area fraction
-    phi = min(max(phi, 0.05), 0.98)
+    if solidity and solidity > 0.0:
+        phi = 1.0 - min(max(float(solidity), 1e-3), 0.999)
+        pitch = (cell_pitch_m if cell_pitch_m > 0.0
+                 else max(min(width_m, height_m), 1e-3) / _GRIDFIN_DEFAULT_CELLS)
+    else:
+        pitch = max(cell_pitch_m, web_thickness_m + 1e-4)
+        phi = ((pitch - web_thickness_m) / pitch) ** 2     # open-area fraction
+    phi = min(max(phi, 0.02), 0.98)
     a_block = (1.0 - phi) * a_frame
     # Total web length in the frontal plane (horizontal + vertical members).
     # For a w×h frame on pitch p this is ≈ 2·A_frame/p for many cells.
@@ -1230,13 +1288,18 @@ def grid_fins_deployed(n_total: int, deploy_schedule, t_s) -> int:
 def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
                  web_thickness_m: float, cell_pitch_m: float,
                  body_diam_m: float, mach: float, re_chord: float = 5e6,
-                 edge_factor: float = _GRIDFIN_EDGE_BLUNT) -> float:
+                 edge_factor: float = _GRIDFIN_EDGE_BLUNT,
+                 solidity: float = 0.0) -> float:
     """
     Total grid-fin axial-force (drag) coefficient increment referenced to the
     body base area A_ref = π(d/2)².  Calibrated to Washington & Miller S1
     (AIAA 93-0035, Fig. 14): a roughly flat baseline (web friction + blunt-edge
     drag) plus a modest transonic bump.  See the module header for references
     and calibration caveats.  Returns 0 when not configured.
+
+    Blockage source: if `solidity` (σ) > 0 it is used directly (σ stands in for
+    web thickness + cell pitch — see grid_fin_solidity()); otherwise σ is
+    derived from web_thickness_m and cell_pitch_m.
 
     edge_factor scales the pressure (edge + transonic-bump) drag, not friction:
     1.0 = blunt webs (W&M S1 / Miller F1 baseline); ~0.6-0.85 for shaped/sharp
@@ -1254,7 +1317,8 @@ def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
     if a_ref <= 0:
         return 0.0
     a_frame, phi, a_block, a_wet = _gridfin_geometry(
-        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m)
+        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m,
+        solidity=solidity)
 
     # Baseline drag (roughly Mach-flat outside transonic):
     #   (a) skin friction on the wetted web area (flat-plate, chord Reynolds)
@@ -1284,7 +1348,7 @@ def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
 def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
                        chord_m: float, web_thickness_m: float,
                        cell_pitch_m: float, body_diam_m: float,
-                       mach: float) -> float:
+                       mach: float, solidity: float = 0.0) -> float:
     """
     Grid-fin normal-force slope (/rad) referenced to body base area, used by
     the L/D estimator (the trajectory integrator flies a pitch program and does
@@ -1302,7 +1366,8 @@ def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
     if a_ref <= 0:
         return 0.0
     a_frame, phi, a_block, a_wet = _gridfin_geometry(
-        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m)
+        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m,
+        solidity=solidity)
     # 2-D lift slope per member surface (Prandtl-Glauert / Ackeret)
     if mach < 0.95:
         cla_2d = 2.0 * math.pi / math.sqrt(max(1.0 - mach * mach, 0.04))
@@ -2379,6 +2444,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'grid_fin_chord_m':         p.grid_fin_chord_m,
         'grid_fin_web_thickness_m': p.grid_fin_web_thickness_m,
         'grid_fin_cell_pitch_m':    p.grid_fin_cell_pitch_m,
+        'grid_fin_solidity':        p.grid_fin_solidity,
         'grid_fin_edge_factor':     p.grid_fin_edge_factor,
         'grid_fin_deploy_schedule': list(p.grid_fin_deploy_schedule or []),
         'payload_diameter_m':     p.payload_diameter_m,
@@ -2495,6 +2561,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         grid_fin_chord_m=float(d.get('grid_fin_chord_m', 0.0)),
         grid_fin_web_thickness_m=float(d.get('grid_fin_web_thickness_m', 0.0)),
         grid_fin_cell_pitch_m=float(d.get('grid_fin_cell_pitch_m', 0.0)),
+        grid_fin_solidity=float(d.get('grid_fin_solidity', 0.0)),
         grid_fin_edge_factor=float(d.get('grid_fin_edge_factor', 1.0)),
         grid_fin_deploy_schedule=list(d.get('grid_fin_deploy_schedule', []) or []),
         glider_enabled=bool(d.get('glider_enabled', False)),
@@ -2832,7 +2899,8 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
                 params.grid_fin_height_m, params.grid_fin_chord_m,
                 params.grid_fin_web_thickness_m, params.grid_fin_cell_pitch_m,
                 params.diameter_m, mach, re_chord=re_c,
-                edge_factor=getattr(params, 'grid_fin_edge_factor', 1.0))
+                edge_factor=getattr(params, 'grid_fin_edge_factor', 1.0),
+                solidity=getattr(params, 'grid_fin_solidity', 0.0))
             a_base = np.pi * (params.diameter_m / 2.0) ** 2
             drag_mag += cd_gf * q * a_base
 
