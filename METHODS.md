@@ -1270,27 +1270,48 @@ reducing the core's `C_D,base`. This interaction is not modelled.
 For finned vehicles (e.g. SCUD-B and other early ballistic missiles)
 two contributions are added:
 
-**Fin lift slope** (`_cl_alpha_fins`, `missile_models.py`) — the lift-curve
-slope per fin from slender-body theory:
+**Fin lift slope** (`_cl_alpha_fins`, `missile_models.py`) — the fin
+normal-force-curve slope from **Barrowman's 1967 thesis, Eq 3-12** (the
+canonical slender-finned-vehicle method; the thesis itself is in
+`data/`), referenced to the body base area `A_ref = π(d/2)²`:
 
 ```
-C_Lα,fin = 2π · (S_fin / S_ref) · η_fin
+A_f  = s·(c_root + c_tip)/2                 # one exposed fin planform
+AR   = (2s)² / A_f                          # reflected aspect ratio (span 2s)
+β    = √|M² − 1|                            # Prandtl-Glauert (sub) / supersonic
+Γ_c  = mid-chord sweep;  tan Γ_c = tan Λ_LE + (c_tip − c_root)/(2s)
+
+C_Nα = N·π·AR·(A_f/A_ref) / [ 2 + √(4 + (β·AR / cos Γ_c)²) ]   ·  K_T(B)
 ```
 
-where `η_fin` is a fin-efficiency factor that depends on the fin planform
-aspect ratio. For preliminary work the slender-body limit is used.
+The `N·π` numerator is Barrowman's cruciform result — for N=4, two fins lie in
+the pitch plane, giving 2× the single-fin `2π` form (Eq 3-6). Body–fin
+interference uses Barrowman's simplified slender-body factor
+`K_T(B) = 1 + r/(s+r) = 1 + d/(2s+d)`.
+
+**Regime — this is BOOSTER aerodynamics, not a glider model.** Eq 3-12 is
+small-angle-of-attack, linear, fin-stabilised slender-vehicle theory (valid to
+~7° AoA, subsonic through supersonic). It is used for a **booster's static
+margin** (Section 8.9). It is deliberately **not** applied to a gliding RV: a
+glide vehicle is a high-AoA hypersonic *lifting body* whose L/D is a Newtonian
+property, supplied directly as `rv.glider_LD` and used by the glide trajectory
+(Section 12). Earlier code mis-applied a (buggy) fin lift slope to the glider
+L/D estimate; that has been removed.
 
 **Fin drag** (`_cd_fins`, `missile_models.py`) — flat-plate skin friction
-on the fin wetted area plus a thickness pressure-drag correction:
+on the fin wetted area plus a thickness/wave term:
 
 ```
-C_D,fins = (N_fins · A_fin / S_ref) · 2 C_f · (1 + 2 · t/c)
+C_D,fric = (2 N · A_fp / A_ref) · C_f · (1 + 2 t/c̄)      # both faces, Mandell 1973
+C_D,wave = (4 N · A_exp / A_ref) · (t/c̄)² / β            # Ackeret, supersonic
 ```
 
-with `N_fins` the number of fins, `A_fin` the planform area per fin, `t/c`
-the thickness-to-chord ratio, and `C_f` the friction coefficient from
-Section 8.3. The factor of 2 accounts for both fin surfaces. This is the
-USAF DATCOM-style formulation.
+with `N` the fin count, `A_exp` the exposed planform, `A_fp = A_exp + ½ c_root·d`
+the body-overlap planform, `t/c̄` the thickness-to-mean-chord ratio, and
+`β = √(M²−1)`. This is a **subset of Barrowman's §4** fin-drag decomposition
+(`C_D = C_Df + C_DL + C_DB + C_Dw`: friction + leading-edge pressure +
+trailing-edge/base + wave); the leading-edge and base components are not yet
+modelled, so fin drag is mildly under-counted.
 
 For strategic and theatre-range missiles flying mostly through the upper
 atmosphere, fin drag is a second-order effect and is sometimes set to
@@ -1536,6 +1557,43 @@ citing the table as Chin in publication-grade work.
 
 For hypersonic glide vehicles the constant-β model is augmented by a
 lift term and (optionally) a polar-drag model — see Section 12.
+
+### 8.9 Static margin and grid-fin sizing
+
+The static margin tells whether a vehicle's fins are appropriately sized for
+stable, controllable flight. It is computed (`grid_fin_sizing.py`) the Barrowman
+way — the centre of pressure is the normal-force-weighted average of the
+component contributions (thesis Eq 3-107):
+
+```
+x_CP = Σ_i (C_Nα,i · x_i) / Σ_i C_Nα,i
+SM   = (x_CP − x_CG) / D            [calibers]
+```
+
+A margin of **~0.5–2 calibers** is the conventional "appropriate" band; below 0
+is unstable, well above ~2 is over-finned. Two uses: **sanity-check** an OSINT
+fin estimate, or **invert** for the fin area a vehicle of a given diameter
+*should* carry (fins scale as area ∝ D² to hold the margin in calibers).
+
+Component normal forces (all referenced to body base area `A_ref = π(d/2)²`):
+
+- **Nose / body** (Barrowman Eq 3-65/3-66): `C_Nα = 2·A_base/A_r` (= 2 for a
+  nose capping the body), with CP at a shape-dependent fraction of nose length
+  (cone ⅔·L_N, tangent ogive ≈0.466·L_N, Eq 3-89/3-90).
+- **Fins**: Barrowman Eq 3-12 (Section 8.5) for planar fins; the dedicated
+  grid-fin slope `_cl_alpha_gridfins` for grid fins.
+
+CG is estimated from the stage mass stack (mass-weighted longitudinal centroid
+at liftoff/full — the most-aft CG, i.e. the *minimum*-margin case), overridable.
+This is the **booster** stability tool; it does not apply to a gliding RV.
+
+**Known gap — diameter transitions.** Barrowman's body term is really
+`C_Nα = (2/A_r)·[A(x₂) − A(x₁)]` at *every* cross-sectional-area change, not just
+the nose. A multistage stack with a narrow payload stepping up to a wide first
+stage has a forward-facing shoulder that adds a stabilising (CP-aft) normal
+force; the current body model is nose-only, so it omits that term and reports a
+*conservative* (slightly low) margin. Adding the transition term is the largest
+pending accuracy improvement to the static-margin estimate.
 
 ---
 
