@@ -1599,6 +1599,45 @@ raising the static margin from ~1.43 to ~1.59 cal. (Remaining limitation: a
 separate payload section, when the nose is not the RV, is not yet inserted as
 its own diameter step — only the nose and stage-to-stage transitions.)
 
+### 8.10 No-separation glider: derived L/D and the trim/control gate
+
+When the RV does **not** separate, the gliding/maneuvering vehicle is the whole
+airframe and its L/D is an emergent geometric property (not a designed input,
+as for a separating RV). Two modules handle this.
+
+**Whole-missile L/D (`glider_ld.py`)** — the semi-empirical body+fin build-up at
+angle of attack (the theoretical core of Missile DATCOM), assembled from primary
+sources in `data/`: body normal force from **Jorgensen (NASA TR R-474)** Eq 2.12
+— slender-body potential + **Allen-Perkins (NACA 1048)** viscous crossflow;
+wing-body interference from **Pitts-Nielsen-Kaattari (NACA 1307)**, whose
+slender-body factors satisfy the identity `K_W(B)+K_B(W) = (1+r/s)²`; combined
+with Jorgensen Eq 5.3's `sin(2α)/(2α)` high-AoA correction. Referenced to body
+base area:
+
+```
+C_Nα_pot = 2·(A_b/A_r) + (1+r/s)²·(C_Lα)_W·(S_W/A_r)
+C_N(α)   = C_Nα_pot·sin(2α)/2 + η·C_dn·(A_p/A_r)·sin²α     (η=1, C_dn=1.2)
+C_A(α)   = C_A0·cos²α ;  C_L = C_N cosα − C_A sinα ;  C_D = C_N sinα + C_A cosα
+```
+L/D is maximised over α. It is a preliminary-design estimate (a slender body is
+a poor lifting shape, so L/D is modest, ~2–3); validated for physical sanity
+(finless slender body ~1.8→2.5 over M2→5; rising with Mach as expected).
+
+**Trim/control gate (`trim_gate.py`)** — a derived L/D is only *achievable* if
+the airframe can trim and hold that AoA. Using the linearised pitching moment
+about the CG:
+```
+C_mα = −SM·C_Nα,total ;   α_trim,max = (C_Nδ/C_Nα,total)·(x_fin−x_CG)/(x_CP−x_CG)·δ_max
+C_Nδ = control_eff·C_Nα,fin     (control_eff = N-K-P k_W(B)/K_W(B): ~1 all-moving, ~0.85 typ., ~0.5 flap)
+```
+Outcomes: **SM ≤ 0 → unstable → tumbles → ballistic** (L/D≈0); SM > 0 with
+`α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
+**control-limited** → achievable L/D is the curve value at `α_trim,max` (the
+over-stable / weak-control case). The gate uses the static margin of §8.9 (body
+incl. transitions + fins) and the `glider_ld` L/D curve, with a mass-stack CG
+and aft fin station (both overridable). It is a preliminary gate, not a 6-DOF
+trim solution.
+
 ---
 
 ## 9. Guidance laws

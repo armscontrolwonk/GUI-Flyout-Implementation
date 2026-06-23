@@ -142,8 +142,11 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
         S_W = s_e * (cr + ct)                      # joined exposed-panel area
         A_p_fin = S_W                              # fin planform for crossflow
 
-    # Potential normal-force slope (per rad), referenced to A_ref.
-    c_na_pot = 2.0 * (A_b / A_ref) + k_sum * cla_w * (S_W / A_ref)
+    # Potential normal-force slope (per rad), referenced to A_ref, split into
+    # the body (slender-body) part and the fin+interference (N-K-P) part.
+    c_na_body = 2.0 * (A_b / A_ref)
+    c_na_fin = k_sum * cla_w * (S_W / A_ref)
+    c_na_pot = c_na_body + c_na_fin
     A_p = A_p_body + A_p_fin
 
     best_ld, best_a, curve = 0.0, 0.0, []
@@ -161,6 +164,7 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
             best_ld, best_a = ld, float(i)
 
     out = dict(ld_max=best_ld, alpha_deg=best_a, c_na_pot=c_na_pot,
+               c_na_body=c_na_body, c_na_fin=c_na_fin,
                k_sum=k_sum, cla_wing=cla_w, cd0=cd0, mach=mach,
                diameter_m=d, body_planform_m2=A_p_body, fin_planform_m2=A_p_fin)
     if return_curve:
