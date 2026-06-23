@@ -1363,6 +1363,16 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
 - **DeSpirito & Sahu, ARL-RP-19 / AIAA 2001-0257** (viscous CFD + DREV tunnel)
   gives a *total*-missile Cx ≈ 0.43 (M2) → 0.45 (M3), roughly flat — supporting
   the flat supersonic baseline and ruling out a decaying form.
+- **DeSpirito et al., AIAA 2000-0391** (viscous CFD vs DERA tunnel, M 2.5)
+  computes the missile body-alone, with planar fins, and with grid fins, which
+  **isolates the grid-fin axial increment**: ΔCx ≈ 0.47 − 0.19 = **0.28** (4 L2
+  fins, ref body area) — ~1.75× the equivalent planar-fin increment. This is the
+  one fin-isolated supersonic check available: the model reproduces 0.28 at
+  σ ≈ 0.33 (0.21–0.24 at σ = 0.25–0.30), and the flat M1.5→3 shape matches. Since
+  the L2 fin's web/pitch (hence σ) is unpublished it is a consistency check, not
+  a pinned match — but it validates the **solidity scaling** across ~10× from the
+  σ ≈ 0.032 W&M S1 calibration point (and hints at a possible mild
+  under-prediction of supersonic fin drag at high solidity).
 - **Abate, Duckerschein & Hathaway, AIAA 2000-0937** (free-flight GTCM) finds
   total Cx flat below **M ≈ 0.77** then a steep transonic rise, independently
   confirming the choke-onset Mach (`_GRIDFIN_M_SUB` = 0.75).
