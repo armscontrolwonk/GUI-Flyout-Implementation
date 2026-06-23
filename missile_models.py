@@ -180,6 +180,7 @@ class MissileParams:
     grid_fin_chord_m:         float = 0.0   # streamwise lattice depth
     grid_fin_web_thickness_m: float = 0.0   # cell wall (web) thickness
     grid_fin_cell_pitch_m:    float = 0.0   # cell centre-to-centre spacing
+    grid_fin_edge_factor:     float = 1.0   # 1.0 blunt webs; ~0.6-0.85 shaped
 
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
@@ -1073,7 +1074,21 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 # ---------------------------------------------------------------------------
 # Grid (lattice) fins.  CALIBRATED to Washington & Miller, "Grid Fins - A New
 # Concept for Missile Stability and Control," AIAA 93-0035 (the S1 fine-mesh
-# configuration, their Fig. 2 geometry and Fig. 14 drag data).  A grid fin is a
+# configuration, their Fig. 2 geometry and Fig. 14 drag data).  Corroborated by
+# three further papers (all read):
+#   * Miller & Washington, "An Experimental Investigation of Grid Fin Drag
+#     Reduction Techniques," AIAA 94-1914 — fin-only axial force for six
+#     frame/web variants.  Confirms the transonic peak (CD rises 0.5→0.9,
+#     decreases above 0.9) and quantifies that frame SHAPING cuts drag ~20-45%
+#     (subsonic) / ~8-27% (supersonic; half-diamond best) vs the blunt baseline
+#     F1, and that thick webs add ~13-19%.  This motivates the edge-shape factor
+#     below; the model's default (blunt) matches W&M S1 ≈ Miller F1.
+#   * DeSpirito & Sahu, ARL-RP-19 / AIAA 2001-0257 — total-missile Cx ≈ 0.43
+#     (M2) → 0.45 (M3), roughly flat: corroborates the flat supersonic baseline.
+#   * Abate, Duckerschein & Hathaway, AIAA 2000-0937 — free-flight GTCM;
+#     total Cx flat below M≈0.77 then a steep transonic rise to a peak ~M1.05,
+#     independently confirming the choke ONSET Mach (~0.77 ≈ _GRIDFIN_M_SUB).
+# A grid fin is a
 # box-frame lattice of thin cells, NOT a planar airfoil, so the flat-plate/
 # Ackeret _cd_fins model does not apply.  W&M's measured axial-force (drag)
 # coefficient, referenced to body cross-section, for the S1 fin (96.8% open,
@@ -1110,9 +1125,15 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 # quantitative fin-drag validation.
 _GRIDFIN_CD_EDGE = 0.50   # blunt LE+TE / profile drag (× web blockage area)
 _GRIDFIN_BUMP    = 0.55   # transonic peak as a fraction above the baseline
-_GRIDFIN_M_SUB   = 0.75   # drag-rise onset Mach (W&M S1)
-_GRIDFIN_M_PEAK  = 0.97   # Mach of the transonic drag peak (W&M S1)
+_GRIDFIN_M_SUB   = 0.75   # drag-rise onset Mach (W&M S1; Abate free-flight 0.77)
+_GRIDFIN_M_PEAK  = 0.97   # Mach of the transonic drag peak (W&M S1; Miller ~0.9)
 _GRIDFIN_M_REC   = 1.60   # Mach of recovery to supersonic behaviour (W&M S1)
+# Edge-shape factor on the pressure (edge + transonic-bump) drag, NOT friction.
+# 1.0 = blunt rectangular webs (W&M S1, Miller F1 baseline — the conservative
+# default).  Miller 94-1914 Tables 2/3: shaping the frame cross-section to a
+# single wedge / half-diamond cuts drag ~20-45% subsonic, ~8-27% supersonic, so
+# a sharp/shaped fin is ~0.6-0.85.  Per-vehicle via grid_fin_edge_factor.
+_GRIDFIN_EDGE_BLUNT = 1.0
 
 
 def _isentropic_area_ratio(mach: float, gamma: float = 1.4) -> float:
@@ -1178,13 +1199,18 @@ def _gridfin_geometry(width_m: float, height_m: float, chord_m: float,
 
 def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
                  web_thickness_m: float, cell_pitch_m: float,
-                 body_diam_m: float, mach: float, re_chord: float = 5e6) -> float:
+                 body_diam_m: float, mach: float, re_chord: float = 5e6,
+                 edge_factor: float = _GRIDFIN_EDGE_BLUNT) -> float:
     """
     Total grid-fin axial-force (drag) coefficient increment referenced to the
     body base area A_ref = π(d/2)².  Calibrated to Washington & Miller S1
     (AIAA 93-0035, Fig. 14): a roughly flat baseline (web friction + blunt-edge
     drag) plus a modest transonic bump.  See the module header for references
     and calibration caveats.  Returns 0 when not configured.
+
+    edge_factor scales the pressure (edge + transonic-bump) drag, not friction:
+    1.0 = blunt webs (W&M S1 / Miller F1 baseline); ~0.6-0.85 for shaped/sharp
+    frames (Miller 94-1914 Tables 2/3).
 
     Validated against W&M S1 (4 fins, frame 2.14×3.243 in, web 0.006 in, pitch
     0.371 in, chord 0.384 in, 5.0 in body): reproduces ~0.042 subsonic,
@@ -1202,11 +1228,12 @@ def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
 
     # Baseline drag (roughly Mach-flat outside transonic):
     #   (a) skin friction on the wetted web area (flat-plate, chord Reynolds)
-    #   (b) blunt leading/trailing-edge + profile drag on the web blockage area
+    #   (b) blunt leading/trailing-edge + profile drag on the web blockage area,
+    #       scaled by the edge-shape factor (sharpening cuts pressure drag).
     re_c = max(re_chord, 1e3)
     cf = 1.328 / math.sqrt(re_c) if re_c < 5e5 else 0.074 / (re_c ** 0.2)
     cd_fric = n_fins * cf * a_wet / a_ref
-    cd_edge = n_fins * _GRIDFIN_CD_EDGE * a_block / a_ref
+    cd_edge = n_fins * _GRIDFIN_CD_EDGE * a_block / a_ref * max(edge_factor, 0.0)
     base = cd_fric + cd_edge
 
     # Transonic bump (choke → spillage → shock-attachment), peaking at M_peak
@@ -2205,6 +2232,9 @@ def _stars_1():
         grid_fin_chord_m=0.12,                   # lattice depth (estimate)
         grid_fin_web_thickness_m=0.004,          # web/wall thickness (estimate)
         grid_fin_cell_pitch_m=0.032,             # cell spacing (estimate)
+        grid_fin_edge_factor=1.0,                # blunt webs (conservative); set
+        #   ~0.7 if the STARS fins are known to have shaped/sharp edges (Miller
+        #   94-1914 shows shaping cuts drag ~15-30%). Edge shape is not known.
         mach_table=[], cd_table=[],
     )
 
@@ -2315,6 +2345,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'grid_fin_chord_m':         p.grid_fin_chord_m,
         'grid_fin_web_thickness_m': p.grid_fin_web_thickness_m,
         'grid_fin_cell_pitch_m':    p.grid_fin_cell_pitch_m,
+        'grid_fin_edge_factor':     p.grid_fin_edge_factor,
         'payload_diameter_m':     p.payload_diameter_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
@@ -2429,6 +2460,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         grid_fin_chord_m=float(d.get('grid_fin_chord_m', 0.0)),
         grid_fin_web_thickness_m=float(d.get('grid_fin_web_thickness_m', 0.0)),
         grid_fin_cell_pitch_m=float(d.get('grid_fin_cell_pitch_m', 0.0)),
+        grid_fin_edge_factor=float(d.get('grid_fin_edge_factor', 1.0)),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
@@ -2756,7 +2788,8 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
             params.n_grid_fins, params.grid_fin_width_m,
             params.grid_fin_height_m, params.grid_fin_chord_m,
             params.grid_fin_web_thickness_m, params.grid_fin_cell_pitch_m,
-            params.diameter_m, mach, re_chord=re_c)
+            params.diameter_m, mach, re_chord=re_c,
+            edge_factor=getattr(params, 'grid_fin_edge_factor', 1.0))
         a_base = np.pi * (params.diameter_m / 2.0) ** 2
         drag_mag += cd_gf * q * a_base
 

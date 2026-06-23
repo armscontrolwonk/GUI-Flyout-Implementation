@@ -1326,18 +1326,33 @@ note its *geometric* contraction under-predicts the choke for thin-web fins
 because boundary-layer blockage in the small cells is a co-cause, so the bump
 anchors come from data, not geometric Kantrowitz alone.
 
+An **edge-shape factor** (`grid_fin_edge_factor`, default 1.0 = blunt
+rectangular webs) scales the pressure (edge + transonic-bump) drag but not the
+friction. Miller & Washington (AIAA 94-1914, Tables 2/3) measured that shaping
+the frame cross-section (single wedge, half-diamond) cuts grid-fin drag ~20–45%
+subsonic and ~8–27% supersonic versus the blunt baseline, so a sharp/shaped fin
+is ~0.6–0.85; the default matches the blunt W&M S1 / Miller F1 case.
+
 **Validation:** run on W&M's exact S1 geometry the model reproduces ~0.042
 (subsonic), ~0.065 (transonic peak) and ~0.038 (supersonic) to within ±13%
-across M = 0.5–3.5. Independent **supersonic corroboration** comes from
-DeSpirito & Sahu (ARL-RP-19 / AIAA 2001-0257), whose viscous CFD and DREV
-wind-tunnel data give a *total*-missile axial force Cx ≈ 0.43 (M2) → 0.45 (M3)
-on a grid-finned TCAAM — roughly flat/slightly rising, consistent with this
-model's flat supersonic baseline (and inconsistent with a decaying form). That
-paper reports total-missile Cx only (not the fin increment) and does not give
-the cell web/pitch, so it is qualitative corroboration, not a quantitative
-fin-drag check. **Caveats:** calibrated to a single blunt-edged configuration;
-sharp edges cut supersonic drag (W&M note this), the bucket shifts with cell
-size/Reynolds number, and extrapolation to other geometries is uncertain. Drag is referenced to body base area and added in
+across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
+
+- **Miller & Washington, AIAA 94-1914** (fin-only axial force, six frame/web
+  variants) confirms the transonic peak (CD rises 0.5→0.9, decreases above 0.9)
+  and quantifies the edge-shape and web-thickness sensitivities above.
+- **DeSpirito & Sahu, ARL-RP-19 / AIAA 2001-0257** (viscous CFD + DREV tunnel)
+  gives a *total*-missile Cx ≈ 0.43 (M2) → 0.45 (M3), roughly flat — supporting
+  the flat supersonic baseline and ruling out a decaying form.
+- **Abate, Duckerschein & Hathaway, AIAA 2000-0937** (free-flight GTCM) finds
+  total Cx flat below **M ≈ 0.77** then a steep transonic rise, independently
+  confirming the choke-onset Mach (`_GRIDFIN_M_SUB` = 0.75).
+
+The DeSpirito and Abate data are total-missile (not fin-isolated) and Abate's
+fins are blunt sub-scale, so they are qualitative corroboration, not
+quantitative fin-drag checks. **Caveats:** calibrated to a single blunt-edged
+configuration; the bucket shifts with cell size/Reynolds number; extrapolation
+to other geometries is uncertain. STARS-1 uses `grid_fin_edge_factor` = 1.0
+(blunt — conservative) because its fin edge shape is not documented. Drag is referenced to body base area and added in
 `drag_force_vector` only while the finned stage is active (first-stage fins
 jettison at staging). The STARS-1 booster (AHW Flight-1 carrier) carries eight
 first-stage grid fins via this model (dimensions are engineering estimates);
