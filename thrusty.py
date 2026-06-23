@@ -5252,16 +5252,27 @@ class MissileFlyoutApp(tk.Tk):
             self._on_main_dive_target_toggled()
 
     def _estimate_body_LD(self):
-        """Estimate body max L/D from geometry, drag model, and fin parameters.
+        """Estimate the terminal/glide vehicle's max L/D with modified-Newtonian
+        hypersonic aerodynamics — the correct regime for a high-AoA glide —
+        maximised over angle of attack.
 
-        Body lift slope (slender-body, Ashley & Landahl 1965): CL_α_body = 2 /rad.
-        Fin lift slope (DATCOM supersonic, Barrowman 1967): added when has_fins.
-        Total drag: body Cd₀ + fin drag increment (friction + wave, Mandell 1973).
-        Parabolic polar: L/D_max = √(CL_α_total/CD₀_total) / 2
+        The lifting planform is the body PLUS the fins when the vehicle does not
+        separate: a no-sep body glider pulls up and glides with its fins as part
+        of the lifting/control surface, so they contribute lift.  Barrowman fin
+        theory (small-AoA, linear) is deliberately NOT used here; it belongs to
+        booster static margin, not a hypersonic glider.
+
+        Modified-Newtonian flat-surface polar, referenced to body base area A_r:
+            C_L = 2·sin²α·cosα · (S_plan/A_r)
+            C_D = 2·sin³α · (S_plan/A_r) + C_D0
+        with S_plan the lifting planform (body ≈ ½·L·d + fins) and C_D0 the
+        zero-lift drag (body + fin friction/wave).  This is an ideal-pressure
+        CEILING — real blunt/viscous losses make the achieved L/D lower — so
+        treat it as an upper bound and prefer a measured rv.glider_LD when known.
         """
         import math
         from missile_models import (_cd_nose_shape, drag_coefficient,
-                                    _SHAPE_ALIAS)
+                                    _SHAPE_ALIAS, _cd_fins)
         try:
             p = get_missile(self._missile_var.get())
         except Exception:
@@ -5302,39 +5313,55 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("L/D Estimate", "Cd₀ is zero — cannot estimate.")
             return
 
-        # ── Body-only L/D estimate ────────────────────────────────────────────
-        # This estimator targets the terminal/glide body (last stage).  A
-        # gliding RV is a high-AoA hypersonic lifting body, NOT a small-AoA
-        # fin-stabilised slender vehicle, so Barrowman fin theory does not apply
-        # here and is deliberately omitted (fin C_Nα / fin drag belong to the
-        # booster's static-margin and ascent-drag treatment, not a glider L/D).
-        # The slender-body body lift below is itself a low-AoA approximation;
-        # treat the number as a rough body-shape ballpark, and prefer the
-        # vehicle's own rv.glider_LD for the actual glide.
+        # ── Lifting planform (body + fins for a no-sep glider) ────────────────
+        A_ref  = math.pi * (d / 2.0) ** 2
+        L_body = float(last.length_m) if last.length_m > 0 else d * 5.0
+        S_body = 0.5 * L_body * d        # slender pointed-body planform (triangle)
+        S_fins = 0.0
+        cd0_fins = 0.0
         fin_detail = ""
+        if getattr(last, 'has_fins', False) and last.fin_span_m > 0 \
+                and last.fin_root_chord_m > 0:
+            n   = int(last.n_fins or 4)
+            s   = float(last.fin_span_m)
+            cr  = float(last.fin_root_chord_m)
+            ct  = float(last.fin_tip_chord_m)
+            tf  = float(last.fin_thickness_m)
+            sw  = float(last.fin_sweep_deg)
+            a_exp = s * (cr + ct) / 2.0
+            # ~half the panels lift in the pitch plane (cruciform); fins are part
+            # of the lifting body only because this vehicle does not separate.
+            S_fins   = 0.5 * n * a_exp
+            cd0_fins = _cd_fins(n, s, cr, ct, tf, d, mach_ref, re_l=re_l, sweep_deg=sw)
+            fin_detail = (f"\nFin lifting planform = {S_fins:.3f} m²"
+                          f"  (incl. — no-sep glider)"
+                          f"\nFin ΔCd₀ = {cd0_fins:.4f}")
 
-        # ── Combined totals ───────────────────────────────────────────────────
-        cl_alpha_total = 2.0           # body slender-body theory (Ashley & Landahl)
-        cd0_total      = cd0_body
+        k         = (S_body + S_fins) / A_ref      # planform / reference area
+        cd0_total = cd0_body + cd0_fins
 
-        # Parabolic polar optimum: L/D_max = √(CL_α / CD₀) / 2
-        ld_max    = math.sqrt(cl_alpha_total / cd0_total) / 2.0
-        alpha_deg = math.degrees(math.sqrt(cd0_total / cl_alpha_total))
+        # ── Maximise the modified-Newtonian L/D over angle of attack ──────────
+        best_ld, best_a = 0.0, 0.0
+        for i in range(1, 60):                     # α = 1°…59°
+            ar = math.radians(float(i))
+            sn, cs = math.sin(ar), math.cos(ar)
+            c_l = 2.0 * sn * sn * cs * k
+            c_d = 2.0 * sn * sn * sn * k + cd0_total
+            ld  = c_l / c_d if c_d > 0 else 0.0
+            if ld > best_ld:
+                best_ld, best_a = ld, float(i)
 
-        # The estimate is displayed for the user to copy into the
-        # Terminal Vehicle editor's L/D field.  (Previously this also
-        # wrote into a main-panel L/D entry, which has been removed —
-        # L/D is now a vehicle property that lives only in the editor.)
         messagebox.showinfo(
-            "Body L/D Estimate",
+            "Body L/D Estimate (modified-Newtonian, hypersonic)",
             f"Body Cd₀  = {cd0_body:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
-            f"Body CL_α = 2.00 /rad  (slender-body theory)"
+            f"Lifting planform S = {S_body + S_fins:.3f} m²  (body {S_body:.3f}"
+            f"{(' + fins ' + format(S_fins, '.3f')) if S_fins > 0 else ''})"
             f"{fin_detail}\n"
+            f"S/A_ref = {k:.2f},  total Cd₀ = {cd0_total:.3f}\n"
             f"\n"
-            f"Total CL_α = {cl_alpha_total:.2f} /rad\n"
-            f"Total Cd₀  = {cd0_total:.3f}\n"
-            f"\n"
-            f"Max L/D ≈ {ld_max:.2f}  at α ≈ {alpha_deg:.0f}°",
+            f"Max L/D ≈ {best_ld:.2f}  at α ≈ {best_a:.0f}°\n"
+            f"(ideal-pressure ceiling; real L/D is lower — prefer a measured "
+            f"glider L/D when available)",
         )
 
     def _rebuild_stage_rows(self):
