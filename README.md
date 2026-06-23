@@ -235,6 +235,48 @@ drag are treated as fully independent.  The simplification is conservative
 when interpreting boost-phase range or burnout-velocity results for missiles
 with large strap-on boosters.
 
+### Fins and stability
+
+Thrusty handles two fin types, and treats **boosters** (fins for *drag +
+stability*) separately from **gliding RVs** (whose *lift*/`L/D` is a hypersonic
+lifting-body property, set per-vehicle — fins do **not** add lift to an
+ascending booster, which flies at ≈0° angle of attack).
+
+**Fin drag is applied in the trajectory** (`drag_force_vector`) while the finned
+stage is active, referenced to body base area and added to body drag; fins
+jettison with their stage.  This affects range for finned atmospheric boosters
+(e.g. the Strypi VIII R's large Castor fins cost it ~18% range).  Two models:
+
+- **Planar fins** (`_cd_fins`): flat-plate skin friction + Ackeret wave drag.
+- **Grid (lattice) fins** (`_cd_gridfins`): a box-frame lattice is not a planar
+  airfoil — it has a transonic-choke drag bump and a roughly flat supersonic
+  level.  The model is calibrated to Washington & Miller (AIAA 93-0035) and
+  corroborated against eight further grid-fin papers (all in `data/`).  Inputs
+  are kept observable: count, frame area, **solidity σ = 1 − ((p−t)/p)²** (the
+  blocked frontal fraction, estimable from imagery), edge shape, and a
+  deployment schedule (grid fins can deploy in timed batches).
+
+**Static margin** (`grid_fin_sizing.py`) answers "are these fins sized right?"
+the Barrowman way — the centre of pressure is the normal-force-weighted average
+of the nose and fin contributions, and
+
+```
+x_CP = Σ_i (C_Nα,i · x_i) / Σ_i C_Nα,i
+SM   = (x_CP − x_CG) / D          [calibers;  ~0.5–2 is "appropriate"]
+```
+
+The fin normal-force slope is **Barrowman 1967 thesis Eq 3-12** (`_cl_alpha_fins`;
+the thesis is in `data/`):
+
+```
+AR = (2s)²/A_f,   β = √|M²−1|,   tan Γ_c = tan Λ_LE + (c_tip−c_root)/(2s)
+C_Nα = N·π·AR·(A_f/A_ref) / [2 + √(4 + (β·AR/cos Γ_c)²)] · (1 + d/(2s+d))
+```
+
+This is small-AoA, fin-stabilised slender-vehicle theory — used for **booster**
+static margin, **not** for a gliding RV (whose L/D comes from `rv.glider_LD`).
+CG is estimated from the stage mass stack (overridable).
+
 ### Guidance laws
 
 **Pitch Program** (`pitch_program`, the default) — The missile launches at
