@@ -2904,6 +2904,22 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
             a_base = np.pi * (params.diameter_m / 2.0) ** 2
             drag_mag += cd_gf * q * a_base
 
+    # Planar fins on the active stage — add their drag increment.  Booster fins
+    # (e.g. a finned first stage) plow through the dense lower atmosphere during
+    # ascent and their drag matters for range; they jettison with their stage,
+    # so gating on the active stage's has_fins is correct.  No lift is added:
+    # an ascending vehicle flies at ~0 deg AoA, so the fins' normal force is a
+    # stability effect (static margin), not a trajectory force.  _cd_fins is
+    # referenced to the body base area, like the grid-fin term above.
+    if getattr(params, 'has_fins', False) and params.n_fins > 0 \
+            and params.fin_span_m > 0 and params.fin_root_chord_m > 0:
+        cd_pf = _cd_fins(
+            params.n_fins, params.fin_span_m, params.fin_root_chord_m,
+            params.fin_tip_chord_m, params.fin_thickness_m, params.diameter_m,
+            mach, re_l=re_l, sweep_deg=params.fin_sweep_deg)
+        a_base = np.pi * (params.diameter_m / 2.0) ** 2
+        drag_mag += cd_pf * q * a_base
+
     return -drag_mag * (vel_ecef / speed)
 
 
