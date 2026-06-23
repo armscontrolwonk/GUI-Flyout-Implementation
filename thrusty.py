@@ -5261,7 +5261,7 @@ class MissileFlyoutApp(tk.Tk):
         """
         import math
         from missile_models import (_cd_nose_shape, drag_coefficient,
-                                    _SHAPE_ALIAS, _cl_alpha_fins, _cd_fins)
+                                    _SHAPE_ALIAS)
         try:
             p = get_missile(self._missile_var.get())
         except Exception:
@@ -5302,27 +5302,20 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showinfo("L/D Estimate", "Cd₀ is zero — cannot estimate.")
             return
 
-        # ── Fin contributions ─────────────────────────────────────────────────
+        # ── Body-only L/D estimate ────────────────────────────────────────────
+        # This estimator targets the terminal/glide body (last stage).  A
+        # gliding RV is a high-AoA hypersonic lifting body, NOT a small-AoA
+        # fin-stabilised slender vehicle, so Barrowman fin theory does not apply
+        # here and is deliberately omitted (fin C_Nα / fin drag belong to the
+        # booster's static-margin and ascent-drag treatment, not a glider L/D).
+        # The slender-body body lift below is itself a low-AoA approximation;
+        # treat the number as a rough body-shape ballpark, and prefer the
+        # vehicle's own rv.glider_LD for the actual glide.
         fin_detail = ""
-        cl_alpha_fins = 0.0
-        cd_fins_incr  = 0.0
-        if getattr(last, 'has_fins', False):
-            n   = int(last.n_fins or 4)
-            s   = float(last.fin_span_m or 0.0)
-            cr  = float(last.fin_root_chord_m or 0.0)
-            ct  = float(last.fin_tip_chord_m or 0.0)
-            tf  = float(last.fin_thickness_m or 0.0)
-            sw  = float(last.fin_sweep_deg or 0.0)
-            cl_alpha_fins = _cl_alpha_fins(n, s, cr, ct, d, mach_ref, sw)
-            cd_fins_incr  = _cd_fins(n, s, cr, ct, tf, d, mach_ref, re_l, sw)
-            fin_detail = (f"\nFin CL_α  = {cl_alpha_fins:.2f} /rad"
-                          f"  ({n} fins, DATCOM supersonic)"
-                          f"\nFin ΔCd₀  = {cd_fins_incr:.4f}"
-                          f"  (friction + wave, Mandell 1973)")
 
         # ── Combined totals ───────────────────────────────────────────────────
-        cl_alpha_total = 2.0 + cl_alpha_fins   # body SBT + fins
-        cd0_total      = cd0_body + cd_fins_incr
+        cl_alpha_total = 2.0           # body slender-body theory (Ashley & Landahl)
+        cd0_total      = cd0_body
 
         # Parabolic polar optimum: L/D_max = √(CL_α / CD₀) / 2
         ld_max    = math.sqrt(cl_alpha_total / cd0_total) / 2.0
