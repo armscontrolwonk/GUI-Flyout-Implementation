@@ -1314,7 +1314,27 @@ C_D,gridfin = C_friction(wetted web area, chord Re)
 ```
 
 with the web blockage area `(1 − φ)·A_frame`, porosity `φ = ((p − t)/p)²` for
-cell pitch `p` and web thickness `t`. The bump represents the three flow
+cell pitch `p` and web thickness `t`.
+
+**Solidity (σ) — the practical input.** The drag is driven by the blocked
+frontal fraction, the *solidity* `σ = 1 − φ = 1 − ((p − t)/p)²` (≈ 2·t/p for
+thin webs). σ is the single quantity that stands in for the two lattice
+details that are hardest to obtain from open sources — web thickness `t` and
+cell pitch `p`. Two ways to supply it:
+
+- If `t` and `p` are known, `grid_fin_solidity(t, p)` converts them to σ via
+  the equation above (or just enter `grid_fin_web_thickness_m`/
+  `grid_fin_cell_pitch_m` and let the model derive φ).
+- If they are not, set `grid_fin_solidity` directly — estimate it from imagery
+  (open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30). When σ
+  is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
+  = 10) sets the wetted area for the *secondary* friction term only.
+
+σ sets the blockage exactly but cannot recover the absolute mesh scale that
+fixes friction, so the σ-only path agrees with the full web/pitch path to
+~7% for blockage-dominated (thicker-web) fins like STARS, and less well for
+unusually fine thin-web meshes (e.g. W&M S1, which is friction-dominated — use
+its known `t`/`p` there). The bump represents the three flow
 regimes W&M describe (Fig. 6/7): the cells **choke below M = 1**, flow spills
 around the fin, the shock attaches and then passes undisturbed, restoring
 supersonic behaviour by **M ≈ 1.6**. Those onset/peak/recovery Mach anchors
