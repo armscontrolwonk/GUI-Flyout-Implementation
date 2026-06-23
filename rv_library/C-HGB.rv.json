@@ -1,0 +1,17 @@
+{
+  "name": "C-HGB",
+  "mass_kg": 450,
+  "beta_kg_m2": 15000,
+  "shape": "cone",
+  "diameter_m": 0.58,
+  "length_m": 1.5,
+  "nose_radius_m": 0.02,
+  "glider_enabled": true,
+  "glider_LD": 2.0,
+  "glider_guidance": "skip_to_equilibrium",
+  "glider_pullup_g_max": 10,
+  "glider_terminal_dive": true,
+  "glider_terminal_alt_km": 30,
+  "glider_skip_count": 1,
+  "tps_material": "rcc"
+}
