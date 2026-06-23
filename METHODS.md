@@ -1298,6 +1298,18 @@ zero by leaving the fin parameters at their default zero values. For
 short-range tactical missiles or atmospheric flight the fin term matters
 and should be enabled.
 
+**Planar fin drag is applied in the trajectory** (`drag_force_vector`) while
+the finned stage is the active stage — a finned first stage plows through the
+dense lower atmosphere during ascent, so its fin drag affects range. It is
+referenced to the body base area and added to the body drag exactly as the
+grid-fin term is. **No lift is added**: an ascending vehicle flies at ≈0° angle
+of attack, so the fins' normal force is a stability effect (static margin), not
+a trajectory force — boosters are thus treated as drag + stability, distinct
+from RVs/gliders where lift (L/D) is the governing aerodynamics. (Example: the
+Strypi VIII R's four large swept Castor fins cost it ~18% of range; the effect
+scales with (t/c)² in the wave-drag term, so it is sensitive to the fin
+thickness when that is estimated.)
+
 **Grid (lattice) fins** (`_cd_gridfins`, `_cl_alpha_gridfins`,
 `missile_models.py`) — a grid fin is a box-frame lattice of thin cells, not
 a planar airfoil, so the flat-plate/Ackeret model above does not apply. The
