@@ -1366,6 +1366,19 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
 - **Abate, Duckerschein & Hathaway, AIAA 2000-0937** (free-flight GTCM) finds
   total Cx flat below **M ≈ 0.77** then a steep transonic rise, independently
   confirming the choke-onset Mach (`_GRIDFIN_M_SUB` = 0.75).
+- **Kretzschmar & Burkhalter, "Aerodynamic Prediction Methodology for Grid
+  Fins"** (NATO RTO-MP-5, 1998) is an independent analytical method (vortex
+  lattice + Evvard's theory) whose grid-fin axial force decomposes the same way
+  as this model — skin friction (wetted area, Cf(Re)) + pressure drag on the
+  fin **frontal area** + an interference term — and is α-independent. Its
+  flow-regime table (subsonic M<0.8; **choked 0.8<M<1.0**; bow shock 1.0–1.4;
+  shock swallowed **1.4–1.9**) brackets our Mach anchors, and it models the
+  transonic choke with the **same isentropic throat-area relation** used here,
+  explicitly attributing the sub-M=1 choke to cell-wall *and boundary-layer*
+  blockage — the co-cause noted above. It also identifies the governing
+  nondimensional geometry as the span/height (b/h) and **chord/height (C/h)**
+  ratios: chord is properly normalized by fin **height**, not body diameter
+  (observed C/h ≈ 0.12–0.35, design-dependent).
 
 The DeSpirito and Abate data are total-missile (not fin-isolated) and Abate's
 fins are blunt sub-scale, so they are qualitative corroboration, not
