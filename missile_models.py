@@ -977,27 +977,29 @@ def _cl_alpha_fins(n_fins: int, span_m: float, c_root_m: float,
                    c_tip_m: float, body_diam_m: float,
                    mach: float, sweep_deg: float = 0.0) -> float:
     """
-    Total fin normal-force (lift) slope in /radian, referenced to body
-    base area A_ref = π(d/2)².
+    Total fin normal-force (lift-curve) slope, /radian, referenced to body base
+    area A_ref = π(d/2)².  Barrowman 1967 thesis **Eq 3-12** (subsonic, N fins),
+    with the standard β = √(M²−1) supersonic extension:
 
-    Model: DATCOM supersonic fin panel formula (Barrowman 1967 / Rocket
-    equation often attributed to Barrowman):
+        A_f  = s·(c_root + c_tip)/2        # one exposed fin planform
+        AR   = (2s)² / A_f                 # reflected aspect ratio (span b = 2s)
+        β    = √|M²−1|                     # Prandtl-Glauert (sub) / supersonic
+        Γ_c  = mid-chord sweep; from LE sweep Λ:
+                 tan Γ_c = tan Λ + (c_tip − c_root)/(2s)
 
-        AR_exp = 2·s² / A_exp          # exposed panel aspect ratio
-        A_exp  = s·(c_root + c_tip)/2  # exposed planform area
-        β      = √max(M²−1, 0.01)      # Prandtl-Glauert compressibility
-        Λ      = leading-edge sweep (rad)
+        (C_Nα)_T = N·π·AR·(A_f/A_ref) / [ 2 + √(4 + (β·AR/cos Γ_c)²) ]
 
-        CL_α_panel = 2π·AR_exp /
-                     (2 + √(AR_exp²·(β²+tan²Λ)/β² + 4))   [per panel, /rad]
+    The N·π numerator (Eq 3-12) is the correct cruciform result: for N=4, two
+    fins lie in the pitch plane, giving 2× the single-fin 2π form (Eq 3-6).
+    Body-fin interference uses Barrowman's simplified slender-body factor
+    (Eq. K_T(B), the r/(s+r) form), identical to 1 + d/(2s+d):
 
-    Body-fin mutual interference (Barrowman Eq. 1-21):
+        K_T(B) = 1 + r/(s+r) = 1 + d/(2s+d)
 
-        K_BF = 1 + d / (2·s + d)
-
-    Total (all panels, referenced to body base area):
-
-        CL_α_fins = n · CL_α_panel · K_BF · (A_exp / A_ref)
+    NOTE — REGIME: this is Barrowman's small-AoA, linear, fin-stabilized
+    slender-vehicle theory.  It is for BOOSTER fins (ascent stability / static
+    margin), NOT for a high-AoA hypersonic gliding RV, whose L/D is a
+    lifting-body (Newtonian) property and is supplied as rv.glider_LD.
 
     Falls back gracefully when span or chords are not yet entered.
     """
@@ -1005,18 +1007,18 @@ def _cl_alpha_fins(n_fins: int, span_m: float, c_root_m: float,
     if n_fins < 1 or span_m <= 0 or c_root_m <= 0 or body_diam_m <= 0:
         return 0.0
     c_tip_m = max(c_tip_m, 0.0)
-    a_exp = span_m * (c_root_m + c_tip_m) / 2.0     # exposed planform area (m²)
-    if a_exp <= 0:
+    a_f = span_m * (c_root_m + c_tip_m) / 2.0       # one-fin exposed planform
+    if a_f <= 0:
         return 0.0
-    ar_exp = 2.0 * span_m ** 2 / a_exp              # exposed aspect ratio
-    beta = max(math.sqrt(max(mach ** 2 - 1.0, 0.0)), 0.01)
-    sweep_rad = math.radians(sweep_deg)
-    tan_sweep = math.tan(sweep_rad)
-    denom = 2.0 + math.sqrt(ar_exp ** 2 * (beta ** 2 + tan_sweep ** 2) / beta ** 2 + 4.0)
-    cl_alpha_panel = 2.0 * math.pi * ar_exp / denom  # /rad per panel
-    k_bf = 1.0 + body_diam_m / (2.0 * span_m + body_diam_m)
+    ar = (2.0 * span_m) ** 2 / a_f                  # reflected aspect ratio
+    beta = math.sqrt(abs(mach * mach - 1.0))        # 0 at M=1 (finite denom)
+    tan_gc = math.tan(math.radians(sweep_deg)) + (c_tip_m - c_root_m) / (2.0 * span_m)
+    cos_gc = 1.0 / math.sqrt(1.0 + tan_gc * tan_gc)
     a_ref = math.pi * (body_diam_m / 2.0) ** 2
-    return float(n_fins * cl_alpha_panel * k_bf * (a_exp / a_ref))
+    denom = 2.0 + math.sqrt(4.0 + (beta * ar / cos_gc) ** 2)
+    cn_alpha = n_fins * math.pi * ar * (a_f / a_ref) / denom
+    k_tb = 1.0 + body_diam_m / (2.0 * span_m + body_diam_m)
+    return float(cn_alpha * k_tb)
 
 
 def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
