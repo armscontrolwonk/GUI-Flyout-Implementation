@@ -167,6 +167,20 @@ class MissileParams:
     fin_thickness_m:      float = 0.0   # max thickness
     fin_sweep_deg:        float = 0.0   # leading-edge sweep angle
 
+    # Grid (lattice) fins — a box-frame lattice of thin cells, NOT a planar
+    # airfoil.  When has_grid_fins is True the grid-fin drag (and lift slope
+    # for the estimator) is computed by _cd_gridfins/_cl_alpha_gridfins
+    # (Washington & Miller; Kantrowitz start limit) and added to the body
+    # values.  Attach to the stage on which the fins are mounted (they apply
+    # only while that stage is the active stage, e.g. a finned first stage).
+    has_grid_fins:        bool  = False
+    n_grid_fins:          int   = 0
+    grid_fin_width_m:         float = 0.0   # frame width (azimuthal span)
+    grid_fin_height_m:        float = 0.0   # frame height (radial)
+    grid_fin_chord_m:         float = 0.0   # streamwise lattice depth
+    grid_fin_web_thickness_m: float = 0.0   # cell wall (web) thickness
+    grid_fin_cell_pitch_m:    float = 0.0   # cell centre-to-centre spacing
+
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
@@ -1054,6 +1068,189 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
         cd_wave = 0.0
 
     return float(cd_fric + cd_wave)
+
+
+# ---------------------------------------------------------------------------
+# Grid (lattice) fins — Washington & Miller (AIAA 93-0035, 94-1914),
+# DeSpirito et al. (ARL CFD).  A grid fin is a box-frame lattice of thin
+# cells, NOT a planar airfoil, so the flat-plate/Ackeret _cd_fins model does
+# not apply.  Three regimes (axial-force / drag):
+#
+#   1. SUBSONIC (M < ~0.7):  flow passes cleanly through the open cells; only
+#      the webs carry profile + friction drag.  Low.
+#   2. TRANSONIC CHOKE (~0.7 < M < M_start):  the cells choke, a detached bow
+#      shock stands ahead of the lattice, flow spills around the frame and the
+#      fin acts like a near-solid bluff body — the well-known grid-fin
+#      transonic drag spike, peaking near M≈1.
+#   3. SUPERSONIC STARTED (M > M_start):  the lattice "swallows" the shock
+#      (self-starts), supersonic flow fills the cells and pressure drag drops
+#      to blunt leading-edge wave drag on the webs, decaying with Mach.
+#
+# The start Mach M_start is set by the KANTROWITZ self-starting limit for an
+# internal contraction ratio CR = 1/porosity (the frame capture area over the
+# open cell area): the cells start once a normal shock at the face, decelerated
+# to subsonic, can still be passed at the M=1 throat.  High-porosity fins
+# (thin webs) start near M≈1.6-1.8; lower porosity starts later.
+#
+# Drag-coefficient levels are engineering estimates referenced to the lattice
+# frontal frame area, anchored to the qualitative magnitudes in the grid-fin
+# literature.  Exposed as named constants so they can be tuned.
+_GRIDFIN_CD_PROFILE = 0.12   # subsonic web profile drag (× blockage fraction)
+_GRIDFIN_CD_CHOKE   = 0.70   # transonic choked peak (× full frame area)
+_GRIDFIN_CD_WAVE    = 1.50   # supersonic blunt-LE wave drag (× blockage frac)
+_GRIDFIN_M_SUB      = 0.70   # drag-rise onset Mach
+_GRIDFIN_M_PEAK     = 1.05   # Mach of the transonic drag peak
+
+
+def _isentropic_area_ratio(mach: float, gamma: float = 1.4) -> float:
+    """A/A* for quasi-1D isentropic flow (Mach ≠ 0)."""
+    import math
+    if mach <= 0:
+        return float('inf')
+    return ((1.0 / mach)
+            * ((2.0 / (gamma + 1.0)) * (1.0 + 0.5 * (gamma - 1.0) * mach * mach))
+            ** ((gamma + 1.0) / (2.0 * (gamma - 1.0))))
+
+
+def _kantrowitz_contraction_ratio(mach: float, gamma: float = 1.4) -> float:
+    """
+    Maximum self-starting internal contraction ratio CR = A_capture/A_throat
+    at flight Mach `mach` (Kantrowitz & Donaldson, NACA 1945).  A normal shock
+    at the face decelerates the flow to subsonic Mach M_y; the throat must then
+    pass that subsonic flow at M=1, so CR = (A/A*)|_{M_y}.
+    """
+    import math
+    if mach <= 1.0:
+        return 1.0
+    my2 = ((1.0 + 0.5 * (gamma - 1.0) * mach * mach)
+           / (gamma * mach * mach - 0.5 * (gamma - 1.0)))
+    return _isentropic_area_ratio(math.sqrt(my2), gamma)
+
+
+def _gridfin_start_mach(contraction_ratio: float, gamma: float = 1.4) -> float:
+    """
+    Mach at which a lattice of contraction ratio CR (=1/porosity) self-starts,
+    by inverting the Kantrowitz limit (monotone in M).  Bisection on [1.01, 8].
+    """
+    cr = max(float(contraction_ratio), 1.0 + 1e-6)
+    lo, hi = 1.01, 8.0
+    if _kantrowitz_contraction_ratio(hi, gamma) < cr:
+        return hi
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if _kantrowitz_contraction_ratio(mid, gamma) < cr:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def _gridfin_geometry(width_m: float, height_m: float, chord_m: float,
+                      web_thickness_m: float, cell_pitch_m: float):
+    """
+    Derived lattice geometry for one grid fin.  Returns
+    (A_frame, porosity φ, A_block, web_wetted_area).  Square cells assumed.
+    """
+    a_frame = max(width_m * height_m, 0.0)
+    pitch = max(cell_pitch_m, web_thickness_m + 1e-4)
+    phi = ((pitch - web_thickness_m) / pitch) ** 2     # open-area fraction
+    phi = min(max(phi, 0.05), 0.98)
+    a_block = (1.0 - phi) * a_frame
+    # Total web length in the frontal plane (horizontal + vertical members).
+    # For a w×h frame on pitch p this is ≈ 2·A_frame/p for many cells.
+    l_web = 2.0 * a_frame / pitch
+    a_wet = 2.0 * l_web * max(chord_m, 0.0)            # both faces of each web
+    return a_frame, phi, a_block, a_wet
+
+
+def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
+                 web_thickness_m: float, cell_pitch_m: float,
+                 body_diam_m: float, mach: float, re_chord: float = 5e6) -> float:
+    """
+    Total grid-fin axial-force (drag) coefficient increment referenced to the
+    body base area A_ref = π(d/2)².  See the module header above for the
+    three-regime model and references.  Returns 0 when not configured.
+    """
+    import math
+    if (n_fins < 1 or width_m <= 0 or height_m <= 0 or chord_m <= 0
+            or body_diam_m <= 0):
+        return 0.0
+    a_ref = math.pi * (body_diam_m / 2.0) ** 2
+    if a_ref <= 0:
+        return 0.0
+    a_frame, phi, a_block, a_wet = _gridfin_geometry(
+        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m)
+
+    # 1. Skin friction on the web surfaces (flat-plate, chord Reynolds).
+    re_c = max(re_chord, 1e3)
+    cf = 1.328 / math.sqrt(re_c) if re_c < 5e5 else 0.074 / (re_c ** 0.2)
+    cd_fric = n_fins * cf * a_wet / a_ref
+
+    # 2. Pressure drag — coefficient cp referenced to the full frame area.
+    cr = 1.0 / phi                                  # contraction ratio
+    m_start = max(_gridfin_start_mach(cr), _GRIDFIN_M_PEAK + 0.05)
+    cp_sub = _GRIDFIN_CD_PROFILE * (1.0 - phi)
+    cp_peak = _GRIDFIN_CD_CHOKE
+
+    def _cp_super(m):
+        b = math.sqrt(max(m * m - 1.0, 1e-3))
+        return _GRIDFIN_CD_WAVE * (1.0 - phi) / b
+
+    if mach < _GRIDFIN_M_SUB:
+        cp = cp_sub
+    elif mach < _GRIDFIN_M_PEAK:
+        # sub → choked peak (smooth half-cosine)
+        x = (mach - _GRIDFIN_M_SUB) / (_GRIDFIN_M_PEAK - _GRIDFIN_M_SUB)
+        cp = cp_sub + (cp_peak - cp_sub) * 0.5 * (1.0 - math.cos(math.pi * x))
+    elif mach < m_start:
+        # choked peak → started supersonic value at M_start (smooth)
+        cp_end = _cp_super(m_start)
+        x = (mach - _GRIDFIN_M_PEAK) / (m_start - _GRIDFIN_M_PEAK)
+        cp = cp_peak + (cp_end - cp_peak) * 0.5 * (1.0 - math.cos(math.pi * x))
+    else:
+        cp = _cp_super(mach)
+
+    cd_press = n_fins * cp * a_frame / a_ref
+    return float(cd_fric + cd_press)
+
+
+def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
+                       chord_m: float, web_thickness_m: float,
+                       cell_pitch_m: float, body_diam_m: float,
+                       mach: float) -> float:
+    """
+    Grid-fin normal-force slope (/rad) referenced to body base area, used by
+    the L/D estimator (the trajectory integrator flies a pitch program and does
+    not use fin lift).  Reduced-order cascade model: the lattice members act as
+    low-aspect-ratio lifting surfaces; the slope scales with the lifting
+    planform (≈ web-wetted area) and a per-Mach 2-D lift slope, with the
+    transonic-choke effectiveness loss folded in via the same M_start as drag.
+    Approximate — flagged as such.
+    """
+    import math
+    if (n_fins < 1 or width_m <= 0 or height_m <= 0 or chord_m <= 0
+            or body_diam_m <= 0):
+        return 0.0
+    a_ref = math.pi * (body_diam_m / 2.0) ** 2
+    if a_ref <= 0:
+        return 0.0
+    a_frame, phi, a_block, a_wet = _gridfin_geometry(
+        width_m, height_m, chord_m, web_thickness_m, cell_pitch_m)
+    # 2-D lift slope per member surface (Prandtl-Glauert / Ackeret)
+    if mach < 0.95:
+        cla_2d = 2.0 * math.pi / math.sqrt(max(1.0 - mach * mach, 0.04))
+    else:
+        cla_2d = 4.0 / math.sqrt(max(mach * mach - 1.0, 0.04))
+    # Lifting planform ≈ half the wetted web area (the load-bearing members)
+    a_lift = 0.5 * a_wet
+    # Transonic-choke effectiveness factor: low through the choked band,
+    # recovering once started.
+    cr = 1.0 / phi
+    m_start = max(_gridfin_start_mach(cr), _GRIDFIN_M_PEAK + 0.05)
+    eff = 1.0
+    if _GRIDFIN_M_SUB <= mach < m_start:
+        eff = 0.5                                    # degraded while choked
+    return float(n_fins * cla_2d * eff * a_lift / a_ref)
 
 
 def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
@@ -1987,6 +2184,19 @@ def _stars_1():
         stage_turn_start_s=2.0, stage_turn_stop_s=55.0,
         stage_burnout_angle_deg=45.0, coast_time_s=5.0,
         payload_kg=_hgb.mass_kg, rv_separates=True, rv=_hgb, stage2=stage2,
+        # Eight grid (lattice) fins on the first stage of the AHW-test STARS,
+        # for ascent stability/control; they jettison with stage 1.  Frame and
+        # cell dimensions here are ENGINEERING ESTIMATES scaled to the 1.37 m
+        # (54 in) first stage -- no published STARS grid-fin drawing -- and
+        # should be refined if specs become available.  Drag is modelled by
+        # _cd_gridfins (transonic choke + Kantrowitz supersonic start).
+        has_grid_fins=True,
+        n_grid_fins=8,
+        grid_fin_width_m=0.40,                   # frame width (estimate)
+        grid_fin_height_m=0.40,                  # frame radial height (estimate)
+        grid_fin_chord_m=0.12,                   # lattice depth (estimate)
+        grid_fin_web_thickness_m=0.004,          # web/wall thickness (estimate)
+        grid_fin_cell_pitch_m=0.032,             # cell spacing (estimate)
         mach_table=[], cd_table=[],
     )
 
@@ -2090,6 +2300,13 @@ def missile_to_dict(p: MissileParams) -> dict:
         'fin_tip_chord_m':        p.fin_tip_chord_m,
         'fin_thickness_m':        p.fin_thickness_m,
         'fin_sweep_deg':          p.fin_sweep_deg,
+        'has_grid_fins':          p.has_grid_fins,
+        'n_grid_fins':            p.n_grid_fins,
+        'grid_fin_width_m':         p.grid_fin_width_m,
+        'grid_fin_height_m':        p.grid_fin_height_m,
+        'grid_fin_chord_m':         p.grid_fin_chord_m,
+        'grid_fin_web_thickness_m': p.grid_fin_web_thickness_m,
+        'grid_fin_cell_pitch_m':    p.grid_fin_cell_pitch_m,
         'payload_diameter_m':     p.payload_diameter_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
@@ -2197,6 +2414,13 @@ def missile_from_dict(d: dict) -> MissileParams:
         fin_tip_chord_m=float(d.get('fin_tip_chord_m', 0.0)),
         fin_thickness_m=float(d.get('fin_thickness_m', 0.0)),
         fin_sweep_deg=float(d.get('fin_sweep_deg', 0.0)),
+        has_grid_fins=bool(d.get('has_grid_fins', False)),
+        n_grid_fins=int(d.get('n_grid_fins', 0)),
+        grid_fin_width_m=float(d.get('grid_fin_width_m', 0.0)),
+        grid_fin_height_m=float(d.get('grid_fin_height_m', 0.0)),
+        grid_fin_chord_m=float(d.get('grid_fin_chord_m', 0.0)),
+        grid_fin_web_thickness_m=float(d.get('grid_fin_web_thickness_m', 0.0)),
+        grid_fin_cell_pitch_m=float(d.get('grid_fin_cell_pitch_m', 0.0)),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
@@ -2513,6 +2737,21 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     area = missile_area(params, altitude_m=altitude_m, top_params=top_params)
     q    = 0.5 * rho * speed**2
     drag_mag = cd * q * area
+
+    # Grid (lattice) fins on the active stage — add their drag increment.
+    # _cd_gridfins is referenced to the body base area π(d/2)², so multiply by
+    # that same reference area (not the front-end `area`, which may be the
+    # shroud/RV frontal area).
+    if getattr(params, 'has_grid_fins', False) and params.n_grid_fins > 0:
+        re_c = rho * speed * params.grid_fin_chord_m / mu if mu > 0.0 else 5e6
+        cd_gf = _cd_gridfins(
+            params.n_grid_fins, params.grid_fin_width_m,
+            params.grid_fin_height_m, params.grid_fin_chord_m,
+            params.grid_fin_web_thickness_m, params.grid_fin_cell_pitch_m,
+            params.diameter_m, mach, re_chord=re_c)
+        a_base = np.pi * (params.diameter_m / 2.0) ** 2
+        drag_mag += cd_gf * q * a_base
+
     return -drag_mag * (vel_ecef / speed)
 
 

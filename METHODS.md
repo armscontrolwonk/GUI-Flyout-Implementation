@@ -1298,6 +1298,36 @@ zero by leaving the fin parameters at their default zero values. For
 short-range tactical missiles or atmospheric flight the fin term matters
 and should be enabled.
 
+**Grid (lattice) fins** (`_cd_gridfins`, `_cl_alpha_gridfins`,
+`missile_models.py`) — a grid fin is a box-frame lattice of thin cells, not
+a planar airfoil, so the flat-plate/Ackeret model above does not apply. The
+drag is modelled in three regimes (refs: Washington & Miller, AIAA 93-0035 /
+94-1914; DeSpirito ARL CFD; Kantrowitz & Donaldson 1945):
+
+1. **Subsonic** (M < 0.7) — flow passes cleanly through the open cells; only
+   the webs carry friction + profile drag (low).
+2. **Transonic choke** (0.7 < M < M_start) — the cells choke, a detached bow
+   shock stands ahead of the lattice and the fin acts as a near-solid bluff
+   frame: the characteristic grid-fin transonic drag spike, peaking near
+   M ≈ 1.05.
+3. **Supersonic started** (M > M_start) — the lattice swallows the shock and
+   pressure drag drops to blunt-LE wave drag on the webs, decaying with Mach.
+
+The start Mach `M_start` is the **Kantrowitz self-starting limit** for an
+internal contraction ratio `CR = 1/φ`, where the porosity (open-area
+fraction) for square cells of pitch `p` and web thickness `t` is
+`φ = ((p − t)/p)²`. A normal shock at the lattice face, decelerated to a
+subsonic Mach `M_y`, must still pass the M = 1 throat, so `CR = (A/A*)|_{M_y}`;
+`_gridfin_start_mach` inverts this. High-porosity (thin-web) fins start near
+M ≈ 1.6–1.8; lower porosity starts later. The drag is referenced to the body
+base area and added to the body drag in `drag_force_vector` only while the
+finned stage is the active stage (e.g. a finned first stage that jettisons
+its fins at staging). The drag-level coefficients (`_GRIDFIN_CD_PROFILE`,
+`_GRIDFIN_CD_CHOKE`, `_GRIDFIN_CD_WAVE`) are engineering estimates anchored to
+the grid-fin literature and exposed as named constants for tuning. The
+STARS-1 booster (AHW Flight-1 carrier) carries eight grid fins on its first
+stage via this model.
+
 ### 8.6 Aerospike correction
 
 An aerospike is a forward-projecting spike (sometimes terminated in a
