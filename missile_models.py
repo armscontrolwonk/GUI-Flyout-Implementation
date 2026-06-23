@@ -1099,6 +1099,15 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 # edges cut supersonic drag (W&M note this explicitly); the bucket shifts with
 # cell size / Reynolds number; extrapolation to other geometries is uncertain.
 # Constants are exposed for tuning.
+#
+# Supersonic corroboration (qualitative only): DeSpirito & Sahu, "Viscous CFD
+# Calculations of Grid Fin Missile Aerodynamics in the Supersonic Flow Regime,"
+# ARL-RP-19 / AIAA 2001-0257, measure a TOTAL-missile axial force Cx ≈ 0.43 at
+# M2 and ≈ 0.45 at M3 (roughly flat / slightly rising) on a grid-finned TCAAM.
+# That flat supersonic trend is consistent with this model's flat baseline and
+# rules out a decaying-with-Mach form, but DeSpirito does NOT isolate the fin
+# increment nor specify the cell web/pitch, so it is corroboration, not a
+# quantitative fin-drag validation.
 _GRIDFIN_CD_EDGE = 0.50   # blunt LE+TE / profile drag (× web blockage area)
 _GRIDFIN_BUMP    = 0.55   # transonic peak as a fraction above the baseline
 _GRIDFIN_M_SUB   = 0.75   # drag-rise onset Mach (W&M S1)

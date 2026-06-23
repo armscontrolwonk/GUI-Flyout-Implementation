@@ -1328,10 +1328,16 @@ anchors come from data, not geometric Kantrowitz alone.
 
 **Validation:** run on W&M's exact S1 geometry the model reproduces ~0.042
 (subsonic), ~0.065 (transonic peak) and ~0.038 (supersonic) to within ±13%
-across M = 0.5–3.5. **Caveats:** calibrated to a single blunt-edged
-configuration; sharp edges cut supersonic drag (W&M note this), the bucket
-shifts with cell size/Reynolds number, and extrapolation to other geometries
-is uncertain. Drag is referenced to body base area and added in
+across M = 0.5–3.5. Independent **supersonic corroboration** comes from
+DeSpirito & Sahu (ARL-RP-19 / AIAA 2001-0257), whose viscous CFD and DREV
+wind-tunnel data give a *total*-missile axial force Cx ≈ 0.43 (M2) → 0.45 (M3)
+on a grid-finned TCAAM — roughly flat/slightly rising, consistent with this
+model's flat supersonic baseline (and inconsistent with a decaying form). That
+paper reports total-missile Cx only (not the fin increment) and does not give
+the cell web/pitch, so it is qualitative corroboration, not a quantitative
+fin-drag check. **Caveats:** calibrated to a single blunt-edged configuration;
+sharp edges cut supersonic drag (W&M note this), the bucket shifts with cell
+size/Reynolds number, and extrapolation to other geometries is uncertain. Drag is referenced to body base area and added in
 `drag_force_vector` only while the finned stage is active (first-stage fins
 jettison at staging). The STARS-1 booster (AHW Flight-1 carrier) carries eight
 first-stage grid fins via this model (dimensions are engineering estimates);
