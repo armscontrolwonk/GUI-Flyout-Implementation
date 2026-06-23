@@ -5252,116 +5252,39 @@ class MissileFlyoutApp(tk.Tk):
             self._on_main_dive_target_toggled()
 
     def _estimate_body_LD(self):
-        """Estimate the terminal/glide vehicle's max L/D with modified-Newtonian
-        hypersonic aerodynamics — the correct regime for a high-AoA glide —
-        maximised over angle of attack.
+        """Derive the terminal/glide vehicle's max L/D from geometry, via the
+        rigorous whole-missile build-up (glider_ld.py): Jorgensen TR R-474 body
+        normal force + Allen-Perkins NACA 1048 viscous crossflow + N-K-P NACA
+        1307 wing-body interference, with Jorgensen's sin(2a)/(2a) high-AoA
+        correction, maximised over angle of attack.
 
-        The lifting planform is the body PLUS the fins when the vehicle does not
-        separate: a no-sep body glider pulls up and glides with its fins as part
-        of the lifting/control surface, so they contribute lift.  Barrowman fin
-        theory (small-AoA, linear) is deliberately NOT used here; it belongs to
-        booster static margin, not a hypersonic glider.
-
-        Modified-Newtonian flat-surface polar, referenced to body base area A_r:
-            C_L = 2·sin²α·cosα · (S_plan/A_r)
-            C_D = 2·sin³α · (S_plan/A_r) + C_D0
-        with S_plan the lifting planform (body ≈ ½·L·d + fins) and C_D0 the
-        zero-lift drag (body + fin friction/wave).  This is an ideal-pressure
-        CEILING — real blunt/viscous losses make the achieved L/D lower — so
-        treat it as an upper bound and prefer a measured rv.glider_LD when known.
-        """
-        import math
-        from missile_models import (_cd_nose_shape, drag_coefficient,
-                                    _SHAPE_ALIAS, _cd_fins)
+        For a NO-SEPARATION body the fins are part of the lifting vehicle and are
+        included.  This is the value to use as a no-sep glider's L/D; for a
+        SEPARATING RV, set the RV's own designed L/D instead.  Hypersonic regime
+        (not Barrowman fin theory, which is for booster static margin)."""
+        import glider_ld
         try:
             p = get_missile(self._missile_var.get())
         except Exception:
             return
-
-        # Walk to last stage — that is the gliding body for a no-sep missile.
-        last = p
-        while last.stage2 is not None:
-            last = last.stage2
-
-        d = float(last.diameter_m)
-        if d <= 0:
-            messagebox.showinfo("L/D Estimate", "Body diameter not set.")
+        mach_ref = glider_ld.GLIDE_MACH_REF
+        r = glider_ld.whole_missile_LD(p, mach=mach_ref)
+        if r.get("error"):
+            messagebox.showinfo("L/D Estimate", r["error"])
             return
-
-        mach_ref = 3.0   # representative supersonic/hypersonic glide Mach
-        L_ref    = float(last.length_m) if last.length_m > 0 else d * 5.0
-        re_l     = 1.2 * 900.0 * L_ref / 1.789e-5  # ρ·v·L/μ at ~Mach 3 SL-density
-
-        # ── Body zero-lift drag (CD₀) ─────────────────────────────────────────
-        nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
-        if nose and nose not in ('', 'forden'):
-            ld_nose = (last.nose_length_m / d
-                       if last.nose_length_m > 0 else 3.0)
-            ld_body = (last.length_m / d if last.length_m > 0 else None)
-            cd0_body = _cd_nose_shape(
-                nose, ld_nose, mach_ref,
-                ld_body=ld_body,
-                aerospike_LD=float(last.aerospike_LD or 0.0),
-                aerospike_dD=float(last.aerospike_dD or 0.0),
-            )
-            cd_src = f"{nose} nose (Chin 1961)"
-        else:
-            cd0_body = drag_coefficient(last, mach_ref)
-            cd_src = "Forden/custom Cd table"
-
-        if cd0_body <= 0:
-            messagebox.showinfo("L/D Estimate", "Cd₀ is zero — cannot estimate.")
-            return
-
-        # ── Lifting planform (body + fins for a no-sep glider) ────────────────
-        A_ref  = math.pi * (d / 2.0) ** 2
-        L_body = float(last.length_m) if last.length_m > 0 else d * 5.0
-        S_body = 0.5 * L_body * d        # slender pointed-body planform (triangle)
-        S_fins = 0.0
-        cd0_fins = 0.0
-        fin_detail = ""
-        if getattr(last, 'has_fins', False) and last.fin_span_m > 0 \
-                and last.fin_root_chord_m > 0:
-            n   = int(last.n_fins or 4)
-            s   = float(last.fin_span_m)
-            cr  = float(last.fin_root_chord_m)
-            ct  = float(last.fin_tip_chord_m)
-            tf  = float(last.fin_thickness_m)
-            sw  = float(last.fin_sweep_deg)
-            a_exp = s * (cr + ct) / 2.0
-            # ~half the panels lift in the pitch plane (cruciform); fins are part
-            # of the lifting body only because this vehicle does not separate.
-            S_fins   = 0.5 * n * a_exp
-            cd0_fins = _cd_fins(n, s, cr, ct, tf, d, mach_ref, re_l=re_l, sweep_deg=sw)
-            fin_detail = (f"\nFin lifting planform = {S_fins:.3f} m²"
-                          f"  (incl. — no-sep glider)"
-                          f"\nFin ΔCd₀ = {cd0_fins:.4f}")
-
-        k         = (S_body + S_fins) / A_ref      # planform / reference area
-        cd0_total = cd0_body + cd0_fins
-
-        # ── Maximise the modified-Newtonian L/D over angle of attack ──────────
-        best_ld, best_a = 0.0, 0.0
-        for i in range(1, 60):                     # α = 1°…59°
-            ar = math.radians(float(i))
-            sn, cs = math.sin(ar), math.cos(ar)
-            c_l = 2.0 * sn * sn * cs * k
-            c_d = 2.0 * sn * sn * sn * k + cd0_total
-            ld  = c_l / c_d if c_d > 0 else 0.0
-            if ld > best_ld:
-                best_ld, best_a = ld, float(i)
-
+        fins = (f" + fins {r['c_na_fin']:.2f}" if r["fin_planform_m2"] > 0
+                else " (body only)")
         messagebox.showinfo(
-            "Body L/D Estimate (modified-Newtonian, hypersonic)",
-            f"Body Cd₀  = {cd0_body:.3f}  (Mach {mach_ref:.0f}, {cd_src})\n"
-            f"Lifting planform S = {S_body + S_fins:.3f} m²  (body {S_body:.3f}"
-            f"{(' + fins ' + format(S_fins, '.3f')) if S_fins > 0 else ''})"
-            f"{fin_detail}\n"
-            f"S/A_ref = {k:.2f},  total Cd₀ = {cd0_total:.3f}\n"
+            "Whole-body L/D estimate (Jorgensen + Allen-Perkins + N-K-P)",
+            f"Mach {mach_ref:.0f}   |   body Cd₀ = {r['cd0']:.3f}\n"
+            f"C_Nα (potential) = {r['c_na_pot']:.2f} /rad  "
+            f"(body {r['c_na_body']:.2f}{fins})\n"
+            f"wing-body factor (1+r/s)² = {r['k_sum']:.2f}\n"
             f"\n"
-            f"Max L/D ≈ {best_ld:.2f}  at α ≈ {best_a:.0f}°\n"
-            f"(ideal-pressure ceiling; real L/D is lower — prefer a measured "
-            f"glider L/D when available)",
+            f"Max L/D ≈ {r['ld_max']:.2f}   at α ≈ {r['alpha_deg']:.0f}°\n"
+            f"\n"
+            f"Derived from geometry — the no-sep body L/D.  For a SEPARATING RV, "
+            f"use the RV's own designed L/D instead.",
         )
 
     def _rebuild_stage_rows(self):

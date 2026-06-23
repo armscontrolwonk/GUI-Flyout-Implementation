@@ -1484,6 +1484,26 @@ def integrate_trajectory(params: MissileParams,
         if launch_elevation_deg is not None:
             params.launch_elevation_deg = launch_elevation_deg
 
+    # Auto-derive the no-separation (body) glider L/D from geometry when it was
+    # left at the sentinel 0.  For a no-sep body the airframe IS the glider, so
+    # its (L/D)_max follows from the whole-missile build-up (glider_ld.py:
+    # Jorgensen + Allen-Perkins + N-K-P).  A SEPARATING RV keeps its own
+    # designed glider_LD; any body whose glider_LD was set >0 is untouched.
+    _rv = params.rv
+    if (_rv is not None
+            and getattr(_rv, 'separation_mode', 'separating_rv') == 'body'
+            and getattr(_rv, 'glider_enabled', False)
+            and float(getattr(_rv, 'glider_LD', 0.0)) <= 0.0):
+        try:
+            import glider_ld
+            import dataclasses as _dc
+            _ld = glider_ld.derive_glider_LD(params)
+            if _ld > 0.0:
+                params = copy.copy(params)
+                params.rv = _dc.replace(_rv, glider_LD=_ld)
+        except Exception:
+            pass   # leave glider_LD at 0; glide modes will treat it as no lift
+
     total_burn = total_burn_time(params)
     if cutoff_time_s is None:
         cutoff_time_s = total_burn

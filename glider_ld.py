@@ -47,6 +47,11 @@ from missile_models import MissileParams, _cd_nose_shape, drag_coefficient, _SHA
 _ETA = 1.0       # crossflow drag proportionality (=1 for supersonic/hypersonic)
 _CDN = 1.2       # modified-Newtonian crossflow drag coefficient of a cylinder
 
+# Representative glide Mach at which a no-sep body's L/D is derived for the
+# trajectory (the build-up's L/D-max is only weakly Mach-sensitive across the
+# supersonic-hypersonic glide range, so a single reference is adequate).
+GLIDE_MACH_REF = 5.0
+
 
 def nkp_interference(r: float, s: float):
     """NACA 1307 slender-body wing-body interference factors (K_W(B), K_B(W)).
@@ -170,6 +175,16 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
     if return_curve:
         out["curve"] = curve
     return out
+
+
+def derive_glider_LD(params: MissileParams, mach: float = GLIDE_MACH_REF) -> float:
+    """Geometry-derived max L/D of a no-separation airframe (the value to use as
+    glider_LD for a body glider).  Thin wrapper over whole_missile_LD; returns
+    0.0 if it cannot be computed."""
+    try:
+        return float(whole_missile_LD(params, mach=mach).get("ld_max", 0.0))
+    except Exception:
+        return 0.0
 
 
 if __name__ == "__main__":
