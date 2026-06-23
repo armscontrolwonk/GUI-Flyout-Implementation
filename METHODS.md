@@ -1387,6 +1387,13 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
   incompressible and lift-focused, it confirms drag rises with added
   slats/blockage and the grid-fins-as-drag-brakes concept (no supersonic drag
   data).
+- **Munawar, ICAS 2010** (standalone-fin RANS, M 0.5–2.5) qualitatively
+  confirms the rise in grid-fin effectiveness from low to high supersonic as
+  the shock is swallowed through the lattice (the recovery regime). Its drag is
+  referenced to an unstated/fin-based area, has no cell spacing (no σ), and no
+  Cd–Mach curve at α=0, so it is not quantitatively comparable. Its geometry
+  derives from Theerthamalai & Nagarathinam (J. Spacecraft & Rockets, 2006), a
+  primary analytical supersonic grid-fin drag method and a useful future lead.
 - **Kretzschmar & Burkhalter, "Aerodynamic Prediction Methodology for Grid
   Fins"** (NATO RTO-MP-5, 1998) is an independent analytical method (vortex
   lattice + Evvard's theory) whose grid-fin axial force decomposes the same way
