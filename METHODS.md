@@ -1587,13 +1587,17 @@ CG is estimated from the stage mass stack (mass-weighted longitudinal centroid
 at liftoff/full — the most-aft CG, i.e. the *minimum*-margin case), overridable.
 This is the **booster** stability tool; it does not apply to a gliding RV.
 
-**Known gap — diameter transitions.** Barrowman's body term is really
-`C_Nα = (2/A_r)·[A(x₂) − A(x₁)]` at *every* cross-sectional-area change, not just
-the nose. A multistage stack with a narrow payload stepping up to a wide first
-stage has a forward-facing shoulder that adds a stabilising (CP-aft) normal
-force; the current body model is nose-only, so it omits that term and reports a
-*conservative* (slightly low) margin. Adding the transition term is the largest
-pending accuracy improvement to the static-margin estimate.
+**Diameter transitions** are included (`body_normal_force` via `_stack_layout`):
+Barrowman's body term is `ΔC_Nα = (2/A_r)·ΔA` at *every* cross-sectional-area
+change, not just the nose. A multistage stack with a narrow payload/upper stage
+stepping up to a wide lower stage has a forward-facing shoulder that adds a
+stabilising (CP-aft) normal force. The net body C_Nα telescopes to `2·A_base/A_r`
+(= 2 when the reference is the base), but its *distribution* — hence the body CP
+— shifts aft when the transitions are modelled. For STARS-1 the narrow HGB→wide
+first-stage shoulder moves the body CP from 1.33 m (nose-only) to 2.82 m,
+raising the static margin from ~1.43 to ~1.59 cal. (Remaining limitation: a
+separate payload section, when the nose is not the RV, is not yet inserted as
+its own diameter step — only the nose and stage-to-stage transitions.)
 
 ---
 
