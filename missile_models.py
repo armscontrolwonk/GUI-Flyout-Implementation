@@ -181,6 +181,12 @@ class MissileParams:
     grid_fin_web_thickness_m: float = 0.0   # cell wall (web) thickness
     grid_fin_cell_pitch_m:    float = 0.0   # cell centre-to-centre spacing
     grid_fin_edge_factor:     float = 1.0   # 1.0 blunt webs; ~0.6-0.85 shaped
+    # Deployment schedule: list of [deploy_time_s, n_fins] batches (absolute
+    # mission time).  n fins become aerodynamically active at deploy_time_s;
+    # the deployed count (capped at n_grid_fins) scales the grid-fin drag.
+    # Empty -> all n_grid_fins active from t=0.  E.g. STARS deploys 4 fins at
+    # tower-clear and 4 more 60 s later: [[t_clear, 4], [t_clear+60, 4]].
+    grid_fin_deploy_schedule: list = field(default_factory=list)
 
     # Payload diameter (m).  When > 0, used as the frontal reference diameter
     # for aerodynamic drag after shroud jettison (or throughout flight when no
@@ -1195,6 +1201,30 @@ def _gridfin_geometry(width_m: float, height_m: float, chord_m: float,
     l_web = 2.0 * a_frame / pitch
     a_wet = 2.0 * l_web * max(chord_m, 0.0)            # both faces of each web
     return a_frame, phi, a_block, a_wet
+
+
+def grid_fins_deployed(n_total: int, deploy_schedule, t_s) -> int:
+    """
+    Number of grid fins aerodynamically active at mission time t_s.
+
+    deploy_schedule is a list of [deploy_time_s, n_fins] batches; n_fins become
+    active once t_s >= deploy_time_s.  An empty/None schedule (or t_s None) means
+    all n_total fins are active (the steady-state / no-timing case).  The result
+    is capped at n_total.
+    """
+    if n_total <= 0:
+        return 0
+    if not deploy_schedule or t_s is None:
+        return n_total
+    deployed = 0
+    for entry in deploy_schedule:
+        try:
+            t_dep, count = float(entry[0]), int(entry[1])
+        except (TypeError, IndexError, ValueError):
+            continue
+        if t_s >= t_dep:
+            deployed += count
+    return max(0, min(deployed, n_total))
 
 
 def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
@@ -2235,6 +2265,10 @@ def _stars_1():
         grid_fin_edge_factor=1.0,                # blunt webs (conservative); set
         #   ~0.7 if the STARS fins are known to have shaped/sharp edges (Miller
         #   94-1914 shows shaping cuts drag ~15-30%). Edge shape is not known.
+        # Deployment: 4 fins deploy after the rocket clears the launch tower,
+        # then 4 more 60 s later.  t_clear = 3 s is an ESTIMATE (tower-clear time
+        # not documented) -- refine when known.
+        grid_fin_deploy_schedule=[[3.0, 4], [63.0, 4]],
         mach_table=[], cd_table=[],
     )
 
@@ -2346,6 +2380,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'grid_fin_web_thickness_m': p.grid_fin_web_thickness_m,
         'grid_fin_cell_pitch_m':    p.grid_fin_cell_pitch_m,
         'grid_fin_edge_factor':     p.grid_fin_edge_factor,
+        'grid_fin_deploy_schedule': list(p.grid_fin_deploy_schedule or []),
         'payload_diameter_m':     p.payload_diameter_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
@@ -2461,6 +2496,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         grid_fin_web_thickness_m=float(d.get('grid_fin_web_thickness_m', 0.0)),
         grid_fin_cell_pitch_m=float(d.get('grid_fin_cell_pitch_m', 0.0)),
         grid_fin_edge_factor=float(d.get('grid_fin_edge_factor', 1.0)),
+        grid_fin_deploy_schedule=list(d.get('grid_fin_deploy_schedule', []) or []),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
@@ -2730,7 +2766,8 @@ def _rv_length(p: MissileParams) -> float:
 
 
 def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
-                      top_params: 'MissileParams' = None) -> np.ndarray:
+                      top_params: 'MissileParams' = None,
+                      t_s: float = None) -> np.ndarray:
     """
     Aerodynamic drag force vector (N) opposing velocity.
 
@@ -2740,6 +2777,8 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     vel_ecef   : velocity vector in ECEF (m/s), shape (3,)
     altitude_m : scalar altitude (m)
     top_params : top-level MissileParams (for shroud diameter lookup); optional
+    t_s        : mission time (s); used for the grid-fin deployment schedule.
+                 If None, all grid fins are treated as deployed.
 
     Returns
     -------
@@ -2783,15 +2822,19 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     # that same reference area (not the front-end `area`, which may be the
     # shroud/RV frontal area).
     if getattr(params, 'has_grid_fins', False) and params.n_grid_fins > 0:
-        re_c = rho * speed * params.grid_fin_chord_m / mu if mu > 0.0 else 5e6
-        cd_gf = _cd_gridfins(
-            params.n_grid_fins, params.grid_fin_width_m,
-            params.grid_fin_height_m, params.grid_fin_chord_m,
-            params.grid_fin_web_thickness_m, params.grid_fin_cell_pitch_m,
-            params.diameter_m, mach, re_chord=re_c,
-            edge_factor=getattr(params, 'grid_fin_edge_factor', 1.0))
-        a_base = np.pi * (params.diameter_m / 2.0) ** 2
-        drag_mag += cd_gf * q * a_base
+        n_dep = grid_fins_deployed(
+            params.n_grid_fins,
+            getattr(params, 'grid_fin_deploy_schedule', None), t_s)
+        if n_dep > 0:
+            re_c = rho * speed * params.grid_fin_chord_m / mu if mu > 0.0 else 5e6
+            cd_gf = _cd_gridfins(
+                n_dep, params.grid_fin_width_m,
+                params.grid_fin_height_m, params.grid_fin_chord_m,
+                params.grid_fin_web_thickness_m, params.grid_fin_cell_pitch_m,
+                params.diameter_m, mach, re_chord=re_c,
+                edge_factor=getattr(params, 'grid_fin_edge_factor', 1.0))
+            a_base = np.pi * (params.diameter_m / 2.0) ** 2
+            drag_mag += cd_gf * q * a_base
 
     return -drag_mag * (vel_ecef / speed)
 

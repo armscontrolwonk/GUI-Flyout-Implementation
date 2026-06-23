@@ -914,7 +914,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         else:
             f_drag = np.zeros(3)
     else:
-        f_drag = drag_force_vector(astage, vel, alt, top_params=params)
+        f_drag = drag_force_vector(astage, vel, alt, top_params=params, t_s=t)
         if params.n_boosters > 0 and t <= params.booster_burn_time_s:
             f_drag = f_drag + booster_drag_vector(params, vel, alt)
 
