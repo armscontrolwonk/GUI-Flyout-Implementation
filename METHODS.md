@@ -1376,6 +1376,17 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
 - **Abate, Duckerschein & Hathaway, AIAA 2000-0937** (free-flight GTCM) finds
   total Cx flat below **M ≈ 0.77** then a steep transonic rise, independently
   confirming the choke-onset Mach (`_GRIDFIN_M_SUB` = 0.75).
+- **Chen, Khalid, Xu & Lesage, AIAA 2000-0987** (Euler CFD, M 1.5/2.0,
+  parametric in panel thickness and edge shape) corroborates three behaviours
+  directly: thicker panels raise axial force (the solidity scaling), a
+  knife-edge face "naturally produces less axial force than a blunt block"
+  (the edge-factor sign), and axial force is higher at M1.5 than M2.0 with
+  thick-web choking persisting to higher Mach (the transonic peak + choke).
+- **Brooks & Burkhalter, J. Aircraft 1989** is the foundational subsonic
+  vortex-lattice analysis underlying the Kretzschmar & Burkhalter method;
+  incompressible and lift-focused, it confirms drag rises with added
+  slats/blockage and the grid-fins-as-drag-brakes concept (no supersonic drag
+  data).
 - **Kretzschmar & Burkhalter, "Aerodynamic Prediction Methodology for Grid
   Fins"** (NATO RTO-MP-5, 1998) is an independent analytical method (vortex
   lattice + Evvard's theory) whose grid-fin axial force decomposes the same way
