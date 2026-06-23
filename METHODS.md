@@ -1301,32 +1301,41 @@ and should be enabled.
 **Grid (lattice) fins** (`_cd_gridfins`, `_cl_alpha_gridfins`,
 `missile_models.py`) — a grid fin is a box-frame lattice of thin cells, not
 a planar airfoil, so the flat-plate/Ackeret model above does not apply. The
-drag is modelled in three regimes (refs: Washington & Miller, AIAA 93-0035 /
-94-1914; DeSpirito ARL CFD; Kantrowitz & Donaldson 1945):
+drag model is **calibrated to Washington & Miller, AIAA 93-0035** (the S1
+fine-mesh configuration: their Fig. 2 geometry and Fig. 14 drag data). The
+measured axial-force coefficient (referenced to body cross-section) is
+roughly **flat at ~0.040 outside transonic with a modest bump to ~0.065
+(≈1.5×) peaking near M ≈ 0.95** — not a large spike. The model is:
 
-1. **Subsonic** (M < 0.7) — flow passes cleanly through the open cells; only
-   the webs carry friction + profile drag (low).
-2. **Transonic choke** (0.7 < M < M_start) — the cells choke, a detached bow
-   shock stands ahead of the lattice and the fin acts as a near-solid bluff
-   frame: the characteristic grid-fin transonic drag spike, peaking near
-   M ≈ 1.05.
-3. **Supersonic started** (M > M_start) — the lattice swallows the shock and
-   pressure drag drops to blunt-LE wave drag on the webs, decaying with Mach.
+```
+C_D,gridfin = C_friction(wetted web area, chord Re)
+            + C_edge   (blunt LE+TE/profile drag × web blockage area)
+            + transonic bump over [M_sub, M_rec], peaking at M_peak
+```
 
-The start Mach `M_start` is the **Kantrowitz self-starting limit** for an
-internal contraction ratio `CR = 1/φ`, where the porosity (open-area
-fraction) for square cells of pitch `p` and web thickness `t` is
-`φ = ((p − t)/p)²`. A normal shock at the lattice face, decelerated to a
-subsonic Mach `M_y`, must still pass the M = 1 throat, so `CR = (A/A*)|_{M_y}`;
-`_gridfin_start_mach` inverts this. High-porosity (thin-web) fins start near
-M ≈ 1.6–1.8; lower porosity starts later. The drag is referenced to the body
-base area and added to the body drag in `drag_force_vector` only while the
-finned stage is the active stage (e.g. a finned first stage that jettisons
-its fins at staging). The drag-level coefficients (`_GRIDFIN_CD_PROFILE`,
-`_GRIDFIN_CD_CHOKE`, `_GRIDFIN_CD_WAVE`) are engineering estimates anchored to
-the grid-fin literature and exposed as named constants for tuning. The
-STARS-1 booster (AHW Flight-1 carrier) carries eight grid fins on its first
-stage via this model.
+with the web blockage area `(1 − φ)·A_frame`, porosity `φ = ((p − t)/p)²` for
+cell pitch `p` and web thickness `t`. The bump represents the three flow
+regimes W&M describe (Fig. 6/7): the cells **choke below M = 1**, flow spills
+around the fin, the shock attaches and then passes undisturbed, restoring
+supersonic behaviour by **M ≈ 1.6**. Those onset/peak/recovery Mach anchors
+(`_GRIDFIN_M_SUB`/`M_PEAK`/`M_REC` = 0.75/0.97/1.60) are taken from the S1
+data. A `_kantrowitz_contraction_ratio`/`_gridfin_start_mach` helper computes
+the self-starting Mach for contraction ratio `CR = 1/φ` from the standard
+normal-shock area relation (the class of 1-D isentropic analysis W&M used);
+note its *geometric* contraction under-predicts the choke for thin-web fins
+because boundary-layer blockage in the small cells is a co-cause, so the bump
+anchors come from data, not geometric Kantrowitz alone.
+
+**Validation:** run on W&M's exact S1 geometry the model reproduces ~0.042
+(subsonic), ~0.065 (transonic peak) and ~0.038 (supersonic) to within ±13%
+across M = 0.5–3.5. **Caveats:** calibrated to a single blunt-edged
+configuration; sharp edges cut supersonic drag (W&M note this), the bucket
+shifts with cell size/Reynolds number, and extrapolation to other geometries
+is uncertain. Drag is referenced to body base area and added in
+`drag_force_vector` only while the finned stage is active (first-stage fins
+jettison at staging). The STARS-1 booster (AHW Flight-1 carrier) carries eight
+first-stage grid fins via this model (dimensions are engineering estimates);
+they cost it ~200 km of range from ascent drag.
 
 ### 8.6 Aerospike correction
 

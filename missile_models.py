@@ -1071,35 +1071,39 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 
 
 # ---------------------------------------------------------------------------
-# Grid (lattice) fins — Washington & Miller (AIAA 93-0035, 94-1914),
-# DeSpirito et al. (ARL CFD).  A grid fin is a box-frame lattice of thin
-# cells, NOT a planar airfoil, so the flat-plate/Ackeret _cd_fins model does
-# not apply.  Three regimes (axial-force / drag):
+# Grid (lattice) fins.  CALIBRATED to Washington & Miller, "Grid Fins - A New
+# Concept for Missile Stability and Control," AIAA 93-0035 (the S1 fine-mesh
+# configuration, their Fig. 2 geometry and Fig. 14 drag data).  A grid fin is a
+# box-frame lattice of thin cells, NOT a planar airfoil, so the flat-plate/
+# Ackeret _cd_fins model does not apply.  W&M's measured axial-force (drag)
+# coefficient, referenced to body cross-section, for the S1 fin (96.8% open,
+# blunt-edged webs) is roughly FLAT at ~0.040 outside transonic with a modest
+# transonic BUMP to ~0.065 (≈1.5×) peaking near M≈0.95 — NOT a large spike.
+# The model therefore is:
 #
-#   1. SUBSONIC (M < ~0.7):  flow passes cleanly through the open cells; only
-#      the webs carry profile + friction drag.  Low.
-#   2. TRANSONIC CHOKE (~0.7 < M < M_start):  the cells choke, a detached bow
-#      shock stands ahead of the lattice, flow spills around the frame and the
-#      fin acts like a near-solid bluff body — the well-known grid-fin
-#      transonic drag spike, peaking near M≈1.
-#   3. SUPERSONIC STARTED (M > M_start):  the lattice "swallows" the shock
-#      (self-starts), supersonic flow fills the cells and pressure drag drops
-#      to blunt leading-edge wave drag on the webs, decaying with Mach.
+#   drag = friction (on the wetted web area, chord Reynolds)
+#        + blunt edge/profile drag (× web frontal blockage area)
+#        + a transonic bump over [M_sub, M_rec] peaking at M_peak.
 #
-# The start Mach M_start is set by the KANTROWITZ self-starting limit for an
-# internal contraction ratio CR = 1/porosity (the frame capture area over the
-# open cell area): the cells start once a normal shock at the face, decelerated
-# to subsonic, can still be passed at the M=1 throat.  High-porosity fins
-# (thin webs) start near M≈1.6-1.8; lower porosity starts later.
+# The three flow regimes W&M describe (Fig. 6/7) — cells CHOKE below M=1, flow
+# spills around the fin, the shock attaches then passes undisturbed, restoring
+# supersonic behaviour by M≈1.6 — set the bump's onset/peak/recovery Mach
+# anchors.  W&M (and Miller, Ref. 3) used 1-D isentropic relations for these;
+# the Kantrowitz helper below reproduces that class of analysis, but note its
+# GEOMETRIC contraction (1/porosity) under-predicts the choke for thin-web
+# fins because boundary-layer blockage in the small cells is the co-cause W&M
+# identify — so the bump Mach anchors are taken from the S1 data, not from
+# geometric Kantrowitz alone.
 #
-# Drag-coefficient levels are engineering estimates referenced to the lattice
-# frontal frame area, anchored to the qualitative magnitudes in the grid-fin
-# literature.  Exposed as named constants so they can be tuned.
-_GRIDFIN_CD_PROFILE = 0.12   # subsonic web profile drag (× blockage fraction)
-_GRIDFIN_CD_CHOKE   = 0.70   # transonic choked peak (× full frame area)
-_GRIDFIN_CD_WAVE    = 1.50   # supersonic blunt-LE wave drag (× blockage frac)
-_GRIDFIN_M_SUB      = 0.70   # drag-rise onset Mach
-_GRIDFIN_M_PEAK     = 1.05   # Mach of the transonic drag peak
+# CALIBRATION CAVEATS: anchored to a single blunt-edged config (S1).  Sharp
+# edges cut supersonic drag (W&M note this explicitly); the bucket shifts with
+# cell size / Reynolds number; extrapolation to other geometries is uncertain.
+# Constants are exposed for tuning.
+_GRIDFIN_CD_EDGE = 0.50   # blunt LE+TE / profile drag (× web blockage area)
+_GRIDFIN_BUMP    = 0.55   # transonic peak as a fraction above the baseline
+_GRIDFIN_M_SUB   = 0.75   # drag-rise onset Mach (W&M S1)
+_GRIDFIN_M_PEAK  = 0.97   # Mach of the transonic drag peak (W&M S1)
+_GRIDFIN_M_REC   = 1.60   # Mach of recovery to supersonic behaviour (W&M S1)
 
 
 def _isentropic_area_ratio(mach: float, gamma: float = 1.4) -> float:
@@ -1168,8 +1172,14 @@ def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
                  body_diam_m: float, mach: float, re_chord: float = 5e6) -> float:
     """
     Total grid-fin axial-force (drag) coefficient increment referenced to the
-    body base area A_ref = π(d/2)².  See the module header above for the
-    three-regime model and references.  Returns 0 when not configured.
+    body base area A_ref = π(d/2)².  Calibrated to Washington & Miller S1
+    (AIAA 93-0035, Fig. 14): a roughly flat baseline (web friction + blunt-edge
+    drag) plus a modest transonic bump.  See the module header for references
+    and calibration caveats.  Returns 0 when not configured.
+
+    Validated against W&M S1 (4 fins, frame 2.14×3.243 in, web 0.006 in, pitch
+    0.371 in, chord 0.384 in, 5.0 in body): reproduces ~0.042 subsonic,
+    ~0.065 transonic peak, ~0.038 supersonic.
     """
     import math
     if (n_fins < 1 or width_m <= 0 or height_m <= 0 or chord_m <= 0
@@ -1181,37 +1191,28 @@ def _cd_gridfins(n_fins: int, width_m: float, height_m: float, chord_m: float,
     a_frame, phi, a_block, a_wet = _gridfin_geometry(
         width_m, height_m, chord_m, web_thickness_m, cell_pitch_m)
 
-    # 1. Skin friction on the web surfaces (flat-plate, chord Reynolds).
+    # Baseline drag (roughly Mach-flat outside transonic):
+    #   (a) skin friction on the wetted web area (flat-plate, chord Reynolds)
+    #   (b) blunt leading/trailing-edge + profile drag on the web blockage area
     re_c = max(re_chord, 1e3)
     cf = 1.328 / math.sqrt(re_c) if re_c < 5e5 else 0.074 / (re_c ** 0.2)
     cd_fric = n_fins * cf * a_wet / a_ref
+    cd_edge = n_fins * _GRIDFIN_CD_EDGE * a_block / a_ref
+    base = cd_fric + cd_edge
 
-    # 2. Pressure drag — coefficient cp referenced to the full frame area.
-    cr = 1.0 / phi                                  # contraction ratio
-    m_start = max(_gridfin_start_mach(cr), _GRIDFIN_M_PEAK + 0.05)
-    cp_sub = _GRIDFIN_CD_PROFILE * (1.0 - phi)
-    cp_peak = _GRIDFIN_CD_CHOKE
+    # Transonic bump (choke → spillage → shock-attachment), peaking at M_peak
+    # and recovering by M_rec.  Smooth half-cosines, zero outside [M_sub, M_rec].
+    bump = 0.0
+    if _GRIDFIN_M_SUB <= mach <= _GRIDFIN_M_REC:
+        if mach <= _GRIDFIN_M_PEAK:
+            x = (mach - _GRIDFIN_M_SUB) / (_GRIDFIN_M_PEAK - _GRIDFIN_M_SUB)
+            shape = 0.5 * (1.0 - math.cos(math.pi * x))          # 0 → 1
+        else:
+            x = (mach - _GRIDFIN_M_PEAK) / (_GRIDFIN_M_REC - _GRIDFIN_M_PEAK)
+            shape = 0.5 * (1.0 + math.cos(math.pi * x))          # 1 → 0
+        bump = _GRIDFIN_BUMP * base * shape
 
-    def _cp_super(m):
-        b = math.sqrt(max(m * m - 1.0, 1e-3))
-        return _GRIDFIN_CD_WAVE * (1.0 - phi) / b
-
-    if mach < _GRIDFIN_M_SUB:
-        cp = cp_sub
-    elif mach < _GRIDFIN_M_PEAK:
-        # sub → choked peak (smooth half-cosine)
-        x = (mach - _GRIDFIN_M_SUB) / (_GRIDFIN_M_PEAK - _GRIDFIN_M_SUB)
-        cp = cp_sub + (cp_peak - cp_sub) * 0.5 * (1.0 - math.cos(math.pi * x))
-    elif mach < m_start:
-        # choked peak → started supersonic value at M_start (smooth)
-        cp_end = _cp_super(m_start)
-        x = (mach - _GRIDFIN_M_PEAK) / (m_start - _GRIDFIN_M_PEAK)
-        cp = cp_peak + (cp_end - cp_peak) * 0.5 * (1.0 - math.cos(math.pi * x))
-    else:
-        cp = _cp_super(mach)
-
-    cd_press = n_fins * cp * a_frame / a_ref
-    return float(cd_fric + cd_press)
+    return float(base + bump)
 
 
 def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
@@ -1224,8 +1225,8 @@ def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
     not use fin lift).  Reduced-order cascade model: the lattice members act as
     low-aspect-ratio lifting surfaces; the slope scales with the lifting
     planform (≈ web-wetted area) and a per-Mach 2-D lift slope, with the
-    transonic-choke effectiveness loss folded in via the same M_start as drag.
-    Approximate — flagged as such.
+    transonic "bucket" (W&M Fig. 6: C_NF,α drops through M_sub..M_rec) folded
+    in.  Approximate — flagged as such; the trajectory does not use it.
     """
     import math
     if (n_fins < 1 or width_m <= 0 or height_m <= 0 or chord_m <= 0
@@ -1243,12 +1244,10 @@ def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
         cla_2d = 4.0 / math.sqrt(max(mach * mach - 1.0, 0.04))
     # Lifting planform ≈ half the wetted web area (the load-bearing members)
     a_lift = 0.5 * a_wet
-    # Transonic-choke effectiveness factor: low through the choked band,
-    # recovering once started.
-    cr = 1.0 / phi
-    m_start = max(_gridfin_start_mach(cr), _GRIDFIN_M_PEAK + 0.05)
+    # Transonic "bucket": effectiveness drops through the choked band
+    # [M_sub, M_rec] and recovers to full once the cells start (W&M Fig. 6).
     eff = 1.0
-    if _GRIDFIN_M_SUB <= mach < m_start:
+    if _GRIDFIN_M_SUB <= mach < _GRIDFIN_M_REC:
         eff = 0.5                                    # degraded while choked
     return float(n_fins * cla_2d * eff * a_lift / a_ref)
 
@@ -2189,7 +2188,7 @@ def _stars_1():
         # cell dimensions here are ENGINEERING ESTIMATES scaled to the 1.37 m
         # (54 in) first stage -- no published STARS grid-fin drawing -- and
         # should be refined if specs become available.  Drag is modelled by
-        # _cd_gridfins (transonic choke + Kantrowitz supersonic start).
+        # _cd_gridfins, calibrated to Washington & Miller (AIAA 93-0035).
         has_grid_fins=True,
         n_grid_fins=8,
         grid_fin_width_m=0.40,                   # frame width (estimate)
