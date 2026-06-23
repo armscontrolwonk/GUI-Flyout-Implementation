@@ -1378,7 +1378,22 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
   blockage — the co-cause noted above. It also identifies the governing
   nondimensional geometry as the span/height (b/h) and **chord/height (C/h)**
   ratios: chord is properly normalized by fin **height**, not body diameter
-  (observed C/h ≈ 0.12–0.35, design-dependent).
+  (observed C/h ≈ 0.07–0.35, design-dependent).
+- **Washington & Miller, "Experimental Investigations of Grid Fin Aerodynamics:
+  A Synopsis of Nine Wind Tunnel and Three Flight Tests"** (AGARD/RTO, 1998) is
+  the umbrella dataset (26 configs; the Miller 94-1914 drag fins are G6–G11 and
+  the Kretzschmar fins are G12–G16). Its Figure 8 marks the flow regimes as
+  **choked flow at M = 0.75, leading-edge shock attachment at M = 1.35, and no
+  shock reflection (supersonic recovery) at M = 1.60** — i.e. `_GRIDFIN_M_SUB`
+  and `_GRIDFIN_M_REC` match W&M's own markers exactly. It confirms the five
+  defining parameters (span, chord, height, cell spacing, web thickness), and
+  the G12–G16 dimensions give C/h ≈ 0.07–0.11 for those research fins.
+
+**Limitation — fin sweep not modelled.** W&M (Synopsis, §3.7) found that
+sweeping a grid fin forward or aft by ±30° **amplifies its axial force by a
+factor of 2–3** while leaving normal force essentially unchanged (grid fins can
+be used as deployable drag brakes). This model assumes **unswept** fins; a
+swept installation would have substantially higher drag than computed.
 
 The DeSpirito and Abate data are total-missile (not fin-isolated) and Abate's
 fins are blunt sub-scale, so they are qualitative corroboration, not
