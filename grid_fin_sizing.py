@@ -152,12 +152,84 @@ def estimate_cg(params: MissileParams):
     return x_cg, L_total
 
 
+def _stack_layout(params: MissileParams):
+    """Front->aft diameter profile for the body normal-force model.
+
+    Returns (nose_base_d, nose_x_cp, sections, L_total) where `sections` is a
+    list of (x_start_m, diameter_m) for the constant-diameter body sections aft
+    of the nose, in nose->tail order.  Mirrors the stage layout used by
+    estimate_cg (upper stages at their own length_m, aft stage takes the
+    remainder), so the two agree on station positions."""
+    d_body = params.diameter_m
+    rv = effective_rv(params)
+    if params.shroud_nose_shape and params.shroud_nose_length_m > 0:
+        nshape, nlen, nd = (params.shroud_nose_shape, params.shroud_nose_length_m,
+                            (params.shroud_diameter_m or d_body))
+    elif params.nose_shape and params.nose_length_m > 0:
+        nshape, nlen, nd = params.nose_shape, params.nose_length_m, d_body
+    elif rv is not None and getattr(rv, 'shape', '') and getattr(rv, 'length_m', 0) > 0:
+        nshape, nlen, nd = rv.shape, rv.length_m, (rv.diameter_m or d_body)
+    else:
+        nshape, nlen, nd = "tangent_ogive", 3.0 * d_body, d_body
+    nose_x_cp = _nose_cp_fraction(nshape) * nlen
+    L_total = max(params.length_m, nlen + 0.5)
+
+    chain = []
+    s = params
+    while s is not None:
+        chain.append(s)
+        s = s.stage2
+    fwd_to_aft = list(reversed(chain))
+    body_len = L_total - nlen
+    upper, aft = fwd_to_aft[:-1], fwd_to_aft[-1]
+    lens = {id(st): (st.length_m if st.length_m > 0 else 0.0) for st in upper}
+    if sum(lens.values()) >= body_len:                 # lengths inconsistent
+        lens = {id(st): body_len / len(fwd_to_aft) for st in fwd_to_aft}
+    else:
+        lens[id(aft)] = body_len - sum(lens.values())
+
+    sections, x = [], nlen
+    for st in fwd_to_aft:
+        sections.append((x, st.diameter_m if st.diameter_m > 0 else d_body))
+        x += max(lens[id(st)], 1e-6)
+    return nd, nose_x_cp, sections, L_total
+
+
 def body_normal_force(params: MissileParams):
-    """(C_Na_body, x_cp_body_m) from the Barrowman nose term, referenced to the
-    body base area.  Nose-only (constant-diameter body adds no potential lift)."""
-    shape, nose_len, d = _front_nose(params)
-    c_na = 2.0                                  # slender-body nose value
-    x_cp = _nose_cp_fraction(shape) * nose_len
+    """(C_Na_body, x_cp_body_m) — the Barrowman body normal force summed over the
+    nose AND every cross-sectional-area change along the stack (thesis Eq 3-65):
+
+        ΔC_Nα = (2/A_r)·ΔA      at each transition, located at its station,
+
+    referenced to the body base area A_r = π(d/2)² (d = params.diameter_m).  A
+    multistage stack with a narrow payload/upper stage stepping up to a wider
+    lower stage has a forward-facing shoulder that adds a stabilising (CP-aft)
+    normal force; including it moves the body CP aft versus a nose-only model
+    (the net C_Nα telescopes to 2·A_base/A_r, but its distribution — hence the
+    CP — changes).  Constant-diameter sections add nothing.
+
+    Limitation: a separate payload section (when the nose is not the RV) is not
+    yet inserted as its own diameter step; only the nose and the stage-to-stage
+    transitions are modelled."""
+    import math
+    d_ref = params.diameter_m
+    a_ref = math.pi * (d_ref / 2.0) ** 2
+    nose_d, nose_x_cp, sections, _ = _stack_layout(params)
+
+    terms = []                                          # (C_Na, x)
+    a_nose = math.pi * (nose_d / 2.0) ** 2
+    terms.append((2.0 * a_nose / a_ref, nose_x_cp))     # nose: 0 -> A_nose
+    prev_d = nose_d
+    for x, dia in sections:
+        if abs(dia - prev_d) > 1e-9:
+            d_a = math.pi * ((dia / 2.0) ** 2 - (prev_d / 2.0) ** 2)
+            terms.append((2.0 * d_a / a_ref, x))
+        prev_d = dia
+
+    c_na = sum(t[0] for t in terms)
+    if c_na <= 1e-9:
+        return 2.0, nose_x_cp                           # degenerate fallback
+    x_cp = sum(t[0] * t[1] for t in terms) / c_na
     return c_na, x_cp
 
 
