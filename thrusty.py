@@ -3981,6 +3981,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Save Missile to XLSX…",    command=self._export_missile_xlsx)
         file_menu.add_command(label="New Missile XLSX Template…", command=self._new_missile_template)
         file_menu.add_separator()
+        file_menu.add_command(label="Load RV…",                 command=self._load_rv)
+        file_menu.add_command(label="Save RV…",                 command=self._export_rv)
+        file_menu.add_separator()
         file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
         file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
         file_menu.add_separator()
@@ -9260,6 +9263,58 @@ class MissileFlyoutApp(tk.Tk):
         data = missile_to_dict(MISSILE_DB[name]())
         Path(path).write_text(json.dumps(data, indent=2))
         self._status_var.set(f"Missile exported: {path}")
+
+    def _load_rv(self):
+        """Import a .rv.json file into the RV library (parallel to Load Missile)."""
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            filetypes=[("RV files", "*.rv.json"), ("JSON files", "*.json"),
+                       ("All files", "*.*")],
+            title="Load RV",
+        )
+        if not path:
+            return
+        try:
+            rv = rv_from_dict(json.loads(Path(path).read_text()))
+        except Exception as e:
+            messagebox.showerror("Load error", f"Could not parse RV file:\n{e}")
+            return
+        name = rv.name or Path(path).stem.replace('.rv', '')
+        if not name:
+            messagebox.showerror("Load error", "RV file has no name field.")
+            return
+        if name in RV_DB and not messagebox.askyesno(
+                "Overwrite?", f"'{name}' already exists. Overwrite?"):
+            return
+        try:
+            _save_rv_to_library(rv)        # copy into the writable user library
+        except Exception as exc:
+            messagebox.showerror("Load RV", f"Could not write RV file:\n{exc}")
+            return
+        self._refresh_rv_list(select_name=name)
+        self._status_var.set(f"RV '{name}' loaded from {Path(path).name}")
+
+    def _export_rv(self):
+        """Export the selected RV (or the missile's RV) to a .rv.json file."""
+        sel = self._rv_main_var.get()
+        rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
+        if rv is None or not getattr(rv, 'name', ''):
+            messagebox.showinfo("No RV", "Select an RV first.")
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            defaultextension=".json",
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialfile=f"{_safe_name(rv.name)}.rv.json",
+            filetypes=[("RV files", "*.rv.json"), ("JSON files", "*.json"),
+                       ("All files", "*.*")],
+            title="Export RV",
+        )
+        if not path:
+            return
+        Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+        self._status_var.set(f"RV exported: {path}")
 
     def _export_missile_xlsx(self):
         """Export current missile to a filled-in XLSX template."""
