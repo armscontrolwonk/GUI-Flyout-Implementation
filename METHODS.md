@@ -1619,9 +1619,28 @@ C_Nα_pot = 2·(A_b/A_r) + (1+r/s)²·(C_Lα)_W·(S_W/A_r)
 C_N(α)   = C_Nα_pot·sin(2α)/2 + η·C_dn·(A_p/A_r)·sin²α     (η=1, C_dn=1.2)
 C_A(α)   = C_A0·cos²α ;  C_L = C_N cosα − C_A sinα ;  C_D = C_N sinα + C_A cosα
 ```
-L/D is maximised over α. It is a preliminary-design estimate (a slender body is
-a poor lifting shape, so L/D is modest, ~2–3); validated for physical sanity
-(finless slender body ~1.8→2.5 over M2→5; rising with Mach as expected).
+where `A_p` is the body's true side-projected **planform** area (the area the
+Allen-Perkins crossflow term acts on): nose + cylindrical afterbody,
+`A_p = fill·L_nose·d + (L−L_nose)·d`, with a shape fill factor (cone 0.5, tangent
+ogive ≈0.67 by exact integration). L/D is maximised over α. It is a
+preliminary-design estimate (a slender body is a poor lifting shape, so L/D is
+modest, ~2–3).
+
+**Validation against Digital DATCOM (USAF, public-domain, PDAS).** The build-up
+was cross-checked against Digital DATCOM (AFFDL-TR-79-3032) for the finless
+slender reference body (D=0.5 m, L=4 m, 1.5 m tangent-ogive nose) at M2/3/5,
+α=0–20°. Zero-lift drag agrees within ~10% (C_A0: glider_ld 0.245/0.184/0.121 vs
+DATCOM 0.272/0.189/0.109), and the best-glide AoA matches closely (16/14/12° vs
+16/14/10°). The cross-check exposed a real error: the original `A_p = ½Ld`
+(a cone-only triangle) underestimated the planform of a body with a long
+cylinder, driving L/D ~20–30% low (worsening with Mach). With the corrected
+nose+afterbody planform, L/D agrees to −6%/−13%/−20% (M2/3/5) — `glider_ld`
+remaining slightly conservative, the safe direction for range. The residual,
+which grows with Mach, is the constant `C_dn=1.2`: the true crossflow drag
+coefficient rises with crossflow Mach `M·sinα`, so a fixed value under-predicts
+crossflow lift at high Mach (a documented limitation, not corrected here to
+avoid over-fitting one body). The input deck and comparison script are in
+`validation/datcom/`.
 
 **Trim/control gate (`trim_gate.py`)** — a derived L/D is only *achievable* if
 the airframe can trim and hold that AoA. Using the linearised pitching moment

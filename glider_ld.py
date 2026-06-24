@@ -47,6 +47,15 @@ from missile_models import MissileParams, _cd_nose_shape, drag_coefficient, _SHA
 _ETA = 1.0       # crossflow drag proportionality (=1 for supersonic/hypersonic)
 _CDN = 1.2       # modified-Newtonian crossflow drag coefficient of a cylinder
 
+# Nose planform "fill" factor: side-projected nose area / (L_nose * d).  A cone
+# projects to a triangle (0.5); rounded noses are fuller (a tangent ogive is
+# ~0.67 by exact integration).  Used to build the Allen-Perkins crossflow
+# planform area for a nose+cylinder body.
+_NOSE_PLANFORM_FILL = {
+    'cone': 0.5, 'tangent_ogive': 0.667, 'parabola': 0.667,
+    'von_karman': 0.667, 'lv_haack': 0.667, 'blunt_cylinder': 0.85,
+}
+
 # Representative glide Mach at which a no-sep body's L/D is derived for the
 # trajectory (the build-up's L/D-max is only weakly Mach-sensitive across the
 # supersonic-hypersonic glide range, so a single reference is adequate).
@@ -124,7 +133,19 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
     A_ref = math.pi * (d / 2.0) ** 2
     L_body = float(last.length_m) if last.length_m > 0 else 5.0 * d
     A_b = A_ref                                   # base area = reference
-    A_p_body = 0.5 * L_body * d                   # slender/pointed-body planform
+    # Planform (side-projected) area for the Allen-Perkins viscous-crossflow
+    # term — NACA 1048 uses the body's true planform S_plan.  The pointed-body
+    # triangle 0.5*L*d is only correct for a cone; for a body with a long
+    # cylindrical afterbody it underestimates S_plan badly (validated against
+    # Digital DATCOM: the triangle drove L/D ~20-30% low, growing with Mach).
+    # Build it as nose (shape fill factor x L_nose x d) + cylindrical afterbody.
+    L_nose = float(getattr(last, 'nose_length_m', 0.0) or 0.0)
+    if 0.0 < L_nose < L_body:
+        nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
+        fill = _NOSE_PLANFORM_FILL.get(nose, 0.667)   # cone 0.5, ogive ~0.67
+        A_p_body = fill * L_nose * d + (L_body - L_nose) * d
+    else:
+        A_p_body = 0.5 * L_body * d                # pointed-body fallback
 
     cd0 = _body_cd0(last, mach)
 
