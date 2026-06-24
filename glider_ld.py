@@ -44,8 +44,42 @@ from __future__ import annotations
 import math
 from missile_models import MissileParams, _cd_nose_shape, drag_coefficient, _SHAPE_ALIAS
 
-_ETA = 1.0       # crossflow drag proportionality (=1 for supersonic/hypersonic)
-_CDN = 1.2       # modified-Newtonian crossflow drag coefficient of a cylinder
+_ETA = 1.0       # crossflow drag proportionality factor.  Jorgensen (NASA TN
+                 # D-7228, 1973) states eta = 1 for supersonic/hypersonic
+                 # free-stream Mach; the eta(L/d) chart (Gowen-Perkins TN 2960
+                 # Fig. 8) applies only at subsonic free-stream.
+
+# Crossflow drag coefficient C_dn of a circular cylinder (section normal to the
+# stream) vs the crossflow Mach number M_n = M*sin(alpha).  This is the
+# "state-of-knowledge" curve Jorgensen's method (TN D-7228 Eq. 1) feeds into the
+# viscous-crossflow term.  Values read from Gowen & Perkins, NACA TN 2960 (1953)
+# Fig. 7 (subcritical-Reynolds branch): ~1.2 at low M, a transonic rise to a
+# sharp peak ~2.1 at M_n=1, decaying through the supersonic range to ~1.34 at
+# M_n=2.9.  Held flat outside the measured range (Re/drag-crisis effects at low
+# subsonic M_n with supercritical crossflow Reynolds are not modelled — the
+# subcritical curve is what Jorgensen's method uses).
+_CDN_VS_MCROSS = [
+    (0.0, 1.20), (0.4, 1.20), (0.5, 1.25), (0.6, 1.32), (0.7, 1.42),
+    (0.8, 1.55), (0.9, 1.75), (1.0, 2.10), (1.1, 2.00), (1.2, 1.80),
+    (1.4, 1.65), (1.6, 1.55), (1.8, 1.52), (2.0, 1.49), (2.4, 1.42),
+    (2.9, 1.34), (4.0, 1.30),
+]
+
+
+def crossflow_cd(m_cross: float) -> float:
+    """Circular-cylinder crossflow drag coefficient C_dn at crossflow Mach
+    M_n = M*sin(alpha), piecewise-linear in the Gowen-Perkins (NACA TN 2960
+    Fig. 7) data, clamped flat beyond the measured range."""
+    tbl = _CDN_VS_MCROSS
+    if m_cross <= tbl[0][0]:
+        return tbl[0][1]
+    if m_cross >= tbl[-1][0]:
+        return tbl[-1][1]
+    for (m0, c0), (m1, c1) in zip(tbl, tbl[1:]):
+        if m_cross <= m1:
+            return c0 + (c1 - c0) * (m_cross - m0) / (m1 - m0)
+    return tbl[-1][1]
+
 
 # Nose planform "fill" factor: side-projected nose area / (L_nose * d).  A cone
 # projects to a triangle (0.5); rounded noses are fuller (a tangent ogive is
@@ -179,7 +213,8 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
     for i in range(1, 60):                         # alpha = 1..59 deg
         a = math.radians(float(i))
         sn, cs = math.sin(a), math.cos(a)
-        c_n = c_na_pot * math.sin(2.0 * a) / 2.0 + _ETA * _CDN * (A_p / A_ref) * sn * sn
+        c_dn = crossflow_cd(mach * sn)             # C_dn at crossflow Mach M*sin(a)
+        c_n = c_na_pot * math.sin(2.0 * a) / 2.0 + _ETA * c_dn * (A_p / A_ref) * sn * sn
         c_a = cd0 * cs * cs
         c_l = c_n * cs - c_a * sn
         c_d = c_n * sn + c_a * cs

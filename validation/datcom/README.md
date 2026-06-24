@@ -40,14 +40,22 @@ across continuation lines.
 
 | Mach | DATCOM L/D_max @ α | glider_ld L/D_max @ α | gap |
 |---|---|---|---|
-| 2 | 2.23 @ 16° | 2.09 @ 16° | −6% |
-| 3 | 2.71 @ 14° | 2.36 @ 14° | −13% |
-| 5 | 3.51 @ 10° | 2.81 @ 12° | −20% |
+| 2 | 2.23 @ 16° | 2.13 @ 16° | −5% |
+| 3 | 2.71 @ 14° | 2.48 @ 15° | −9% |
+| 5 | 3.51 @ 10° | 3.17 @ 12° | −10% |
 
 Zero-lift drag agrees within ~10% and the best-glide AoA matches closely.
 `glider_ld` runs slightly conservative (under-predicts L/D — the safe direction
-for range). The cross-check originally exposed a real error — the planform area
-used the cone-only triangle `½Ld` instead of the body's true (nose + cylinder)
-planform — which is now fixed in `glider_ld.py`. The residual gap grows with
-Mach because `glider_ld` holds the crossflow drag coefficient constant
-(`C_dn = 1.2`) while the true value rises with crossflow Mach `M·sinα`.
+for range). The cross-check drove two sourced fixes in `glider_ld.py`:
+
+1. **Planform area** — the original `A_p = ½Ld` (a cone-only triangle)
+   underestimated the planform of a body with a long cylinder; replaced by the
+   true nose + cylinder planform.
+2. **Crossflow drag coefficient** — the original constant `C_dn = 1.2`
+   under-predicted crossflow lift at high Mach (at a M5 best-glide AoA the
+   crossflow Mach `M_n = M·sinα ≈ 1`, where the cylinder `C_dn ≈ 2.1`); replaced
+   by `C_dn(M_n)` from Gowen & Perkins, NACA TN 2960 Fig. 7.
+
+These cut the worst gap from ~20% to ~10% and flattened its Mach dependence. The
+remaining ~10% is a consistent conservative bias (slender-body potential slope vs
+DATCOM's fuller body-lift method).
