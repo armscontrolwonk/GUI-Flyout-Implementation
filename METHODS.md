@@ -1616,31 +1616,42 @@ base area:
 
 ```
 C_Nα_pot = 2·(A_b/A_r) + (1+r/s)²·(C_Lα)_W·(S_W/A_r)
-C_N(α)   = C_Nα_pot·sin(2α)/2 + η·C_dn·(A_p/A_r)·sin²α     (η=1, C_dn=1.2)
+C_N(α)   = C_Nα_pot·sin(2α)/2 + η·C_dn(M_n)·(A_p/A_r)·sin²α
 C_A(α)   = C_A0·cos²α ;  C_L = C_N cosα − C_A sinα ;  C_D = C_N sinα + C_A cosα
 ```
 where `A_p` is the body's true side-projected **planform** area (the area the
 Allen-Perkins crossflow term acts on): nose + cylindrical afterbody,
 `A_p = fill·L_nose·d + (L−L_nose)·d`, with a shape fill factor (cone 0.5, tangent
-ogive ≈0.67 by exact integration). L/D is maximised over α. It is a
-preliminary-design estimate (a slender body is a poor lifting shape, so L/D is
-modest, ~2–3).
+ogive ≈0.67 by exact integration). The two crossflow factors are **sourced, not
+assumed**: `η = 1` for supersonic/hypersonic free-stream Mach per **Jorgensen
+(NASA TN D-7228, 1973)** — the analytic statement of this exact build-up
+(Eq. 1) — and the crossflow drag coefficient `C_dn` is a function of the
+crossflow Mach `M_n = M·sinα`, read from **Gowen & Perkins (NACA TN 2960, 1953)**
+Fig. 7: ~1.2 at low M_n, a transonic peak ~2.1 at M_n=1, decaying to ~1.34 at
+M_n=2.9. L/D is maximised over α. It is a preliminary-design estimate (a slender
+body is a poor lifting shape, so L/D is modest, ~2–3).
 
 **Validation against Digital DATCOM (USAF, public-domain, PDAS).** The build-up
 was cross-checked against Digital DATCOM (AFFDL-TR-79-3032) for the finless
 slender reference body (D=0.5 m, L=4 m, 1.5 m tangent-ogive nose) at M2/3/5,
 α=0–20°. Zero-lift drag agrees within ~10% (C_A0: glider_ld 0.245/0.184/0.121 vs
 DATCOM 0.272/0.189/0.109), and the best-glide AoA matches closely (16/14/12° vs
-16/14/10°). The cross-check exposed a real error: the original `A_p = ½Ld`
-(a cone-only triangle) underestimated the planform of a body with a long
-cylinder, driving L/D ~20–30% low (worsening with Mach). With the corrected
-nose+afterbody planform, L/D agrees to −6%/−13%/−20% (M2/3/5) — `glider_ld`
-remaining slightly conservative, the safe direction for range. The residual,
-which grows with Mach, is the constant `C_dn=1.2`: the true crossflow drag
-coefficient rises with crossflow Mach `M·sinα`, so a fixed value under-predicts
-crossflow lift at high Mach (a documented limitation, not corrected here to
-avoid over-fitting one body). The input deck and comparison script are in
-`validation/datcom/`.
+16/14/10°). The cross-check drove two sourced corrections:
+
+1. The original `A_p = ½Ld` (a cone-only triangle) underestimated the planform
+   of a body with a long cylinder, driving L/D ~20–30% low (worsening with
+   Mach); replaced by the true nose+afterbody planform.
+2. The original constant `C_dn = 1.2` under-predicted crossflow lift at high
+   Mach — at a M5 best-glide AoA the crossflow Mach `M_n = M·sinα ≈ 1`, where
+   the cylinder `C_dn ≈ 2.1`, not 1.2 — which is why the gap grew with Mach;
+   replaced by `C_dn(M_n)` from Gowen-Perkins TN 2960 Fig. 7.
+
+Together these bring L/D to within **−5%/−9%/−10%** (M2/3/5) of DATCOM, with the
+residual now roughly **flat** in Mach instead of growing. `glider_ld` remains
+slightly conservative (under-predicts L/D — the safe direction for range); the
+~10% residual is consistent with the slender-body potential slope vs DATCOM's
+fuller body-lift method. The input deck, reference output, and comparison script
+are in `validation/datcom/`.
 
 **Trim/control gate (`trim_gate.py`)** — a derived L/D is only *achievable* if
 the airframe can trim and hold that AoA. Using the linearised pitching moment
