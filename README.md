@@ -274,8 +274,58 @@ C_Nα = N·π·AR·(A_f/A_ref) / [2 + √(4 + (β·AR/cos Γ_c)²)] · (1 + d/(2
 ```
 
 This is small-AoA, fin-stabilised slender-vehicle theory — used for **booster**
-static margin, **not** for a gliding RV (whose L/D comes from `rv.glider_LD`).
-CG is estimated from the stage mass stack (overridable).
+static margin, **not** for a gliding RV (whose L/D is a hypersonic lifting-body
+property; see below).  CG is estimated from the stage mass stack (overridable).
+
+### No-separation glider: L/D derived from geometry
+
+A **separating** RV carries its own designed `glider_LD`.  But when the warhead
+does **not** separate (KN-23 / Pershing II MaRV class), the gliding vehicle *is*
+the whole airframe, so its L/D is an emergent geometric property, not an input.
+`glider_ld.py` derives it from the semi-empirical body+fin force build-up at
+angle of attack — the analytic core of Missile DATCOM — assembled from primary
+sources in `data/`:
+
+- **body normal force**: slender-body potential lift + viscous crossflow
+  (**Allen-Perkins**, NACA Rep. 1048 / RM A50L07; **Jorgensen**, NASA TN D-7228
+  Eq. 1 and TR R-474),
+- **wing-body interference**: **Pitts-Nielsen-Kaattari** (NACA Rep. 1307), whose
+  slender-body factors satisfy `K_W(B) + K_B(W) = (1 + r/s)²`.
+
+Referenced to body base area, with `M_n = M·sinα` the crossflow Mach:
+
+```
+C_Nα,pot = 2·(A_b/A_r) + (1+r/s)²·(C_Lα)_W·(S_W/A_r)
+C_N(α)   = C_Nα,pot·sin(2α)/2 + η·C_dn(M_n)·(A_p/A_r)·sin²α
+C_A(α)   = C_A0·cos²α ;   C_L = C_N cosα − C_A sinα ;   C_D = C_N sinα + C_A cosα
+```
+
+L/D is maximised over α.  The two crossflow factors are **sourced, not assumed**:
+`η = 1` for supersonic/hypersonic free-stream Mach (Jorgensen TN D-7228), and the
+cylinder crossflow drag coefficient `C_dn(M_n)` is read from **Gowen-Perkins**
+(NACA TN 2960) Fig. 7 — ~1.2 at low `M_n`, a transonic peak ~2.1 at `M_n = 1`,
+decaying to ~1.34 at `M_n = 2.9`.  `A_p` is the body's true side-projected
+planform (nose `fill·L_nose·d` + cylinder `(L−L_nose)·d`; cone fill 0.5, ogive
+~0.67).  For a no-sep body left at `glider_LD = 0`, the trajectory auto-derives
+this value once at setup; existing models with an explicit `glider_LD > 0` are
+untouched.
+
+This build-up is **validated against Digital DATCOM** (USAF, public-domain) for a
+finless slender body at M2/3/5: L/D agrees to within ~10% (and zero-lift drag and
+best-glide AoA closely), `glider_ld` staying slightly conservative.  The deck,
+reference output, and comparison script are in `validation/datcom/`.
+
+**Trim/control gate** (`trim_gate.py`) — a derived L/D is only *achievable* if
+the airframe can trim and hold that AoA.  From the linearised pitching moment
+about the CG (`SM` from the static margin above, `C_Nδ = control_eff·C_Nα,fin`):
+
+```
+α_trim,max = (C_Nδ/C_Nα,total) · (x_fin − x_CG)/(x_CP − x_CG) · δ_max
+```
+
+Outcomes: `SM ≤ 0` → unstable → tumbles → ballistic (no glide); `SM > 0` with
+`α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
+control-limited → the (lower) L/D at `α_trim,max`.
 
 ### Guidance laws
 

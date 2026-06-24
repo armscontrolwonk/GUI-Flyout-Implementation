@@ -1668,6 +1668,13 @@ incl. transitions + fins) and the `glider_ld` L/D curve, with a mass-stack CG
 and aft fin station (both overridable). It is a preliminary gate, not a 6-DOF
 trim solution.
 
+**Wiring.** The GUI L/D estimator calls `whole_missile_LD` directly. In the
+trajectory, a no-separation body glider left at the sentinel `glider_LD = 0` has
+its value auto-derived once at integration setup (`derive_glider_LD`, at
+`GLIDE_MACH_REF = 5`); a separating RV, or any body with an explicit
+`glider_LD > 0`, is left untouched. The derive runs at setup, not per step (it is
+outside the EOM hot loop).
+
 ---
 
 ## 9. Guidance laws
