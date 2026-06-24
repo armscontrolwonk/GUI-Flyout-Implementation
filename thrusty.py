@@ -181,6 +181,9 @@ _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.j
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
 _RV_LIBRARY_PATH  = _THRUSTY_ROOT / "rv_library"
+# Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
+# These are always available; the writable user library above overrides them.
+_BUNDLED_RV_LIBRARY_PATH = Path(__file__).resolve().parent / "rv_library"
 _DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
 _DIR_SITES        = _THRUSTY_ROOT / "sites"
 _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
@@ -257,16 +260,31 @@ RV_DB: dict = {}   # name -> callable returning a fresh RVParams
 
 
 def _load_rv_library():
-    """Scan rv_library/ and register every .rv.json into RV_DB."""
+    """Register every .rv.json into RV_DB.
+
+    RVs are loaded from two places: the **bundled** rv_library/ shipped next to
+    thrusty.py (the canonical RVs that travel with the code — SWERVE, AHW, …),
+    and the user's writable ~/Documents/Thrusty/rv_library (saved or edited
+    RVs).  Bundled RVs load first; a user RV of the same name overrides the
+    bundled one, so a fresh checkout always exposes the shipped RVs while the
+    user's own edits still win."""
     _ensure_dir(_RV_LIBRARY_PATH)
     RV_DB.clear()
-    for fp in sorted(_RV_LIBRARY_PATH.glob("*.rv.json")):
-        try:
-            rv = rv_from_dict(json.loads(fp.read_text()))
-            key = rv.name or fp.stem.replace(".rv", "")
-            RV_DB[key] = lambda _r=rv: _r
-        except Exception as exc:
-            print(f"Warning: could not load RV '{fp.name}': {exc}")
+    dirs, seen = [], set()
+    for d in (_BUNDLED_RV_LIBRARY_PATH, _RV_LIBRARY_PATH):
+        rp = str(d.resolve())
+        if rp not in seen:          # skip if bundled == user (e.g. run in place)
+            seen.add(rp); dirs.append(d)
+    for d in dirs:
+        if not d.exists():
+            continue
+        for fp in sorted(d.glob("*.rv.json")):
+            try:
+                rv = rv_from_dict(json.loads(fp.read_text()))
+                key = rv.name or fp.stem.replace(".rv", "")
+                RV_DB[key] = lambda _r=rv: _r
+            except Exception as exc:
+                print(f"Warning: could not load RV '{fp.name}': {exc}")
 
 
 def _save_rv_to_library(rv) -> Path:
