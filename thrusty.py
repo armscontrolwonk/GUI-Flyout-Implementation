@@ -1547,7 +1547,16 @@ class MissileDialog(tk.Toplevel):
         self._gfin_width_var  = _gf_entry(1, "Frame width (m):", "0", "m")
         self._gfin_height_var = _gf_entry(2, "Frame height (m):", "0", "m")
         self._gfin_chord_var  = _gf_entry(3, "Chord / lattice depth (m):", "0", "m")
-        self._gfin_solidity_var = _gf_entry(4, "Solidity σ (0–1):", "0", "")
+        # Solidity row carries a "Calculate σ…" helper (σ from web/pitch).
+        ttk.Label(self._gridfins_section, text="Solidity σ (0–1):").grid(
+            row=4, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        _sol_inner = ttk.Frame(self._gridfins_section)
+        _sol_inner.grid(row=4, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._gfin_solidity_var = tk.StringVar(value="0")
+        ttk.Entry(_sol_inner, textvariable=self._gfin_solidity_var,
+                  width=12).pack(side=tk.LEFT)
+        ttk.Button(_sol_inner, text="Calculate σ…",
+                   command=self._calc_gridfin_solidity).pack(side=tk.LEFT, padx=(6, 0))
         self._gfin_edge_var   = _gf_entry(5, "Edge factor (0.6–1.0):", "1.0", "")
         self._gfin_deploy_var = _gf_entry(6, "Deploy schedule (t:n, …):",
                                           "", "", pady=(2, 4))
@@ -1742,6 +1751,32 @@ class MissileDialog(tk.Toplevel):
             self._gridfins_section.grid()
         else:
             self._gridfins_section.grid_remove()
+
+    def _calc_gridfin_solidity(self):
+        """Compute solidity σ = 1 − ((p−t)/p)² from the lattice web thickness t
+        and cell pitch p, and fill the σ field (grid_fin_solidity)."""
+        t = simpledialog.askfloat(
+            "Calculate σ", "Web (wall) thickness  t  (m):",
+            parent=self, minvalue=0.0)
+        if t is None:
+            return
+        p = simpledialog.askfloat(
+            "Calculate σ", "Cell pitch  p  (centre-to-centre, m):",
+            parent=self, minvalue=0.0)
+        if p is None:
+            return
+        if p <= 0.0:
+            messagebox.showerror("Calculate σ",
+                                 "Cell pitch p must be greater than 0.",
+                                 parent=self)
+            return
+        if t > p:
+            messagebox.showerror("Calculate σ",
+                                 "Web thickness t cannot exceed cell pitch p.",
+                                 parent=self)
+            return
+        sigma = mm.grid_fin_solidity(t, p)
+        self._gfin_solidity_var.set(f"{sigma:.3f}")
 
     # ------------------------------------------------------------------
     def _current_main_rv(self):

@@ -253,9 +253,10 @@ jettison with their stage.  This affects range for finned atmospheric boosters
   level.  The model is calibrated to Washington & Miller (AIAA 93-0035) and
   corroborated against eight further grid-fin papers (all in `data/`).  Inputs
   are kept observable: count, frame width/height, chord, **solidity σ = 1 −
-  ((p−t)/p)²** (the blocked frontal fraction, estimable from imagery), edge
-  factor, and a **deployment schedule**.  All of these are editable in the
-  missile editor's *Fins* panel ("Has grid (lattice) fins").  Grid fins can
+  ((p−t)/p)²** (the blocked frontal fraction, estimable from imagery, or via a
+  **"Calculate σ…"** button that derives it from the web thickness `t` and cell
+  pitch `p`), edge factor, and a **deployment schedule**.  All of these are
+  editable in the missile editor's *Fins* panel ("Has grid (lattice) fins").  Grid fins can
   deploy in timed batches: the deploy-schedule field takes `t:n, …` entries —
   e.g. STARS flies `3:4, 63:4` (4 fins at tower-clear ≈ t=3 s, 4 more at
   t=63 s); a blank field means all fins are deployed from launch.  The deployed
