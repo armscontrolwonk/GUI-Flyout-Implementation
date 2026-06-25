@@ -1352,8 +1352,10 @@ cell pitch `p` and web thickness `t`.
 **Solidity (σ) — the practical input.** The drag is driven by the blocked
 frontal fraction, the *solidity* `σ = 1 − φ = 1 − ((p − t)/p)²` (≈ 2·t/p for
 thin webs). σ is the single quantity that stands in for the two lattice
-details that are hardest to obtain from open sources — web thickness `t` and
-cell pitch `p`. Two ways to supply it:
+details that are hardest to obtain from open sources — web (wall) thickness `t`
+and cell pitch `p` (centre-to-centre). See `docs/grid_fin_solidity_diagram.png`
+for a labelled frontal view of `t`, `p`, and the open window `(p − t)`. Two ways
+to supply it:
 
 - If `t` and `p` are known, `grid_fin_solidity(t, p)` converts them to σ via
   the equation above (or just enter `grid_fin_web_thickness_m`/
