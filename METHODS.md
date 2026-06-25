@@ -1403,7 +1403,11 @@ to supply it:
   others, the Soviet/Russian **SS-20, SS-21, SS-25 (Topol)** ballistic missiles,
   **MOAB**, **Soyuz** (launch-escape/braking), and **R-77/AA-12** — but it
   publishes no dimensioned cell geometry for them, so their σ cannot be computed
-  from these sources. (That review also asserts the US AMRAAM uses grid fins;
+  from these sources. A second Russian patent — **RU 2 532 287 C1** (Leonov
+  et al., **NPO Mashinostroyeniya**, 2014) — is a real missile-bureau design
+  using **folding lattice stabilizers on the boost stage of a submarine-launched
+  missile** (a direct analogue of the timed-deploy booster grid fins modelled
+  here, §grid-fin deployment), but it likewise gives no cell dimensions. (That review also asserts the US AMRAAM uses grid fins;
   that appears to be an error — AMRAAM uses planar tail fins.) So the bands
   reflect grid-fin *technology*
   as tested in the open literature; the consistent picture across US (MICOM),
