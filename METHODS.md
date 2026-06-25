@@ -1372,11 +1372,13 @@ to supply it:
     (ii) a **real Russian patented design** — RU 2 686 593 C1 (Komarov et al.,
     2019), worked example: 36 mm cell pitch, 1 mm wall → σ = 1−(35/36)² =
     **0.055**.
-  - **typical · σ ≈ 0.12** — the **AA-12-class reference fin** used across ~20
-    studies: Debiasi 2020 (J. Spacecraft & Rockets, DOI 1.C035626) Fig. 1
+  - **typical · σ ≈ 0.09–0.12** — the **AA-12-class reference fin** used across
+    ~20 studies: Debiasi 2020 (J. Spacecraft & Rockets, DOI 1.C035626) Fig. 1
     baseline, 0.1109 D pitch, 0.007 D wall → σ = 1−(0.1039/0.1109)² = **0.122**
-    (measured wind-tunnel model; Abate 2000's GTCM fin is the same family,
-    σ ≈ 0.087–0.121).
+    (measured wind-tunnel model). The same family with the thinner 0.005 D web —
+    Abate 2000's GTCM fin and the DRDC/DeSpirito fin re-used by Despeyroux 2015
+    (D = 30 mm) — gives σ ≈ 0.087–0.09, so several independent groups corroborate
+    this anchor.
   - **dense (atypical) · σ ≈ 0.22** — Chen et al. 2000 (AIAA-2000-0987)
     thick-web DREV panel (CFD parametric): 0.175 D pitch, 0.021 D web → σ = 0.225.
     Important: this is the **same AA-12-class fin with ~3× the standard web** —
