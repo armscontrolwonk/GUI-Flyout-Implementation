@@ -1445,10 +1445,13 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
   shock swallowed **1.4–1.9**) brackets our Mach anchors, and it models the
   transonic choke with the **same isentropic throat-area relation** used here,
   explicitly attributing the sub-M=1 choke to cell-wall *and boundary-layer*
-  blockage — the co-cause noted above. It also identifies the governing
-  nondimensional geometry as the span/height (b/h) and **chord/height (C/h)**
-  ratios: chord is properly normalized by fin **height**, not body diameter
-  (observed C/h ≈ 0.07–0.35, design-dependent).
+  blockage — the co-cause noted above. K&B treats fin **span, cell density, and
+  chord** as *independent* geometric parameters and varies each one directly
+  (G12/G13 span, G12/G14 cell density, G15/G16 chord). It does **not** define a
+  chord-to-height (`C/h`) normalizing ratio or state that chord scales with
+  height — that framing, and any `C/h ≈ 0.07–0.35` range, were this author's
+  inference and are **not** a sourced K&B design rule. Chord is an independent
+  parameter; the model takes it as a direct input.
 - **Washington & Miller, "Experimental Investigations of Grid Fin Aerodynamics:
   A Synopsis of Nine Wind Tunnel and Three Flight Tests"** (AGARD/RTO, 1998) is
   the umbrella dataset (26 configs; the Miller 94-1914 drag fins are G6–G11 and
@@ -1456,8 +1459,8 @@ across M = 0.5–3.5. Three further papers (all read) corroborate the structure:
   **choked flow at M = 0.75, leading-edge shock attachment at M = 1.35, and no
   shock reflection (supersonic recovery) at M = 1.60** — i.e. `_GRIDFIN_M_SUB`
   and `_GRIDFIN_M_REC` match W&M's own markers exactly. It confirms the five
-  defining parameters (span, chord, height, cell spacing, web thickness), and
-  the G12–G16 dimensions give C/h ≈ 0.07–0.11 for those research fins.
+  defining parameters (span, chord, height, cell spacing, web thickness) that
+  the model takes as direct inputs (the G12–G16 fins are the Kretzschmar set).
 
 **Limitation — fin sweep not modelled.** W&M (Synopsis, §3.7) found that
 sweeping a grid fin forward or aft by ±30° **amplifies its axial force by a
