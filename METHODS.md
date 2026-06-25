@@ -1364,30 +1364,44 @@ to supply it:
   The reference classes below are **anchored to real published fins** (σ computed
   from their cited geometry), and the key finding is that measured grid fins are
   **very open** — far more open than a naïve "looks blocked" guess:
-  - **open · σ ≈ 0.04** — the standard US-tested fin: 0.371 in cell pitch
-    (centre-to-centre, Miller-Washington 1994 AIAA-94-1914 Fig. 1; same lattice
-    in Kretzschmar-Burkhalter 1998 G12–G16), 0.008 in web → σ = 1−(0.363/0.371)²
-    = 0.043. This is the most-tested grid fin in the open literature.
-  - **typical · σ ≈ 0.09–0.12** — Abate 2000 (AIAA-2000-0937) GTCM free-flight
-    fin: ~0.11-cal pitch, 0.005–0.007-cal web → σ ≈ 0.087 (design) to 0.121
-    (as-built).
-  - **dense (rare) · σ ≈ 0.22** — Chen et al. 2000 (AIAA-2000-0987) thick-web
-    DREV panel (CFD parametric): 0.175 D pitch, 0.021 D web → σ = 0.225. This is
-    the *densest* fin found across eleven grid-fin papers; **no measured hardware
-    in that corpus reaches σ ≈ 0.25–0.30**, so treat very high σ as atypical.
+  - **open · σ ≈ 0.04–0.06** — two independent real fins land here:
+    (i) the standard US-tested fin: 0.371 in cell pitch (centre-to-centre,
+    Miller-Washington 1994 AIAA-94-1914 Fig. 1; same lattice in
+    Kretzschmar-Burkhalter 1998 G12–G16), 0.008 in web → σ = 1−(0.363/0.371)² =
+    **0.043** (the most-tested grid fin in the open literature); and
+    (ii) a **real Russian patented design** — RU 2 686 593 C1 (Komarov et al.,
+    2019), worked example: 36 mm cell pitch, 1 mm wall → σ = 1−(35/36)² =
+    **0.055**.
+  - **typical · σ ≈ 0.12** — the **AA-12-class reference fin** used across ~20
+    studies: Debiasi 2020 (J. Spacecraft & Rockets, DOI 1.C035626) Fig. 1
+    baseline, 0.1109 D pitch, 0.007 D wall → σ = 1−(0.1039/0.1109)² = **0.122**
+    (measured wind-tunnel model; Abate 2000's GTCM fin is the same family,
+    σ ≈ 0.087–0.121).
+  - **dense (atypical) · σ ≈ 0.22** — Chen et al. 2000 (AIAA-2000-0987)
+    thick-web DREV panel (CFD parametric): 0.175 D pitch, 0.021 D web → σ = 0.225.
+    Important: this is the **same AA-12-class fin with ~3× the standard web** —
+    its baseline is σ ≈ 0.12 (above). No *measured* fin across thirteen grid-fin
+    papers reaches σ ≈ 0.25–0.30, so treat high σ as a deliberately-thick-web
+    special case, not a standard configuration.
 
-  See `docs/grid_fin_solidity_classes.png` for these three real fins side by
-  side. (Earlier drafts used invented bands of 0.10–0.30; those were not anchored
-  to data and read too dense — corrected here against the cited geometry.)
+  See `docs/grid_fin_solidity_classes.png` for the three classes side by side.
+  (Earlier drafts used invented bands of 0.10–0.30; those were not anchored to
+  data and read too dense — corrected here against the cited geometry. The
+  Russian patent independently confirms the construction the model assumes:
+  square lattice cells at 45° with wedge-sharpened edges.)
 
   *Provenance:* these are mostly **research / generic test fins**, not fielded
   hardware — the open anchor is the US Army Missile Command (MICOM) grid-fin
-  R&D fin, and the typical anchor is Abate's explicitly "Generic" Tail Control
-  Missile. The **only one tied to a fielded weapon is the dense anchor**: the
-  Chen/DREV fin is modelled to resemble the **Russian R-77 / AA-12 "Adder"**
-  (a grid-finned air-to-air missile). So the bands reflect grid-fin *technology*
-  as tested in the open literature, with one real-missile data point at the
-  dense end. When σ
+  R&D fin (plus a Russian *patent*, which is a design rather than a known
+  fielded missile), and the typical anchor is the AA-12-class reference fin
+  (also the body of Abate's explicitly "Generic" Tail Control Missile). The
+  closest tie to a fielded weapon is that AA-12-class geometry, which several
+  papers state resembles the **Russian R-77 / AA-12 "Adder"**. So the bands
+  reflect grid-fin *technology*
+  as tested in the open literature; the consistent picture across US (MICOM),
+  Russian (patent), and AA-12-class sources is that real fins are **open to
+  typical (σ ≈ 0.04–0.12)**, with higher σ only from deliberately thick webs.
+  When σ
   is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
   = 10) sets the wetted area for the *secondary* friction term only.
 

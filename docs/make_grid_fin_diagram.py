@@ -67,12 +67,12 @@ def make_classes(out=None):
         ("open", "σ ~ 0.04", 0.043,
          "Miller-Washington / Kretzschmar\n0.371 in pitch, 0.008 in web  (measured)",
          "US Army MICOM research fin"),
-        ("typical", "σ ~ 0.09-0.12", 0.10,
-         "Abate GTCM free-flight\n~0.11 cal pitch, 0.005-0.007 cal web  (measured)",
-         "generic test missile (GTCM)"),
-        ("dense (rare)", "σ ~ 0.22", 0.225,
-         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD; densest sourced)",
-         "~ Russian R-77 / AA-12  (real missile)"),
+        ("typical", "σ ~ 0.12", 0.122,
+         "Debiasi 2020 baseline (Abate-class)\n0.111 D pitch, 0.007 D wall  (measured)",
+         "AA-12-class reference fin (~20 studies)"),
+        ("dense (atypical)", "σ ~ 0.22", 0.225,
+         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD parametric)",
+         "same fin's baseline is ~0.12;\nneeds ~3x the standard web"),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.4))
     n, p = 4, 1.0
@@ -94,8 +94,8 @@ def make_classes(out=None):
         ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-2.7, L + 0.3)
         ax.set_aspect('equal'); ax.axis('off')
     fig.suptitle("Grid-fin solidity σ — real-fin reference classes  "
-                 "(open/typical = research fins; only the dense fin is modelled "
-                 "on a fielded missile)",
+                 "(real fins are open-to-typical, σ ≈ 0.04–0.12; "
+                 "'dense' is the same fin with a deliberately thick web)",
                  fontsize=12, weight='bold', y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     fig.savefig(out, dpi=130, bbox_inches='tight')
