@@ -1378,7 +1378,16 @@ to supply it:
 
   See `docs/grid_fin_solidity_classes.png` for these three real fins side by
   side. (Earlier drafts used invented bands of 0.10–0.30; those were not anchored
-  to data and read too dense — corrected here against the cited geometry.) When σ
+  to data and read too dense — corrected here against the cited geometry.)
+
+  *Provenance:* these are mostly **research / generic test fins**, not fielded
+  hardware — the open anchor is the US Army Missile Command (MICOM) grid-fin
+  R&D fin, and the typical anchor is Abate's explicitly "Generic" Tail Control
+  Missile. The **only one tied to a fielded weapon is the dense anchor**: the
+  Chen/DREV fin is modelled to resemble the **Russian R-77 / AA-12 "Adder"**
+  (a grid-finned air-to-air missile). So the bands reflect grid-fin *technology*
+  as tested in the open literature, with one real-missile data point at the
+  dense end. When σ
   is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
   = 10) sets the wetted area for the *secondary* friction term only.
 

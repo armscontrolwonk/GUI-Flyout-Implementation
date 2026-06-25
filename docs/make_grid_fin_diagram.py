@@ -65,15 +65,18 @@ def make_classes(out=None):
     # Real measured hardware is dominated by very open, thin-web lattices.
     classes = [
         ("open", "σ ~ 0.04", 0.043,
-         "Miller-Washington / Kretzschmar\n0.371 in pitch, 0.008 in web  (measured)"),
+         "Miller-Washington / Kretzschmar\n0.371 in pitch, 0.008 in web  (measured)",
+         "US Army MICOM research fin"),
         ("typical", "σ ~ 0.09-0.12", 0.10,
-         "Abate GTCM free-flight\n~0.11 cal pitch, 0.005-0.007 cal web  (measured)"),
+         "Abate GTCM free-flight\n~0.11 cal pitch, 0.005-0.007 cal web  (measured)",
+         "generic test missile (GTCM)"),
         ("dense (rare)", "σ ~ 0.22", 0.225,
-         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD; densest sourced)"),
+         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD; densest sourced)",
+         "~ Russian R-77 / AA-12  (real missile)"),
     ]
-    fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.0))
+    fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.4))
     n, p = 4, 1.0
-    for ax, (name, rng, sig, cite) in zip(axes, classes):
+    for ax, (name, rng, sig, cite, prov) in zip(axes, classes):
         t = tp(sig) * p; L = n * p + t; win = p - t
         ax.add_patch(Rectangle((0, 0), L, L, facecolor="#9aa7b4",
                                edgecolor="black", lw=1.2))
@@ -84,13 +87,16 @@ def make_classes(out=None):
         ax.set_title(f"{name}\n{rng}", fontsize=13, weight='bold')
         ax.text(L / 2, -0.55, cite, ha='center', va='top', fontsize=8.5,
                 color="#333")
-        ax.text(L / 2, -1.45, f"(shown: σ ~ {sig:.2f}, t/p ~ {tp(sig):.2f})",
-                ha='center', va='top', fontsize=8.5, color="#777")
-        ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-2.0, L + 0.3)
+        ax.text(L / 2, -1.45, prov, ha='center', va='top', fontsize=8.5,
+                color="#1a4f8a", style='italic')
+        ax.text(L / 2, -2.10, f"(shown: σ ~ {sig:.2f}, t/p ~ {tp(sig):.2f})",
+                ha='center', va='top', fontsize=8, color="#888")
+        ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-2.7, L + 0.3)
         ax.set_aspect('equal'); ax.axis('off')
-    fig.suptitle("Grid-fin solidity σ — real-fin reference classes "
-                 "(frontal view; grey = solid webs, white = open cells)",
-                 fontsize=13, weight='bold', y=0.99)
+    fig.suptitle("Grid-fin solidity σ — real-fin reference classes  "
+                 "(open/typical = research fins; only the dense fin is modelled "
+                 "on a fielded missile)",
+                 fontsize=12, weight='bold', y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     fig.savefig(out, dpi=130, bbox_inches='tight')
     print("wrote", out)
