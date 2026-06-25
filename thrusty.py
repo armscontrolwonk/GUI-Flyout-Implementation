@@ -1779,8 +1779,9 @@ class MissileDialog(tk.Toplevel):
                   foreground="#888").grid(
             row=3, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 2))
         ttk.Label(dlg,
-                  text="visual guide:  open ≈ 0.10–0.15   ·   typical ≈ 0.15–0.22"
-                       "   ·   dense ≈ 0.25–0.30",
+                  text="real fins (σ from published geometry):  open ≈ 0.04 "
+                       "(Miller-Washington/Kretzschmar)  ·  typical ≈ 0.09–0.12 "
+                       "(Abate)  ·  dense ≈ 0.22 (Chen, rare)",
                   foreground="#555").grid(
             row=4, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 2))
 

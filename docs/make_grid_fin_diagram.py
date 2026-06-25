@@ -61,12 +61,19 @@ def make_classes(out=None):
     out = out or os.path.join(os.path.dirname(__file__),
                               "grid_fin_solidity_classes.png")
     tp = lambda sig: 1 - math.sqrt(1 - sig)        # t/p giving target σ
-    classes = [("open", "≈ 0.10–0.15", 0.125),
-               ("typical", "≈ 0.15–0.22", 0.185),
-               ("dense", "≈ 0.25–0.30", 0.275)]
-    fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.6))
+    # Anchored to REAL published fins (σ computed from their cited geometry).
+    # Real measured hardware is dominated by very open, thin-web lattices.
+    classes = [
+        ("open", "σ ~ 0.04", 0.043,
+         "Miller-Washington / Kretzschmar\n0.371 in pitch, 0.008 in web  (measured)"),
+        ("typical", "σ ~ 0.09-0.12", 0.10,
+         "Abate GTCM free-flight\n~0.11 cal pitch, 0.005-0.007 cal web  (measured)"),
+        ("dense (rare)", "σ ~ 0.22", 0.225,
+         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD; densest sourced)"),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.0))
     n, p = 4, 1.0
-    for ax, (name, rng, sig) in zip(axes, classes):
+    for ax, (name, rng, sig, cite) in zip(axes, classes):
         t = tp(sig) * p; L = n * p + t; win = p - t
         ax.add_patch(Rectangle((0, 0), L, L, facecolor="#9aa7b4",
                                edgecolor="black", lw=1.2))
@@ -74,12 +81,14 @@ def make_classes(out=None):
             for j in range(n):
                 ax.add_patch(Rectangle((t + i * p, t + j * p), win, win,
                                        facecolor="white", edgecolor="none"))
-        ax.set_title(f"{name}\nsigma {rng}", fontsize=13, weight='bold')
-        ax.text(L / 2, -0.55, f"(shown: sigma ~ {sig:.2f}, t/p ~ {tp(sig):.2f})",
-                ha='center', va='top', fontsize=9.5, color="#444")
-        ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-1.0, L + 0.3)
+        ax.set_title(f"{name}\n{rng}", fontsize=13, weight='bold')
+        ax.text(L / 2, -0.55, cite, ha='center', va='top', fontsize=8.5,
+                color="#333")
+        ax.text(L / 2, -1.45, f"(shown: σ ~ {sig:.2f}, t/p ~ {tp(sig):.2f})",
+                ha='center', va='top', fontsize=8.5, color="#777")
+        ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-2.0, L + 0.3)
         ax.set_aspect('equal'); ax.axis('off')
-    fig.suptitle("Grid-fin solidity sigma - visual classes "
+    fig.suptitle("Grid-fin solidity σ — real-fin reference classes "
                  "(frontal view; grey = solid webs, white = open cells)",
                  fontsize=13, weight='bold', y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.94])

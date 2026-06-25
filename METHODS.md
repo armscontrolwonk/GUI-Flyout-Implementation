@@ -1360,10 +1360,25 @@ to supply it:
 - If `t` and `p` are known, `grid_fin_solidity(t, p)` converts them to σ via
   the equation above (or just enter `grid_fin_web_thickness_m`/
   `grid_fin_cell_pitch_m` and let the model derive φ).
-- If they are not, set `grid_fin_solidity` directly — estimate it from imagery
-  (open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30; see
-  `docs/grid_fin_solidity_classes.png` for a side-by-side visual of the three
-  classes). When σ
+- If they are not, set `grid_fin_solidity` directly — estimate it from imagery.
+  The reference classes below are **anchored to real published fins** (σ computed
+  from their cited geometry), and the key finding is that measured grid fins are
+  **very open** — far more open than a naïve "looks blocked" guess:
+  - **open · σ ≈ 0.04** — the standard US-tested fin: 0.371 in cell pitch
+    (centre-to-centre, Miller-Washington 1994 AIAA-94-1914 Fig. 1; same lattice
+    in Kretzschmar-Burkhalter 1998 G12–G16), 0.008 in web → σ = 1−(0.363/0.371)²
+    = 0.043. This is the most-tested grid fin in the open literature.
+  - **typical · σ ≈ 0.09–0.12** — Abate 2000 (AIAA-2000-0937) GTCM free-flight
+    fin: ~0.11-cal pitch, 0.005–0.007-cal web → σ ≈ 0.087 (design) to 0.121
+    (as-built).
+  - **dense (rare) · σ ≈ 0.22** — Chen et al. 2000 (AIAA-2000-0987) thick-web
+    DREV panel (CFD parametric): 0.175 D pitch, 0.021 D web → σ = 0.225. This is
+    the *densest* fin found across eleven grid-fin papers; **no measured hardware
+    in that corpus reaches σ ≈ 0.25–0.30**, so treat very high σ as atypical.
+
+  See `docs/grid_fin_solidity_classes.png` for these three real fins side by
+  side. (Earlier drafts used invented bands of 0.10–0.30; those were not anchored
+  to data and read too dense — corrected here against the cited geometry.) When σ
   is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
   = 10) sets the wetted area for the *secondary* friction term only.
 
