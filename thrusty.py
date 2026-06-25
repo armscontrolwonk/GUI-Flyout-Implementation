@@ -7704,9 +7704,23 @@ class MissileFlyoutApp(tk.Tk):
             if len(ac) == len(t_plot):
                 ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
                            ls='--', label='Azimuth (°)')
-                # 5° tick steps on the azimuth axis
+                # Adaptive ticks.  A fixed 5° step (MultipleLocator(5)) crams 30+
+                # overlapping labels onto the axis whenever the heading sweeps a
+                # wide range — e.g. long-range / near-polar flights where the
+                # great-circle azimuth changes by >100°.  MaxNLocator keeps ~6
+                # readable ticks at any range.  Limits are set from the finite
+                # samples so the NaN gaps (coast/glide, where no azimuth is
+                # commanded) don't break autoscaling.
+                _ac_fin = ac[np.isfinite(ac)]
+                if _ac_fin.size:
+                    _lo, _hi = float(_ac_fin.min()), float(_ac_fin.max())
+                    if _hi - _lo < 1.0:                 # near-constant heading
+                        _lo, _hi = _lo - 2.0, _hi + 2.0
+                    _pad = 0.05 * (_hi - _lo)
+                    ax_g2.set_ylim(_lo - _pad, _hi + _pad)
                 ax_g2.yaxis.set_major_locator(
-                    matplotlib.ticker.MultipleLocator(5))
+                    matplotlib.ticker.MaxNLocator(nbins=6,
+                                                  steps=[1, 2, 2.5, 5, 10]))
                 ax_g2.yaxis.set_label_position('right')
                 ax_g2.yaxis.set_ticks_position('right')
                 ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
