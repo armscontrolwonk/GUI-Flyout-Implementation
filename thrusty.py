@@ -1753,30 +1753,72 @@ class MissileDialog(tk.Toplevel):
             self._gridfins_section.grid_remove()
 
     def _calc_gridfin_solidity(self):
-        """Compute solidity σ = 1 − ((p−t)/p)² from the lattice web thickness t
-        and cell pitch p, and fill the σ field (grid_fin_solidity)."""
-        t = simpledialog.askfloat(
-            "Calculate σ", "Web (wall) thickness  t  (m):",
-            parent=self, minvalue=0.0)
-        if t is None:
-            return
-        p = simpledialog.askfloat(
-            "Calculate σ", "Cell pitch  p  (centre-to-centre, m):",
-            parent=self, minvalue=0.0)
-        if p is None:
-            return
-        if p <= 0.0:
-            messagebox.showerror("Calculate σ",
-                                 "Cell pitch p must be greater than 0.",
-                                 parent=self)
-            return
-        if t > p:
-            messagebox.showerror("Calculate σ",
-                                 "Web thickness t cannot exceed cell pitch p.",
-                                 parent=self)
-            return
-        sigma = mm.grid_fin_solidity(t, p)
-        self._gfin_solidity_var.set(f"{sigma:.3f}")
+        """Open a dialog (both inputs explicit) to compute solidity
+        σ = 1 − ((p−t)/p)² from the lattice web (wall) thickness t and cell
+        pitch p, then fill the σ field.  Styled like Estimate Nozzle Exit Area."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Calculate σ (solidity)")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text="Web (wall) thickness  t  (m):").grid(
+            row=0, column=0, sticky=tk.W, padx=(10, 4), pady=(10, 2))
+        t_var = tk.StringVar(value="")
+        ttk.Entry(dlg, textvariable=t_var, width=12).grid(
+            row=0, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 2))
+
+        ttk.Label(dlg, text="Cell pitch  p  (centre-to-centre, m):").grid(
+            row=1, column=0, sticky=tk.W, padx=(10, 4), pady=2)
+        p_var = tk.StringVar(value="")
+        ttk.Entry(dlg, textvariable=p_var, width=12).grid(
+            row=1, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+
+        ttk.Label(dlg, text="σ = 1 − ((p − t) / p)²", foreground="#666").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(8, 0))
+
+        result_var = tk.StringVar(value="Enter t and p.")
+        ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
+            row=3, column=0, columnspan=2, padx=10, pady=(2, 4))
+
+        def _compute(*_):
+            try:
+                t = float(t_var.get())
+                p = float(p_var.get())
+            except (ValueError, TypeError):
+                result_var.set("Enter valid t and p.")
+                return None
+            if p <= 0.0:
+                result_var.set("Cell pitch p must be greater than 0.")
+                return None
+            if t < 0.0 or t > p:
+                result_var.set("Need 0 ≤ t ≤ p.")
+                return None
+            sigma = mm.grid_fin_solidity(t, p)
+            result_var.set(f"σ ≈ {sigma:.3f}")
+            return sigma
+
+        t_var.trace_add("write", lambda *_: _compute())
+        p_var.trace_add("write", lambda *_: _compute())
+
+        btn_row = ttk.Frame(dlg)
+        btn_row.grid(row=4, column=0, columnspan=2, pady=(4, 10))
+
+        def _accept():
+            sigma = _compute()
+            if sigma is not None:
+                self._gfin_solidity_var.set(f"{sigma:.3f}")
+                dlg.destroy()
+
+        ttk.Button(btn_row, text="Accept", command=_accept).pack(
+            side=tk.LEFT, padx=6)
+        ttk.Button(btn_row, text="Cancel",
+                   command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+
+        # Centre over parent (matches _suggest_nozzle_area)
+        dlg.update_idletasks()
+        px = self.winfo_rootx() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
+        py = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
+        dlg.geometry(f"+{px}+{py}")
 
     # ------------------------------------------------------------------
     def _current_main_rv(self):
