@@ -209,6 +209,41 @@ def _ensure_dir(d: Path) -> Path:
     return d
 
 
+def _parse_deploy_schedule(text: str):
+    """Parse a grid-fin deploy schedule 't:n, t:n' into [[t_s, n], ...].
+
+    Each entry is 'deploy_time_seconds : number_of_fins'.  Whitespace is
+    ignored; an empty string means all fins are deployed from t=0 (-> []).
+    Raises ValueError on malformed input."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    out = []
+    for chunk in text.replace(";", ",").split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if ":" not in chunk:
+            raise ValueError(f"deploy entry '{chunk}' must be 'time:count'")
+        t_s, n_s = chunk.split(":", 1)
+        out.append([float(t_s.strip()), int(float(n_s.strip()))])
+    return out
+
+
+def _format_deploy_schedule(sched) -> str:
+    """Format [[t_s, n], ...] back to 't:n, t:n' for the entry field."""
+    parts = []
+    for entry in (sched or []):
+        try:
+            t_s, n = float(entry[0]), int(entry[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        t_str = f"{t_s:g}"
+        parts.append(f"{t_str}:{n}")
+    return ", ".join(parts)
+
+
+
 def _load_traj_profiles() -> dict:
     """Return saved trajectory profiles keyed by missile name."""
     if not _TRAJ_PATH.exists():
@@ -1484,6 +1519,44 @@ class MissileDialog(tk.Toplevel):
         self._fin_thick_var    = _ff_entry(4, "Thickness (m):", "0", "m")
         self._fin_sweep_var    = _ff_entry(5, "L.E. sweep (°):", "0", "°", pady=(2, 4))
 
+        # ── Grid (lattice) fins ──────────────────────────────────────────
+        self._gridfins_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ff, text="Has grid (lattice) fins",
+                        variable=self._gridfins_var,
+                        command=self._update_gridfins_state).grid(
+            row=2, column=0, columnspan=2, sticky=tk.W,
+            padx=(6, 2), pady=(4, 0))
+
+        self._gridfins_section = ttk.Frame(ff)
+        self._gridfins_section.grid(row=3, column=0, columnspan=2,
+                                    sticky=tk.EW, padx=(16, 0))
+        self._gridfins_section.columnconfigure(1, weight=1)
+        self._gridfins_section.grid_remove()
+
+        def _gf_entry(row, label, default, unit, pady=2):
+            ttk.Label(self._gridfins_section, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(6, 2), pady=pady)
+            _inner = ttk.Frame(self._gridfins_section)
+            _inner.grid(row=row, column=1, sticky=tk.W, padx=(0, 6), pady=pady)
+            _v = tk.StringVar(value=default)
+            ttk.Entry(_inner, textvariable=_v, width=12).pack(side=tk.LEFT)
+            ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
+            return _v
+
+        self._gfin_n_var      = _gf_entry(0, "Number of grid fins:", "0", "")
+        self._gfin_width_var  = _gf_entry(1, "Frame width (m):", "0", "m")
+        self._gfin_height_var = _gf_entry(2, "Frame height (m):", "0", "m")
+        self._gfin_chord_var  = _gf_entry(3, "Chord / lattice depth (m):", "0", "m")
+        self._gfin_solidity_var = _gf_entry(4, "Solidity σ (0–1):", "0", "")
+        self._gfin_edge_var   = _gf_entry(5, "Edge factor (0.6–1.0):", "1.0", "")
+        self._gfin_deploy_var = _gf_entry(6, "Deploy schedule (t:n, …):",
+                                          "", "", pady=(2, 4))
+        ttk.Label(self._gridfins_section,
+                  text="e.g. \"3:4, 63:4\" = 4 fins at t=3 s, 4 more at t=63 s; "
+                       "blank = all deployed at launch.",
+                  foreground="#666").grid(row=7, column=0, columnspan=2,
+                                          sticky=tk.W, padx=(6, 6), pady=(0, 4))
+
         # ── Guidance mode ────────────────────────────────────────────────
         gf = ttk.LabelFrame(body, text="Guidance Mode")
         gf.pack(fill=tk.X, padx=8, pady=4)
@@ -1663,6 +1736,13 @@ class MissileDialog(tk.Toplevel):
         else:
             self._fins_section.grid_remove()
 
+    def _update_gridfins_state(self):
+        """Show/hide the grid-fin geometry entries."""
+        if self._gridfins_var.get():
+            self._gridfins_section.grid()
+        else:
+            self._gridfins_section.grid_remove()
+
     # ------------------------------------------------------------------
     def _current_main_rv(self):
         """Return the RVParams currently selected in the parent app's
@@ -1821,6 +1901,18 @@ class MissileDialog(tk.Toplevel):
         self._fin_sweep_var.set(f"{float(getattr(p, 'fin_sweep_deg', 0.0)):.1f}")
         self._update_fins_state()
 
+        # Grid (lattice) fins
+        self._gridfins_var.set(bool(getattr(p, 'has_grid_fins', False)))
+        self._gfin_n_var.set(str(int(getattr(p, 'n_grid_fins', 0) or 0)))
+        self._gfin_width_var.set(f"{float(getattr(p, 'grid_fin_width_m', 0.0)):.3f}")
+        self._gfin_height_var.set(f"{float(getattr(p, 'grid_fin_height_m', 0.0)):.3f}")
+        self._gfin_chord_var.set(f"{float(getattr(p, 'grid_fin_chord_m', 0.0)):.3f}")
+        self._gfin_solidity_var.set(f"{float(getattr(p, 'grid_fin_solidity', 0.0)):.3f}")
+        self._gfin_edge_var.set(f"{float(getattr(p, 'grid_fin_edge_factor', 1.0) or 1.0):.2f}")
+        self._gfin_deploy_var.set(
+            _format_deploy_schedule(getattr(p, 'grid_fin_deploy_schedule', [])))
+        self._update_gridfins_state()
+
         # Shroud
         has_shroud = shroud_mass > 0
         self._shroud_var.set(has_shroud)
@@ -1934,6 +2026,27 @@ class MissileDialog(tk.Toplevel):
         else:
             n_fins = 4; fin_span_m = 0.0; fin_root_m = 0.0
             fin_tip_m = 0.0; fin_thick_m = 0.0; fin_sweep_deg = 0.0
+
+        # Grid (lattice) fins
+        has_grid_fins = bool(self._gridfins_var.get())
+        if has_grid_fins:
+            try:
+                n_grid_fins      = max(1, int(float(self._gfin_n_var.get())))
+                gfin_width_m     = max(0.0, float(self._gfin_width_var.get()))
+                gfin_height_m    = max(0.0, float(self._gfin_height_var.get()))
+                gfin_chord_m     = max(0.0, float(self._gfin_chord_var.get()))
+                gfin_solidity    = max(0.0, min(1.0, float(self._gfin_solidity_var.get())))
+                gfin_edge_factor = float(self._gfin_edge_var.get())
+            except ValueError:
+                raise ValueError("Grid-fin dimensions must be numbers.")
+            try:
+                gfin_deploy = _parse_deploy_schedule(self._gfin_deploy_var.get())
+            except ValueError as exc:
+                raise ValueError(f"Grid-fin deploy schedule: {exc}")
+        else:
+            n_grid_fins = 0; gfin_width_m = 0.0; gfin_height_m = 0.0
+            gfin_chord_m = 0.0; gfin_solidity = 0.0; gfin_edge_factor = 1.0
+            gfin_deploy = []
 
         # PBV geometry
         try:
@@ -2050,6 +2163,14 @@ class MissileDialog(tk.Toplevel):
         node.fin_tip_chord_m        = fin_tip_m
         node.fin_thickness_m        = fin_thick_m
         node.fin_sweep_deg          = fin_sweep_deg
+        node.has_grid_fins          = has_grid_fins
+        node.n_grid_fins            = n_grid_fins
+        node.grid_fin_width_m       = gfin_width_m
+        node.grid_fin_height_m      = gfin_height_m
+        node.grid_fin_chord_m       = gfin_chord_m
+        node.grid_fin_solidity      = gfin_solidity
+        node.grid_fin_edge_factor   = gfin_edge_factor
+        node.grid_fin_deploy_schedule = gfin_deploy
 
         # Strap-on boosters
         try:
