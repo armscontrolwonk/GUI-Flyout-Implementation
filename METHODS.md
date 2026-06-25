@@ -1396,11 +1396,20 @@ to supply it:
   fielded missile), and the typical anchor is the AA-12-class reference fin
   (also the body of Abate's explicitly "Generic" Tail Control Missile). The
   closest tie to a fielded weapon is that AA-12-class geometry, which several
-  papers state resembles the **Russian R-77 / AA-12 "Adder"**. So the bands
+  papers state resembles the **Russian R-77 / AA-12 "Adder"**. Grid fins *are*
+  widely fielded — the Sharma-Kumar 2019 review (INCAS Bull. 11(1)) lists, among
+  others, the Soviet/Russian **SS-20, SS-21, SS-25 (Topol)** ballistic missiles,
+  **MOAB**, **Soyuz** (launch-escape/braking), and **R-77/AA-12** — but it
+  publishes no dimensioned cell geometry for them, so their σ cannot be computed
+  from these sources. (That review also asserts the US AMRAAM uses grid fins;
+  that appears to be an error — AMRAAM uses planar tail fins.) So the bands
   reflect grid-fin *technology*
   as tested in the open literature; the consistent picture across US (MICOM),
   Russian (patent), and AA-12-class sources is that real fins are **open to
   typical (σ ≈ 0.04–0.12)**, with higher σ only from deliberately thick webs.
+  The review independently corroborates this: it notes thick fin panels *degrade*
+  performance and that thinning the webs *reduces* drag, i.e. designs favour thin
+  (low-σ) lattices.
   When σ
   is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
   = 10) sets the wetted area for the *secondary* friction term only.
