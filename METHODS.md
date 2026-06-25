@@ -1392,6 +1392,20 @@ to supply it:
   Russian patent independently confirms the construction the model assumes:
   square lattice cells at 45° with wedge-sharpened edges.)
 
+  *Origin source.* The foundational monograph — **S. M. Belotserkovsky (ed.),
+  "Решетчатые крылья" (Reshetchatye Krylya / Lattice Wings), Mashinostroenie,
+  Moscow, 1985** (the original of the 1987 FTD translation) — is in `data/`. It
+  is a theory/structures/materials work (vortex-lattice aerodynamics, structural
+  mechanics, manufacturing), **not** a catalogue of fielded-missile fin
+  dimensions, so it yields no new σ data point. Worth recording, though: its
+  primary *dimensionless* geometric parameter (§1.1) is the **relative pitch
+  t̄ = t/b** (cell pitch ÷ chord), and it shows lift depends on size and t̄,
+  independent of cell-shape (frame "рамное" vs honeycomb "сотовое"). So the
+  origin literature parameterises by t/b — neither the blockage *solidity* used
+  here (a Western/derived convention) nor the chord/height ratio that an earlier
+  draft of this note wrongly invented. σ remains the practical input for the
+  drag model; t/b is the classical lift parameter.
+
   *Provenance:* these are mostly **research / generic test fins**, not fielded
   hardware — the open anchor is the US Army Missile Command (MICOM) grid-fin
   R&D fin (plus a Russian *patent*, which is a design rather than a known
