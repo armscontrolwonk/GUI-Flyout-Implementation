@@ -51,3 +51,41 @@ ax.set_xlim(-0.9, L + 1.9); ax.set_ylim(-0.95, L + 1.25)
 ax.set_aspect('equal'); ax.axis('off'); fig.tight_layout()
 fig.savefig(OUT, dpi=130, bbox_inches='tight')
 print("wrote", OUT)
+
+
+def make_classes(out=None):
+    """grid_fin_solidity_classes.png — open / typical / dense lattices side by
+    side, sized to the mid-range σ of each visual class, for eyeball
+    classification from imagery."""
+    import math
+    out = out or os.path.join(os.path.dirname(__file__),
+                              "grid_fin_solidity_classes.png")
+    tp = lambda sig: 1 - math.sqrt(1 - sig)        # t/p giving target σ
+    classes = [("open", "≈ 0.10–0.15", 0.125),
+               ("typical", "≈ 0.15–0.22", 0.185),
+               ("dense", "≈ 0.25–0.30", 0.275)]
+    fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.6))
+    n, p = 4, 1.0
+    for ax, (name, rng, sig) in zip(axes, classes):
+        t = tp(sig) * p; L = n * p + t; win = p - t
+        ax.add_patch(Rectangle((0, 0), L, L, facecolor="#9aa7b4",
+                               edgecolor="black", lw=1.2))
+        for i in range(n):
+            for j in range(n):
+                ax.add_patch(Rectangle((t + i * p, t + j * p), win, win,
+                                       facecolor="white", edgecolor="none"))
+        ax.set_title(f"{name}\nsigma {rng}", fontsize=13, weight='bold')
+        ax.text(L / 2, -0.55, f"(shown: sigma ~ {sig:.2f}, t/p ~ {tp(sig):.2f})",
+                ha='center', va='top', fontsize=9.5, color="#444")
+        ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-1.0, L + 0.3)
+        ax.set_aspect('equal'); ax.axis('off')
+    fig.suptitle("Grid-fin solidity sigma - visual classes "
+                 "(frontal view; grey = solid webs, white = open cells)",
+                 fontsize=13, weight='bold', y=0.99)
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(out, dpi=130, bbox_inches='tight')
+    print("wrote", out)
+
+
+if __name__ == "__main__":
+    make_classes()

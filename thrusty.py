@@ -1777,11 +1777,16 @@ class MissileDialog(tk.Toplevel):
             row=2, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(8, 0))
         ttk.Label(dlg, text="(σ is a ratio — any consistent unit for t and p works)",
                   foreground="#888").grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 0))
+            row=3, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 2))
+        ttk.Label(dlg,
+                  text="visual guide:  open ≈ 0.10–0.15   ·   typical ≈ 0.15–0.22"
+                       "   ·   dense ≈ 0.25–0.30",
+                  foreground="#555").grid(
+            row=4, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 2))
 
         result_var = tk.StringVar(value="Enter t and p.")
         ttk.Label(dlg, textvariable=result_var, foreground="navy").grid(
-            row=4, column=0, columnspan=2, padx=10, pady=(4, 4))
+            row=5, column=0, columnspan=2, padx=10, pady=(4, 4))
 
         def _compute(*_):
             try:
@@ -1804,7 +1809,7 @@ class MissileDialog(tk.Toplevel):
         p_var.trace_add("write", lambda *_: _compute())
 
         btn_row = ttk.Frame(dlg)
-        btn_row.grid(row=5, column=0, columnspan=2, pady=(4, 10))
+        btn_row.grid(row=6, column=0, columnspan=2, pady=(4, 10))
 
         def _accept():
             sigma = _compute()
