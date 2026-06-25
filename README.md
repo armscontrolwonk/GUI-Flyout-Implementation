@@ -252,9 +252,14 @@ jettison with their stage.  This affects range for finned atmospheric boosters
   airfoil — it has a transonic-choke drag bump and a roughly flat supersonic
   level.  The model is calibrated to Washington & Miller (AIAA 93-0035) and
   corroborated against eight further grid-fin papers (all in `data/`).  Inputs
-  are kept observable: count, frame area, **solidity σ = 1 − ((p−t)/p)²** (the
-  blocked frontal fraction, estimable from imagery), edge shape, and a
-  deployment schedule (grid fins can deploy in timed batches).
+  are kept observable: count, frame width/height, chord, **solidity σ = 1 −
+  ((p−t)/p)²** (the blocked frontal fraction, estimable from imagery), edge
+  factor, and a **deployment schedule**.  All of these are editable in the
+  missile editor's *Fins* panel ("Has grid (lattice) fins").  Grid fins can
+  deploy in timed batches: the deploy-schedule field takes `t:n, …` entries —
+  e.g. STARS flies `3:4, 63:4` (4 fins at tower-clear ≈ t=3 s, 4 more at
+  t=63 s); a blank field means all fins are deployed from launch.  The deployed
+  count scales the grid-fin drag in the trajectory (`grid_fins_deployed`).
 
 **Static margin** (`grid_fin_sizing.py`) answers "are these fins sized right?"
 the Barrowman way — the centre of pressure is the normal-force-weighted average
@@ -326,6 +331,24 @@ about the CG (`SM` from the static margin above, `C_Nδ = control_eff·C_Nα,fin
 Outcomes: `SM ≤ 0` → unstable → tumbles → ballistic (no glide); `SM > 0` with
 `α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
 control-limited → the (lower) L/D at `α_trim,max`.
+
+**L/D in a pull-up.** `L/D_max` is the *peak*, reached only at the best-glide
+angle of attack. A non-separating warhead that pulls up commands a load factor
+`n` (≤ `glider_pullup_g_max`), needing lift `L = n·m·g`, i.e. `C_L = n·m·g/(q·A_ref)`
+with `q = ½ρV²`. The effective L/D at that `C_L` comes from the back-solved drag
+polar (`_aero_polar`):
+
+```
+C_D0 = m/(β·A_ref) ;  k = 1/(4·C_D0·(L/D_max)²) ;  L/D(C_L) = C_L/(C_D0 + k·C_L²)
+```
+
+which peaks at `C_L* = √(C_D0/k)` recovering `L/D_max`. Any pull harder than
+`C_L*` climbs the induced-drag branch `k·C_L²`, so the instantaneous L/D drops
+below `L/D_max` — a steep pull-up trades glide range for turn rate. `C_L` is
+capped at ≈0.87 (`C_L ≈ 2α` at α_max = 25°) and `n` at `glider_pullup_g_max`.
+For a non-sep body the `L/D_max` here is the geometry-derived value above; for a
+separating RV it is the designed input. (The pull-up arc and glide-guidance
+modes are in METHODS §12.)
 
 ### Guidance laws
 

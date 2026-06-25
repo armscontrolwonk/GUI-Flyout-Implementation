@@ -1675,6 +1675,36 @@ its value auto-derived once at integration setup (`derive_glider_LD`, at
 `glider_LD > 0`, is left untouched. The derive runs at setup, not per step (it is
 outside the EOM hot loop).
 
+**L/D during a pull-up maneuver.** The geometry-derived `L/D_max` above is the
+*peak* lift-to-drag, available only at the best-glide angle of attack. A
+non-separating warhead that pulls up does not fly there. A pull-up commands a
+load factor `n` (capped at `glider_pullup_g_max`), so the lift it must generate
+is `L = n·m·g`, i.e. a lift coefficient
+
+```
+C_L = n·m·g / (q·A_ref) ,     q = ½ρV²
+```
+
+The *effective* lift-to-drag at that commanded `C_L` follows from the drag polar
+(§12.2.2, `_aero_polar`), whose two coefficients are back-solved from the
+vehicle's ballistic coefficient β and its `L/D_max`:
+
+```
+C_D0 = m / (β·A_ref) ,    k = 1 / (4·C_D0·(L/D_max)²)
+L/D(C_L) = C_L / (C_D0 + k·C_L²)
+```
+
+This peaks at `C_L* = √(C_D0/k)`, where it recovers exactly the input
+`L/D_max = 1/(2·√(C_D0·k))` (and `C_D* = 2·C_D0`). Pulling harder than `C_L*`
+— any load factor above the equilibrium-glide value — drives `C_L` up the
+induced-drag branch `k·C_L²`, so the *instantaneous* L/D drops below `L/D_max`:
+a steep pull-up trades glide efficiency for turn rate. The command is bounded —
+`C_L ≤ C_L_lim ≈ 2·(25°·π/180) ≈ 0.87` (the slender-body `C_L ≈ 2α` at α_max)
+and `n ≤ glider_pullup_g_max` — so the worst-case induced-drag penalty is
+capped. For a **non-separating** body the `L/D_max` in these formulas is the
+geometry-derived value from this section; for a separating RV it is the designed
+input. The pull-up arc itself and the guidance modes that drive it are §12.
+
 ---
 
 ## 9. Guidance laws
