@@ -1361,7 +1361,9 @@ to supply it:
   the equation above (or just enter `grid_fin_web_thickness_m`/
   `grid_fin_cell_pitch_m` and let the model derive φ).
 - If they are not, set `grid_fin_solidity` directly — estimate it from imagery
-  (open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30). When σ
+  (open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30; see
+  `docs/grid_fin_solidity_classes.png` for a side-by-side visual of the three
+  classes). When σ
   is given without a pitch, a representative cell count (`_GRIDFIN_DEFAULT_CELLS`
   = 10) sets the wetted area for the *secondary* friction term only.
 
