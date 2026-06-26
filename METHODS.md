@@ -1354,8 +1354,20 @@ frontal fraction, the *solidity* `σ = 1 − φ = 1 − ((p − t)/p)²` (≈ 2�
 thin webs). σ is the single quantity that stands in for the two lattice
 details that are hardest to obtain from open sources — web (wall) thickness `t`
 and cell pitch `p` (centre-to-centre). See `docs/grid_fin_solidity_diagram.png`
-for a labelled frontal view of `t`, `p`, and the open window `(p − t)`. Two ways
-to supply it:
+for a labelled frontal view of `t`, `p`, and the open window `(p − t)`.
+
+This blockage parameterisation is independently corroborated by **Dikbaş 2015**
+(METU M.S. thesis, *Design of a Grid Fin… for Transonic Flight*, in `data/`),
+whose grid-fin design driver is the **web-to-cell ratio `t/w`** — i.e. exactly
+`σ/2` for thin webs. His transonic design study (D = 400 mm, c = 0.1 D, fixed
+1 mm web, cell width swept) spans `t/w = 0.0025–0.030`, i.e. **σ ≈ 0.005–0.06 —
+all open**, and the drag-optimal direction is toward *larger* cells (lower σ),
+reinforcing that transonic-efficient fins are open. The thesis also validates
+its CFD against Washington-Miller (our calibration anchor), and its "unit grid
+fin" (single-cell) result — that grid-fin loads scale per-cell × cell count —
+is the same per-cell basis as the σ·(frame area) scaling used here. It adds no
+new fielded fin and no closed-form correlation to adopt; it corroborates the
+approach rather than changing it. Two ways to supply σ:
 
 - If `t` and `p` are known, `grid_fin_solidity(t, p)` converts them to σ via
   the equation above (or just enter `grid_fin_web_thickness_m`/
