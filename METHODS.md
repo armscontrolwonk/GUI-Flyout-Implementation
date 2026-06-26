@@ -1411,6 +1411,30 @@ approach rather than changing it. Two ways to supply σ:
   and mid-span); the dense root is a structural feature contributing little
   lift or projected drag area.
 
+  **Empirical σ range (all real fins gathered).** Pooling every fin for which a
+  σ can be computed from cited/observed geometry (web-to-cell `t/w ≈ σ/2`):
+
+  | Fin | type | σ | t/w |
+  |---|---|---|---|
+  | US MICOM (W&M / Kretzschmar) baseline | measured | 0.043 | 0.022 |
+  | US MICOM thick-web variant | measured | 0.064 | 0.032 |
+  | Russian patent (Komarov RU 2686593) | patent design | 0.055 | 0.028 |
+  | AA-12-class, 0.005 D web (Abate/DeSpirito) | measured | 0.088 | 0.045 |
+  | AA-12-class, 0.007 D web (Debiasi) | measured | 0.122 | 0.063 |
+  | SpaceX Falcon 9 — aero tip | observed | 0.041 | 0.021 |
+  | Dikbaş transonic design sweep | CFD design | 0.005–0.06 | 0.003–0.03 |
+  | — Falcon 9 structural root (~20 mm web) | observed | ≈0.26 | 0.14 |
+  | — Chen DREV thick web | CFD parametric | 0.225 | 0.12 |
+
+  So the **aerodynamically-active σ of real grid fins is ≈ 0.04–0.12**
+  (`t/w ≈ 0.02–0.06`). Large **booster / launch-vehicle / SLBM** fins — the class
+  relevant to most vehicles modelled here (STARS-class boosters, Topol, Falcon 9,
+  Russian SLBMs) — sit at the **open end, σ ≈ 0.04–0.06**; the denser ≈0.09–0.12
+  values are the smaller **air-to-air (AA-12) class**. Only structural roots and
+  deliberately thick CFD cases exceed ≈0.15 (and those choke transonically). A
+  sensible default for a booster grid fin is therefore **σ ≈ 0.05**; treat σ ≳
+  0.15 as atypical for an aero surface.
+
   See `docs/grid_fin_solidity_classes.png` for the three classes side by side.
   (Earlier drafts used invented bands of 0.10–0.30; those were not anchored to
   data and read too dense — corrected here against the cited geometry. The
