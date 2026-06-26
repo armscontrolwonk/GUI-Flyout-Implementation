@@ -1202,10 +1202,14 @@ def _gridfin_start_mach(contraction_ratio: float, gamma: float = 1.4) -> float:
 #
 #       σ = 1 − ((p − t) / p)²        (≈ 2·t/p for thin webs)
 #
-# If you DON'T, estimate σ directly from imagery (how "filled in" the lattice
-# looks): open lattice σ ≈ 0.10–0.15, typical ≈ 0.15–0.22, dense ≈ 0.25–0.30.
-# Supplying σ avoids having to guess t and p separately; grid_fin_solidity()
-# below converts t,p → σ when you have them.
+# If you DON'T, estimate σ from imagery (how "filled in" the lattice looks).
+# Empirical range for REAL fins (see METHODS "Empirical σ range"): the aero
+# region is σ ≈ 0.04–0.12.  Large booster / launch-vehicle / SLBM fins (STARS,
+# Topol, Falcon 9, R-77 boosters) sit open, σ ≈ 0.04–0.06; the smaller air-to-
+# air (AA-12) class is σ ≈ 0.09–0.12.  σ ≳ 0.15 is atypical for an aero surface
+# (only structural fin-roots / deliberately thick CFD cases — they choke
+# transonically).  Booster default ≈ 0.05.  Supplying σ avoids guessing t and p
+# separately; grid_fin_solidity() below converts t,p → σ when you have them.
 
 # Representative cells-across-frame used to estimate the (secondary) friction
 # wetted area when σ is given but the cell pitch is not.
@@ -2322,12 +2326,18 @@ def _stars_1():
         # (54 in) first stage -- no published STARS grid-fin drawing -- and
         # should be refined if specs become available.  Drag is modelled by
         # _cd_gridfins, calibrated to Washington & Miller (AIAA 93-0035).
+        # The web/pitch below give solidity sigma ~= 0.06, consistent with the
+        # empirical range for real BOOSTER/launch-vehicle grid fins (sigma ~=
+        # 0.04-0.06; see METHODS "Empirical sigma range").  An earlier 4 mm web
+        # gave sigma ~= 0.23, which is the atypical thick-web/structural regime
+        # (real aero lattices that dense choke transonically) -- corrected.
         has_grid_fins=True,
         n_grid_fins=8,
         grid_fin_width_m=0.40,                   # frame width (estimate)
         grid_fin_height_m=0.40,                  # frame radial height (estimate)
         grid_fin_chord_m=0.12,                   # lattice depth (estimate)
-        grid_fin_web_thickness_m=0.004,          # web/wall thickness (estimate)
+        grid_fin_web_thickness_m=0.001,          # web/wall thickness ~1 mm (estimate;
+        #                                          sigma~0.06, booster-typical)
         grid_fin_cell_pitch_m=0.032,             # cell spacing (estimate)
         grid_fin_edge_factor=1.0,                # blunt webs (conservative); set
         #   ~0.7 if the STARS fins are known to have shaped/sharp edges (Miller
