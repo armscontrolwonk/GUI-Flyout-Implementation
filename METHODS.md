@@ -1379,12 +1379,25 @@ to supply it:
     Abate 2000's GTCM fin and the DRDC/DeSpirito fin re-used by Despeyroux 2015
     (D = 30 mm) — gives σ ≈ 0.087–0.09, so several independent groups corroborate
     this anchor.
-  - **dense (atypical) · σ ≈ 0.22** — Chen et al. 2000 (AIAA-2000-0987)
-    thick-web DREV panel (CFD parametric): 0.175 D pitch, 0.021 D web → σ = 0.225.
-    Important: this is the **same AA-12-class fin with ~3× the standard web** —
-    its baseline is σ ≈ 0.12 (above). No *measured* fin across thirteen grid-fin
-    papers reaches σ ≈ 0.25–0.30, so treat high σ as a deliberately-thick-web
-    special case, not a standard configuration.
+  - **dense · σ ≈ 0.2–0.3** — occurs on real hardware, but **localised to the
+    structurally-loaded root** of a large fin, not the aero span. The **SpaceX
+    Falcon 9** titanium grid fin (≈1.2 m, ~8 cells of **14.5 cm** pitch across)
+    is the clean example: its lattice walls are only ~2–3 mm at the aerodynamic
+    *tip* → σ = 1−(142/145)² ≈ **0.04** (open, same ballpark as the MICOM fin),
+    but thicken markedly toward the *root* where they carry the fin's bending
+    load — a ~15–25 mm root web gives σ ≈ **0.20–0.32**. So a single flight fin
+    spans the whole open→dense range. (The only fully *aero* example of a dense
+    lattice is Chen 2000's thick-web DREV CFD case, σ = 0.225 — the same
+    AA-12-class fin with ~3× the standard web — and the literature notes such
+    thick lattices choke and add transonic drag, which is why nobody flies a
+    uniformly dense fin.) Falcon 9 cell/web figures are from observation/public
+    imagery; SpaceX has not published official dimensions.
+
+  **σ is not a single number for a real fin — it varies span-wise** (open
+  aero-tip → dense structural-root, as above). The single σ this model takes
+  should represent the **aerodynamically active** region (the open/typical tip
+  and mid-span); the dense root is a structural feature contributing little
+  lift or projected drag area.
 
   See `docs/grid_fin_solidity_classes.png` for the three classes side by side.
   (Earlier drafts used invented bands of 0.10–0.30; those were not anchored to

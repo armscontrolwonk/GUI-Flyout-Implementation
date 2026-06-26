@@ -70,9 +70,9 @@ def make_classes(out=None):
         ("typical", "σ ~ 0.12", 0.122,
          "Debiasi 2020 baseline (Abate-class)\n0.111 D pitch, 0.007 D wall  (measured)",
          "AA-12-class reference fin (~20 studies)"),
-        ("dense (atypical)", "σ ~ 0.22", 0.225,
-         "Chen DREV, thick web\n0.175 D pitch, 0.021 D web  (CFD parametric)",
-         "same fin's baseline is ~0.12;\nneeds ~3x the standard web"),
+        ("dense (fin root)", "σ ~ 0.2-0.3", 0.25,
+         "Falcon 9 fin root (structural)\n14.5 cm cell, ~20 mm root web",
+         "same fin's aero tip is open, σ ~ 0.04"),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.4))
     n, p = 4, 1.0
@@ -94,9 +94,9 @@ def make_classes(out=None):
         ax.set_xlim(-0.3, L + 0.3); ax.set_ylim(-2.7, L + 0.3)
         ax.set_aspect('equal'); ax.axis('off')
     fig.suptitle("Grid-fin solidity σ — real-fin reference classes  "
-                 "(real fins are open-to-typical, σ ≈ 0.04–0.12; "
-                 "'dense' is the same fin with a deliberately thick web)",
-                 fontsize=12, weight='bold', y=0.99)
+                 "(open where it matters: aero tip/span σ≈0.04–0.12; "
+                 "σ rises toward the root for structure — a Falcon 9 fin spans both)",
+                 fontsize=11, weight='bold', y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     fig.savefig(out, dpi=130, bbox_inches='tight')
     print("wrote", out)
