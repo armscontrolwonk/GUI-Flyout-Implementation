@@ -240,6 +240,8 @@ structural relationship that survives it.
 | Dujardin; Ling et al. | primary | WMLES "different way"; low-speed; SOTA quantifies (not eliminates) transition uncertainty |
 | Hu et al. 2025 | primary | large-area TPS architectures; bondline axis; >800 °C acreage < leading edge |
 | Murbach 1993; Murbach et al. (AEOLUS) 1997 | primary | SWERVE-derived **Mars** glider; load-vs-flux trajectory dichotomy; multi-probe heating; SIRCA/UHTC/CMA material response (see §9) |
+| Sutton & Graves TR R-376 (1971) | primary | the SG stagnation equation; K is `W/m²` SI; CO₂ mixture constant pinned via West |
+| West & Brandis 2018 (NTRS 20200002354) | primary | modern Mars convective+radiative fits; SG-CO₂ = 1.83e-4; SG accurate at high heating, over-predicts < 10 W/cm²; ~25% load difference (§9) |
 
 ---
 
@@ -276,14 +278,30 @@ Entry: V = 7 km/s, alt 125 km, γ = −15°, Mach ≤ 22 (Mars GRAM atmosphere; 
 aero, 6000 h wind-tunnel). These are design-study values (like the Rizvi medium-range
 configs), **corroborative, not flown anchors** — keep them out of the Earth-air `_BENCHMARKS`.
 
-**CO₂ Sutton-Graves constant (to enable a future Mars mode).** Duffa §1.2 (Eq. 1.1),
-`q̇ = a·√(ρ/R)·V³`: air `a = 1.83e-4`, **Mars (CO₂) `a = 1.35e-4`** (kg^½·m⁻¹) — i.e.
-**Mars ≈ 0.74× Earth**. Scaled to our code's air value (`_SG_K = 1.7415e-4`, Sutton-Graves
-TR R-376), the Mars constant is **≈ 1.29e-4 (SI)** = `1.7415e-4 × (1.35/1.83)`. Convective-
-only is appropriate here: Duffa Table 1.4 shows Mars robotic entries (Viking/Pathfinder/MER/
-Phoenix, 4–7 km/s) have radiative fraction ≈ 0%. Primary for an exact value (both NTRS,
-automated fetch 403s): Sutton-Graves TR R-376 (NTRS 19720003329); updated Mars correlations
-(NTRS 20200002354, already in `HEATING_TPS_REFERENCES.md`).
+**CO₂ Sutton-Graves constant — pinned from the primary (corrects an earlier Duffa-based
+draft).** The Sutton-Graves TR R-376 constant for the Mars 97% CO₂ / 3% N₂ mixture is
+**`k_SG,Mars = 1.83×10⁻⁴` (SI: W/m², ρ kg/m³, R_n m, V m/s)** — per **West & Brandis 2018**
+(`west2018.pdf` = NTRS 20200002354) quoting the SG primary directly (their Eq. 2). This is
+**~5% ABOVE** the Earth-air value (`_SG_K = 1.7415e-4`), i.e. Mars CO₂ convective stagnation
+heating is *slightly higher* than Earth air for the same ρ, V, R_n.
+⚠ **Do not use Duffa §1.2's `a(Mars)=1.35e-4`** (an earlier draft of this memo did): Duffa's
+constants are from Hoshizaki/Bade (older inert-gas refs), not Sutton-Graves, and its
+`a(air)=1.83e-4` even disagrees with the canonical SG air value (1.7415e-4) — so its Mars
+number is not SG-consistent. Convective-only remains appropriate (West: convection dominates
+below ~6 km/s; Duffa Table 1.4: Mars robotic entries 4–7 km/s radiative fraction ≈ 0%).
+
+**Does the modern correlation (West 2018) change Murbach's numbers? — Not the design-driving
+ones.** West's updated convective fit keeps the SG form but steepens the velocity exponent:
+`q̇_c = 7.2074·ρ^0.4739·R_n^−0.5405·V^3.4956` (W/cm², V km/s; ±10–25% vs 390 CFD cases).
+West's own assessment: **Sutton-Graves is "well suited for higher heating cases" and only
+over-predicts below ~10 W/cm²** (trajectory tails). Murbach's peaks (stagnation 1360, wing LE
+465, sidewall ~68 W/cm² — all ≫ 10) sit where SG ≈ West, so the **peak fluxes and material-class
+calls are stable**. The **integrated heat LOAD** differs more — West's Pathfinder test has legacy
+SG + Tauber-Sutton ~**25% lower** total load than West (much of that gap is the radiative term,
+where Tauber-Sutton is badly extrapolated) — so Murbach's ablator-thickness/recession *totals*
+could shift up to ~25% under West, while the material *selection* does not. Upshot: **West is the
+right choice for a production Mars convective mode** (it needs only freestream ρ, V, R_n), but
+using it does **not** invalidate Murbach as a peak/structural benchmark.
 
 **Status:** structural corroboration now (load-vs-flux, multi-probe, material ladder/charring
 response, second long-glide anchor). A future **Mars heating mode** (the repo already runs
