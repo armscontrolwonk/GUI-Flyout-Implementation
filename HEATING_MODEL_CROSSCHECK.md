@@ -239,3 +239,54 @@ structural relationship that survives it.
 | Simeonides | primary | bluntness-Re correlation; SWBLI promotion; cone-flight discrepancy unresolved |
 | Dujardin; Ling et al. | primary | WMLES "different way"; low-speed; SOTA quantifies (not eliminates) transition uncertainty |
 | Hu et al. 2025 | primary | large-area TPS architectures; bondline axis; >800 °C acreage < leading edge |
+| Murbach 1993; Murbach et al. (AEOLUS) 1997 | primary | SWERVE-derived **Mars** glider; load-vs-flux trajectory dichotomy; multi-probe heating; SIRCA/UHTC/CMA material response (see §9) |
+
+---
+
+## 9. Mars / SWERVE-derived (AEOLUS) benchmark — structural corroboration
+
+Two Murbach papers describe a **SWERVE-derived lifting glider for Mars** (same airframe
+lineage as the repo's `SWERVE` / `AHW` RVs): Murbach, *A Hypersonic Vehicle Approach to
+Planetary Exploration* (AIAA-93-0313, 1993); Murbach, Keese & Farmer, *AEOLUS* (SSC97-V-2,
+1997). Useful as a **structural/method benchmark**, **not** as an Earth-air numeric anchor.
+
+**Load-vs-flux dichotomy (independent statement of our core framing).** Murbach 1993 (p.4)
+gives two trajectory cases: **(a)** level flight at 20 km for **~1 hour (≈3600 s)** →
+*"the total integrated heat load … becomes a consideration"* (load/soak-limited); **(b)**
+steeper → *"more severe but of significantly shorter duration"* (flux-limited). This is our
+ablation/soak vs flux regime split, and case (a) is a **Mars analog of the ~3600 s HTV-2
+tier** — a second long-glide anchor on the glide-time axis.
+
+**Multi-probe + material ladder.** AEOLUS Table 1 evaluates **stagnation (nosetip) + cone
+sidewall + wing leading edge** separately, with **sidewall = 5% of stagnation** (a
+windward/stagnation ratio anchor). Material selection is long-soak-driven: **SIRCA**
+(low-density, low-conductivity ablator for the soak) on the body, **UHTC** (>3033 K without
+ablation) on nosetip/leading edges, with response via the **CMA charring-ablation code** —
+i.e. the B′/charring material-response class adopted for #2/#3.
+
+**AEOLUS Table 1 numbers — *preliminary/analytical* (HANDI + CMA), *Mars CO₂*:**
+
+| Probe | Peak flux | Surface T | TPS | Recession |
+|---|---|---|---|---|
+| Stagnation | 1360 W/cm² = **13.6 MW/m²** | 3055 K | carbon-carbon | 3.43 cm |
+| Wing leading edge | 465 W/cm² = **4.65 MW/m²** | 2200 K | silica phenolic | 1.0 cm |
+| Cone sidewall | 5% of stag ≈ 0.68 MW/m² | 1411 K (alum 483 K) | silica phenolic | 0 |
+
+Entry: V = 7 km/s, alt 125 km, γ = −15°, Mach ≤ 22 (Mars GRAM atmosphere; SWERVE-derived
+aero, 6000 h wind-tunnel). These are design-study values (like the Rizvi medium-range
+configs), **corroborative, not flown anchors** — keep them out of the Earth-air `_BENCHMARKS`.
+
+**CO₂ Sutton-Graves constant (to enable a future Mars mode).** Duffa §1.2 (Eq. 1.1),
+`q̇ = a·√(ρ/R)·V³`: air `a = 1.83e-4`, **Mars (CO₂) `a = 1.35e-4`** (kg^½·m⁻¹) — i.e.
+**Mars ≈ 0.74× Earth**. Scaled to our code's air value (`_SG_K = 1.7415e-4`, Sutton-Graves
+TR R-376), the Mars constant is **≈ 1.29e-4 (SI)** = `1.7415e-4 × (1.35/1.83)`. Convective-
+only is appropriate here: Duffa Table 1.4 shows Mars robotic entries (Viking/Pathfinder/MER/
+Phoenix, 4–7 km/s) have radiative fraction ≈ 0%. Primary for an exact value (both NTRS,
+automated fetch 403s): Sutton-Graves TR R-376 (NTRS 19720003329); updated Mars correlations
+(NTRS 20200002354, already in `HEATING_TPS_REFERENCES.md`).
+
+**Status:** structural corroboration now (load-vs-flux, multi-probe, material ladder/charring
+response, second long-glide anchor). A future **Mars heating mode** (the repo already runs
+Mars *trajectories* via `mars_smoke_test.py`) with `k_SG ≈ 1.29e-4` would make AEOLUS Table 1
+a direct numeric validation target; pairs naturally with adding a `SWERVE-Mars/AEOLUS` RV
+variant alongside `SWERVE` and `AHW`.
