@@ -246,6 +246,8 @@ structural relationship that survives it.
 | Berry, Reentry-F deep-dive (NASA CR-154044) | primary | flight nose recession: R_n 0.10→0.171 in (+71%, ~0.7 R_n), 0.77 in axial, survived — grounds the shape-change threshold (§10.2) |
 | Paul et al., ACerS Bulletin 91(1) 2012 | primary | UHTC for hypersonic LE: melt >3000 °C but oxidation-protected ~1600–2000 °C, recedes above; HfB₂/HfC-C ~60–140 s at 2700 °C — UHTC is dwell-limited (§10.4) |
 | Loehman et al., SAND2006-2925 (Sandia) | primary | UHTC properties: ZrB₂ melt 3247 °C; oxidation limit ~1500–1600 °C (B₂O₃ boils); monolithic ρ 6.1 (ZrB₂)/10.5 (HfB₂) g/cm³ vs composite ~2.3; sharp-LE → UHTC-or-nothing (§10.4) |
+| Lin, Grabowsky & Yelmgren 1982 (TRW/BMO) | primary | nosetip shape-change/recession: 0.1 R_N → "mildly indented", asymmetric recession → dispersion (CEP); "nosetip overhang" = `nose_solid_depth_m`; oblate noses recede less (§10.2) |
+| NASA "Origins of TPS" (20110023700) | secondary | TPS history; confirms nose/LE/acreage split; Apollo 250 °F (120 °C) metal-substructure bondline anchor (§10.1) |
 | Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
 
 ---
@@ -329,6 +331,8 @@ Trajectory (ballistic *or* glide) already comes free from the existing integrato
 - **`body_tps_material`** (dropdown) + **`body_tps_thickness_m`** (input, or sized-to-survive
   output — body acreage is a designed layer, not solid, so it *cannot* be derived from geometry).
 - *(optional)* **`structure_material` / `structure_limit_K`** — the bondline verdict (Gulan axis).
+  Grounded anchor range: **~120 °C (250 °F) metal substructure** (Apollo Avcoat-on-stainless,
+  NASA 20110023700) to **~250–260 °C ablative bondline** (NTRS 20060004824 / Orion).
 - Already present and reused: `nose_radius_m`/`effective_nose_radius_m()`, `emissivity`,
   `mass_kg`, `diameter_m`, `length_m`, `shape`.
 
@@ -339,11 +343,20 @@ The nose verdict uses `δ/R_n` (geometry-anchored). Thresholds from real data:
   RV tolerates ~0.5–1 R_n radial blunting; burn-through is set by solid-tip *length* (here ~7.7 R_n).
 - **PANT program (ADA019186):** the binding criterion is **shape symmetry → aerodynamic
   dispersion** (accuracy) — *asymmetric* recession well below 0.7 R_n; graphite/C-C best resist it.
+- **Lin et al. 1982 (TRW/BMO, AIAA):** TRW-SCATHE shape-change calc (R_N 3.5 in, β 2000 psf):
+  spherical-nose stagnation recession **0.35 in ≈ 0.1 R_N at 67 kft → already "mildly indented"**;
+  ~0.7 R_N total over the flight. The driver is **asymmetric recession → trim → reentry dispersion
+  (CEP)**, propagated by boundary-layer transition (PANT criterion). **"Nosetip overhang"** = the
+  solid-tip length sized to absorb recession + margin (= our `nose_solid_depth_m`). Oblate/flat-face
+  /biconic noses recede *less* and more symmetrically (0.12 in vs 0.35 in) — nose *shape*, not just
+  R_n, sets recession rate (a future refinement).
 - **Glider sharp nose/LE:** tolerance ≈ **0** → must be non-ablating (UHTC) — the design choice
   itself is the data (Murbach UHTC tip; HTV-2 C/C+UHTC edges; NRC shape-change note).
 
-Verdict bands: `δ/R_n ≲ 0.5` intact · `0.5–1` significant blunting (ballistic-survivable,
-**glider-fail**) · `>1` toward burn-through (then `nose_solid_depth_m` sets the true limit).
+Verdict bands (`δ/R_n`): **~0.1 → shape-change onset** ("mildly indented"; accuracy/dispersion
+impact begins — binding for precision RVs *and* gliders) · **0.5–1 → significant blunting**
+(ballistic-survivable per Reentry-F, **glider-fail**) · **> nosetip-overhang/R_n → burn-through**
+(`nose_solid_depth_m` sets the true limit; default ~R_n is conservative).
 **Glider flag dominates:** any meaningful `δ/R_n` on an ablative nose/LE of a glider → "needs
 non-ablating tip (UHTC-class)" (the SWERVE→AHW lesson).
 
