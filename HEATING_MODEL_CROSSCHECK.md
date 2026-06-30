@@ -518,6 +518,33 @@ Trajectory (ballistic *or* glide) already comes free from the existing integrato
 - Already present and reused: `nose_radius_m`/`effective_nose_radius_m()`, `emissivity`,
   `mass_kg`, `diameter_m`, `length_m`, `shape`.
 
+**Both slots are selectable for every RV** (nose **and** body), and they handle separating vs
+**non-separating** vehicles with **no separate "is it separating?" flag** — the architecture is carried
+by *which group* of the catalog the body material comes from. Define `body_tps_material` as **"the
+outer surface material of the body"** and `structure_material` as **"what is behind it"**:
+
+| Vehicle | `body_tps_material` (surface) | `structure_material` (behind) | Bondline check |
+|---|---|---|---|
+| Separating RV (heat shield) | sacrificial (silica-phenolic / SIRCA / tile) | airframe metal | real — TPS protects structure |
+| **Non-separating, bare hot structure** (KN-23) | **the airframe material** (Al/steel/C-C/C-SiC) | **= `body_tps_material`** | **collapses** — surface limit *is* the structure limit |
+| Non-separating, coated airframe | ablative coating | airframe metal | real — coating protects the airframe |
+
+- **The dropdown is grouped** — *sacrificial TPS* (ablators/tiles) vs *hot structure / airframe*
+  (C-C, C-SiC, Al, Ti, steel). Picking a **hot-structure/airframe** material sets
+  `structure_material = body_tps_material` automatically (nothing sacrificial in front, nothing to
+  protect behind) → the bondline axis **collapses to that one material's own continuous/oxidation
+  limit**. Picking a **sacrificial** material keeps the layer-over-structure path with a real bondline.
+- **Both nose *and* body draw from the full grouped catalog** — a non-separating warhead needs
+  metals/hot-structure in the **nose** slot too (its tip is airframe, not an ablator); only the
+  defaults/ordering differ by location.
+- **`body_tps_thickness_m` reinterprets by group:** sacrificial → TPS-layer thickness (recession +
+  bondline protection); hot structure → **skin/wall thickness**, feeding the *transient heat-sink*
+  (does the skin absorb the KN-23 pull-up spike before exceeding its limit — §0).
+- **Control surfaces/fins ride the body material for v1.** The KN-23 hot spot (fin LE / windward) is
+  evaluated *at that location* with the body material's limit, so choosing the airframe material as
+  `body_tps_material` already governs the binding spot. A dedicated control-surface slot is a later
+  refinement, not needed for the first build.
+
 ### 10.2 Shape-change threshold — grounded in flight data
 The nose verdict uses `δ/R_n` (geometry-anchored). Thresholds from real data:
 - **Reentry-F (Berry, NASA CR-154044):** R_n **0.10 → 0.171 in (+71%, ≈0.7 R_n radial blunting)**,
