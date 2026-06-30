@@ -204,6 +204,24 @@ structural relationship that survives it.
   fine (material-rung) call. A single point estimate would have *hidden* exactly the
   transition-sensitivity that decides whether a glide time flies on existing TPS or forces
   the carbon-phenolic→C/C step.
+
+**The rigorous next step — probabilistic UQ (Lu/Shi & Zhang 2024).** A laminar/turbulent
+*bracket* is the screening-tier honesty; the formal version is a **probabilistic design (PD)**:
+Monte-Carlo / response-surface propagation of the uncertain inputs (velocity, density, pressure,
+material `k/ρ/c/ε`, thickness) to an output **reliability**, not a point. Two takeaways transfer
+even though full UQ is out of screening scope:
+1. **Don't hard-stack worst cases.** Lu et al. show deterministic "all worst cases co-occur with
+   equal probability" **oversizes** TPS; the honest band is a *distribution*, so the
+   laminar-and-turbulent + recession bounds are **envelope bounds to weight**, not a claim that
+   they happen together. A future tier should probability-weight the bracket.
+2. **Aerothermal input uncertainty dominates the response** ("exacerbates the randomness of TPS
+   thermal response, significantly impacting reliability") — i.e. the trajectory/transition inputs
+   we bracket are exactly the right things to carry, confirmed by their sensitivity analysis.
+Their model also corroborates two structural choices: **Fay-Riddell stagnation + a cone
+non-uniform-heating distribution** (validated vs NASA TN D-5450, stagnation <4%, cone <9%) with a
+**cone-tail/stagnation flux ratio ≈ 0.13** — a hard number for the acreage-vs-nose split (§10.1,
+complements Monti's `x^(−1/4)`); and a **3-layer outer-SiC / insulation / inner-panel** stack whose
+binding limit is the **inner-surface temperature** (their 393 K) — the bondline axis (§7.3/§10.7).
 - **One caveat:** at the ~1000 s ablation↔reradiation crossover a wide band can straddle the
   **regime** itself — flag that glide-time neighborhood as "regime-ambiguous under
   transition." Away from it (most 300 s / 3000 s cases) the regime call is solid.
@@ -286,6 +304,7 @@ structural relationship that survives it.
 | Tului et al. 2008 (Surf. & Coat. Tech. 202; CSM/CIRA) | primary | UHTC oxidation hard data: ZrB₂-SiC reusable at 1800 °C (parabolic SiO₂ scale ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation embrittles (MOR −40–50%) → tightens the `uhtc` row, reconciles SAND2006↔Monti (§10.4) |
 | Wagner et al. 2015 (AIAA 2015-3576, DLR) | primary | passive transition control: ultrasonically absorptive porous C/C damps the 2nd-mode → delays transition (laminar-side lever); envelope `M_e>4`/2-D/smooth, **fails at low pressure/high alt**; C/C porosity ~15%, ρ 1.33 (§4) |
 | Uyanna & Najafi 2020 (Acta Astronautica 176) | secondary (rigorous) | TPS review; passive taxonomy **heat-sink / hot-structure / insulated** ↔ our 3 criteria + bondline axis (hot structure temp-limited *not* duration-limited = load-vs-flux); corroborates Sutton-Graves V³, FIAT, PICA/SIRCA/TUFROC, X-15 Inconel-X ~650 °C, UHTC ~1800 °C + oxidation/embrittlement caveat (triangulates Tului/Monti) |
+| Lu, Shi, Zhang et al. 2024 (Int. J. Heat & Mass Transfer 225) | primary | probabilistic/UQ TPS design: Monte-Carlo over uncertain V/ρ/p/material → reliability (formal version of the band, §5); deterministic worst-case-stacking oversizes; aerothermal input uncertainty dominates response; Fay-Riddell + cone distribution (cone-tail/stag flux ≈0.13, validated <9%); inner-surface temp (393 K) = bondline limit (§5/§10.1) |
 
 ---
 
