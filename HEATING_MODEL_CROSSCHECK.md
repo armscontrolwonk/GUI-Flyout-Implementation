@@ -250,6 +250,7 @@ structural relationship that survives it.
 | NASA "Origins of TPS" (20110023700) | secondary | TPS history; confirms nose/LE/acreage split; Apollo 250 °F (120 °C) metal-substructure bondline anchor (§10.1) |
 | Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
 | Schneider, Teter, Coleman & Heath 1972 (AIAA 72-705, Lockheed) | primary | ballistic graphite nosetip design; recession `s/R_N ∝ λ` (λ ∝ laminar heat load) corroborates Q-driven backbone; transition+ablation are the two uncertainties; shape→drag→trajectory loop = accuracy erosion; ablation-model spread ~1.6× recession / ±25%, mechanical-erosion ζ≤3 >55 atm (§10.6) |
+| Monti, De Stefano Fumo & Savino 2005 (AIAA 2005-3265, Napoli) | primary | BLTPS "lightning rod" — `T_wr ∝ x^(−1/4)` grounds nose/LE-vs-acreage split + UHTC-insert sizing; binding limit is UHTC↔structure *junction* not surface (high-λ UHTC double-edged); AoA > ~10° → windside structure overheat (distinct from Schneider's AoA→recession); sharp body ≈ frozen flow → catalysis is a blunt-body uncertainty; load-vs-flux corroboration; ZrB₂ ρ≈6000, reusable ~2500 K (§10.7) |
 
 ---
 
@@ -508,3 +509,50 @@ blunting limit. **Accuracy degrades first** — which is exactly why precision R
 should (a) emit an `accuracy-erosion` flag when any screening flag above trips, and (b) widen the
 reported recession band by the ablation-model spread (~±25%, more >55 atm) on top of the §4
 laminar/turbulent transition bracket.
+
+### 10.7 BLTPS "lightning rod" + the angle-of-attack / junction-temperature limit — Monti 2005
+Monti, De Stefano Fumo & Savino, **"Thermal shielding of a re-entry vehicle by UHTC materials,"
+AIAA 2005-3265** — the canonical **Boundary-Layer Thermal Protection System (BLTPS)** paper. It is
+the physical basis for the per-location model (§10.1/§10.4), sharpens the bondline axis, and adds an
+**angle-of-attack constraint** to the glider verdict that we had not captured.
+
+**"Lightning rod" — grounds the nose/LE-vs-acreage split, and gives an insert-sizing rule.** A sharp
+UHTC tip concentrates heating at the very front; the radiative-equilibrium wall temperature falls off
+downstream as **`T_wr ∝ x^(−1/4)`** (laminar flat plate: `T_wr⁴ ∝ Pe^(1/2)·T_r·(x/L)^(−1/2)`). So the
+acreage runs cool enough for bare structural metal — *"massive TPS only at the leading edge."* This is
+exactly the nose/LE-vs-acreage split of §10.1, now with a **sizing rule**: pick the UHTC-insert length
+as the `x` where `T_wr` drops below the acreage/structure limit (`structure_limit_K`). → ties
+`nose_solid_depth_m` / UHTC-insert length directly to the downstream material limit.
+
+**The binding limit is the JUNCTION, not the surface (sharpens §10.1 bondline axis).** Monti:
+*"monitor not only the stagnation-point temperature, but especially the temperature of the structural
+material at the junction between the UHTC nose tip and the metallic structure."* UHTC's **high thermal
+conductivity is double-edged** (Table 1: ZrB₂ `λ=66`, SiC `λ=60`, Inconel-617 `λ=15` W/m·K): it lowers
+the peak *tip* temperature but pipes heat into the junction. → confirms `structure_limit_K` (bondline)
+is frequently the **binding** criterion, and that a high-conductivity nose can *fail the structure
+while the surface is fine* — the verdict must check the junction, not just `T_w`.
+
+**Angle-of-attack limit (new constraint for the glider verdict).** BLTPS works only at low AoA —
+*"sharp bodies tend to behave as blunt bodies at high angle of attack,"* exposing more windside to
+high flux. For the study config (1 cm ZrB₂ tip), **AoA > ~10° drives the junction temperature past any
+conventional metal (~1500 K)** → BLTPS breaks. The **tip length trades against AoA capability**: a
+longer/heavier insert cools the junction and buys more allowable AoA; a **flat-bottom nose buys ~12.5°**
+(windside at 25° behaves like ~10°, connecting to the `flat_face` shape of §10.5). → add an
+`aoa_limit` consideration: a glider's *trim AoA* must stay under the BLTPS limit or the **windside
+structure** (not the tip) fails. This is a **distinct AoA failure path** from Schneider's AoA →
+asymmetric *recession* → dispersion (§10.6): Monti's is AoA → windside *structure overheat*. A glider
+verdict should flag **both**.
+
+**Catalysis / real-gas nuance for the shared evaluator.** For sharp slender bodies the weak oblique
+shock + short residence time → nearly **frozen** shock layer → real-gas-vs-ideal and
+fully-catalytic-vs-non-catalytic differ *negligibly*. For **blunt** bodies, catalytic vs non-catalytic
+peak heat flux can vary **>100%**. → in the apples-to-apples evaluator (§2), surface **catalysis is a
+blunt-ballistic-nose uncertainty, largely ignorable for sharp glider edges** — don't carry a wide
+catalysis band on sharp configs (a real reduction in the glider's error bars).
+
+**Load-vs-flux corroboration.** Monti's Eqs (1)–(4) decompose KE→thermal: the "low-risk" glide
+*flattens the q̇ time profile* while the total `∫ė dt = V₀²/2` is invariant vs a Shuttle-like entry
+(Figs. 1–2) — the same **load-vs-flux stopwatch** corroborated against Murbach/AEOLUS (§5/§9). UHTC
+property values (ZrB₂ ρ≈6000 kg/m³; reusable to ~2500 K in arc-jet; melt >3000 °C, stable >2400 °C in
+oxidation) corroborate the §10.4 catalog — note Monti's ~2500 K reusable is *more optimistic* than the
+SAND2006 ~1600 °C oxidation-protected limit, bounding the UHTC-life spread.
