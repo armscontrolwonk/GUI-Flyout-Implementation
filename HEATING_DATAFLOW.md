@@ -60,18 +60,28 @@ flowchart LR
 
 ## 1 · What the user inputs
 
-| Input | Field / source | Role | Status |
-|---|---|---|---|
-| Nose radius | `RVParams.nose_radius_m`, else `effective_nose_radius_m()` from geometry | sets stagnation flux (`q̇ ∝ 1/√R_n`) | ● |
-| TPS material | `RVParams.tps_material` → `TPS_MATERIALS` key | sets the temperature/load limits | ● |
-| Emissivity | `RVParams.emissivity` (default 0.85) | sets radiative-equilibrium wall temp | ● |
-| Mass / β / frontal area | `mass_kg`, `beta_kg_m2`, frontal area | heat-sink criterion; drives trajectory | ● |
-| Glider params | `glider_enabled`, `glider_LD`, `glider_guidance`, pull-up g, terminal dive | selects ballistic vs glide trajectory (→ load) | ● |
-| Launch / trajectory | velocity, flight-path angle, range | generates the state history | ● |
-| Nose shape | `nose_shape` + `b/a` / flat-face / biconic | shape-aware `R_eff` → flux & recession (§10.5) | ○ |
-| Per-location materials | `nose_tps_material`, `body_tps_material` + `body_tps_thickness_m`, `nose_solid_depth_m` | nose/LE/acreage resolved separately (§10.1/10.4) | ○ |
-| Structure / bondline | `structure_material`, `structure_limit_K` | binding limit is often the junction, not surface (§10.7) | ○ |
-| Soak dwell · AoA | `soak_dwell_s`; trim angle of attack | soak criterion; AoA → dispersion & windside overheat (§10.6/10.7) | ○ |
+**Required / Optional** column: **Req** = no usable result without it · **Opt(default)** = has a
+sensible default, override is an expert knob · **Derived** = computed from other inputs if not given.
+
+| Input | Field / source | Required? | Role | Status |
+|---|---|---|---|---|
+| Nose radius | `RVParams.nose_radius_m` (default 0.0) → else `effective_nose_radius_m()` from geometry | **Derived** — needs geometry *or* explicit value | sets stagnation flux (`q̇ ∝ 1/√R_n`) | ● |
+| TPS material | `RVParams.tps_material` (default `""`) → `TPS_MATERIALS` key | **Req for a verdict** — empty ⇒ physical numbers only | sets the temperature/load limits | ● |
+| Emissivity | `RVParams.emissivity` (**default 0.85**, Anderson §18.8 / Hirschel; typical TPS range **0.75–0.90**, NASA RP-1289 RCC) | **Opt(default)** | sets radiative-equilibrium wall temp | ● |
+| Mass / β | `mass_kg`, `beta_kg_m2` (no default) | **Req** | heat-sink criterion; drives trajectory | ● |
+| Frontal area | frontal area | **Derived** (from geometry/β) | heat-sink criterion | ● |
+| Glider params | `glider_enabled` (default `False`), `glider_LD`, `glider_guidance` (default `equilibrium_glide`), pull-up g, terminal dive | **Opt(default)** — off ⇒ ballistic | selects ballistic vs glide trajectory (→ load) | ● |
+| Launch / trajectory | velocity, flight-path angle, range | **Req** | generates the state history | ● |
+| Nose shape | `nose_shape` (default `spherical`) + `b/a` / flat-face / biconic | **Opt(default)** | shape-aware `R_eff` → flux & recession (§10.5) | ○ |
+| Per-location materials | `nose_tps_material`, `body_tps_material` + `body_tps_thickness_m`, `nose_solid_depth_m` | **Opt(default)** — fall back to single `tps_material`; depth derived from geometry | nose/LE/acreage resolved separately (§10.1/10.4) | ○ |
+| Structure / bondline | `structure_material`, `structure_limit_K` | **Opt(default)** — off, or auto from material (~120 °C metal / ~250–260 °C ablative) | binding limit is often the junction, not surface (§10.7) | ○ |
+| Soak dwell | `soak_dwell_s` (**default 120 s**) | **Opt(default)** | soak criterion threshold | ● |
+| Angle of attack | trim AoA | **Opt(default)** — 0 ⇒ symmetric | AoA → dispersion & windside overheat (§10.6/10.7) | ○ |
+
+**Bottom line — only three things are truly required:** a **nose radius** (explicit or from geometry),
+a **TPS material** (for a verdict, not just numbers), and **mass + β + a trajectory**. Everything else
+(emissivity, glider mode, nose shape, per-location/bondline fields, soak dwell, AoA) has a working
+default — the user touches them only to refine the screening.
 
 ## 2 · What Thrusty calculates (before heating)
 
