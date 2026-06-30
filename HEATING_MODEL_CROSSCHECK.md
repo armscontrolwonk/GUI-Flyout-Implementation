@@ -164,6 +164,20 @@ quantity. The module must:
 5. Take the **turbulent bound seriously** for deflected control surfaces (SWBLI
    reattachment, Simeonides) — not a remote worst case.
 
+**Mitigation lever (Wagner et al. 2015, DLR) — a real way to push the laminar side.**
+Passive transition control exists: an **ultrasonically absorptive porous surface** (open-cell
+C/C, which most TPS already is — ~15 % open porosity) **damps the second-mode (Mack) instability**
+that drives hypersonic transition → delays transition → lowers skin friction *and* heat load. This
+is a physical lever that can move the *laminar* edge of the band later — worth flagging as
+"transition-delay available" rather than a fixed material property. **Envelope/caveats:** it only
+helps where the **second mode dominates** — boundary-layer edge `M_e > ~4`, 2-D flow, smooth wall,
+low AoA — and its absorption **collapses at low static pressure** (≈500–5500 Pa flight pressures →
+reflection coefficient → 1, i.e. no effect at high-altitude/SSTO conditions). So it favors
+*sustained lower-altitude* hypersonic cruise, **not** the high-altitude long-glide corridor — and it
+is a vehicle-design choice, not something Thrusty models. Net for the bracket: the laminar bound is
+*physically attainable* in part of the envelope (don't treat fully-turbulent as inevitable there),
+but the lever is regime-limited and unproven in flight.
+
 ---
 
 ## 5. How the band relates to the core goal (glide-time ↔ TPS type)
@@ -226,6 +240,13 @@ structural relationship that survives it.
    reradiative/ablative spine; add a **backface/bondline axis** (from Hu et al. 2025 review)
    to separate "thin reradiative skin OK" from "needs insulation stack." Keep the verdict on
    **passive reradiative + ablative**; name **active cooling out of scope** (cruise/propulsion).
+   *Corroboration (Uyanna & Najafi 2020):* the classic passive taxonomy is exactly
+   **heat-sink** (metal, short-pulse / our heat_sink criterion) · **hot-structure** (high-ε
+   reradiation, *temperature*-limited **not** duration-limited / our peak_surface+soak) ·
+   **insulated** (reradiating skin + inner insulation / the bondline axis) — and semi-passive
+   (heat-pipe, **ablation**) vs **active** (transpiration/film/convective, out of scope). The
+   "hot structure is temperature- not duration-limited" point is the load-vs-flux split (§5)
+   stated in materials terms.
 4. **Velocity convention:** airspeed (ECEF, co-rotating atmosphere) everywhere — matches
    `trajectory.py:2765`; reconcile the `v_c`-based closed forms accordingly.
 5. **Hot-wall `T_w` as the benchmark default** (fix #1); cold-wall `q̇` stays the comparison
@@ -263,6 +284,8 @@ structural relationship that survives it.
 | Monti, De Stefano Fumo & Savino 2005 (AIAA 2005-3265, Napoli) | primary | BLTPS "lightning rod" — `T_wr ∝ x^(−1/4)` grounds nose/LE-vs-acreage split + UHTC-insert sizing; binding limit is UHTC↔structure *junction* not surface (high-λ UHTC double-edged); AoA > ~10° → windside structure overheat (distinct from Schneider's AoA→recession); sharp body ≈ frozen flow → catalysis is a blunt-body uncertainty; load-vs-flux corroboration; ZrB₂ ρ≈6000, reusable ~2500 K (§10.7) |
 | Chen & Milos 1999 (J. Spacecraft & Rockets 36(3); FIAT, NASA Ames) | primary | the NASA-standard implicit ablation/thermal-response solver; B′ blowing correction (λ=½ laminar), surface energy balance = hot-wall (concern #1), 3-component Arrhenius pyrolysis; supersedes CMA; validated vs arcjet for PICA/SIRCA → the validation target + next-tier model for the designed recession code (§3) |
 | Tului et al. 2008 (Surf. & Coat. Tech. 202; CSM/CIRA) | primary | UHTC oxidation hard data: ZrB₂-SiC reusable at 1800 °C (parabolic SiO₂ scale ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation embrittles (MOR −40–50%) → tightens the `uhtc` row, reconciles SAND2006↔Monti (§10.4) |
+| Wagner et al. 2015 (AIAA 2015-3576, DLR) | primary | passive transition control: ultrasonically absorptive porous C/C damps the 2nd-mode → delays transition (laminar-side lever); envelope `M_e>4`/2-D/smooth, **fails at low pressure/high alt**; C/C porosity ~15%, ρ 1.33 (§4) |
+| Uyanna & Najafi 2020 (Acta Astronautica 176) | secondary (rigorous) | TPS review; passive taxonomy **heat-sink / hot-structure / insulated** ↔ our 3 criteria + bondline axis (hot structure temp-limited *not* duration-limited = load-vs-flux); corroborates Sutton-Graves V³, FIAT, PICA/SIRCA/TUFROC, X-15 Inconel-X ~650 °C, UHTC ~1800 °C + oxidation/embrittlement caveat (triangulates Tului/Monti) |
 
 ---
 
