@@ -8,10 +8,12 @@
   "nose_radius_m": 0.02,
   "glider_enabled": true,
   "glider_LD": 2.0,
-  "glider_guidance": "skip_to_equilibrium",
+  "glider_guidance": "damped_glide",
+  "glider_aero_model": "polar",
+  "glider_damping_zeta": 0.7,
   "glider_pullup_g_max": 10,
   "glider_terminal_dive": true,
   "glider_terminal_alt_km": 30,
   "glider_skip_count": 1,
-  "tps_material": "rcc"
+  "tps_material": "uhtc"
 }
