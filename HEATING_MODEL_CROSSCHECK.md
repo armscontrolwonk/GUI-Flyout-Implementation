@@ -117,6 +117,14 @@ equilibrium `T_w`; keep cold-wall `q̇` as the cross-trajectory currency.
   *magnitude* is the trustworthy output; the *along-body distribution* inherits the transition
   band (reinforces §5). Galileo also carried an explicit **bondline limit** (<644 K bond / <589 K
   structure) and **variable thickness** (14.6→5.1→5.4 cm) — the §10.1/§10.7 axes, flight-confirmed.
+- **The mid-tier model to actually build — Mazzaracchio 2018 (JATM, open access).** Between the
+  screening FOM and full FIAT sits a **preliminary-design 1-D implicit charring solver**: mobile
+  coordinates (recession), pyrolysis + in-depth conduction, and — crucially — it **sizes the
+  minimum heat-shield thickness from the bondline (adhesive-junction) max temperature**, the exact
+  design parameter Thrusty's §10.1 wants. Validated on the **Stardust** capsule against
+  industry-standard codes. This is the concrete, open blueprint for the next tier up (and answers
+  §7.1: it's a small standalone 1-D model, not full FIAT) — recession `δ` *and* thickness from a
+  bondline limit, the two things the screening tier only flags.
 
 **#4 — Turbulent coefficient 0.0288 vs 0.0296.** Pick one, cite it; second-order next
 to the laminar/turbulent decision itself.
@@ -127,6 +135,17 @@ to the laminar/turbulent decision itself.
 velocity guard `heating.py` already has. New from Regan: add a **Knudsen/altitude
 validity guard** — continuum convective correlations are valid only below ~80 km
 (Kn < 0.01); flag the high-altitude early-soak as out-of-continuum.
+
+**Flight corroboration of #1/#6 + catalysis — IXV (Fumo et al., EUCASS, body-flap, 194 TCs,
+orbital ~7.5 km/s, Feb 2015).** A rare in-flight TPS validation, and it backs three of our
+positions: (a) **continuum CFD over-predicts heat flux at altitude** ("continuum-regime
+assumption overestimates" early) → confirms the **Knudsen guard** (#6); (b) **radiative
+equilibrium "is not appropriate"** where in-depth conduction matters → confirms classifying on
+the **hot-wall energy balance, not radiative-eq** (#1); (c) measured flap temperatures **lie on
+the *non-catalytic* simulations**, with fully-catalytic conservative → confirms catalysis is a
+treat-as-bound, not a point (and on sharp/sustained surfaces the non-catalytic case is the real
+one — cf. Monti §10.7). Also flight data on a **deflected CMC control surface** with
+laminar→turbulent transition (the §4 item-5 turbulent-bound case).
 
 ---
 
@@ -303,6 +322,13 @@ binding limit is the **inner-surface temperature** (their 393 K) — the bondlin
    (heat-pipe, **ablation**) vs **active** (transpiration/film/convective, out of scope). The
    "hot structure is temperature- not duration-limited" point is the load-vs-flux split (§5)
    stated in materials terms.
+   *Bondline-driven material selection (Gogu et al. 2009; Kumar & Mahulikar 2015):* both size/select
+   the stack from the **inner/bottom-face (bondline) temperature** — exactly the axis here. Gogu's
+   ITPS (corrugated-core sandwich, thermal **+ structural**) reduces selection to **two
+   non-dimensional variables** (a Biot-like group + a load group) — a clean screening parallel — and
+   shows a **load-bearing** TPS runs ~40% heavier than a non-structural one (the cost of folding
+   structure into the skin). Kumar's lightest multilayer is **SIRCA + Saffil + glass-wool** (insulated
+   stack, SIRCA already in §10.4). Confirms: pick material on the bondline limit, then size thickness.
 4. **Velocity convention:** airspeed (ECEF, co-rotating atmosphere) everywhere — matches
    `trajectory.py:2765`; reconcile the `v_c`-based closed forms accordingly.
 5. **Hot-wall `T_w` as the benchmark default** (fix #1); cold-wall `q̇` stays the comparison
@@ -341,6 +367,11 @@ binding limit is the **inner-surface temperature** (their 393 K) — the bondlin
 | Chen & Milos 1999 (J. Spacecraft & Rockets 36(3); FIAT, NASA Ames) | primary | the NASA-standard implicit ablation/thermal-response solver; B′ blowing correction (λ=½ laminar), surface energy balance = hot-wall (concern #1), 3-component Arrhenius pyrolysis; supersedes CMA; validated vs arcjet for PICA/SIRCA → the validation target + next-tier model for the designed recession code (§3) |
 | Moyer & Rindal 1968 (NASA CR-1061, Aerotherm; CMA) | primary | **lineage root** of the recession formalism: virgin→char+gas, 3-component pyrolysis, surface chemical+energy balance with the B′ closure (CMA's own symbols); FIAT is its implicit re-solve → backbone is CMA→FIAT→Duffa, one formalism (§3) |
 | Milos, Chen, Squire & Brewer 1999 (JSR 36(3); Galileo probe) | primary | flight validation: Jupiter 47.4 km/s, carbon-phenolic, 10 ARAD recession + 4 bondline sensors; **Galileo recession anomaly** — 1-D prediction got the along-body *distribution* wrong (turbulence-driven frustum over-recession), magnitude ~right; flight-confirms bondline limit (<644 K) + variable thickness; reinforces "magnitude weightable, distribution inherits the transition band" (§3/§5) |
+| Mazzaracchio 2018 (J. Aerosp. Technol. Manag. 10, e0418, open access) | primary | the **mid-tier model**: implicit 1-D charring solver (mobile coords/recession) that sizes **minimum thickness from the bondline (adhesive-junction) limit**; validated on Stardust vs industry codes → the concrete preliminary-design blueprint above screening, below FIAT (§3, §7.1) |
+| Gogu, Bapanapalli, Haftka & Sankar 2009 (JSR 46(3); ITPS) | primary | integrated (load-bearing) TPS material selection by **bottom-face/bondline temperature**, reduced to 2 non-dim variables; structural TPS ~40% heavier than non-structural — corroborates bondline-driven selection (§7.3) |
+| Kumar & Mahulikar 2015 (J. Therm. Sci. Eng. Appl. 8(2)) | primary | multilayer passive TPS: select on thermal props then size by 1-D FD; lightest = **SIRCA + Saffil + glass-wool** insulated stack — corroborates the insulated/bondline axis + SIRCA (§7.3/§10.4) |
+| De Stefano Fumo et al. 2015 (EUCASS; IXV body-flap) | primary | rare in-flight TPS validation: continuum CFD **over-predicts** flux at altitude (→ Knudsen guard #6), radiative-eq **not appropriate** where conduction matters (→ hot-wall #1), flap data lies on **non-catalytic** (catalysis is a bound; cf. Monti); deflected CMC control-surface w/ transition (§3/§4) |
+| Spencer, Blanchard, Braun et al. 1999 (JSR 36(3); Mars Pathfinder EDL) | primary | EDL trajectory + atmosphere reconstruction from onboard accelerometer/altimeter — the flight companion to Milos's Pathfinder ablation data; Mars entry-state benchmark (§9) |
 | Tului et al. 2008 (Surf. & Coat. Tech. 202; CSM/CIRA) | primary | UHTC oxidation hard data: ZrB₂-SiC reusable at 1800 °C (parabolic SiO₂ scale ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation embrittles (MOR −40–50%) → tightens the `uhtc` row, reconciles SAND2006↔Monti (§10.4) |
 | Wagner et al. 2015 (AIAA 2015-3576, DLR) | primary | passive transition control: ultrasonically absorptive porous C/C damps the 2nd-mode → delays transition (laminar-side lever); envelope `M_e>4`/2-D/smooth, **fails at low pressure/high alt**; C/C porosity ~15%, ρ 1.33 (§4) |
 | Uyanna & Najafi 2020 (Acta Astronautica 176) | secondary (rigorous) | TPS review; passive taxonomy **heat-sink / hot-structure / insulated** ↔ our 3 criteria + bondline axis (hot structure temp-limited *not* duration-limited = load-vs-flux); corroborates Sutton-Graves V³, FIAT, PICA/SIRCA/TUFROC, X-15 Inconel-X ~650 °C, UHTC ~1800 °C + oxidation/embrittlement caveat (triangulates Tului/Monti) |
