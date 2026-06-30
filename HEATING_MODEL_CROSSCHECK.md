@@ -245,6 +245,7 @@ structural relationship that survives it.
 | PANT program (DTIC ADA019186) | primary | RV nosetip recession; binding criterion = shape symmetry → dispersion; graphite/C-C best resist recession (§10.2) |
 | Berry, Reentry-F deep-dive (NASA CR-154044) | primary | flight nose recession: R_n 0.10→0.171 in (+71%, ~0.7 R_n), 0.77 in axial, survived — grounds the shape-change threshold (§10.2) |
 | Paul et al., ACerS Bulletin 91(1) 2012 | primary | UHTC for hypersonic LE: melt >3000 °C but oxidation-protected ~1600–2000 °C, recedes above; HfB₂/HfC-C ~60–140 s at 2700 °C — UHTC is dwell-limited (§10.4) |
+| Loehman et al., SAND2006-2925 (Sandia) | primary | UHTC properties: ZrB₂ melt 3247 °C; oxidation limit ~1500–1600 °C (B₂O₃ boils); monolithic ρ 6.1 (ZrB₂)/10.5 (HfB₂) g/cm³ vs composite ~2.3; sharp-LE → UHTC-or-nothing (§10.4) |
 | Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
 
 ---
@@ -367,7 +368,7 @@ verification pass before coding; this is the screening-tier catalog.
 | `rcc` (coated C/C) | N | ~1920 K (1650 °C, atomic-O) | ~2070 K | ~1600 | reusable; oxidises fast >1650 °C | Shuttle / D3 |
 | `c_sic` | N | ~1970 K (1700 °C) | — | ~2000 | single re-entry qualified | X-38/EXPERT/IXV |
 | `cc_hot_structure` | N | ~2170 K (1900 °C surf; 1090 °C/3600 s struct) | — | ~1800 | HTV-2 flown | HTV-2 |
-| `uhtc` (ZrB₂/HfB₂-SiC) | N→recedes | **oxidation-protected ~1900–2270 K (1600–2000 °C)** | melt/decomp **>3270 K (>3000 °C)** | ~2200–2400 | **non-ablating <~2000 °C; recedes above (oxide blown off); best HfB₂/HfC-C: no erosion ~60 s / min. ~140 s at 2700 °C** | ACerS Bulletin 2012 (Paul et al.); Murbach 3033 K |
+| `uhtc` (ZrB₂/HfB₂-SiC) | N→recedes | **oxidation-protected ~1500–1600 °C** (B₂O₃-layer limit) | melt ZrB₂ **3247 °C**, HfB₂ >3200 °C | **monolithic 6.1 (ZrB₂) / 10.5 (HfB₂); C-fiber composite ~2.2–2.4** | **B₂O₃ protective layer fails >~1600 °C (boils); recedes >~2000 °C in hypersonic flow; HfB₂/HfC-C composite: no erosion ~60 s / min. ~140 s at 2700 °C** | **SAND2006-2925 (Sandia)**; ACerS 2012; Murbach 3033 K |
 
 **Body / acreage (long soak):**
 
@@ -384,6 +385,11 @@ verification pass before coding; this is the screening-tier catalog.
 | `aluminum` | N | cont 450 K / melt 775 K | 2700 (c 900) | existing |
 | `titanium` | N | cont 870 K / melt 1900 K | 4500 (c 520) | existing |
 | `steel` | N | cont 1100 K / melt 1700 K | 7800 (c 500) | existing |
+
+**UHTC density caveat (SAND2006-2925):** there are two UHTC classes with very different
+densities — **monolithic** hot-pressed ZrB₂/HfB₂-SiC (6–10.5 g/cm³, dense bulk ceramic) vs
+**carbon-fiber–UHTC composite** (~2.2–2.4 g/cm³, for sharp edges). Pick the right one for the
+mass term; the oxidation-life behavior (the binding limit) is similar for both.
 
 **Key catalog upgrades over today's `heating.py` `TPS_MATERIALS`:** add `density`, `H_eff`,
 `is_ablator`, and an **oxidation-dwell limit** column; split `carbon_ablator` into bare
