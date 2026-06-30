@@ -249,6 +249,7 @@ structural relationship that survives it.
 | Lin, Grabowsky & Yelmgren 1982 (TRW/BMO) | primary | nosetip shape-change/recession: 0.1 R_N → "mildly indented", asymmetric recession → dispersion (CEP); "nosetip overhang" = `nose_solid_depth_m`; oblate noses recede less (§10.2) |
 | NASA "Origins of TPS" (20110023700) | secondary | TPS history; confirms nose/LE/acreage split; Apollo 250 °F (120 °C) metal-substructure bondline anchor (§10.1) |
 | Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
+| Schneider, Teter, Coleman & Heath 1972 (AIAA 72-705, Lockheed) | primary | ballistic graphite nosetip design; recession `s/R_N ∝ λ` (λ ∝ laminar heat load) corroborates Q-driven backbone; transition+ablation are the two uncertainties; shape→drag→trajectory loop = accuracy erosion; ablation-model spread ~1.6× recession / ±25%, mechanical-erosion ζ≤3 >55 atm (§10.6) |
 
 ---
 
@@ -448,3 +449,62 @@ on SWERVE: sharp 5° cone, `R_eff ≈ R_n` — no blunting credit available.)
 shape params (oblateness `b/a`, or `flat_face_radius_m`/`corner_radius_m`); `effective_nose_radius_m()`
 does the shape→`R_eff` conversion. The shape-change threshold (`δ/R_n`, §10.2) uses `R_eff`/shoulder
 radius as the reference for non-spherical noses.
+
+### 10.6 When heating erodes *accuracy* (not just survival) — Schneider 72-705
+Thrusty's verdict to date answers **survival** ("does the TPS live?"). **Accuracy** (impact
+dispersion / CEP) is a *separate output that degrades earlier* and is *governed by the most
+uncertain inputs*. Schneider, Teter, Coleman & Heath, **"Design of Graphite Nosetips for Ballistic
+Reentry," AIAA 72-705** (Lockheed, 1972) — a primary ballistic-RV nosetip-design paper — makes the
+mechanism explicit and brackets it. This is the ballistic-side complement to the §10.2
+PANT/Lin glide-side dispersion thread.
+
+**The mechanism (heating → shape → drag → dispersion).** Recession changes the effective
+stagnation radius `R_eff` (§10.5), and *"effective nosetip radius of curvature effects aerodynamics
+through nosetip pressure drag."* Schneider's own design loop (Fig. 4) **re-iterates the trajectory
+whenever "shape changes are sufficient to significantly alter drag."** So heating → shape change →
+drag change → trajectory/impact-point change **is** the accuracy-erosion path — the same axis as
+§10.2, now with the drag link named. The shape change is **not monotone**: *"progressive
+stagnation-point blunting develops if no transition occurs"* (↑drag), whereas *"early transition
+causes abrupt sharpening at low altitudes"* (↓drag) — the sign of the drag perturbation flips across
+the transition assumption.
+
+**It is set by the worst input at the worst time.** *"Stagnation-point surface temperatures depend
+on ablation model at high altitudes and on transition model at low altitudes."* The terminal
+(low-altitude, dispersion-critical) shape is governed by **transition** — exactly the irreducible
+uncertainty of §4. Accuracy predictions are therefore least trustworthy precisely where they matter
+most for impact dispersion.
+
+**The band: recession magnitude is clean; the shape is not.**
+- Recession magnitude follows a **single-parameter law** — `s/R_N` correlates with the dimensionless
+  reentry parameter `λ = σ·(V_E²/g)·√(β̄ / (ρ₀·R_N³·sin γ_E))`, where **λ ∝ total laminar convective
+  heat load** (Fig. 11). This **corroborates Thrusty's Q-driven recession backbone** (`δ = Q/(ρ·H_eff)`):
+  recession scales with *integrated* load, not peak flux.
+- But the Fig.-11 scatter is *"caused by varying transition and erosion models."* **Ablation-model
+  spread alone** (Fig. 7, fixed conditions): surface temperature **7530–8490 °R** (~520 K spread),
+  recession rate **32.5–51.5 mil/s** (~**1.6× spread**) across Dolton/Kratsch/Bartlett/JANAF —
+  and *"none of the models is conclusively substantiated by experimental data."* Above **~55 atm**
+  local pressure, **mechanical erosion** adds an amplification `ζ = ṡ_total/ṡ_chem` **up to ~3**
+  (Fig. 8), and *"mechanical erosion cannot be separated from chemical ablation at the high pressures
+  of interest."*
+- Net: recession *magnitude* is bracketed to roughly **±25%** by ablation model (more above 55 atm);
+  the *shape* (blunt-vs-sharp → drag **sign**) can flip across the transition bracket. **The accuracy
+  band is wider than, and qualitatively distinct from, the survival band.**
+
+**Screening flags — "heating is eroding accuracy here" when any of:**
+- **High λ** (high `V_E`, steep `γ_E`, small `R_n`, deep low-altitude/high-pressure penetration) →
+  large `s/R_n` → shape change big enough to move drag.
+- **Local stagnation pressure > ~55 atm** → mechanical erosion amplifies and decouples from theory →
+  recession (and shape) poorly bounded.
+- **Any angle of attack / asymmetry** → asymmetric recession → trim → dispersion. Schneider is
+  explicitly *zero-AoA* and still names AoA as a recession driver; PANT/Lin (§10.2) supply the
+  asymmetric → CEP link.
+- **Low-altitude terminal phase** where transition (not ablation) sets shape → drag uncertainty maximal.
+
+**Verdict implication — split, or at least flag.** Report **accuracy** alongside **survival**.
+A nosetip can be solidly *survivable* yet already *accuracy-eroding*: `s/R_n ≈ 0.1` (the §10.2
+"mildly indented" onset, where dispersion begins) sits **well below** the ~0.5–1 `R_n` survival
+blunting limit. **Accuracy degrades first** — which is exactly why precision RVs treat the PANT
+**shape-symmetry/dispersion** criterion as binding rather than burn-through. Concretely, Thrusty
+should (a) emit an `accuracy-erosion` flag when any screening flag above trips, and (b) widen the
+reported recession band by the ablation-model spread (~±25%, more >55 atm) on top of the §4
+laminar/turbulent transition bracket.
