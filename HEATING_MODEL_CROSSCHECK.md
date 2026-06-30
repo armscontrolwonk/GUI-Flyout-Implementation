@@ -242,6 +242,10 @@ structural relationship that survives it.
 | Murbach 1993; Murbach et al. (AEOLUS) 1997 | primary | SWERVE-derived **Mars** glider; load-vs-flux trajectory dichotomy; multi-probe heating; SIRCA/UHTC/CMA material response (see §9) |
 | Sutton & Graves TR R-376 (1971) | primary | the SG stagnation equation; K is `W/m²` SI; CO₂ mixture constant pinned via West |
 | West & Brandis 2018 (NTRS 20200002354) | primary | modern Mars convective+radiative fits; SG-CO₂ = 1.83e-4; SG accurate at high heating, over-predicts < 10 W/cm²; ~25% load difference (§9) |
+| PANT program (DTIC ADA019186) | primary | RV nosetip recession; binding criterion = shape symmetry → dispersion; graphite/C-C best resist recession (§10.2) |
+| Berry, Reentry-F deep-dive (NASA CR-154044) | primary | flight nose recession: R_n 0.10→0.171 in (+71%, ~0.7 R_n), 0.77 in axial, survived — grounds the shape-change threshold (§10.2) |
+| Paul et al., ACerS Bulletin 91(1) 2012 | primary | UHTC for hypersonic LE: melt >3000 °C but oxidation-protected ~1600–2000 °C, recedes above; HfB₂/HfC-C ~60–140 s at 2700 °C — UHTC is dwell-limited (§10.4) |
+| Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
 
 ---
 
@@ -305,6 +309,85 @@ using it does **not** invalidate Murbach as a peak/structural benchmark.
 
 **Status:** structural corroboration now (load-vs-flux, multi-probe, material ladder/charring
 response, second long-glide anchor). A future **Mars heating mode** (the repo already runs
-Mars *trajectories* via `mars_smoke_test.py`) with `k_SG ≈ 1.29e-4` would make AEOLUS Table 1
-a direct numeric validation target; pairs naturally with adding a `SWERVE-Mars/AEOLUS` RV
-variant alongside `SWERVE` and `AHW`.
+Mars *trajectories* via `mars_smoke_test.py`) with `k_SG = 1.83e-4` (CO₂, §9) would make
+AEOLUS Table 1 a direct numeric validation target; pairs naturally with adding a
+`SWERVE-Mars/AEOLUS` RV variant alongside `SWERVE` and `AHW`.
+
+---
+
+## 10. Per-location material data model + materials dropdown
+
+### 10.1 Fields (the verdict-enabling additions)
+Trajectory (ballistic *or* glide) already comes free from the existing integrator
+(`mass_kg`, `beta_kg_m2`, `glider_LD`, `glider_*`). To turn heat *load* into a survival
+*verdict* for any RV, split the single `tps_material` by location:
+
+- **`nose_tps_material`** (dropdown) — recession allowance **derived from geometry** (no
+  thickness field): `effective_nose_radius_m()` → `R_n`; verdict expressed as `δ/R_n`.
+  Optional `nose_solid_depth_m` override for long solid tips.
+- **`body_tps_material`** (dropdown) + **`body_tps_thickness_m`** (input, or sized-to-survive
+  output — body acreage is a designed layer, not solid, so it *cannot* be derived from geometry).
+- *(optional)* **`structure_material` / `structure_limit_K`** — the bondline verdict (Gulan axis).
+- Already present and reused: `nose_radius_m`/`effective_nose_radius_m()`, `emissivity`,
+  `mass_kg`, `diameter_m`, `length_m`, `shape`.
+
+### 10.2 Shape-change threshold — grounded in flight data
+The nose verdict uses `δ/R_n` (geometry-anchored). Thresholds from real data:
+- **Reentry-F (Berry, NASA CR-154044):** R_n **0.10 → 0.171 in (+71%, ≈0.7 R_n radial blunting)**,
+  **0.77 in axial recession (≈7.7 R_n)**, and the vehicle **flew its full mission** → a ballistic
+  RV tolerates ~0.5–1 R_n radial blunting; burn-through is set by solid-tip *length* (here ~7.7 R_n).
+- **PANT program (ADA019186):** the binding criterion is **shape symmetry → aerodynamic
+  dispersion** (accuracy) — *asymmetric* recession well below 0.7 R_n; graphite/C-C best resist it.
+- **Glider sharp nose/LE:** tolerance ≈ **0** → must be non-ablating (UHTC) — the design choice
+  itself is the data (Murbach UHTC tip; HTV-2 C/C+UHTC edges; NRC shape-change note).
+
+Verdict bands: `δ/R_n ≲ 0.5` intact · `0.5–1` significant blunting (ballistic-survivable,
+**glider-fail**) · `>1` toward burn-through (then `nose_solid_depth_m` sets the true limit).
+**Glider flag dominates:** any meaningful `δ/R_n` on an ablative nose/LE of a glider → "needs
+non-ablating tip (UHTC-class)" (the SWERVE→AHW lesson).
+
+### 10.3 SWERVE materials (documented)
+- **Nose tip, wing leading edge, control surfaces: carbon-carbon composite** (Murbach 1993 p.3,
+  explicit; AEOLUS Table 1 stagnation = carbon-carbon) — bare ablative *nosetip* grade (recedes by
+  oxidation/sublimation; PANT "best recession resistance"), **not** coated-reusable RCC or UHTC.
+- **Body: silica phenolic.** The repo's `carbon_ablator` captures the ablative-carbon *class*
+  correctly. This is *why* "AHW = SWERVE with improved TPS" = swap the ablative C/C nose for a
+  non-ablating UHTC one.
+
+### 10.4 Materials dropdown catalog (grounded; ★ sourced, ~ engineering estimate)
+Properties for the per-location dropdown. `is_abl` = ablator (recession `δ = Q/(ρ·H_eff)`);
+others reradiative/structural (peak `T_w` + oxidation-dwell limited). Exact values need a
+verification pass before coding; this is the screening-tier catalog.
+
+**Nose / leading-edge (high flux, sharp):**
+
+| dropdown value | is_abl | oxidation/cont. limit | melt/abl | ρ (kg/m³) | key note | source |
+|---|---|---|---|---|---|---|
+| `carbon_carbon` (bare) | Y | bare-oxidation, diffusion-limited recession | sublimes ~3900 K | ~1800 | SWERVE/Reentry-F nose; H_eff ~25–60 MJ/kg | Murbach, Berry, Duffa Ch5 |
+| `rcc` (coated C/C) | N | ~1920 K (1650 °C, atomic-O) | ~2070 K | ~1600 | reusable; oxidises fast >1650 °C | Shuttle / D3 |
+| `c_sic` | N | ~1970 K (1700 °C) | — | ~2000 | single re-entry qualified | X-38/EXPERT/IXV |
+| `cc_hot_structure` | N | ~2170 K (1900 °C surf; 1090 °C/3600 s struct) | — | ~1800 | HTV-2 flown | HTV-2 |
+| `uhtc` (ZrB₂/HfB₂-SiC) | N→recedes | **oxidation-protected ~1900–2270 K (1600–2000 °C)** | melt/decomp **>3270 K (>3000 °C)** | ~2200–2400 | **non-ablating <~2000 °C; recedes above (oxide blown off); best HfB₂/HfC-C: no erosion ~60 s / min. ~140 s at 2700 °C** | ACerS Bulletin 2012 (Paul et al.); Murbach 3033 K |
+
+**Body / acreage (long soak):**
+
+| dropdown value | is_abl | limit | ρ (kg/m³) | note | source |
+|---|---|---|---|---|---|
+| `carbon_phenolic` | Y | abl ~3000–3900 K | ~1450 | charring; H_eff ~10–25 MJ/kg (= existing `carbon_ablator`) | Duffa Table 1.4 |
+| `silica_phenolic` | Y | surf ~1700 K before recession | ~1700 | Murbach baseline body | Murbach AEOLUS |
+| `sirca` | Y | ~1700 K | ~250–280 | low-density reusable ablator; ~1/9 conductivity; long-soak | Murbach AEOLUS; NASA Ames |
+| `pica` | Y | — | ~250 | modern low-density ablator | Duffa Table 1.4 |
+| `silica_tile` (LI-900/RCG) | N | ~1533 K (2300 °F operational) / melt ~1811 K | ~144 | reusable tile (Shuttle acreage) | NASA TPSX; Myers |
+
+**Structure / heat-sink (lower temp; `structure_material` or heat-sink):**
+
+| `aluminum` | N | cont 450 K / melt 775 K | 2700 (c 900) | existing |
+| `titanium` | N | cont 870 K / melt 1900 K | 4500 (c 520) | existing |
+| `steel` | N | cont 1100 K / melt 1700 K | 7800 (c 500) | existing |
+
+**Key catalog upgrades over today's `heating.py` `TPS_MATERIALS`:** add `density`, `H_eff`,
+`is_ablator`, and an **oxidation-dwell limit** column; split `carbon_ablator` into bare
+`carbon_carbon` (nose) vs `carbon_phenolic` (body); add `c_sic`, `cc_hot_structure`,
+`silica_phenolic`, `sirca`, `pica`; and **regrade `uhtc`** from "non-ablating to 3500 K" to the
+grounded "non-ablating <~2000 °C, recedes above, ~60–140 s life at 2700 °C." UHTC is governed by
+**oxidation dwell**, not melt — its dwell life is the frontier the longest glides must cross.
