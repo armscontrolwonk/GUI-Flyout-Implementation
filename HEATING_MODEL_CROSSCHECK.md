@@ -410,3 +410,41 @@ mass term; the oxidation-life behavior (the binding limit) is similar for both.
 `silica_phenolic`, `sirca`, `pica`; and **regrade `uhtc`** from "non-ablating to 3500 K" to the
 grounded "non-ablating <~2000 °C, recedes above, ~60–140 s life at 2700 °C." UHTC is governed by
 **oxidation dwell**, not melt — its dwell life is the frontier the longest glides must cross.
+
+### 10.5 Nose shape for recession
+Nose shape enters heating/recession through **one physical variable — the stagnation radius of
+curvature `R_eff`** (since `(du/dx)_s ≈ U_∞/R_eff` and Sutton-Graves `q̇ ∝ 1/√R_eff`). Sutton-Graves
+already uses it, so the integration is to make **`effective_nose_radius_m()` shape-aware**; the
+heating and recession code then need no change.
+
+**(a) Stagnation-heating effect — via `R_eff` (exact, first-order).** Convert nose shape to the
+tip radius of curvature:
+- `spherical`: `R_eff = R_n`.
+- `oblate_ellipse` (axial semi-axis a, transverse b): `R_eff = b²/a` (blunter → larger → less heating).
+- `flat_face` (truncated / blunted): `R_eff ≈ 2·R_n` — grounded in Baker-Kramer's measured **~30%
+  heat reduction** vs a sphere (`R_eff/R_n = (1/0.70)² ≈ 2.0`).
+- `biconic` nose: mildly blunter, `R_eff ≈ 1.2–1.3·R_n`.
+
+Recession scales `∝ 1/√R_eff`, so a flat-face nose recedes **~0.71×** the spherical rate *from this
+effect alone*.
+
+**(b) Transition effect — the larger part, rides the existing transition axis.** Lin 1982 measured
+a flat-face nose receding **0.34×** the spherical (0.12 vs 0.35 in), not 0.71×. The gap (0.71→0.34)
+is **boundary-layer transition**: a flatter nose has *lower local Reynolds number* → stays laminar
+longer → slower transition-front propagation → much less total recession. This is **not** an `R_eff`
+factor — it is captured by feeding the shape-dependent local Re into the transition criterion (the
+laminar/turbulent band of §4). **Full shape benefit = `R_eff` (≈30%) × transition (the rest).** A
+screening tool should apply (a) directly and let (b) ride the transition bracket, noting the
+combined effect can be ~3× (Lin) for strongly oblate noses.
+
+**(c) The L/D trade — why this is regime-dependent (and why gliders need UHTC).** Lin: ballistic
+RVs *can* blunt the nose (less recession, but lower L/D); a **maneuvering glider needs a sharp nose
+for L/D and therefore cannot blunt its way out of recession** → it is forced to the non-ablating
+material (UHTC). So `R_eff` reduction is a ballistic-RV lever; for a glider the verdict should *not*
+credit blunting (the `glider_enabled` flag gates it), reinforcing the UHTC requirement. (Confirmed
+on SWERVE: sharp 5° cone, `R_eff ≈ R_n` — no blunting credit available.)
+
+**Fields:** `nose_shape` enum (`spherical` default / `oblate_ellipse` / `flat_face` / `biconic`) +
+shape params (oblateness `b/a`, or `flat_face_radius_m`/`corner_radius_m`); `effective_nose_radius_m()`
+does the shape→`R_eff` conversion. The shape-change threshold (`δ/R_n`, §10.2) uses `R_eff`/shoulder
+radius as the reference for non-spherical noses.
