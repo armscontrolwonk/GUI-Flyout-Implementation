@@ -98,6 +98,25 @@ equilibrium `T_w`; keep cold-wall `q̇` as the cross-trajectory currency.
   (both in the §10.4 catalog). **Role for Thrusty:** FIAT is the *next tier up* and the
   **validation target** for the designed recession model — match its surface-energy-balance
   `T_w` and `δ` on a PICA/SIRCA arcjet case before trusting the screening recession band.
+- **Lineage root — CMA (Moyer & Rindal 1968, NASA CR-1061, Aerotherm).** The *origin* of the
+  whole formalism FIAT/Duffa inherit: virgin→char+gas, **3-component pyrolysis** (resin A+B
+  two-stage + reinforcement C, volume fraction F), and the **surface chemical + energy balance**
+  with the **B′ transfer-coefficient closure** (`B′, B′_C, B′_g, C_H/C_H0, ρ_eu_eC_M` are CMA's
+  own symbols). The "Aerotherm Charring Material Ablation program, Version 2" — explicit FD;
+  FIAT is the implicit re-solve. Confirms the recession backbone is **CMA (1968) → FIAT (1999)
+  → Duffa (2013)**, one continuous formalism, not three independent models.
+- **Flight validation — Galileo probe (Milos, Chen et al. 1999, JSR 36(3)).** The most extreme
+  entry ever flown (Jupiter, 47.4 km/s, ~30 kW/cm², ~300 kJ/cm²), carbon-phenolic shield, **10
+  ARAD recession sensors + 4 bondline thermometers**. The **Galileo recession anomaly** is the
+  key lesson: measured recession ran **4.45 cm nose → 2.74 cm min at mid-frustum → 4.00 cm near
+  base** — *non-monotonic*, and the pre-flight 1-D ablation prediction **got the distribution
+  wrong**. The authors attribute the frustum over-recession to **turbulence** (earlier
+  peak-recession-rate on the frustum than the nosecap). **Takeaway for Thrusty:** even the
+  standard solver, on the best-instrumented ablation flight ever, mis-distributed recession —
+  and the error tracks **transition/turbulence**, the §4 irreducible axis. So the recession
+  *magnitude* is the trustworthy output; the *along-body distribution* inherits the transition
+  band (reinforces §5). Galileo also carried an explicit **bondline limit** (<644 K bond / <589 K
+  structure) and **variable thickness** (14.6→5.1→5.4 cm) — the §10.1/§10.7 axes, flight-confirmed.
 
 **#4 — Turbulent coefficient 0.0288 vs 0.0296.** Pick one, cite it; second-order next
 to the laminar/turbulent decision itself.
@@ -210,10 +229,29 @@ structural relationship that survives it.
 Monte-Carlo / response-surface propagation of the uncertain inputs (velocity, density, pressure,
 material `k/ρ/c/ε`, thickness) to an output **reliability**, not a point. Two takeaways transfer
 even though full UQ is out of screening scope:
-1. **Don't hard-stack worst cases.** Lu et al. show deterministic "all worst cases co-occur with
-   equal probability" **oversizes** TPS; the honest band is a *distribution*, so the
-   laminar-and-turbulent + recession bounds are **envelope bounds to weight**, not a claim that
-   they happen together. A future tier should probability-weight the bracket.
+1. **Don't hard-stack worst cases — but weight only what has a credible distribution.** Lu et al.
+   show deterministic "all worst cases co-occur with equal probability" **oversizes** TPS. The
+   honest treatment **splits by what we can characterize**, and this is *not* uniformly a "future
+   tier":
+   - **Characterizable axes → weight now (cheap).** Trajectory dispersion (V, γ, ρ), material-property
+     scatter, and the **recession-*magnitude* spread** (FIAT/Schneider pin it ~±25% / ~1.6×) all have
+     assumable distributions. Monte-Carlo / RSS over these is a **wrapper around the existing fast
+     evaluator**, not new physics — it's the Lu et al. method, and it stops the co-stacking. Backlog,
+     not barrier.
+   - **Transition → keep as a hard bracket (cannot weight honestly yet).** Weighting the
+     laminar↔turbulent band needs a *flight-validated distribution over transition onset*, which §4
+     shows does not exist (SWERVE matched no criterion; Reentry-F roughness-contaminated). Inventing
+     weights = false precision on an irreducible/aleatoric quantity; even max-entropy "uniform"
+     reduces to the midpoint and reads as confidence we don't have. Note Lu et al. themselves **never
+     weight transition** — their UQ is over inputs with known statistics (Fay-Riddell, AoA = 0). The
+     real "future tier" that unlocks this is a transition model shipping a *validated* uncertainty
+     (Dujardin/Ling WMLES confidence score; BOLT/HIFiRE flight data).
+   - **Report the bracket regardless.** Even once the characterizable axes are weighted, keep the
+     transition band explicit — the decision signal is "does it **straddle a material rung**," which a
+     weighted mean erases (§5 deliverable).
+   **Galileo makes this concrete:** the standard solver got the recession *magnitude* roughly right
+   but the along-body *distribution* wrong, and the error tracked **turbulence/transition** — i.e. the
+   weightable axis was fine, the bracketed axis was where the prediction broke. Exactly the split above.
 2. **Aerothermal input uncertainty dominates the response** ("exacerbates the randomness of TPS
    thermal response, significantly impacting reliability") — i.e. the trajectory/transition inputs
    we bracket are exactly the right things to carry, confirmed by their sensitivity analysis.
@@ -301,6 +339,8 @@ binding limit is the **inner-surface temperature** (their 393 K) — the bondlin
 | Schneider, Teter, Coleman & Heath 1972 (AIAA 72-705, Lockheed) | primary | ballistic graphite nosetip design; recession `s/R_N ∝ λ` (λ ∝ laminar heat load) corroborates Q-driven backbone; transition+ablation are the two uncertainties; shape→drag→trajectory loop = accuracy erosion; ablation-model spread ~1.6× recession / ±25%, mechanical-erosion ζ≤3 >55 atm (§10.6) |
 | Monti, De Stefano Fumo & Savino 2005 (AIAA 2005-3265, Napoli) | primary | BLTPS "lightning rod" — `T_wr ∝ x^(−1/4)` grounds nose/LE-vs-acreage split + UHTC-insert sizing; binding limit is UHTC↔structure *junction* not surface (high-λ UHTC double-edged); AoA > ~10° → windside structure overheat (distinct from Schneider's AoA→recession); sharp body ≈ frozen flow → catalysis is a blunt-body uncertainty; load-vs-flux corroboration; ZrB₂ ρ≈6000, reusable ~2500 K (§10.7) |
 | Chen & Milos 1999 (J. Spacecraft & Rockets 36(3); FIAT, NASA Ames) | primary | the NASA-standard implicit ablation/thermal-response solver; B′ blowing correction (λ=½ laminar), surface energy balance = hot-wall (concern #1), 3-component Arrhenius pyrolysis; supersedes CMA; validated vs arcjet for PICA/SIRCA → the validation target + next-tier model for the designed recession code (§3) |
+| Moyer & Rindal 1968 (NASA CR-1061, Aerotherm; CMA) | primary | **lineage root** of the recession formalism: virgin→char+gas, 3-component pyrolysis, surface chemical+energy balance with the B′ closure (CMA's own symbols); FIAT is its implicit re-solve → backbone is CMA→FIAT→Duffa, one formalism (§3) |
+| Milos, Chen, Squire & Brewer 1999 (JSR 36(3); Galileo probe) | primary | flight validation: Jupiter 47.4 km/s, carbon-phenolic, 10 ARAD recession + 4 bondline sensors; **Galileo recession anomaly** — 1-D prediction got the along-body *distribution* wrong (turbulence-driven frustum over-recession), magnitude ~right; flight-confirms bondline limit (<644 K) + variable thickness; reinforces "magnitude weightable, distribution inherits the transition band" (§3/§5) |
 | Tului et al. 2008 (Surf. & Coat. Tech. 202; CSM/CIRA) | primary | UHTC oxidation hard data: ZrB₂-SiC reusable at 1800 °C (parabolic SiO₂ scale ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation embrittles (MOR −40–50%) → tightens the `uhtc` row, reconciles SAND2006↔Monti (§10.4) |
 | Wagner et al. 2015 (AIAA 2015-3576, DLR) | primary | passive transition control: ultrasonically absorptive porous C/C damps the 2nd-mode → delays transition (laminar-side lever); envelope `M_e>4`/2-D/smooth, **fails at low pressure/high alt**; C/C porosity ~15%, ρ 1.33 (§4) |
 | Uyanna & Najafi 2020 (Acta Astronautica 176) | secondary (rigorous) | TPS review; passive taxonomy **heat-sink / hot-structure / insulated** ↔ our 3 criteria + bondline axis (hot structure temp-limited *not* duration-limited = load-vs-flux); corroborates Sutton-Graves V³, FIAT, PICA/SIRCA/TUFROC, X-15 Inconel-X ~650 °C, UHTC ~1800 °C + oxidation/embrittlement caveat (triangulates Tului/Monti) |
