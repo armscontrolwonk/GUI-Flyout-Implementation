@@ -88,6 +88,16 @@ equilibrium `T_w`; keep cold-wall `q̇` as the cross-trajectory currency.
 - **Honesty note:** cold-wall + no-blowing over-predicts heating into an ablator
   (conservative on recession). Label any `H_eff` surrogate as order-of-magnitude with
   its source conditions.
+- **Reference implementation — FIAT (Chen & Milos 1999, NASA Ames).** The NASA-standard
+  implicit ablation/thermal-response solver is exactly this B′ formalism made into a 1-D
+  through-thickness code: surface energy balance (their Eq. 10) = our concern-#1 hot-wall
+  balance; blowing correction `C_H/C_H0 = (1+2λB′)…` with **λ=½ laminar** (their Eq. 11) =
+  the B′ closure above; plus 3-component Arrhenius pyrolysis and in-depth conduction (the
+  terms Thrusty's screening FOM deliberately omits — `heating.py` warnings already say so).
+  FIAT supersedes 1960s **CMA**, and is validated vs CMA + arcjet for **PICA and SIRCA**
+  (both in the §10.4 catalog). **Role for Thrusty:** FIAT is the *next tier up* and the
+  **validation target** for the designed recession model — match its surface-energy-balance
+  `T_w` and `δ` on a PICA/SIRCA arcjet case before trusting the screening recession band.
 
 **#4 — Turbulent coefficient 0.0288 vs 0.0296.** Pick one, cite it; second-order next
 to the laminar/turbulent decision itself.
@@ -251,6 +261,8 @@ structural relationship that survives it.
 | Murbach 1993 / AEOLUS | primary | SWERVE nose/LE/control = carbon-carbon, body = silica phenolic (§10.3) |
 | Schneider, Teter, Coleman & Heath 1972 (AIAA 72-705, Lockheed) | primary | ballistic graphite nosetip design; recession `s/R_N ∝ λ` (λ ∝ laminar heat load) corroborates Q-driven backbone; transition+ablation are the two uncertainties; shape→drag→trajectory loop = accuracy erosion; ablation-model spread ~1.6× recession / ±25%, mechanical-erosion ζ≤3 >55 atm (§10.6) |
 | Monti, De Stefano Fumo & Savino 2005 (AIAA 2005-3265, Napoli) | primary | BLTPS "lightning rod" — `T_wr ∝ x^(−1/4)` grounds nose/LE-vs-acreage split + UHTC-insert sizing; binding limit is UHTC↔structure *junction* not surface (high-λ UHTC double-edged); AoA > ~10° → windside structure overheat (distinct from Schneider's AoA→recession); sharp body ≈ frozen flow → catalysis is a blunt-body uncertainty; load-vs-flux corroboration; ZrB₂ ρ≈6000, reusable ~2500 K (§10.7) |
+| Chen & Milos 1999 (J. Spacecraft & Rockets 36(3); FIAT, NASA Ames) | primary | the NASA-standard implicit ablation/thermal-response solver; B′ blowing correction (λ=½ laminar), surface energy balance = hot-wall (concern #1), 3-component Arrhenius pyrolysis; supersedes CMA; validated vs arcjet for PICA/SIRCA → the validation target + next-tier model for the designed recession code (§3) |
+| Tului et al. 2008 (Surf. & Coat. Tech. 202; CSM/CIRA) | primary | UHTC oxidation hard data: ZrB₂-SiC reusable at 1800 °C (parabolic SiO₂ scale ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation embrittles (MOR −40–50%) → tightens the `uhtc` row, reconciles SAND2006↔Monti (§10.4) |
 
 ---
 
@@ -405,6 +417,23 @@ verification pass before coding; this is the screening-tier catalog.
 densities — **monolithic** hot-pressed ZrB₂/HfB₂-SiC (6–10.5 g/cm³, dense bulk ceramic) vs
 **carbon-fiber–UHTC composite** (~2.2–2.4 g/cm³, for sharp edges). Pick the right one for the
 mass term; the oxidation-life behavior (the binding limit) is similar for both.
+
+**UHTC oxidation life — hard numbers (Tului et al. 2008, ZrB₂-SiC plasma-sprayed coatings).**
+Direct furnace-oxidation data that tightens the `uhtc` row and reconciles the SAND2006-vs-Monti
+spread:
+- At **2073 K (1800 °C)** in air, ZrB₂-SiC (60/40 and 80/20 vol%) grows a **parabolic** (diffusion-
+  limited) SiO₂/ZrO₂ scale of only **~110–185 µm in up to 2520 s (~42 min)** → genuinely **reusable
+  at 1800 °C for tens of minutes**. So the "oxidation-protected ~1500–1600 °C" figure (SAND2006,
+  the B₂O₃-volatilization limit) is **conservative**: above ~1200 °C the protection is the **SiO₂
+  scale from SiC**, not B₂O₃, and it holds parabolically to ~1800 °C — consistent with Monti's
+  "reusable ~2500 K" being optimistic and SAND2006 being conservative.
+- **~2500 K (2227 °C): ZrB₂+SiC form a stable liquid** (below SiC decomposition ~3000 K) — a real
+  upper bound (liquid-phase onset), independent of melt point. This is the physically grounded
+  "recedes/fails above ~2200–2500 K" ceiling.
+- **Oxidation degrades strength** (MOR drops ~40–50 % after a 1800 s/2073 K cycle; the oxide scale
+  initiates cracks) → an *accuracy/structural* caveat, not just surface life: an oxidized UHTC nose
+  is weaker, relevant to the bondline/structure axis. Net `uhtc` grading: **reusable ≲1800 °C
+  (parabolic SiO₂ scale, ~150 µm/40 min); liquid-phase onset ~2227 °C; oxidation also embrittles.**
 
 **Key catalog upgrades over today's `heating.py` `TPS_MATERIALS`:** add `density`, `H_eff`,
 `is_ablator`, and an **oxidation-dwell limit** column; split `carbon_ablator` into bare
