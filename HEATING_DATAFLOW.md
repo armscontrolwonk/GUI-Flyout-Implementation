@@ -112,6 +112,40 @@ default — the user touches them only to refine the screening.
 | — | Accuracy-erosion flag | shape→drag→dispersion when λ high / p>55 atm / AoA≠0 (§10.6) | ○ |
 | — | CO₂/Mars SG constant | `1.83e-4` for Mars entries (§9) | ○ |
 
+## 3a · Which calculation screens which failure / degradation mode
+
+Two distinctions organize the whole map:
+
+- **Flux-driven vs load-driven.** *Flux-driven* modes are set by the **peak** — they strike at the
+  single worst instant (velocity-locked, ~0.73–0.82 v_c). *Load-driven* modes are set by the
+  **integral `Q = ∫q̇ dt`** — they accrue over the whole arc, so they scale with **glide time** (the
+  "stopwatch"). This is exactly why `q_peak` and `integrated_load` are reported as **two separate
+  numbers**: they feed different failure families.
+- **Survival vs accuracy.** *Survival* = does the TPS/airframe live? *Accuracy* = it lives, but
+  recession reshapes the nose and the vehicle flies worse. **Accuracy degrades first** — the nose
+  starts changing shape (`δ/R_n ≈ 0.1`) long before it burns through (`δ/R_n ≈ 0.5–1`).
+
+| Heating calc / output | → drives | Failure / degradation mode | Kind | In code? | Source |
+|---|---|---|---|---|---|
+| Peak flux `q_peak` → peak `T_eq` | `peak_surface` criterion (`T_peak/peak_K`) | **surface melt / ablation pull-out** at the tip | flux · **survival** | ● (mode `surface melt/ablation (pull-out)`) | heating.py |
+| `T_eq` dwell above `continuous_K` | `soak` criterion (time-above vs `soak_dwell_s`) | **oxidation soak** — too long above the oxidation/continuous limit → erodes / chars through (the long-glide killer) | load · **survival** | ● (mode `TPS oxidation soak (glide)`) | heating.py |
+| Integrated load `Q` above re-radiation cap `εσ·continuous_K⁴` | `heat_sink` criterion (`Q_absorbed` vs `m·c·ΔT_melt`) | **bare-body melt** — lumped mass absorbs more than it can hold | load · **survival** | ● (mode `bare-body melt (heat sink)`) | heating.py |
+| `Q` → recession depth `δ = Q/(ρ·H_eff)` vs `nose_solid_depth_m` | recession-depth check | **nose burn-through** — solid tip fully consumed | load · **survival** | ○ | §10.2 |
+| `Q` → blunting `δ/R_n` → `ΔR_eff` → Δdrag | accuracy-erosion flag | **nose recession → shape change → drag change → impact-point shift (accuracy)** — onset `δ/R_n≈0.1`, well before burn-through | load · **accuracy** | ○ | Schneider §10.6 |
+| `Q` + AoA / asymmetry | accuracy-erosion flag | **asymmetric recession → induced trim → reentry dispersion (CEP)** | load · **accuracy** | ○ | PANT / Lin §10.2 |
+| Laminar/turbulent **transition bracket** | widens flux *and* shape | turbulent flux ~3–5× laminar (survival band) **and** blunt-vs-sharp terminal shape (accuracy band) — the single biggest uncertainty | both · **both** | ○ | §4, Schneider §10.6 |
+| Conduction through TPS → **junction temperature** | bondline check vs `structure_limit_K` | **structure / bondline failure** — substructure cooks even when the surface is fine (high-conductivity UHTC nose) | flux+load · **survival** | ○ | Monti §10.7 |
+| Per-location windside heating at AoA | AoA-limit check | **windside structure overheat** above ~10° AoA → BLTPS breaks (caps usable trim AoA) | load · accuracy-enabling | ○ | Monti §10.7 |
+
+**The recession→accuracy chain, spelled out** (the mode the question highlights): integrated load `Q`
+drives recession depth `δ = Q/(ρ·H_eff)`; on a **symmetric** nose `δ` blunts the tip, raising `R_eff`,
+changing pressure drag and therefore the impact point — *accuracy* erodes even though the tip is
+nowhere near burning through. On an **asymmetric** nose (any angle of attack, or transition-driven
+uneven heating) the recession is uneven → the nose develops an induced trim angle → **reentry
+dispersion (CEP)**. Both are *load-driven* (they scale with glide time) and both bite at `δ/R_n ≈ 0.1`
+— roughly **5–10× sooner than the survival limit**. That gap is the whole reason the design splits the
+verdict into a **survival** band and a separate, earlier **accuracy** band.
+
 ## 4 · How results are communicated
 
 | Output | Vehicle | Content | Status |
