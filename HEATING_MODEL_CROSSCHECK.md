@@ -37,11 +37,19 @@ pass survival and fail accuracy; accuracy degrades first (`δ/R_n ≈ 0.1` vs ~0
 
 **The three classes and what binds:**
 
-| Class | Example | Trajectory signature | What binds (the measure) | Hot spot | Material | Compare by |
+| Class | Example | Trajectory signature | What binds (the measure) | Hot spot | Binding-location material | Compare by |
 |---|---|---|---|---|---|---|
-| **Ballistic RV** | ICBM RV | velocity-locked peak then done; ~6 km/s | **peak flux + integrated load** (they trade off across loft/depress) | nose stagnation | ablative heat shield (carbon-phenolic) | margin-rank trajectories (loft / depress / MET), fixed RV |
-| **Glider / HGV** | AHW, HTV-2 | near-constant flux, long duration | **duration**: soak / oxidation-dwell / recession (the stopwatch) | nose, then acreage/bondline as it lengthens | UHTC / RCC nose | survival-time vs glide-time, capped by **min(aero range, thermal range)** |
-| **Maneuvering quasi-ballistic** | **KN-23** | low-altitude high-q̄ **pull-up spike**, short glide; ~2 km/s | **transient peak flux** (heat-sink, not equilibrium); load/soak don't bind | **fin LE / windward flank** (AoA-shifted, *not* the nose) | airframe / hot structure | **maneuver envelope**: how aggressive a pull-up before a hot spot exceeds the airframe limit |
+| **Ballistic RV** | ICBM RV | velocity-locked peak then done; ~6 km/s | **peak flux + integrated load** (they trade off across loft/depress) | nose stagnation | **nose** ablator (carbon-phenolic); **body** = same/thinner ablator | margin-rank trajectories (loft / depress / MET), fixed RV |
+| **Glider / HGV** | AHW, HTV-2 | near-constant flux, long duration | **duration**: soak / oxidation-dwell / recession (the stopwatch) | nose, then acreage/bondline as it lengthens | **nose** UHTC/RCC; **body** silica-phenolic / SIRCA / tile (≠ nose) | survival-time vs glide-time, capped by **min(aero range, thermal range)** |
+| **Maneuvering quasi-ballistic** | **KN-23** | low-altitude high-q̄ **pull-up spike**, short glide; ~2 km/s | **transient peak flux** (heat-sink, not equilibrium); load/soak don't bind | **fin LE / windward flank** (AoA-shifted, *not* the nose) | **body + control-surface** airframe / hot structure (**nose material ~irrelevant**) | **maneuver envelope**: how aggressive a pull-up before a hot spot exceeds the airframe limit |
+
+**Material is a per-location input, not one value.** The catalog (§10.1/§10.4) takes **`nose_tps_material`,
+`body_tps_material` (+ `body_tps_thickness_m`), and an optional `structure_material`** — and *which
+location's material binds tracks the hot-spot column above*: nose for the ballistic RV; nose-then-body
+for a lengthening glide; and **body + control-surface for the KN-23**, where the nose material barely
+enters and the fin/airframe material *is* the answer. (Today's `heating.py` applies a **single**
+`tps_material` everywhere — the per-location split is the §10.1 upgrade; the KN-23 case is the sharpest
+reason it's needed, since evaluating it on the nose material would test the wrong part entirely.)
 
 **Reading the table.** The full ~7-measure space (§3a of `HEATING_DATAFLOW.md`) collapses per class to
 **one or two binding measures**. Each class also exposes one capability the others can skip:
@@ -56,11 +64,12 @@ pass survival and fail accuracy; accuracy degrades first (`δ/R_n ≈ 0.1` vs ~0
   short to reach radiative-equilibrium `T_w`, which therefore *over-predicts* — IXV flight, §3/#6).
   Plus it is a **hot structure under maneuver load** (strength-at-temperature, not just melt).
 
-**Scope consequence.** Build the **two-number engine** (`q̇`/`T_w` peak and `Q`/dwell) with **material
-limits**, plus the three **comparison modes** above. Per-location/AoA heating and the transient
-heat-sink are the only additions the KN-23 forces; bondline, thermo-structural, and accuracy are
-**second-order overlays** added once the three modes work — they refine the verdict, they don't change
-the architecture.
+**Scope consequence.** Build the **two-number engine** (`q̇`/`T_w` peak and `Q`/dwell) with
+**per-location material limits** (nose / body / control-surface — §10.1), plus the three **comparison
+modes** above. Per-location + AoA heating and the transient heat-sink are the only additions the KN-23
+forces — and the per-location split is *also* what lets a glider carry a different nose and body
+material at all. Bondline, thermo-structural, and accuracy are **second-order overlays** added once the
+three modes work — they refine the verdict, they don't change the architecture.
 
 ---
 
