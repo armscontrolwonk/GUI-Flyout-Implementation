@@ -18,6 +18,52 @@ research/validation phase to implementation. Source abbreviations:
 
 ---
 
+## 0. What we're actually measuring — three vehicle classes and what binds
+
+Before any equations: the module exists to answer **"can this vehicle take the heat of this
+trajectory?"** — but the *binding* physics is different for different vehicles, and that, not a
+longer list of measures, is what scopes the tool.
+
+**The unifying principle (the apples-to-apples invariant).** There is **one** heating evaluator —
+stagnation/​local flux `q̇`, wall temperature `T_w`, integrated load `Q` — applied to **different
+state histories**. Ballistic, glide, and maneuvering vehicles are not different physics; they are
+the same evaluator reading different `(t, ρ, V, alt, AoA)` arcs. The binding measure differs only
+because the arc differs. So a new vehicle class is a new *trajectory*, not new machinery.
+
+**Two questions, usually only the first is asked.** *Survival* — does the TPS live? *Accuracy* —
+does the vehicle still hit (recession reshapes the nose → drag/trim → dispersion)? A vehicle can
+pass survival and fail accuracy; accuracy degrades first (`δ/R_n ≈ 0.1` vs ~0.5–1 for burn-through,
+§10.6). The three classes below are scoped to **survival**; accuracy is a deferred overlay.
+
+**The three classes and what binds:**
+
+| Class | Example | Trajectory signature | What binds (the measure) | Hot spot | Material | Compare by |
+|---|---|---|---|---|---|---|
+| **Ballistic RV** | ICBM RV | velocity-locked peak then done; ~6 km/s | **peak flux + integrated load** (they trade off across loft/depress) | nose stagnation | ablative heat shield (carbon-phenolic) | margin-rank trajectories (loft / depress / MET), fixed RV |
+| **Glider / HGV** | AHW, HTV-2 | near-constant flux, long duration | **duration**: soak / oxidation-dwell / recession (the stopwatch) | nose, then acreage/bondline as it lengthens | UHTC / RCC nose | survival-time vs glide-time, capped by **min(aero range, thermal range)** |
+| **Maneuvering quasi-ballistic** | **KN-23** | low-altitude high-q̄ **pull-up spike**, short glide; ~2 km/s | **transient peak flux** (heat-sink, not equilibrium); load/soak don't bind | **fin LE / windward flank** (AoA-shifted, *not* the nose) | airframe / hot structure | **maneuver envelope**: how aggressive a pull-up before a hot spot exceeds the airframe limit |
+
+**Reading the table.** The full ~7-measure space (§3a of `HEATING_DATAFLOW.md`) collapses per class to
+**one or two binding measures**. Each class also exposes one capability the others can skip:
+
+- **Ballistic** needs the **load-vs-flux pair** — loft raises peak, depress raises load, so *no single
+  scalar ranks them*; rank on minimum margin across criteria.
+- **Glider** needs the **two range ceilings** — aerodynamic (can L/D, β reach the range?) and thermal
+  (can the material survive the time?); achievable range = the **min** (AHW: aero ~6000 km, thermal
+  ~1500 km).
+- **Maneuvering (KN-23)** needs **(a) off-nose + AoA heating** (the hot spot is a fin LE / windward
+  flank, not the nose) and **(b) the transient, non-equilibrium heat-sink** (the pull-up spike is too
+  short to reach radiative-equilibrium `T_w`, which therefore *over-predicts* — IXV flight, §3/#6).
+  Plus it is a **hot structure under maneuver load** (strength-at-temperature, not just melt).
+
+**Scope consequence.** Build the **two-number engine** (`q̇`/`T_w` peak and `Q`/dwell) with **material
+limits**, plus the three **comparison modes** above. Per-location/AoA heating and the transient
+heat-sink are the only additions the KN-23 forces; bondline, thermo-structural, and accuracy are
+**second-order overlays** added once the three modes work — they refine the verdict, they don't change
+the architecture.
+
+---
+
 ## 1. Equations & constants — verified
 
 | Quantity | Form used | Primary check | Status |
