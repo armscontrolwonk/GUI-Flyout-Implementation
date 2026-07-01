@@ -40,6 +40,7 @@ from trajectory import (integrate_trajectory, maximize_range, aim_missile,
 from coordinates import range_between
 from slv_performance import schilling_performance
 import mass_estimator as mest
+import heating
 
 # ---------------------------------------------------------------------------
 # Country border map data (Natural Earth 110m, bundled GeoJSON)
@@ -4373,15 +4374,18 @@ class MissileFlyoutApp(tk.Tk):
         timeline_tab = ttk.Frame(self._right_nb)
         params_tab   = ttk.Frame(self._right_nb)
         slv_tab      = ttk.Frame(self._right_nb)
+        heat_tab     = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
         self._right_nb.add(params_tab,   text="  Missile Parameters  ")
         self._right_nb.add(slv_tab,      text="  SLV Performance  ")
+        self._right_nb.add(heat_tab,     text="  Heating Survivability  ")
 
         self._build_plot_panel(plots_tab)
         self._build_timeline_panel(timeline_tab)
         self._build_params_tab(params_tab)
         self._build_slv_tab(slv_tab)
+        self._build_heating_tab(heat_tab)
 
         # Status bar
         self._status_var = tk.StringVar(value="Ready.")
@@ -4907,6 +4911,94 @@ class MissileFlyoutApp(tk.Tk):
             "Accuracy: ~260 m/s RMS in total mission ΔV; typically < 10 %\n"
             "error in payload capacity  (Schilling 2009).",
             verdict=None)
+
+    # ------------------------------------------------------------------
+    # Heating Survivability tab  (screening; reads result['heating_fom'])
+    # ------------------------------------------------------------------
+    def _build_heating_tab(self, parent):
+        rf = ttk.LabelFrame(
+            parent,
+            text="Heating Survivability  (screening estimate — not a TPS design verdict)")
+        rf.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        self._heat_text = tk.Text(
+            rf, state=tk.DISABLED, font=("TkFixedFont", 9),
+            wrap=tk.WORD, relief=tk.FLAT, background="#f8f8f8",
+            foreground="#222222", selectbackground="#c0d8f0")
+        vsb = ttk.Scrollbar(rf, orient=tk.VERTICAL, command=self._heat_text.yview)
+        self._heat_text.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._heat_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Headline verdict tags (colour by status), plus body tags.
+        self._heat_text.tag_configure("survive",  foreground="#006600",
+                                      font=("TkFixedFont", 11, "bold"))
+        self._heat_text.tag_configure("fail",     foreground="#aa0000",
+                                      font=("TkFixedFont", 11, "bold"))
+        self._heat_text.tag_configure("analysis", foreground="#b8860b",
+                                      font=("TkFixedFont", 11, "bold"))
+        self._heat_text.tag_configure("none",     foreground="#555555",
+                                      font=("TkFixedFont", 11, "bold"))
+        self._heat_text.tag_configure("dim", foreground="#777777")
+
+        self._heat_set_text(
+            None, "",
+            "Fly a trajectory (Launch / Max Range).  This panel then shows a\n"
+            "rough screening estimate of whether the reentry vehicle survives\n"
+            "the aerodynamic heat load — evaluated at the nose tip and the body\n"
+            "acreage, using the per-location TPS materials set for the RV.\n\n"
+            "It is a screening indicator (Sutton-Graves stagnation flux +\n"
+            "radiative-equilibrium wall temperature), NOT a through-wall TPS\n"
+            "design analysis.  Read the verdict as 'likely', not certain.")
+
+    def _heat_set_text(self, status, headline, body):
+        """Replace the heating panel contents: coloured headline + body."""
+        self._heat_text.configure(state=tk.NORMAL)
+        self._heat_text.delete("1.0", tk.END)
+        if status is not None:
+            mark = {"survive": "✓  ", "fail": "✗  ",
+                    "analysis": "⚠  ", "none": "•  "}.get(status, "")
+            self._heat_text.insert(tk.END, mark + headline + "\n\n", status)
+        self._heat_text.insert(tk.END, body)
+        self._heat_text.configure(state=tk.DISABLED)
+
+    def _populate_heating(self, r):
+        """Fill the Heating Survivability tab from result['heating_fom']."""
+        fom = r.get("heating_fom") if r else None
+        s = heating.survivability_summary(fom)
+
+        if not s["lines"]:
+            self._heat_set_text(
+                "none", s["headline"],
+                "No reentry heating was computed for this flight.\n\n"
+                "Heating is assessed on the reentry / glide arc: set a TPS\n"
+                "material on the RV (Missile Parameters) and fly a trajectory\n"
+                "that reenters the atmosphere.")
+            return
+
+        rv = effective_rv(get_missile(self._missile_var.get()))
+        name = rv.name if rv is not None else self._missile_var.get()
+
+        out = ["Vehicle:  %s" % name]
+        if s["nose_q_MW"] is not None:
+            out.append("Reentry:  peak %.1f MW/m² (nose stagnation),  "
+                       "integrated load %.0f MJ/m²"
+                       % (s["nose_q_MW"], s["load_MJ"]))
+        out += ["", "Per-location screening  (worst location drives the verdict):", ""]
+        for L in s["lines"]:
+            binds = "   ← binds" if L["binds"] else ""
+            out.append("  %-5s %-24s  peak %5.0f K   %s %s%s"
+                       % (L["loc"].capitalize(), L["label"][:24], L["T"],
+                          L["mark"], L["detail"], binds))
+
+        body = "\n".join(out) + "\n\n"
+        body += ("How to read this:\n"
+                 "  • A rough 'likely' survive/fail screen, not a certified\n"
+                 "    TPS verdict.  The verdict is set by the worst location.\n")
+        for n in s["notes"]:
+            body += "  • " + n + "\n"
+
+        self._heat_set_text(s["status"], s["headline"], body)
 
     def _slv_set_text(self, body: str, verdict=None):
         """Replace the SLV results text widget contents."""
@@ -7507,6 +7599,7 @@ class MissileFlyoutApp(tk.Tk):
         self._results_strip_var.set(_strip)
         self._plot_results(r, scale, ulbl)
         self._populate_timeline(r)
+        self._populate_heating(r)
 
     # ------------------------------------------------------------------
     def _populate_timeline(self, r):
