@@ -37,20 +37,85 @@ NOTHING_SURVIVES_K = 4000.0       # T_eq above all usable materials → the
                                   # (ablators survive by recession/blowing, not by
                                   # staying below a fixed surface limit)
 
-# TPS material ladder — HEATING_TPS_REFERENCES.md §2 (peak vs continuous limits).
+# TPS material ladder — HEATING_TPS_REFERENCES.md §2 + HEATING_MODEL_CROSSCHECK.md §10.4.
+# CONSUMED by the current FOM (do not change for existing keys — verdict stability):
 #   peak_K       : short-duration surface limit (melt / ablation onset)
 #   continuous_K : sustained / oxidation (soak) limit, also the re-radiation cap
 #   melt_K       : bulk melt/sublimation for the lumped heat sink (None → continuous_K)
 #   c_J_kgK      : specific heat for the lumped heat sink
+#   label        : display name
+# Phase-1 metadata (NOT yet consumed — used by the per-location evaluator, Phase 2+):
+#   group        : 'metal' | 'hot_structure' | 'insulative' | 'ablative'.  Architecture flag:
+#                  'metal'/'hot_structure' = the material IS the load path → bondline collapses
+#                  onto its own limit (§10.1, non-separating hot-structure case); 'insulative'/
+#                  'ablative' = a layer over a separate structure → bondline applies.  Also the
+#                  GUI-flyout dropdown grouping.
+#   is_ablator   : recedes (δ = Q/(ρ·H_eff)); else reradiative/heat-sink limited
+#   density_kg_m3: for the lumped heat-sink mass and ablator recession
+#   H_eff_MJ_kg  : effective heat of ablation (ablators only; None otherwise)
+#   oxidation_dwell_s : representative oxidation-limited dwell life at its severe-use temperature
+#                  (UHTC ~60-140 s at 2700 °C, §10.4/Tului); None if not dwell-limited
+# NEW entries (carbon_carbon, carbon_phenolic, c_sic, cc_hot_structure, silica_phenolic, sirca,
+# pica) carry SCREENING-tier peak/continuous estimates pending a verification pass (§10.4); they
+# are not referenced by any existing rv.json, so they do not affect current verdicts.  The `uhtc`
+# temperature limits are the LEGACY screening values, kept for verdict stability; the grounded
+# regrade (recede >~2000 °C, dwell-limited) lands when the oxidation-dwell criterion is built.
 TPS_MATERIALS = {
-    "aluminum":       dict(peak_K=775,  continuous_K=450,  melt_K=775,  c_J_kgK=900,  label="Aluminum"),
-    "titanium":       dict(peak_K=1900, continuous_K=870,  melt_K=1900, c_J_kgK=520,  label="Titanium"),
-    "steel":          dict(peak_K=1700, continuous_K=1100, melt_K=1700, c_J_kgK=500,  label="Steel"),
-    "silica_tile":    dict(peak_K=1811, continuous_K=1533, melt_K=None, c_J_kgK=1000, label="Silica tile (LI-900)"),
-    "rcc":            dict(peak_K=1922, continuous_K=1811, melt_K=None, c_J_kgK=1200, label="Coated carbon-carbon (RCC)"),
-    "uhtc":           dict(peak_K=2700, continuous_K=1900, melt_K=3500, c_J_kgK=600,  label="UHTC (ZrB2/HfB2-SiC)"),
-    "carbon_ablator": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Ablative carbon-carbon"),
+    # --- structural metals (heat-sink / bare hot structure) ---
+    "aluminum":        dict(peak_K=775,  continuous_K=450,  melt_K=775,  c_J_kgK=900,  label="Aluminum",
+                            group="metal", is_ablator=False, density_kg_m3=2700, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    "titanium":        dict(peak_K=1900, continuous_K=870,  melt_K=1900, c_J_kgK=520,  label="Titanium",
+                            group="metal", is_ablator=False, density_kg_m3=4500, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    "steel":           dict(peak_K=1700, continuous_K=1100, melt_K=1700, c_J_kgK=500,  label="Steel",
+                            group="metal", is_ablator=False, density_kg_m3=7800, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    # --- non-ablating hot structures (the material IS the structure) ---
+    "rcc":             dict(peak_K=1922, continuous_K=1811, melt_K=None, c_J_kgK=1200, label="Coated carbon-carbon (RCC)",
+                            group="hot_structure", is_ablator=False, density_kg_m3=1600, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    "c_sic":           dict(peak_K=1970, continuous_K=1970, melt_K=None, c_J_kgK=1200, label="C/SiC (coated CMC)",
+                            group="hot_structure", is_ablator=False, density_kg_m3=2000, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    "cc_hot_structure":dict(peak_K=2170, continuous_K=2170, melt_K=None, c_J_kgK=1200, label="C/C hot structure (HTV-2)",
+                            group="hot_structure", is_ablator=False, density_kg_m3=1800, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    "uhtc":            dict(peak_K=2700, continuous_K=1900, melt_K=3500, c_J_kgK=600,  label="UHTC (ZrB2/HfB2-SiC)",
+                            group="hot_structure", is_ablator=False, density_kg_m3=6000, H_eff_MJ_kg=None, oxidation_dwell_s=120),
+    # --- reusable insulator (a layer over a separate structure) ---
+    "silica_tile":     dict(peak_K=1811, continuous_K=1533, melt_K=None, c_J_kgK=1000, label="Silica tile (LI-900)",
+                            group="insulative", is_ablator=False, density_kg_m3=144, H_eff_MJ_kg=None, oxidation_dwell_s=None),
+    # --- ablators (sacrificial layer; recede) ---
+    "carbon_ablator":  dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Ablative carbon-carbon",
+                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None),
+    "carbon_carbon":   dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Bare carbon-carbon (nose)",
+                            group="ablative", is_ablator=True, density_kg_m3=1800, H_eff_MJ_kg=40, oxidation_dwell_s=None),
+    "carbon_phenolic": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Carbon phenolic",
+                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None),
+    "silica_phenolic": dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="Silica phenolic",
+                            group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None),
+    "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="SIRCA (low-density ablator)",
+                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None),
+    "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
+                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None),
 }
+
+# Dropdown groups for the GUI flyout (§10.1/§10.4) — order = display order.
+TPS_MATERIAL_GROUPS = ("metal", "hot_structure", "insulative", "ablative")
+
+
+def materials_by_group():
+    """Return {group: [(key, label), ...]} for building the per-location material dropdown.
+
+    Both the nose and body selectors draw from the full catalog (a non-separating warhead
+    needs metals/hot-structure in the nose slot too, §10.1); the GUI orders by group.
+    """
+    out = {g: [] for g in TPS_MATERIAL_GROUPS}
+    for key, m in TPS_MATERIALS.items():
+        out.setdefault(m.get("group", "ablative"), []).append((key, m["label"]))
+    return out
+
+
+def is_hot_structure(material_key):
+    """True if the material is its own load path (metal / hot structure) → bondline collapses
+    onto its own limit (§10.1).  Layers (insulative / ablative) sit over a separate structure."""
+    m = TPS_MATERIALS.get(material_key or "")
+    return bool(m) and m.get("group") in ("metal", "hot_structure")
 
 # Reentry heating benchmarks — HEATING_TPS_REFERENCES.md §3.  Per entry:
 #   q_MW : peak stagnation flux (MW/m²);  Q_MJ : integrated load (MJ/m², per

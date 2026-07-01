@@ -414,6 +414,28 @@ class RVParams:
     # 'silica_tile' / 'rcc' / 'uhtc' / 'carbon_ablator'.  '' → physical heating
     # numbers only, no pass/fail verdict.
     tps_material:           str   = ""
+    # Per-location TPS materials (HEATING_MODEL_CROSSCHECK.md §10.1 / §11 Phase 1).
+    # Both selectable for every RV.  When blank, they fall back to tps_material for
+    # BOTH locations (via nose_material()/body_material()), so existing RVs are
+    # unchanged.  body_tps_thickness_m is the designed body-layer thickness (or, for
+    # a bare hot structure, the skin/wall thickness feeding the transient heat-sink).
+    # structure_material / structure_limit_K carry the bondline verdict; for a
+    # hot-structure body (heating.is_hot_structure) the bondline collapses onto the
+    # body material's own limit.  NOT yet consumed by the FOM — wired in Phase 2.
+    nose_tps_material:      str   = ""
+    body_tps_material:      str   = ""
+    body_tps_thickness_m:   float = 0.0
+    structure_material:     str   = ""
+    structure_limit_K:      float = 0.0
+
+    def nose_material(self) -> str:
+        """Nose TPS material key, falling back to the single tps_material (Phase-1
+        back-compat: a lone tps_material governs both nose and body)."""
+        return self.nose_tps_material or self.tps_material
+
+    def body_material(self) -> str:
+        """Body/acreage TPS material key, falling back to the single tps_material."""
+        return self.body_tps_material or self.tps_material
 
     def effective_nose_radius_m(self) -> float:
         """Stagnation radius (m) for Sutton-Graves heating: the explicit
@@ -453,6 +475,11 @@ def rv_to_dict(rv: RVParams) -> dict:
         'separation_mode':       rv.separation_mode,
         'emissivity':            rv.emissivity,
         'tps_material':          rv.tps_material,
+        'nose_tps_material':     rv.nose_tps_material,
+        'body_tps_material':     rv.body_tps_material,
+        'body_tps_thickness_m':  rv.body_tps_thickness_m,
+        'structure_material':    rv.structure_material,
+        'structure_limit_K':     rv.structure_limit_K,
     }
 
 
@@ -493,6 +520,11 @@ def rv_from_dict(d: dict) -> RVParams:
         separation_mode=str(d.get('separation_mode', 'separating_rv')),
         emissivity=float(d.get('emissivity', 0.85)),
         tps_material=str(d.get('tps_material', '')),
+        nose_tps_material=str(d.get('nose_tps_material', '')),
+        body_tps_material=str(d.get('body_tps_material', '')),
+        body_tps_thickness_m=float(d.get('body_tps_thickness_m', 0.0)),
+        structure_material=str(d.get('structure_material', '')),
+        structure_limit_K=float(d.get('structure_limit_K', 0.0)),
     )
 
 
