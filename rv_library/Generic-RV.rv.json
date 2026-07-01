@@ -10,5 +10,9 @@
   "glider_guidance": "equilibrium_glide",
   "glider_pullup_g_max": 10,
   "glider_terminal_dive": false,
-  "glider_terminal_alt_km": 30
+  "glider_terminal_alt_km": 30,
+  "tps_material": "carbon_phenolic",
+  "nose_tps_material": "carbon_carbon",
+  "body_tps_material": "carbon_phenolic",
+  "material_notes": "Template defaults so the RV yields a heating verdict out of the box: carbon-carbon nosetip + carbon-phenolic aeroshell (generic ballistic RV). Override per vehicle."
 }

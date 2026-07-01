@@ -15,5 +15,8 @@
   "glider_terminal_dive": true,
   "glider_terminal_alt_km": 30,
   "glider_skip_count": 1,
-  "tps_material": "uhtc"
+  "tps_material": "uhtc",
+  "nose_tps_material": "uhtc",
+  "body_tps_material": "carbon_phenolic",
+  "material_notes": "Nose = UHTC (per user direction). Body = carbon_phenolic is an ESTIMATE - no public C-HGB acreage-material source; a conical glide body of the SWERVE/AHW (Sandia) lineage with an ablative aeroshell is the screening assumption."
 }
