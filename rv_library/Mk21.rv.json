@@ -10,5 +10,9 @@
   "glider_guidance": "equilibrium_glide",
   "glider_pullup_g_max": 10,
   "glider_terminal_dive": false,
-  "glider_terminal_alt_km": 30
+  "glider_terminal_alt_km": 30,
+  "tps_material": "carbon_phenolic",
+  "nose_tps_material": "carbon_carbon",
+  "body_tps_material": "carbon_phenolic",
+  "material_notes": "Standard precision ballistic-RV combo (screening): carbon-carbon nosetip + carbon-phenolic aeroshell (the PANT/Mk-series lineage, HEATING_MODEL_CROSSCHECK.md par. 10.2-10.4). nose_radius_m intentionally unset - the shape fallback (0.10*R_body = 2.75 cm) is in the plausible Mk21 sharp-cone range."
 }
