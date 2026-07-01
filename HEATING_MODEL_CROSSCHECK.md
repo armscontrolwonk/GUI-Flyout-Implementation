@@ -780,3 +780,75 @@ catalysis band on sharp configs (a real reduction in the glider's error bars).
 property values (ZrB₂ ρ≈6000 kg/m³; reusable to ~2500 K in arc-jet; melt >3000 °C, stable >2400 °C in
 oxidation) corroborate the §10.4 catalog — note Monti's ~2500 K reusable is *more optimistic* than the
 SAND2006 ~1600 °C oxidation-protected limit, bounding the UHTC-life spread.
+
+---
+
+## 11. Implementation plan (how this executes in Thrusty)
+
+The §0 apples-to-apples invariant keeps this small: **one evaluator + a thin orchestration layer.**
+The three vehicle classes are not three code paths — they are three ways of *feeding and summarizing*
+the same evaluator. Screening tier throughout (not FIAT; see §3 for the tier above).
+
+```
+                     ┌─ Ballistic mode:  fly loft/depress/MET, margin-rank trajectories
+   per-location  ───→├─ Glider mode:     survival-time vs glide-time, min(aero, thermal) range
+   evaluator         └─ Maneuver mode:   sweep pull-up aggressiveness → thermal envelope
+   (heating.py)
+        ↑ one function: state history → {per-location, per-criterion, banded} → binding verdict
+```
+
+### Phase 1 — Data layer (back-compatible, no behavior change)
+**Files:** `heating.py` (`TPS_MATERIALS`), `missile_models.py` (RVParams + JSON loader).
+- Extend `TPS_MATERIALS` to the §10.4 grouped catalog: add `density`, `H_eff`, `is_ablator`,
+  `oxidation_dwell_s`, and a **`group`** field (`sacrificial` / `hot_structure` / `metal`). Split
+  `carbon_ablator` → `carbon_carbon` + `carbon_phenolic`; add `c_sic`, `cc_hot_structure`,
+  `silica_phenolic`, `sirca`, `pica`; regrade `uhtc` (§10.4).
+- Add `nose_tps_material`, `body_tps_material`, `body_tps_thickness_m`, optional
+  `structure_material`/`structure_limit_K` to RVParams + the JSON loader (§10.1).
+- **Back-compat guarantee:** if the new fields are absent, fall back to the single `tps_material`
+  for *both* nose and body. Every current `rv.json` yields the identical verdict.
+- **Verify:** existing RVs load with byte-identical FOM output; catalog round-trips; the GUI flyout
+  reads `group` to build the grouped dropdown.
+
+### Phase 2 — Per-location evaluator (the shared core)
+**Files:** `heating.py` (`heating_figure_of_merit`), call site `trajectory.py:2788`.
+- Evaluate at **nose** (stagnation, `R_n`) and **body/acreage** (local flux = stagnation × acreage
+  factor — start with Shi & Zhang cone-tail ≈0.13 or Monti `x^(−1/4)`, flagged screening), each
+  against its own location's material limit.
+- Run the three existing criteria (`peak_surface`, `soak`, `heat_sink`) **per location**; verdict =
+  the **binding (min-margin) location**.
+- Bondline collapse (§10.1): if `body_tps_material.group == hot_structure`, `structure_limit = body`.
+- **Verify:** body material = nose material and acreage factor = 1 reproduces Phase-1 exactly;
+  SWERVE/AHW give nose-binding verdicts matching the hand calcs.
+
+### Phase 3 — The three comparison modes (orchestration)
+**Files:** new small driver (`heating_modes.py` or functions in `trajectory.py`), reusing the integrator.
+- **Ballistic:** fly the fixed RV over loft / depress / MET; min-margin per trajectory; rank.
+- **Glider:** thermal-survival-time (evaluator) vs glide-time (trajectory); achievable range =
+  **min(aero range, thermal range)**.
+- **Maneuver (KN-23):** sweep pull-up severity (g, altitude); find where a hot-spot margin → 1 → the
+  **envelope**.
+- **Verify:** reproduce this session's numbers — SWERVE ~100 s; AHW ~500 s @ 1,500 km, nose-limited @
+  6,000 km.
+
+### Phase 4 — KN-23 specifics (the two additions §0 named)
+**Files:** `heating.py`.
+- **AoA / off-nose heating:** windward/fin amplification so the binding location can be the fin LE /
+  windward flank, not the nose.
+- **Transient heat-sink:** short spikes use the non-equilibrium skin response (`ρ·c·δ_skin`) instead of
+  equilibrium `T_w` (which over-predicts — IXV flight, §3/#6); `body_tps_thickness_m` as skin thickness.
+- **Verify:** a KN-23-class case binds on the fin/windward, not the nose; transient `T_w` < equilibrium.
+
+### Phase 5 — Bands + reporting (honesty layer)
+- Run every flux-dependent measure **laminar and turbulent**; report the **band + binding measure +
+  binding location** (the §5 deliverable shape). Weight the characterizable axes via the cheap MC
+  wrapper later (§5); keep transition **bracketed**.
+
+### Open decisions before coding
+1. **File layout** — extend `heating.py` in place (§7.1 recommendation: single source of truth,
+   minimal churn) vs. the spec's standalone `thrusty/thermo/` package. *Lean: extend in place.*
+2. **First-cut scope** — Phases 1–2 (per-location verdict, the foundation) vs. push through Phase 3
+   (the three comparison modes = the actual deliverable) in one go.
+
+**Sequencing note:** Phase 1 is pure, low-risk, back-compatible plumbing and unblocks everything else
+(and the GUI dropdown) — the recommended starting point.
