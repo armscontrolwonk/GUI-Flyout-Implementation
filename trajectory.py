@@ -2785,17 +2785,34 @@ def integrate_trajectory(params: MissileParams,
             # compromise point, and verdict (stored in result['heating_fom']).
             if len(_glide_v) > 1:
                 _diam = float(getattr(_erv_ms, 'diameter_m', 0.0) or 0.0)
-                _heating_fom = heating.heating_figure_of_merit(
-                    t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
-                    nose_radius_m=_RN, body_radius_m=_diam / 2.0,
-                    emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
-                    material=str(getattr(_erv_ms, 'tps_material', '') or ''),
-                    mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
-                    frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
+                # Per-location (nose + body acreage) verdict when the RV sets
+                # split materials (§10.1); otherwise the legacy single-material
+                # call — byte-identical for existing RVs.
+                _split = bool(getattr(_erv_ms, 'nose_tps_material', '') or
+                              getattr(_erv_ms, 'body_tps_material', ''))
+                if _split:
+                    _heating_fom = heating.heating_fom_per_location(
+                        t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
+                        nose_radius_m=_RN, body_radius_m=_diam / 2.0,
+                        emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
+                        nose_material=_erv_ms.nose_material(),
+                        body_material=_erv_ms.body_material(),
+                        mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
+                        frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
+                else:
+                    _heating_fom = heating.heating_figure_of_merit(
+                        t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
+                        nose_radius_m=_RN, body_radius_m=_diam / 2.0,
+                        emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
+                        material=str(getattr(_erv_ms, 'tps_material', '') or ''),
+                        mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
+                        frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
                 _cmp = _heating_fom.get('compromise')
                 if _cmp is not None:
                     _row = _milestone(_cmp['t_s'])
-                    _row['event'] = "TPS compromise — " + _cmp['mode']
+                    _loc = _cmp.get('location')
+                    _row['event'] = ("TPS compromise — " +
+                                     ((_loc + ": ") if _loc else "") + _cmp['mode'])
                     _insert_chrono(_row)
 
             # Max structural load factor n = |a_proper| / g0, where

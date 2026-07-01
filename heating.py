@@ -286,3 +286,102 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     else:
         out["verdict"] = f"no screened thermal failure ({mat['label']})"
     return out
+
+
+# ---------------------------------------------------------------------------
+# Two-location screening verdict (HEATING_MODEL_CROSSCHECK.md §11, lean Phase 2)
+# ---------------------------------------------------------------------------
+# Acreage flux fraction: windward cone-flank/tail heating as a fraction of the
+# nose stagnation flux.  Screening constant: Lu/Shi & Zhang 2024 give a
+# cone-tail/stagnation ratio ≈ 0.13 (engineering distribution validated vs
+# NASA TN D-5450 to <9%); the STS-1 windward-acreage-vs-RCC-stagnation ratio
+# (~0.1) is consistent.  One number, flagged — not a heating distribution.
+BODY_FLUX_FRACTION = 0.13
+
+
+def _severity(res):
+    """Rank a single-location FOM result for binding-location selection.
+    inf  = outside no-ablation validity (worst — the model can't even clear it);
+    -inf = no material set (no verdict to bind on);
+    else the worst criterion margin (heat_sink margin is inverted: safe > 1)."""
+    if res.get("T_eq_peak_K", 0.0) >= NOTHING_SURVIVES_K:
+        return float("inf")
+    if not res.get("material"):
+        return float("-inf")
+    worst = float("-inf")
+    crit = res.get("criteria") or {}
+    if "peak_surface" in crit:
+        worst = max(worst, crit["peak_surface"]["margin"])
+    if "soak" in crit:
+        worst = max(worst, crit["soak"]["margin"])
+    if "heat_sink" in crit:
+        m = crit["heat_sink"]["margin"]
+        worst = max(worst, (1.0 / m) if m > 0 else float("inf"))
+    return worst
+
+
+def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
+                             body_radius_m=0.0, emissivity=0.85,
+                             nose_material="", body_material="",
+                             mass_kg=0.0, frontal_area_m2=0.0,
+                             soak_dwell_s=120.0,
+                             body_flux_fraction=BODY_FLUX_FRACTION):
+    """Two-location screening verdict: the SAME evaluator run at the nose
+    (stagnation flux, nose material) and at the body acreage
+    (body_flux_fraction × stagnation, body material); the headline verdict is
+    the BINDING location — outside-validity first, else earliest compromise,
+    else worst margin.
+
+    The acreage call reuses heating_figure_of_merit unchanged by exploiting
+    q̇ ∝ 1/√R: a flux fraction f is exactly an effective radius R_n/f².
+    The lumped heat-sink criterion (mass/frontal-area) runs on the body call
+    only (it is a whole-body bulk criterion; running it at the nose too would
+    double-count).
+
+    Returns the binding location's dict (same top-level keys as
+    heating_figure_of_merit, so existing consumers are unchanged) plus:
+      binding_location : 'nose' | 'body'
+      locations        : {'nose': <full result>, 'body': <full result>}
+    and compromise (when present) gains a 'location' key.
+    """
+    nose = heating_figure_of_merit(
+        t, rho, V, alt, rng, nose_radius_m=nose_radius_m, body_radius_m=0.0,
+        emissivity=emissivity, material=nose_material, mass_kg=0.0,
+        frontal_area_m2=0.0, soak_dwell_s=soak_dwell_s)
+    f = min(max(float(body_flux_fraction), 1e-3), 1.0)
+    body = heating_figure_of_merit(
+        t, rho, V, alt, rng, nose_radius_m=nose_radius_m / f ** 2,
+        body_radius_m=body_radius_m, emissivity=emissivity,
+        material=body_material, mass_kg=mass_kg,
+        frontal_area_m2=frontal_area_m2, soak_dwell_s=soak_dwell_s)
+
+    # Binding location: validity breach > earlier compromise > worst margin.
+    sn, sb = _severity(nose), _severity(body)
+    if sn == float("inf") or sb == float("inf"):
+        name = "nose" if sn >= sb else "body"
+    else:
+        nc, bc = nose.get("compromise"), body.get("compromise")
+        if nc and bc:
+            name = "nose" if nc["t_s"] <= bc["t_s"] else "body"
+        elif nc or bc:
+            name = "nose" if nc else "body"
+        else:
+            name = "nose" if sn >= sb else "body"
+    binding, other = (nose, body) if name == "nose" else (body, nose)
+    other_name = "body" if name == "nose" else "nose"
+
+    out = dict(binding)
+    out["binding_location"] = name
+    out["locations"] = {"nose": nose, "body": body}
+    out["verdict"] = f"{name.upper()} binds — {binding['verdict']}"
+    if other.get("material"):
+        out["verdict"] += f"  [{other_name}: {other['verdict']}]"
+    if out.get("compromise"):
+        out["compromise"] = dict(binding["compromise"], location=name)
+    out["warnings"] = list(binding.get("warnings", [])) + [
+        f"Body acreage flux modeled as a single screening fraction "
+        f"({f:.2f} × nose stagnation; Lu/Shi & Zhang 2024 cone-tail ratio) — "
+        f"not a heating distribution; windward/turbulent flank heating can "
+        f"run 3–5× higher than the laminar value used here.",
+    ]
+    return out

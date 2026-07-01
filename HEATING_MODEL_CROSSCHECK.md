@@ -785,6 +785,19 @@ SAND2006 ~1600 °C oxidation-protected limit, bounding the UHTC-life spread.
 
 ## 11. Implementation plan (how this executes in Thrusty)
 
+> **REVISED (lean scope, per user).** Phase 1 shipped as written. Phase 2 shrank to a
+> **two-location wrapper**: `heating_fom_per_location()` calls the untouched evaluator twice —
+> nose (stagnation, nose material) and body acreage (`BODY_FLUX_FRACTION = 0.13` × stagnation,
+> body material, via the `q̇ ∝ 1/√R` radius trick) — and reports the **binding location**
+> (validity breach > earliest compromise > worst margin). Wired at `trajectory.py` behind a
+> split-fields check, so legacy single-material RVs keep the old call byte-identical.
+> **Phases 3–5 are cancelled**: the three §0 questions are answered by *running trajectories and
+> reading the existing output* (loft-vs-depress = run both and compare; longer-glide = compromise
+> time vs glide time; KN-23 = fly the pull-up, the body location catches the spike). Bands,
+> recession, bondline, maneuver-envelope sweeps stay in this memo as research record, surfaced
+> only as fixed `warnings[]` text. The original five-phase plan is retained below as the record
+> of what was considered and consciously not built.
+
 The §0 apples-to-apples invariant keeps this small: **one evaluator + a thin orchestration layer.**
 The three vehicle classes are not three code paths — they are three ways of *feeding and summarizing*
 the same evaluator. Screening tier throughout (not FIAT; see §3 for the tier above).
