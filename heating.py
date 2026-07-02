@@ -168,7 +168,8 @@ def _stag_flux(rho, V, radius_m):
 
 def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                             body_radius_m=0.0, emissivity=0.85, material="",
-                            mass_kg=0.0, frontal_area_m2=0.0, soak_dwell_s=120.0):
+                            mass_kg=0.0, frontal_area_m2=0.0, soak_dwell_s=120.0,
+                            recession_depth_m=0.0):
     """Evaluate the heating-survivability SCREENING figure of merit over a
     reentry arc.  This is a stagnation-point convective indicator, not a
     through-wall TPS response model; verdicts are screening flags (see the
@@ -224,12 +225,19 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
             f"Convective-only model; radiative gas heating NOT assessed "
             f"(peak V {_Vmax/1000:.1f} km/s exceeds the ~9 km/s screening envelope).")
 
-    if T_peak >= NOTHING_SURVIVES_K:
+    mat = TPS_MATERIALS.get(material)
+    is_ablator = bool(mat and mat.get("is_ablator"))
+
+    # NOTHING_SURVIVES guard applies to RERADIATIVE surfaces (and the no-material
+    # case): a non-ablating wall above ~4000 K is beyond the no-ablation
+    # equilibrium model.  An ABLATOR is *supposed* to sit above it — it survives
+    # by receding at its ablation temperature, not by staying below a surface
+    # limit — so ablators skip this guard and are judged by RECESSION below.
+    if not is_ablator and T_peak >= NOTHING_SURVIVES_K:
         out["verdict"] = (f"outside no-ablation model validity (peak T_eq ≈ {T_peak:.0f} K "
                           f"≥ {NOTHING_SURVIVES_K:.0f} K) — requires ablation/material-response analysis")
         return out
 
-    mat = TPS_MATERIALS.get(material)
     if not mat:
         out["verdict"] = ("physical numbers only — set the RV's tps_material "
                           "for a screening verdict")
@@ -238,48 +246,91 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     crossings = []   # (index, mode label)
     dt = np.diff(t, prepend=t[0])
 
-    # 1. Peak surface temperature vs short-duration limit
-    out["criteria"]["peak_surface"] = {
-        "margin": T_peak / mat["peak_K"], "limit_K": mat["peak_K"],
-        "T_eq_peak_K": T_peak}
-    ex = np.where(T_eq > mat["peak_K"])[0]
-    if ex.size:
-        # T_eq is the zero-thermal-mass EQUILIBRIUM wall temperature, so this
-        # timestamp is when the flux first EXCEEDS the surface limit — the
-        # real (finite-thermal-mass) skin reaches failure seconds to tens of
-        # seconds later (τ ≈ ρcδ·ΔT/q̇).  Label accordingly.
-        crossings.append((int(ex[0]), "flux above surface melt/ablation limit"))
+    if is_ablator:
+        # === ABLATOR: recession criterion δ = ∫q̇dt / (ρ·H_eff) ===
+        # An ablator does NOT fail by exceeding a surface temperature — it
+        # ablates AT its surface temperature and carries the heat away.  The
+        # screening survival question is whether cumulative recession δ exceeds
+        # the available material depth (burn-through).  The effective heat of
+        # ablation H_eff already bundles reradiation and blowing; recession
+        # accrues only while the surface is ablating (T_eq ≥ the material's
+        # onset limit).  Grounded in Duffa §4.3/§4.7 (δ = Q/(ρ·H_eff)); the
+        # peak-surface T_eq is reported but is INFORMATIONAL, not a failure.
+        H_eff = float(mat.get("H_eff_MJ_kg") or 0.0) * 1e6     # J/kg
+        rho_abl = float(mat.get("density_kg_m3") or 0.0)
+        T_onset = float(mat["continuous_K"])                   # ablation/oxidation onset
+        depth = (float(recession_depth_m) if recession_depth_m and recession_depth_m > 0
+                 else float(nose_radius_m))
+        out["criteria"]["peak_surface"] = {
+            "margin": T_peak / mat["peak_K"], "limit_K": mat["peak_K"],
+            "T_eq_peak_K": T_peak,
+            "note": "informational for an ablator — it ablates at its surface "
+                    "temperature; exceeding T_eq is expected, not a failure"}
+        if H_eff > 0 and rho_abl > 0 and depth > 0:
+            q_recess = np.where(T_eq >= T_onset, q_surf, 0.0)  # incident load while ablating
+            delta_cum = np.cumsum(q_recess * dt) / (rho_abl * H_eff)   # cumulative recession (m)
+            delta_final = float(delta_cum[-1]) if delta_cum.size else 0.0
+            out["criteria"]["recession"] = {
+                "margin": delta_final / depth,
+                "recession_m": delta_final,
+                "recession_over_Rn": delta_final / max(float(nose_radius_m), 1e-6),
+                "depth_m": depth,
+                "H_eff_MJ_kg": mat.get("H_eff_MJ_kg"), "rho_kg_m3": rho_abl,
+                "basis": "effective-heat-of-ablation screen δ = ∫q̇dt/(ρ·H_eff) "
+                         "over the ablating portion (T_eq ≥ onset); burn-through "
+                         "when δ ≥ available depth (default = nose radius)"}
+            bt = np.where(delta_cum >= depth)[0]
+            if bt.size:
+                crossings.append((int(bt[0]), "burn-through (recession exceeds depth)"))
+        else:
+            out["warnings"].append(
+                "Ablator recession not evaluated (missing H_eff / density / depth) "
+                "— physical numbers only for this location.")
+    else:
+        # === RERADIATIVE / non-ablating: the existing screen (unchanged) ===
+        # 1. Peak surface temperature vs short-duration limit
+        out["criteria"]["peak_surface"] = {
+            "margin": T_peak / mat["peak_K"], "limit_K": mat["peak_K"],
+            "T_eq_peak_K": T_peak}
+        ex = np.where(T_eq > mat["peak_K"])[0]
+        if ex.size:
+            # T_eq is the zero-thermal-mass EQUILIBRIUM wall temperature, so this
+            # timestamp is when the flux first EXCEEDS the surface limit — the
+            # real (finite-thermal-mass) skin reaches failure seconds to tens of
+            # seconds later (τ ≈ ρcδ·ΔT/q̇).  Label accordingly.
+            crossings.append((int(ex[0]), "flux above surface melt/ablation limit"))
 
-    # 2. Heat-soak: dwell above the continuous (oxidation) limit
-    above = T_eq > mat["continuous_K"]
-    cum_above = np.cumsum(np.where(above, dt, 0.0))
-    time_above = float(cum_above[-1]) if cum_above.size else 0.0
-    out["criteria"]["soak"] = {
-        "margin": time_above / soak_dwell_s, "time_above_s": time_above,
-        "limit_K": mat["continuous_K"], "dwell_s": soak_dwell_s,
-        "basis": "empirical dwell-above-continuous-limit damage surrogate "
-                 "(not an oxidation-kinetics closure)"}
-    js = np.where(cum_above >= soak_dwell_s)[0]
-    if js.size:
-        crossings.append((int(js[0]), "TPS oxidation soak (glide)"))
+        # 2. Heat-soak: dwell above the continuous (oxidation) limit
+        above = T_eq > mat["continuous_K"]
+        cum_above = np.cumsum(np.where(above, dt, 0.0))
+        time_above = float(cum_above[-1]) if cum_above.size else 0.0
+        out["criteria"]["soak"] = {
+            "margin": time_above / soak_dwell_s, "time_above_s": time_above,
+            "limit_K": mat["continuous_K"], "dwell_s": soak_dwell_s,
+            "basis": "empirical dwell-above-continuous-limit damage surrogate "
+                     "(not an oxidation-kinetics closure)"}
+        js = np.where(cum_above >= soak_dwell_s)[0]
+        if js.size:
+            crossings.append((int(js[0]), "TPS oxidation soak (glide)"))
 
-    # 3. Lumped heat-sink burn-up (Reynerson): flux above the re-radiation cap
-    #    soaks into the body mass; melt when accumulated heat ≥ m·c·(T_melt−T₀).
-    if mass_kg > 0 and frontal_area_m2 > 0 and body_radius_m > 0:
-        q_body = _stag_flux(rho, V, body_radius_m)
-        q_cap = eps * SIGMA * mat["continuous_K"] ** 4          # re-radiation cap
-        q_excess = np.maximum(q_body - q_cap, 0.0)
-        Q_in = np.cumsum(q_excess * dt) * frontal_area_m2       # J absorbed by mass
-        Tm = mat["melt_K"] or mat["continuous_K"]
-        Q_melt = mass_kg * mat["c_J_kgK"] * (Tm - _T0)
-        out["criteria"]["heat_sink"] = {
-            "margin": Q_melt / max(float(Q_in[-1]), 1e-9),
-            "Q_absorbed_MJ": float(Q_in[-1]) / 1e6,
-            "Q_melt_MJ": Q_melt / 1e6, "melt_K": Tm}
-        jh = np.where(Q_in >= Q_melt)[0]
-        if jh.size:
-            crossings.append((int(jh[0]), "bare-body melt (heat sink)"))
+        # 3. Lumped heat-sink burn-up (Reynerson): flux above the re-radiation cap
+        #    soaks into the body mass; melt when accumulated heat ≥ m·c·(T_melt−T₀).
+        if mass_kg > 0 and frontal_area_m2 > 0 and body_radius_m > 0:
+            q_body = _stag_flux(rho, V, body_radius_m)
+            q_cap = eps * SIGMA * mat["continuous_K"] ** 4          # re-radiation cap
+            q_excess = np.maximum(q_body - q_cap, 0.0)
+            Q_in = np.cumsum(q_excess * dt) * frontal_area_m2       # J absorbed by mass
+            Tm = mat["melt_K"] or mat["continuous_K"]
+            Q_melt = mass_kg * mat["c_J_kgK"] * (Tm - _T0)
+            out["criteria"]["heat_sink"] = {
+                "margin": Q_melt / max(float(Q_in[-1]), 1e-9),
+                "Q_absorbed_MJ": float(Q_in[-1]) / 1e6,
+                "Q_melt_MJ": Q_melt / 1e6, "melt_K": Tm}
+            jh = np.where(Q_in >= Q_melt)[0]
+            if jh.size:
+                crossings.append((int(jh[0]), "bare-body melt (heat sink)"))
 
+    out["is_ablator"] = is_ablator
     if crossings:
         ci, mode = min(crossings, key=lambda c: c[0])
         out["compromise"] = {
@@ -289,6 +340,13 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         out["verdict"] = (f"COMPROMISED — {mode} at t={t[ci]:.0f}s, "
                           f"{alt[ci]/1000:.0f} km, {V[ci]/1000:.1f} km/s "
                           f"({mat['label']})")
+    elif is_ablator and "recession" in out["criteria"]:
+        # survives by ablation: report the recession it took to get there
+        rc = out["criteria"]["recession"]
+        out["verdict"] = (f"no screened burn-through ({mat['label']}); "
+                          f"recedes {rc['recession_m']*100:.1f} cm "
+                          f"({rc['recession_over_Rn']:.2f} R_n, "
+                          f"{rc['margin']:.0%} of {rc['depth_m']*100:.1f} cm depth)")
     else:
         out["verdict"] = f"no screened thermal failure ({mat['label']})"
     return out
@@ -306,16 +364,20 @@ BODY_FLUX_FRACTION = 0.13
 
 
 def _severity(res):
-    """Rank a single-location FOM result for binding-location selection.
-    inf  = outside no-ablation validity (worst — the model can't even clear it);
-    -inf = no material set (no verdict to bind on);
-    else the worst criterion margin (heat_sink margin is inverted: safe > 1)."""
+    """Rank a single-location FOM result for binding-location selection
+    (higher = closer to / past failure; ≥1 means a criterion is exceeded).
+    -inf = no material set (no verdict to bind on)."""
+    if not res or not res.get("material"):
+        return float("-inf")
+    crit = res.get("criteria") or {}
+    # Ablator: severity is the recession margin (δ/depth); T_eq and peak_surface
+    # are informational, NOT failures — an ablator is meant to run hot and recede.
+    if res.get("is_ablator") and "recession" in crit:
+        return crit["recession"]["margin"]
+    # Reradiative: outside-validity is worst, else the worst criterion margin.
     if res.get("T_eq_peak_K", 0.0) >= NOTHING_SURVIVES_K:
         return float("inf")
-    if not res.get("material"):
-        return float("-inf")
     worst = float("-inf")
-    crit = res.get("criteria") or {}
     if "peak_surface" in crit:
         worst = max(worst, crit["peak_surface"]["margin"])
     if "soak" in crit:
@@ -330,7 +392,8 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                              body_radius_m=0.0, emissivity=0.85,
                              nose_material="", body_material="",
                              mass_kg=0.0, frontal_area_m2=0.0,
-                             soak_dwell_s=120.0,
+                             soak_dwell_s=120.0, nose_solid_depth_m=0.0,
+                             body_thickness_m=0.0,
                              body_flux_fraction=BODY_FLUX_FRACTION):
     """Two-location screening verdict: the SAME evaluator run at the nose
     (stagnation flux, nose material) and at the body acreage
@@ -351,10 +414,15 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
       locations        : {'nose': <full result>, 'body': <full result>}
     and compromise (when present) gains a 'location' key.
     """
+    # Recession depth per location (only used if the material is an ablator):
+    #   nose  → solid-tip depth (default = nose radius, a conservative screen);
+    #   body  → the designed TPS-layer thickness (MUST be passed explicitly —
+    #           the body call's inflated effective radius is not a depth).
     nose = heating_figure_of_merit(
         t, rho, V, alt, rng, nose_radius_m=nose_radius_m, body_radius_m=0.0,
         emissivity=emissivity, material=nose_material, mass_kg=0.0,
-        frontal_area_m2=0.0, soak_dwell_s=soak_dwell_s)
+        frontal_area_m2=0.0, soak_dwell_s=soak_dwell_s,
+        recession_depth_m=nose_solid_depth_m)
     f = min(max(float(body_flux_fraction), 1e-3), 1.0)
     # Acreage reference scale: the flank/acreage boundary layer is set by the
     # BODY scale and contains no tip-radius term — referencing the fraction to
@@ -364,11 +432,15 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     # heat_sink criterion already uses); sharp tip and blunt capsule then give
     # the same acreage estimate for the same body.
     _R_ref = body_radius_m if body_radius_m > 0.0 else nose_radius_m
+    # Body ablator depth: the designed layer thickness, or a 2 cm screening
+    # default when the RV does not specify one (flagged in warnings below).
+    _body_depth = float(body_thickness_m) if body_thickness_m and body_thickness_m > 0 else 0.02
     body = heating_figure_of_merit(
         t, rho, V, alt, rng, nose_radius_m=_R_ref / f ** 2,
         body_radius_m=body_radius_m, emissivity=emissivity,
         material=body_material, mass_kg=mass_kg,
-        frontal_area_m2=frontal_area_m2, soak_dwell_s=soak_dwell_s)
+        frontal_area_m2=frontal_area_m2, soak_dwell_s=soak_dwell_s,
+        recession_depth_m=_body_depth)
 
     # Binding location: validity breach > earlier compromise > worst margin.
     sn, sb = _severity(nose), _severity(body)
@@ -419,11 +491,24 @@ def _loc_status(res):
     T = float(res.get("T_eq_peak_K", 0.0) or 0.0)
     q = float(res.get("q_peak_MW_m2", 0.0) or 0.0)
     mat = res.get("material", "")
-    if T >= NOTHING_SURVIVES_K:
-        return ("analysis", "⚠", T, q, "peak T_eq beyond the no-ablation model — needs ablation analysis")
     if not mat:
         return ("none", "–", T, q, "no TPS material set")
     cmp = res.get("compromise")
+    if res.get("is_ablator"):
+        # Ablator: judged by recession, not T_eq — high T_eq is expected, so no
+        # "beyond the model" branch here.  Fail = burn-through; else survives
+        # with a stated recession.
+        if cmp:
+            return ("fail", "✗", T, q, f"{cmp['mode']} at t={cmp['t_s']:.0f} s")
+        rc = (res.get("criteria") or {}).get("recession")
+        if rc:
+            return ("survive", "✓", T, q,
+                    f"ablates: recedes {rc['recession_m']*100:.1f} cm "
+                    f"({rc['recession_over_Rn']:.2f} R_n, {rc['margin']:.0%} of depth)")
+        return ("survive", "✓", T, q, "no screened burn-through")
+    # Reradiative (non-ablating): T_eq beyond the no-ablation model is unassessable.
+    if T >= NOTHING_SURVIVES_K:
+        return ("analysis", "⚠", T, q, "peak T_eq beyond the no-ablation model — needs ablation analysis")
     if cmp:
         return ("fail", "✗", T, q, f"{cmp['mode']} at t={cmp['t_s']:.0f} s")
     return ("survive", "✓", T, q, "no screened thermal failure")

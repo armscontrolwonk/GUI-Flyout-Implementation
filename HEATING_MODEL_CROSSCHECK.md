@@ -558,6 +558,20 @@ outer surface material of the body"** and `structure_material` as **"what is beh
   `body_tps_material` already governs the binding spot. A dedicated control-surface slot is a later
   refinement, not needed for the first build.
 
+### 10.2a IMPLEMENTED — ablator recession criterion (root-cause fix)
+An independent audit found the two-location screen used the **no-ablation** equilibrium model
+(`peak_surface` T_eq vs limit, + `soak`) for **ablators** too — the wrong physics for the class that
+survives *by receding* (SWERVE's bare carbon nose, most ballistic RVs). Symptom: fed documented
+conditions (SWERVE ~Mach 12), the model returned a **false "fails"/"needs-analysis,"** and only read
+"survives" when an under-energized reconstruction kept flux low. Fix (`heating.py`): materials with
+`is_ablator=True` are now judged by **recession** — `δ = ∫q̇dt/(ρ·H_eff)` accrued while ablating
+(`T_eq ≥ onset`), **burn-through when δ ≥ available depth** (nose: solid-tip depth, default `R_n`;
+body: `body_tps_thickness_m`). Ablators **skip the `NOTHING_SURVIVES_K` guard** (sitting above it is
+how they survive); `peak_surface`/T_eq become *informational*. Reradiative materials (RCC, C/SiC,
+UHTC, metals) are unchanged. Verified: SWERVE's carbon nose now survives across the documented
+Mach 8–14 band (recedes 0.11 → 0.64 `R_n`, never burning through), matching the flight record, instead
+of flipping to a false fail at ~Mach 11.
+
 ### 10.2 Shape-change threshold — grounded in flight data
 The nose verdict uses `δ/R_n` (geometry-anchored). Thresholds from real data:
 - **Reentry-F (Berry, NASA CR-154044):** R_n **0.10 → 0.171 in (+71%, ≈0.7 R_n radial blunting)**,
