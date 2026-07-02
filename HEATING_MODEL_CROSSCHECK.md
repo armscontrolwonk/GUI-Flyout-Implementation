@@ -338,6 +338,19 @@ binding limit is the **inner-surface temperature** (their 393 K) — the bondlin
   **regime** itself — flag that glide-time neighborhood as "regime-ambiguous under
   transition." Away from it (most 300 s / 3000 s cases) the regime call is solid.
 
+**IMPLEMENTED — `tps_ladder.py` (the NAS/NRC-2008 seconds→class tool).** The seconds→tier ladder is
+now a module reproducing the **NRC 2008 CPGS reentry-body lineage (pp. 119-121)**, per the approach
+docs **D-2 (lineage)** and **D-3 (ablation↔reradiation step)**. It is a **step function with ONE
+materials line**, not a per-second material ladder — the report's own point: *the 300 s and 800 s
+cases share carbon-phenolic with the tens-of-s CTM; only the 3,000 s case is advanced.* Anchors it
+reproduces exactly: CTM ~tens of s / Mk-500 RB **300 s** / AMaRV **800 s** → CONVENTIONAL
+carbon-phenolic (ablation-limited, binding `Q`); FALCON **3,000 s** → ADVANCED carbon-carbon
+(reradiation-limited, binding `T_w`); HTV-2 **3,600 s** (1 h soak) → FRONTIER C/C + UHTC LE. The
+`nas_tps_tier(glide_time_s)` lookup places any glide/reentry duration on this ladder; Thrusty feeds it
+the reentry-arc span (`heating_fom['duration_s']`), surfaced in the **Heating Survivability** panel.
+Peak flux is velocity-locked, so the material step is driven by **duration (load/soak)**, not a hotter
+peak — the physics of D-glide_heating.
+
 ---
 
 ## 6. Benchmark anchors — status
