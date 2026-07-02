@@ -191,10 +191,12 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     Q_area = (float(np.sum(0.5 * (q_surf[1:] + q_surf[:-1]) * np.diff(t)))
               if q_surf.size > 1 else 0.0)
 
+    _duration_s = float(t[-1] - t[0]) if np.asarray(t).size > 1 else 0.0
     out = {
         "q_peak_MW_m2": q_peak / 1e6,
         "T_eq_peak_K": T_peak,
         "integrated_load_MJ_m2": Q_area / 1e6,
+        "duration_s": _duration_s,       # reentry/glide-arc span (feeds the TPS ladder)
         "benchmark": _nearest_benchmark(q_peak / 1e6, "q_MW"),
         "benchmark_load": _nearest_benchmark(Q_area / 1e6, "Q_MJ"),
         "material": material,
@@ -466,5 +468,6 @@ def survivability_summary(fom):
         lines=lines,
         nose_q_MW=nose.get("q_peak_MW_m2"),
         load_MJ=nose.get("integrated_load_MJ_m2"),
+        duration_s=fom.get("duration_s") or nose.get("duration_s"),
         notes=list(fom.get("warnings", [])),
     )

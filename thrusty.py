@@ -4992,6 +4992,14 @@ class MissileFlyoutApp(tk.Tk):
                           L["mark"], L["detail"], binds))
 
         body = "\n".join(out) + "\n\n"
+
+        # NRC-2008 TPS-class ladder, with this flight's glide duration placed on it.
+        dur = s.get("duration_s")
+        if dur and dur > 0:
+            import tps_ladder
+            body += "─" * 60 + "\n"
+            body += tps_ladder.format_ladder(dur) + "\n\n"
+
         body += ("How to read this:\n"
                  "  • A rough 'likely' survive/fail screen, not a certified\n"
                  "    TPS verdict.  The verdict is set by the worst location.\n")
