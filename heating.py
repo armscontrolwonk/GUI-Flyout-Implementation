@@ -242,7 +242,11 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         "T_eq_peak_K": T_peak}
     ex = np.where(T_eq > mat["peak_K"])[0]
     if ex.size:
-        crossings.append((int(ex[0]), "surface melt/ablation (pull-out)"))
+        # T_eq is the zero-thermal-mass EQUILIBRIUM wall temperature, so this
+        # timestamp is when the flux first EXCEEDS the surface limit — the
+        # real (finite-thermal-mass) skin reaches failure seconds to tens of
+        # seconds later (τ ≈ ρcδ·ΔT/q̇).  Label accordingly.
+        crossings.append((int(ex[0]), "flux above surface melt/ablation limit"))
 
     # 2. Heat-soak: dwell above the continuous (oxidation) limit
     above = T_eq > mat["continuous_K"]
