@@ -2798,7 +2798,8 @@ def integrate_trajectory(params: MissileParams,
                         nose_material=_erv_ms.nose_material(),
                         body_material=_erv_ms.body_material(),
                         mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
-                        frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
+                        frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0),
+                        body_thickness_m=float(getattr(_erv_ms, 'body_tps_thickness_m', 0.0) or 0.0))
                 else:
                     _heating_fom = heating.heating_figure_of_merit(
                         t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
