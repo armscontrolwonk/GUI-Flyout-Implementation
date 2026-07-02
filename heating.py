@@ -339,7 +339,8 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     else worst margin.
 
     The acreage call reuses heating_figure_of_merit unchanged by exploiting
-    q̇ ∝ 1/√R: a flux fraction f is exactly an effective radius R_n/f².
+    q̇ ∝ 1/√R: a flux fraction f is exactly an effective radius R_ref/f²,
+    where R_ref is the BODY radius (flank heating carries no tip-radius term).
     The lumped heat-sink criterion (mass/frontal-area) runs on the body call
     only (it is a whole-body bulk criterion; running it at the nose too would
     double-count).
@@ -355,8 +356,16 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         emissivity=emissivity, material=nose_material, mass_kg=0.0,
         frontal_area_m2=0.0, soak_dwell_s=soak_dwell_s)
     f = min(max(float(body_flux_fraction), 1e-3), 1.0)
+    # Acreage reference scale: the flank/acreage boundary layer is set by the
+    # BODY scale and contains no tip-radius term — referencing the fraction to
+    # the sharp-tip stagnation flux would inflate body heating by
+    # sqrt(R_body/R_n) (3.8x for SWERVE's 1.7 cm tip on a 24 cm body).  So the
+    # fraction multiplies the body-scale stagnation flux (same reference the
+    # heat_sink criterion already uses); sharp tip and blunt capsule then give
+    # the same acreage estimate for the same body.
+    _R_ref = body_radius_m if body_radius_m > 0.0 else nose_radius_m
     body = heating_figure_of_merit(
-        t, rho, V, alt, rng, nose_radius_m=nose_radius_m / f ** 2,
+        t, rho, V, alt, rng, nose_radius_m=_R_ref / f ** 2,
         body_radius_m=body_radius_m, emissivity=emissivity,
         material=body_material, mass_kg=mass_kg,
         frontal_area_m2=frontal_area_m2, soak_dwell_s=soak_dwell_s)
@@ -386,9 +395,11 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         out["compromise"] = dict(binding["compromise"], location=name)
     out["warnings"] = list(binding.get("warnings", [])) + [
         f"Body acreage flux modeled as a single screening fraction "
-        f"({f:.2f} × nose stagnation; Lu/Shi & Zhang 2024 cone-tail ratio) — "
-        f"not a heating distribution; windward/turbulent flank heating can "
-        f"run 3–5× higher than the laminar value used here.",
+        f"({f:.2f} × body-scale stagnation flux; Lu/Shi & Zhang 2024 cone-tail "
+        f"ratio, referenced to the body radius so tip sharpness does not "
+        f"inflate acreage heating) — not a heating distribution; windward/"
+        f"turbulent flank heating can run 3–5× higher than the laminar value "
+        f"used here.",
     ]
     return out
 
