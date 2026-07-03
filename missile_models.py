@@ -2204,11 +2204,19 @@ def _minotaur_4_htv2():
     )
 
 
-def _strypi_viii_r():
+def _strypi_viii_r(castor2: bool = False):
     # STRYPI VIII R — Sandia reentry-vehicle carrier (SWERVE flights, 1979-1985,
     # Kauai Test Facility; flight 3 reentered near Johnston Island, ~1,180 km).
     # Two propulsive stages + two strap-on boosters:
-    #   Stage 1 (core): Thiokol TX-33-39 Castor I sustainer, fin-stabilized, 31" body.
+    #   Stage 1 (core): Thiokol Castor sustainer, fin-stabilized, 31" body.
+    #                   castor2=False -> TX-33-39 Castor I (default);
+    #                   castor2=True  -> TX-354-4 Castor II, same envelope and
+    #                   mating features (Wente): 2,197,000 lb-sec vac in 38.5 s,
+    #                   14% more impulse, "about 1,100 ft/sec increase in
+    #                   reentry velocity".  Prop 8,220 lbm / burnout 1,444 lbm
+    #                   from Bryant 1989 (AIAA 89-2422) Table V; grain is a
+    #                   cylindrical perforation with two circumferential slots
+    #                   (neutral) -> "rod_tube" profile.
     #   Strap-ons:      2x Thiokol TE-M-29 Recruit, light at liftoff, jettison ~3 s.
     #   Stage 2:        Aerojet Alcor IB (= the Strypi VII R 2nd stage; VIII R omits
     #                   the VII R's BE-3B-1 third stage per Sandia layout, Fig. 3).
@@ -2242,24 +2250,55 @@ def _strypi_viii_r():
         mach_table=[], cd_table=[],
     )
 
-    # Stage 1 core dry = Castor empty 1427 + fins 605.3 + adapter 101.5 + Recruit
+    # Castor-choice numbers.  Castor I: Wente Table 5 + Bryant Table IV.
+    # Castor II (TX-354-4): prop 8,220 lbm, burnout 1,444 lbm (Bryant Table V);
+    # grain a cylindrical perforation with two circumferential slots (neutral)
+    # -> "rod_tube".  Wente states Castor II delivers "14 percent more" impulse
+    # than Castor I and "about 1,100 ft/sec increase in reentry velocity".
+    #
+    # IMPULSE CONVENTION: Castor I's thrust_N (239,925 N) is a sea-level-effective
+    # average (Bryant Table IV lists 1,639,000 lb-sec "sea level").  The model
+    # treats thrust_N as vacuum thrust and subtracts P_amb*A_exit, so both motors
+    # must use the SAME reference.  Rather than pair Castor I's SL-effective value
+    # with Castor II's raw vacuum impulse (2,197,000 lb-sec -> a spurious +34%),
+    # Castor II is set to +14% of the Castor I model's own impulse on the same
+    # basis, reproducing Wente's documented +14% / +1,100 fps.
+    if castor2:
+        castor_prop_kg   = 8220.0 * 0.453592     # 3728 kg
+        castor_empty_lbm = 1444.0
+        castor_burn_s    = 38.5
+        # +14% of Castor I modeled impulse (239,925 N x 30.5 s), same SL-eff basis.
+        castor_thrust_n  = 1.14 * 239_925 * 30.5 / castor_burn_s   # ~216,600 N (48,700 lbf)
+        castor_isp_s     = castor_thrust_n * castor_burn_s / (castor_prop_kg * 9.80665)  # ~228 s
+        castor_grain     = "rod_tube"            # neutral CP + 2 circumferential slots
+        castor_note      = "Castor II"
+    else:
+        castor_prop_kg   = 3324.0                # 7328 lbm
+        castor_empty_lbm = 1427.0
+        castor_thrust_n  = 239_925               # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
+        castor_burn_s    = 30.5
+        castor_isp_s     = 224.0
+        castor_grain     = "star"                # 5-point star (Bryant 1989, Table IV)
+        castor_note      = "Castor I"
+
+    # Stage 1 core dry = Castor empty + fins 605.3 + adapter 101.5 + Recruit
     # track 113.9 lbm.  (Recruit motor inert/prop handled by the booster_* fields.)
-    core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * 0.453592   # ~= 1019 kg
+    core_dry_kg = (castor_empty_lbm + 605.3 + 101.5 + 113.9) * 0.453592
     _shroud_kg = 29.1 * 0.453592                 # ascent heat shield (Wente), 13.2 kg
     return MissileParams(
-        name="Strypi VIII R",
+        name="Strypi VIII R (Castor II)" if castor2 else "Strypi VIII R",
         # core wet + shield + (S2+RV); strap-on Recruits added via booster_* fields.
-        mass_initial=(3324.0 + core_dry_kg + _shroud_kg) + stage2.mass_initial,
-        mass_propellant=3324.0,                  # 7328 lbm Castor I
+        mass_initial=(castor_prop_kg + core_dry_kg + _shroud_kg) + stage2.mass_initial,
+        mass_propellant=castor_prop_kg,
         mass_final=core_dry_kg,                  # jettisoned after Castor burnout
         diameter_m=0.787,                        # 31 in
         length_m=8.2,                            # Castor + Alcor + SWERVE stack (approx)
-        thrust_N=239_925,                        # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
-        thrust_peak_N=239_925 / grain_fill_factor("star"),  # preserve total impulse
-        grain_type="star",                       # Castor I: 5-point star (Bryant 1989, Table IV)
-        solid_motor=True,                        # Thiokol TX-33-39 Castor I — solid
-        burn_time_s=30.5,
-        isp_s=224.0,
+        thrust_N=castor_thrust_n,
+        thrust_peak_N=castor_thrust_n / grain_fill_factor(castor_grain),  # preserve total impulse
+        grain_type=castor_grain,
+        solid_motor=True,                        # Thiokol Castor — solid
+        burn_time_s=castor_burn_s,
+        isp_s=castor_isp_s,
         nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
         guidance="pitch_program",
         # Ascent heat shield: filament-wound fiberglass/phenolic fairing over the
@@ -2516,6 +2555,7 @@ MISSILE_DB = {
     "AUR+HGB":           _aur_hgb,
     "Minotaur-IV + HTV-2": _minotaur_4_htv2,
     "Strypi VIII R":     _strypi_viii_r,
+    "Strypi VIII R (Castor II)": lambda: _strypi_viii_r(castor2=True),
     "Strypi VII R":      _strypi_vii_r,
     "STARS-1":           _stars_1,
 }
