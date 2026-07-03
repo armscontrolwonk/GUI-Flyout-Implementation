@@ -2235,6 +2235,7 @@ def _strypi_viii_r():
         isp_s=283.0,
         nozzle_exit_area_m2=0.141,               # 1.5175 ft^2
         guidance="pitch_program",
+        solid_motor=True,                        # Aerojet Alcor IB — solid
         burnout_angle_deg=5.0,
         stage_burnout_angle_deg=5.0,
         coast_time_s=0.0,
@@ -2244,18 +2245,29 @@ def _strypi_viii_r():
     # Stage 1 core dry = Castor empty 1427 + fins 605.3 + adapter 101.5 + Recruit
     # track 113.9 lbm.  (Recruit motor inert/prop handled by the booster_* fields.)
     core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * 0.453592   # ~= 1019 kg
+    _shroud_kg = 29.1 * 0.453592                 # ascent heat shield (Wente), 13.2 kg
     return MissileParams(
         name="Strypi VIII R",
-        mass_initial=(3324.0 + core_dry_kg) + stage2.mass_initial,  # core wet + (S2+RV); boosters added separately
+        # core wet + shield + (S2+RV); strap-on Recruits added via booster_* fields.
+        mass_initial=(3324.0 + core_dry_kg + _shroud_kg) + stage2.mass_initial,
         mass_propellant=3324.0,                  # 7328 lbm Castor I
         mass_final=core_dry_kg,                  # jettisoned after Castor burnout
         diameter_m=0.787,                        # 31 in
         length_m=8.2,                            # Castor + Alcor + SWERVE stack (approx)
         thrust_N=239_925,                        # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
+        thrust_peak_N=239_925 / grain_fill_factor("star"),  # preserve total impulse
+        grain_type="star",                       # Castor I: 5-point star (Bryant 1989, Table IV)
+        solid_motor=True,                        # Thiokol TX-33-39 Castor I — solid
         burn_time_s=30.5,
         isp_s=224.0,
         nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
         guidance="pitch_program",
+        # Ascent heat shield: filament-wound fiberglass/phenolic fairing over the
+        # payload, jettisoned at first-stage separation (Wente).  Mass only — the
+        # Castor core (0.787 m) is the ascent drag reference, not the narrow
+        # fairing, so shroud_diameter_m is left 0 to keep the core area.
+        shroud_mass_kg=_shroud_kg,
+        shroud_jettison_alt_km=45.0,             # dropped at S1 sep (above ~40 km burnout)
         # SWERVE flight-3 trajectory is flown by passing launch_elevation_deg~40
         # and burnout_angle_deg~32 to integrate_trajectory (Kauai->Johnston,
         # ~1,180 km, ~160 s reentry, Mach ~12).  These factory defaults are the
@@ -2426,6 +2438,7 @@ def _strypi_vii_r():
         burn_time_s=7.8, isp_s=276.0,
         nozzle_exit_area_m2=0.0755,              # 0.8125 ft^2
         guidance="pitch_program",
+        solid_motor=True,                        # Hercules BE-3B-1 — solid
         burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
         coast_time_s=0.0, mach_table=[], cd_table=[],
     )
@@ -2440,6 +2453,7 @@ def _strypi_vii_r():
         thrust_N=42_852, burn_time_s=26.5, isp_s=283.0,
         nozzle_exit_area_m2=0.141,               # 1.5175 ft^2
         guidance="pitch_program",
+        solid_motor=True,                        # Aerojet Alcor IB — solid
         burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
         coast_time_s=7.5,                        # Alcor burnout 254.5 -> BE-3B ignite 262 s
         stage2=stage3,
@@ -2451,13 +2465,17 @@ def _strypi_vii_r():
     # (217 lbm) carried through boost/coast and jettisoned before S2 ignite.
     core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * _LB   # ~1019 kg
     acs_kg = 217.0 * _LB                                    # ~98.4 kg, jettisoned before S2
+    shroud_kg = 29.1 * _LB                                  # ascent heat shield (Wente), 13.2 kg
     return MissileParams(
         name="Strypi VII R",
-        mass_initial=(7328.0 * _LB + core_dry_kg + acs_kg) + stage2.mass_initial,
+        mass_initial=(7328.0 * _LB + core_dry_kg + acs_kg + shroud_kg) + stage2.mass_initial,
         mass_propellant=7328.0 * _LB,            # 7328 lbm Castor I -> 3324 kg
         mass_final=core_dry_kg + acs_kg,         # core dry + ACS, jettisoned before S2
         diameter_m=0.787, length_m=11.9,         # 467.5 in overall (Wente)
         thrust_N=239_925,                        # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
+        thrust_peak_N=239_925 / grain_fill_factor("star"),  # preserve total impulse
+        grain_type="star",                       # Castor I: 5-point star (Bryant 1989, Table IV)
+        solid_motor=True,                        # Thiokol TX-33-39 Castor I — solid
         burn_time_s=30.5, isp_s=224.0,
         nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
         guidance="pitch_program",
@@ -2472,6 +2490,11 @@ def _strypi_vii_r():
         payload_kg=rv.mass_kg,
         rv_separates=True, rv=rv,
         stage2=stage2,
+        # Ascent heat shield jettisoned at first-stage separation (Wente).  Mass
+        # only; the 0.787 m Castor core sets the ascent drag reference, so
+        # shroud_diameter_m stays 0 to keep the core area (the fairing is narrower).
+        shroud_mass_kg=shroud_kg,
+        shroud_jettison_alt_km=45.0,             # dropped at S1 sep (above ~40 km burnout)
         # Strap-on Recruits (2x TE-M-29): 59,723 lb-sec each, 35,222 lbf, Isp 223.
         n_boosters=2,
         booster_thrust_n=156_680, booster_burn_time_s=1.7,
