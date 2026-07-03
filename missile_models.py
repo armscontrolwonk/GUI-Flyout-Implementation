@@ -2288,10 +2288,12 @@ def _strypi_viii_r(castor2: bool = False):
         # fairing, so shroud_diameter_m is left 0 to keep the core area.
         shroud_mass_kg=_shroud_kg,
         shroud_jettison_alt_km=45.0,             # dropped at S1 sep (above ~40 km burnout)
-        # SWERVE flight-3 trajectory is flown by passing launch_elevation_deg~40
-        # and burnout_angle_deg~32 to integrate_trajectory (Kauai->Johnston,
-        # ~1,180 km, ~160 s reentry, Mach ~12).  These factory defaults are the
-        # generic lofted-suborbital starting values.
+        # Strypi is rail-launched at 73 deg elevation (Wente: 20-ft rail,
+        # "minimum elevation angle of 73 degrees"), NOT vertical.  This is the
+        # default in the GUI's Launch elev. field and is overridable per flight.
+        # burnout_angle_deg below is the default loft target the GUI overrides;
+        # tune it to place apogee (Kauai->Johnston ~1,180 km, ~160 s reentry).
+        launch_elevation_deg=73.0,
         burnout_angle_deg=80.0,
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0,
@@ -2498,9 +2500,12 @@ def _strypi_vii_r():
         burn_time_s=30.5, isp_s=224.0,
         nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
         guidance="pitch_program",
-        # Wente design point: 73 deg launcher elevation from Kauai; long coast
-        # (S1 burnout 43 s -> ACS sep 224 s) while the ACS orients the spinning
-        # upper stages, then S2/S3 fire near apogee.  Reentry gamma -30 deg.
+        # Wente design point: 73 deg launcher elevation from Kauai (20-ft rail),
+        # NOT vertical; long coast (S1 burnout 43 s -> ACS sep 224 s) while the
+        # ACS orients the spinning upper stages, then S2/S3 fire near apogee.
+        # Reentry gamma -30 deg.  launch_elevation_deg is the GUI Launch elev.
+        # default and is overridable per flight.
+        launch_elevation_deg=73.0,
         burnout_angle_deg=30.0,
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0, stage_turn_stop_s=25.0,
