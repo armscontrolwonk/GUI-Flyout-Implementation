@@ -2382,6 +2382,103 @@ def _stars_1():
     )
 
 
+def _strypi_vii_r():
+    # STRYPI VII R — Sandia THREE-stage solid RV carrier (Wente, "The Strypi
+    # VII R Launch Vehicle," AIAA/Sandia, 1982).  Distinct from the two-stage
+    # Strypi VIII-R that carried the heavier SWERVE II (Sandia Lab News,
+    # 23 Jan 1981: "2-stage STRYPI VIII-R", PMRF, Sept 1980).
+    #   Stage 1 (core): Thiokol TX-33-39 Castor I + 2x TE-M-29 Recruit strap-ons
+    #   ACS section:    spinning attitude-control unit, jettisoned before S2 ignite
+    #   Stage 2:        Aerojet Alcor IB
+    #   Stage 3:        Hercules BE-3B-1
+    #   Payload:        100 lbm generic RV (Wente design point)
+    # Masses from Wente Table 5 (100 lb RV), lbm->kg x0.453592; impulses/thrusts
+    # from the motor tables.  DOCUMENTED validation trajectory (Wente Figs 7-8,
+    # 73 deg launch from Kauai): S1 burnout 43 s / 134 kft / 6262 fps; ACS sep
+    # 224 s / 587 kft; Alcor +8677 fps; BE-3B +7028 fps, burnout 402 kft;
+    # RV sep 278 s / 326 kft; RE-ENTRY 300 kft, 19,544 fps (~Mach 18), gamma -30,
+    # impact 284 nm.  Use this as the launch-vehicle performance check.
+    _LB = 0.453592
+
+    # Generic 100 lbm test RV (RCTV/MTV/NRV class) — not SWERVE.
+    rv = RVParams(
+        name="Strypi VII R RV (100 lbm)",
+        mass_kg=100.0 * _LB, beta_kg_m2=8000.0,
+        shape="cone", diameter_m=0.30, length_m=1.0, nose_radius_m=0.02,
+        tps_material="carbon_phenolic",
+        nose_tps_material="carbon_carbon", body_tps_material="carbon_phenolic",
+    )
+
+    # Stage 3 — Hercules BE-3B-1: 60,514 lb-sec vac, ~7.8 s, 7,700 lbf, Isp ~276.
+    stage3 = MissileParams(
+        name="BE-3B-1 (Strypi 3rd stage)",
+        mass_initial=317.4 * _LB + rv.mass_kg,   # 3rd-stage loaded 317.4 lbm + RV
+        mass_propellant=219.1 * _LB,             # BE-3B prop
+        mass_final=(317.4 - 219.1) * _LB,        # 3rd-stage inert (struct+motor case), jettisoned
+        diameter_m=0.33, length_m=1.2,
+        thrust_N=34_251,                         # 7,700 lbf
+        burn_time_s=7.8, isp_s=276.0,
+        nozzle_exit_area_m2=0.0755,              # 0.8125 ft^2
+        guidance="pitch_program",
+        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
+        coast_time_s=0.0, mach_table=[], cd_table=[],
+    )
+
+    # Stage 2 — Aerojet Alcor IB: 257,900 lb-sec vac, ~26.5 s, 9,634 lbf, Isp 283.
+    stage2 = MissileParams(
+        name="Alcor IB (Strypi 2nd stage)",
+        mass_initial=1105.0 * _LB + stage3.mass_initial,  # Alcor loaded 1105 lbm + (S3+RV)
+        mass_propellant=912.3 * _LB,
+        mass_final=(1105.0 - 912.3) * _LB,       # Alcor inert, jettisoned
+        diameter_m=0.512, length_m=2.0,
+        thrust_N=42_852, burn_time_s=26.5, isp_s=283.0,
+        nozzle_exit_area_m2=0.141,               # 1.5175 ft^2
+        guidance="pitch_program",
+        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
+        coast_time_s=7.5,                        # Alcor burnout 254.5 -> BE-3B ignite 262 s
+        stage2=stage3,
+        mach_table=[], cd_table=[],
+    )
+
+    # Stage 1 core dry (same first stage as VIII-R): Castor empty 1427 + fins
+    # 605.3 + adapter 101.5 + Recruit track 113.9 lbm; plus the ACS section
+    # (217 lbm) carried through boost/coast and jettisoned before S2 ignite.
+    core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * _LB   # ~1019 kg
+    acs_kg = 217.0 * _LB                                    # ~98.4 kg, jettisoned before S2
+    return MissileParams(
+        name="Strypi VII R",
+        mass_initial=(7328.0 * _LB + core_dry_kg + acs_kg) + stage2.mass_initial,
+        mass_propellant=7328.0 * _LB,            # 7328 lbm Castor I -> 3324 kg
+        mass_final=core_dry_kg + acs_kg,         # core dry + ACS, jettisoned before S2
+        diameter_m=0.787, length_m=11.9,         # 467.5 in overall (Wente)
+        thrust_N=239_925,                        # 53,940 lbf avg (1,643,400 lb-sec / 30.5 s)
+        burn_time_s=30.5, isp_s=224.0,
+        nozzle_exit_area_m2=0.286,               # 3.0765 ft^2
+        guidance="pitch_program",
+        # Wente design point: 73 deg launcher elevation from Kauai; long coast
+        # (S1 burnout 43 s -> ACS sep 224 s) while the ACS orients the spinning
+        # upper stages, then S2/S3 fire near apogee.  Reentry gamma -30 deg.
+        burnout_angle_deg=30.0,
+        loft_angle_rate_deg_s=2.0,
+        stage_turn_start_s=0.0, stage_turn_stop_s=25.0,
+        stage_burnout_angle_deg=30.0,
+        coast_time_s=182.0,                      # 43 s S1 burnout -> ~225 s S2 ignite
+        payload_kg=rv.mass_kg,
+        rv_separates=True, rv=rv,
+        stage2=stage2,
+        # Strap-on Recruits (2x TE-M-29): 59,723 lb-sec each, 35,222 lbf, Isp 223.
+        n_boosters=2,
+        booster_thrust_n=156_680, booster_burn_time_s=1.7,
+        booster_inert_kg=47.5, booster_prop_kg=121.5, booster_isp_s=223.0,
+        booster_diam_m=0.229, booster_nozzle_area_m2=0.02,
+        booster_core_delay_s=0.0,
+        has_fins=True, n_fins=4,
+        fin_root_chord_m=1.270, fin_tip_chord_m=0.798,
+        fin_span_m=1.118, fin_sweep_deg=45.0, fin_thickness_m=0.102,
+        mach_table=[], cd_table=[],
+    )
+
+
 MISSILE_DB = {
     # Packaged defaults — always available.
     # Additional missiles are loaded at runtime from custom_missiles.json
@@ -2389,6 +2486,7 @@ MISSILE_DB = {
     "AUR+HGB":           _aur_hgb,
     "Minotaur-IV + HTV-2": _minotaur_4_htv2,
     "Strypi VIII R":     _strypi_viii_r,
+    "Strypi VII R":      _strypi_vii_r,
     "STARS-1":           _stars_1,
 }
 
