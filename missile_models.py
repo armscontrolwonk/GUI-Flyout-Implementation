@@ -1528,7 +1528,6 @@ def _scud_b():
         loft_angle_rate_deg_s=1.348,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=31.4,
-        stage_burnout_angle_deg=47.6563,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1553,7 +1552,6 @@ def _al_hussein():
         loft_angle_rate_deg_s=1.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=45.0,
-        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1578,7 +1576,6 @@ def _nodong():
         loft_angle_rate_deg_s=1.5,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=30.0,
-        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1603,7 +1600,6 @@ def _taepodong_i():
         guidance="pitch_program",
         burnout_angle_deg=45.0,
         loft_angle_rate_deg_s=1.0,
-        stage_burnout_angle_deg=45.0,   # hold at stage-1 burnout angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1628,7 +1624,6 @@ def _taepodong_i():
         loft_angle_rate_deg_s=1.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=45.0,
-        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -1656,7 +1651,6 @@ def _shahab3():
         loft_angle_rate_deg_s=1.5,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=30.0,
-        stage_burnout_angle_deg=45.0,
         mach_table=mach,
         cd_table=cd,
     )
@@ -1679,7 +1673,6 @@ def _generic_icbm():
         guidance="pitch_program",
         burnout_angle_deg=30.0,
         loft_angle_rate_deg_s=0.5,
-        stage_burnout_angle_deg=30.0,
         mach_table=mach,
         cd_table=cd,
     )
@@ -1699,7 +1692,6 @@ def _generic_icbm():
         loft_angle_rate_deg_s=0.5,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=120.0,
-        stage_burnout_angle_deg=30.0,
         mach_table=mach,
         cd_table=cd,
         stage2=stage2,
@@ -1726,7 +1718,6 @@ def _taepodong_ii():
         guidance="pitch_program",
         burnout_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
-        stage_burnout_angle_deg=40.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1746,7 +1737,6 @@ def _taepodong_ii():
         guidance="pitch_program",
         burnout_angle_deg=35.0,
         loft_angle_rate_deg_s=0.6,
-        stage_burnout_angle_deg=40.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage3,
@@ -1770,7 +1760,6 @@ def _taepodong_ii():
         loft_angle_rate_deg_s=0.8,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=62.5,
-        stage_burnout_angle_deg=40.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -1819,7 +1808,6 @@ def _zoljanah():
         guidance="pitch_program",
         burnout_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
-        stage_burnout_angle_deg=35.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1844,7 +1832,6 @@ def _zoljanah():
         loft_angle_rate_deg_s=0.8,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=68.8,
-        stage_burnout_angle_deg=35.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -1902,7 +1889,6 @@ def _zoljanah_slv():
         guidance="pitch_program",
         burnout_angle_deg=25.0,
         loft_angle_rate_deg_s=0.5,
-        stage_burnout_angle_deg=45.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
     )
@@ -1928,7 +1914,6 @@ def _zoljanah_slv():
         guidance="pitch_program",
         burnout_angle_deg=35.0,
         loft_angle_rate_deg_s=0.6,
-        stage_burnout_angle_deg=45.0,   # hold at stage-1 target angle
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage3,
@@ -1956,7 +1941,6 @@ def _zoljanah_slv():
         loft_angle_rate_deg_s=1.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=45.0,
-        stage_burnout_angle_deg=45.0,
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
@@ -1993,7 +1977,6 @@ def _aur():
         # Depressed-trajectory — starting values; tune experimentally.
         burnout_angle_deg=25.0,
         loft_angle_rate_deg_s=3.0,
-        stage_burnout_angle_deg=25.0,   # hold at stage-1 target angle
         coast_time_s=0.0,
         # Empty tables → legacy 2 % sea-level back-pressure approximation used.
         mach_table=[],
@@ -2021,7 +2004,6 @@ def _aur():
         loft_angle_rate_deg_s=3.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=21.7,
-        stage_burnout_angle_deg=25.0,
         coast_time_s=0.0,
         payload_kg=450.0,
         rv_beta_kg_m2=1500.0,
@@ -2245,7 +2227,6 @@ def _strypi_viii_r(castor2: bool = False):
         guidance="pitch_program",
         solid_motor=True,                        # Aerojet Alcor IB — solid
         burnout_angle_deg=5.0,
-        stage_burnout_angle_deg=5.0,
         coast_time_s=0.0,
         mach_table=[], cd_table=[],
     )
@@ -2315,7 +2296,6 @@ def _strypi_viii_r(castor2: bool = False):
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=25.0,
-        stage_burnout_angle_deg=80.0,
         coast_time_s=120.0,
         payload_kg=_swerve.mass_kg,
         rv_separates=True,
@@ -2373,7 +2353,7 @@ def _stars_1():
         burn_time_s=14.6,
         isp_s=290.0,
         guidance="pitch_program",
-        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0, coast_time_s=0.0,
+        burnout_angle_deg=5.0, coast_time_s=0.0,
         mach_table=[], cd_table=[],
     )
     # Stage 2 — Polaris A3 2nd (Hercules X-260): 9,000 lb prop, Isp 280 s.
@@ -2388,7 +2368,7 @@ def _stars_1():
         burn_time_s=65.0,
         isp_s=280.0,
         guidance="pitch_program",
-        burnout_angle_deg=8.0, stage_burnout_angle_deg=8.0, coast_time_s=5.0,
+        burnout_angle_deg=8.0, coast_time_s=5.0,
         stage2=stage3,
         mach_table=[], cd_table=[],
     )
@@ -2407,7 +2387,7 @@ def _stars_1():
         guidance="pitch_program",
         burnout_angle_deg=45.0, loft_angle_rate_deg_s=1.5,
         stage_turn_start_s=2.0, stage_turn_stop_s=55.0,
-        stage_burnout_angle_deg=45.0, coast_time_s=5.0,
+ coast_time_s=5.0,
         payload_kg=_hgb.mass_kg, rv_separates=True, rv=_hgb, stage2=stage2,
         # Eight grid (lattice) fins on the first stage of the AHW-test STARS,
         # for ascent stability/control; they jettison with stage 1.  Frame and
@@ -2478,7 +2458,7 @@ def _strypi_vii_r():
         nozzle_exit_area_m2=0.0755,              # 0.8125 ft^2
         guidance="pitch_program",
         solid_motor=True,                        # Hercules BE-3B-1 — solid
-        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
+        burnout_angle_deg=5.0,
         coast_time_s=0.0, mach_table=[], cd_table=[],
     )
 
@@ -2493,7 +2473,7 @@ def _strypi_vii_r():
         nozzle_exit_area_m2=0.141,               # 1.5175 ft^2
         guidance="pitch_program",
         solid_motor=True,                        # Aerojet Alcor IB — solid
-        burnout_angle_deg=5.0, stage_burnout_angle_deg=5.0,
+        burnout_angle_deg=5.0,
         coast_time_s=7.5,                        # Alcor burnout 254.5 -> BE-3B ignite 262 s
         stage2=stage3,
         mach_table=[], cd_table=[],
@@ -2524,7 +2504,6 @@ def _strypi_vii_r():
         burnout_angle_deg=30.0,
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0, stage_turn_stop_s=25.0,
-        stage_burnout_angle_deg=30.0,
         coast_time_s=182.0,                      # 43 s S1 burnout -> ~225 s S2 ignite
         payload_kg=rv.mass_kg,
         rv_separates=True, rv=rv,
