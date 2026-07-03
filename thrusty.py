@@ -1598,18 +1598,19 @@ class MissileDialog(tk.Toplevel):
 
         self._b_thrust_var      = _be_entry(0, "Thrust per booster (kN):", "500",  "kN")
         self._b_burn_var        = _be_entry(1, "Burn time (s):",            "60",   "s")
-        self._b_core_delay_var  = _be_entry(2, "Core ignition delay (s):", "0",    "s")
-        self._b_inert_var       = _be_entry(3, "Inert mass per booster (kg):", "2000", "kg")
-        self._b_prop_var        = _be_entry(4, "Propellant per booster (kg):", "10000","kg")
-        self._b_isp_var         = _be_entry(5, "Isp (vacuum, s):",          "270",  "s")
-        self._b_nozzle_var      = _be_entry(6, "Nozzle exit area (m²):",    "0",    "m²")
-        self._b_diam_var        = _be_entry(7, "Diameter (m):",              "1.2",  "m")
-        self._b_length_var      = _be_entry(8, "Length (m):",               "0",    "m  (0 = 2×dia)")
-        self._b_cd_var          = _be_entry(9, "Cd (drag coeff):",          "0.20", "",
+        self._b_jett_var        = _be_entry(2, "Jettison time (s):",        "0",    "s  (0 = at burnout)")
+        self._b_core_delay_var  = _be_entry(3, "Core ignition delay (s):", "0",    "s")
+        self._b_inert_var       = _be_entry(4, "Inert mass per booster (kg):", "2000", "kg")
+        self._b_prop_var        = _be_entry(5, "Propellant per booster (kg):", "10000","kg")
+        self._b_isp_var         = _be_entry(6, "Isp (vacuum, s):",          "270",  "s")
+        self._b_nozzle_var      = _be_entry(7, "Nozzle exit area (m²):",    "0",    "m²")
+        self._b_diam_var        = _be_entry(8, "Diameter (m):",              "1.2",  "m")
+        self._b_length_var      = _be_entry(9, "Length (m):",               "0",    "m  (0 = 2×dia)")
+        self._b_cd_var          = _be_entry(10, "Cd (drag coeff):",         "0.20", "",
                                             pady=(2, 6))
         ttk.Label(self._booster_frame, text="Cd guide: 0.10 ogive · 0.20 cone · 0.40 hemi · 1.0 flat",
                   foreground="gray50").grid(
-            row=10, column=0, columnspan=2, sticky=tk.W, padx=(6, 6), pady=(0, 4))
+            row=11, column=0, columnspan=2, sticky=tk.W, padx=(6, 6), pady=(0, 4))
 
         # Stage frames (1 always visible; 2-4 toggled).
         # A dedicated container ensures dynamically-packed stages always appear
@@ -2032,6 +2033,7 @@ class MissileDialog(tk.Toplevel):
             self._b_length_var.set(f"{getattr(p, 'booster_length_m', 0.0):.2f}")
             self._b_cd_var.set(f"{getattr(p, 'booster_cd', 0.20):.2f}")
             self._b_core_delay_var.set(f"{getattr(p, 'booster_core_delay_s', 0.0):.1f}")
+            self._b_jett_var.set(f"{getattr(p, 'booster_jettison_s', 0.0):.1f}")
         self._update_booster_frame()
 
         # Apply show/hide state for all sections
@@ -2269,6 +2271,7 @@ class MissileDialog(tk.Toplevel):
                 _b_thrust_kn   = float(self._b_thrust_var.get())
                 _b_burn        = float(self._b_burn_var.get())
                 _b_core_delay  = float(self._b_core_delay_var.get())
+                _b_jettison    = float(self._b_jett_var.get() or 0.0)
                 _b_inert       = float(self._b_inert_var.get())
                 _b_prop        = float(self._b_prop_var.get())
                 _b_isp         = float(self._b_isp_var.get())
@@ -2286,6 +2289,7 @@ class MissileDialog(tk.Toplevel):
             node.booster_thrust_n       = _b_thrust_kn * 1000.0
             node.booster_burn_time_s    = _b_burn
             node.booster_core_delay_s   = max(0.0, _b_core_delay)
+            node.booster_jettison_s     = max(0.0, _b_jettison)
             node.booster_inert_kg       = _b_inert
             node.booster_prop_kg        = _b_prop
             node.booster_isp_s          = _b_isp

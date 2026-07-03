@@ -420,6 +420,8 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
          notes='Default 0.20 (tangent ogive)')
     brow('b_delay', 'Core ignition delay',         's',  'booster_core_delay_s',
          notes='0 = simultaneous (Soyuz); >0 = sequential (LVM3, Titan IIIC)')
+    brow('b_jett',  'Jettison time',               's',  'booster_jettison_s',
+         notes='0 = jettison at burnout; >0 = carry spent boosters (mass+drag) until this time')
 
     # ── COMPUTED — BOOSTERS ──────────────────────────────────────────────────
     _section(ws, _RC_BOOSTERS, 'COMPUTED — BOOSTERS  (do not edit)',
@@ -750,6 +752,7 @@ def import_missile_xlsx(path: str):
     top_stage.booster_length_m    = _rnum(ws, r['b_len'],   4)
     top_stage.booster_cd          = _rnum(ws, r['b_cd'],    4, 0.20)
     top_stage.booster_core_delay_s= _rnum(ws, r['b_delay'], 4)
+    top_stage.booster_jettison_s  = _rnum(ws, r['b_jett'],  4)
     return top_stage
 
 

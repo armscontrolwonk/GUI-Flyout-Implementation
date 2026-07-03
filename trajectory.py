@@ -77,7 +77,7 @@ from coordinates import (
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
-    booster_drag_vector, effective_rv,
+    booster_drag_vector, effective_rv, booster_separation_time,
 )
 
 
@@ -261,7 +261,7 @@ def _stage_event_times(params: MissileParams):
 
     # Insert booster separation in chronological order
     if params.n_boosters > 0 and params.booster_burn_time_s > 0:
-        t_sep = params.booster_burn_time_s
+        t_sep = booster_separation_time(params)
         for i, (_, t_ev) in enumerate(events):
             if t_ev > t_sep:
                 events.insert(i, ("Booster separation", t_sep))
@@ -915,7 +915,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             f_drag = np.zeros(3)
     else:
         f_drag = drag_force_vector(astage, vel, alt, top_params=params, t_s=t)
-        if params.n_boosters > 0 and t <= params.booster_burn_time_s:
+        if params.n_boosters > 0 and t <= booster_separation_time(params):
             f_drag = f_drag + booster_drag_vector(params, vel, alt)
 
     # --- Thrust with mode-selected guidance ---
@@ -2540,7 +2540,7 @@ def integrate_trajectory(params: MissileParams,
     if (params.n_boosters > 0
             and params.booster_diam_m > 0
             and params.booster_inert_kg > 0):
-        _t_bsep = params.booster_burn_time_s
+        _t_bsep = booster_separation_time(params)
         if _t_bsep > 0 and _t_bsep <= t_arr[-1]:
             _b_len = (params.booster_length_m
                       if params.booster_length_m > 0
