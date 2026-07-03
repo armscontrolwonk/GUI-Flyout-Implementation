@@ -2280,6 +2280,7 @@ def _strypi_viii_r():
         booster_diam_m=0.229,                    # 9 in
         booster_nozzle_area_m2=0.02,             # estimate (not in Wente)
         booster_core_delay_s=0.0,                # core + boosters light together
+        booster_jettison_s=3.0,                  # Wente: jettisoned 3 s / M=0.6, after burnout
         # Fins — 4 single-wedge on the Castor stage (Wente: LE sweep 45 deg,
         # root chord 50", exposed span 44"; tip chord ~31.4" derived).
         has_fins=True,
@@ -2477,6 +2478,7 @@ def _strypi_vii_r():
         booster_inert_kg=47.5, booster_prop_kg=121.5, booster_isp_s=223.0,
         booster_diam_m=0.229, booster_nozzle_area_m2=0.02,
         booster_core_delay_s=0.0,
+        booster_jettison_s=3.0,                  # Wente: jettisoned 3 s / M=0.6, after burnout
         has_fins=True, n_fins=4,
         fin_root_chord_m=1.270, fin_tip_chord_m=0.798,
         fin_span_m=1.118, fin_sweep_deg=45.0, fin_thickness_m=0.102,
@@ -2608,6 +2610,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'booster_length_m':       p.booster_length_m,
         'booster_cd':             p.booster_cd,
         'booster_core_delay_s':   p.booster_core_delay_s,
+        'booster_jettison_s':     p.booster_jettison_s,
     }
     # RV: write the new rv object when present; otherwise write legacy inline
     # fields so that older software can still load this missile file.
@@ -2737,6 +2740,7 @@ def missile_from_dict(d: dict) -> MissileParams:
         booster_length_m=float(d.get('booster_length_m', 0.0)),
         booster_cd=float(d.get('booster_cd', 0.20)),
         booster_core_delay_s=float(d.get('booster_core_delay_s', 0.0)),
+        booster_jettison_s=float(d.get('booster_jettison_s', 0.0)),
         stage_turn_start_s=(float(d['stage_turn_start_s'])
                             if d.get('stage_turn_start_s') is not None else None),
         stage_turn_stop_s=(float(d['stage_turn_stop_s'])
@@ -2841,12 +2845,29 @@ def active_stage_and_t(params: MissileParams, t: float):
     return s, t_rem   # last stage
 
 
+def booster_separation_time(params: MissileParams) -> float:
+    """Time (s after T=0) the spent strap-on boosters physically leave.
+
+    booster_jettison_s if set later than burnout, else burnout.  A jettison
+    time at or before burnout is treated as "separate at burnout" — boosters
+    cannot leave while still thrusting.
+    """
+    t_b = params.booster_burn_time_s
+    return params.booster_jettison_s if params.booster_jettison_s > t_b else t_b
+
+
 def _booster_mass_addend(params: MissileParams, t: float) -> float:
-    """Mass (kg) contributed by attached strap-on boosters; 0 after separation."""
+    """Mass (kg) contributed by attached strap-on boosters; 0 after separation.
+
+    Between burnout and jettison (when booster_jettison_s > burn time) the
+    spent boosters ride along as dead inert mass.
+    """
     n, t_b = params.n_boosters, params.booster_burn_time_s
-    if n <= 0 or t_b <= 0 or t > t_b:
+    if n <= 0 or t_b <= 0 or t > booster_separation_time(params):
         return 0.0
     t = max(0.0, t)
+    if t >= t_b:                       # burned out, not yet jettisoned
+        return n * params.booster_inert_kg
     return (n * (params.booster_prop_kg + params.booster_inert_kg)
             - n * params.booster_prop_kg / t_b * t)
 
