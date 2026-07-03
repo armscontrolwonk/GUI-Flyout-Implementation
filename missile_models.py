@@ -229,6 +229,11 @@ class MissileParams:
     # Seconds after T=0 (strap-on ignition / liftoff) before stage-1 core ignites.
     # 0 = all ignite together (Soyuz).  >0 = sequential (LVM3, Titan IIIC).
     booster_core_delay_s:   float = 0.0
+    # Time (s after T=0) the spent boosters are physically jettisoned.  Many
+    # strap-ons burn out and are then carried as dead (thrustless) mass for a
+    # short coast before separation — during that coast they still add inert
+    # mass and parasitic drag.  0 = jettison coincides with burnout (legacy).
+    booster_jettison_s:     float = 0.0
 
     # ── RV reference (new architecture) ─────────────────────────────────────
     # When set, all RV flight properties (β, shape, glider params) are read
