@@ -2489,6 +2489,58 @@ class RVEditorDialog(tk.Toplevel):
 
         self._update_glider_state()
 
+        # ── Thermal protection (TPS) materials — per location (§10) ──────
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
+        ttk.Label(self, text="Thermal protection (TPS) materials",
+                  font=("TkDefaultFont", 9, "bold")).pack(anchor=tk.W, padx=12, pady=(8, 0))
+        tps_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        tps_frm.pack(fill=tk.X)
+        tps_frm.columnconfigure(1, weight=1)
+
+        # Choice list shared by both locations: "(none)" + full grouped catalog
+        # + "Custom…".  _mat_map maps the display string back to the material key.
+        self._mat_choices, self._mat_map = self._material_choices()
+
+        def _mat_row(row, label, cur_key):
+            ttk.Label(tps_frm, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            var = tk.StringVar(value=self._display_for_key(cur_key))
+            cb = ttk.Combobox(tps_frm, textvariable=var, values=self._mat_choices,
+                              state="readonly", width=34)
+            cb.grid(row=row, column=1, sticky=tk.W, pady=2)
+            return var, cb
+
+        _nk = (rv.nose_tps_material or rv.tps_material) if rv else ""
+        _bk = (rv.body_tps_material or rv.tps_material) if rv else ""
+        self._nose_mat_var, self._nose_mat_cb = _mat_row(0, "Nose / leading edge:", _nk)
+        self._nose_cust_frm, self._nose_cust = self._build_custom_fields(
+            tps_frm, 1, rv.nose_tps_custom if rv else None)
+        self._body_mat_var, self._body_mat_cb = _mat_row(2, "Body / acreage:", _bk)
+        self._body_cust_frm, self._body_cust = self._build_custom_fields(
+            tps_frm, 3, rv.body_tps_custom if rv else None)
+
+        ttk.Label(tps_frm, text="Body layer thickness:").grid(
+            row=4, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        _bt = f"{rv.body_tps_thickness_m:.4f}" if (rv and rv.body_tps_thickness_m > 0) else "0"
+        self._body_thick_var = tk.StringVar(value=_bt)
+        _bt_in = ttk.Frame(tps_frm); _bt_in.grid(row=4, column=1, sticky=tk.W, pady=2)
+        ttk.Entry(_bt_in, textvariable=self._body_thick_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_bt_in, text=" m  (0 = auto)").pack(side=tk.LEFT)
+
+        ttk.Label(tps_frm, text="Emissivity:").grid(
+            row=5, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        self._emiss_var = tk.StringVar(value=f"{rv.emissivity:.2f}" if rv else "0.85")
+        _em_in = ttk.Frame(tps_frm); _em_in.grid(row=5, column=1, sticky=tk.W, pady=2)
+        ttk.Entry(_em_in, textvariable=self._emiss_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_em_in, text="  (0.85 typical; range 0.75–0.90)").pack(side=tk.LEFT)
+
+        self._nose_mat_cb.bind("<<ComboboxSelected>>",
+                               lambda _e: self._update_custom_state("nose"))
+        self._body_mat_cb.bind("<<ComboboxSelected>>",
+                               lambda _e: self._update_custom_state("body"))
+        self._update_custom_state("nose")
+        self._update_custom_state("body")
+
         # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
         btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
@@ -2661,6 +2713,31 @@ class RVEditorDialog(tk.Toplevel):
         else:
             LD = 0.0; g_max = 10.0; beta_S = 0.0
 
+        # --- TPS materials (§10): resolve each dropdown to a catalog key, or a
+        # 'custom_*' sentinel with the bespoke properties stored on the RV. ---
+        _nose_disp = self._nose_mat_var.get()
+        _body_disp = self._body_mat_var.get()
+        nose_custom = body_custom = None
+        if _nose_disp == self._MAT_CUSTOM_LABEL:
+            nose_custom = self._custom_dict_from(self._nose_cust)
+            nose_key = heating.CUSTOM_NOSE_KEY if nose_custom else ""
+        else:
+            nose_key = self._mat_map.get(_nose_disp, "")
+        if _body_disp == self._MAT_CUSTOM_LABEL:
+            body_custom = self._custom_dict_from(self._body_cust)
+            body_key = heating.CUSTOM_BODY_KEY if body_custom else ""
+        else:
+            body_key = self._mat_map.get(_body_disp, "")
+        try:
+            emiss = float(self._emiss_var.get())
+            body_thick = float(self._body_thick_var.get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input",
+                "Emissivity and body layer thickness must be numbers.",
+                parent=self)
+            return None
+
         return RVParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
@@ -2670,6 +2747,12 @@ class RVEditorDialog(tk.Toplevel):
             glider_pullup_g_max=g_max,
             glider_beta_entry_kg_m2=beta_S,
             separation_mode=self._sep_var.get(),
+            emissivity=emiss,
+            nose_tps_material=nose_key,
+            body_tps_material=body_key,
+            body_tps_thickness_m=body_thick,
+            nose_tps_custom=nose_custom,
+            body_tps_custom=body_custom,
         )
 
     def _update_glider_state(self):
@@ -2677,6 +2760,91 @@ class RVEditorDialog(tk.Toplevel):
             self._glider_frm.pack(fill=tk.X)
         else:
             self._glider_frm.pack_forget()
+
+    # ---- TPS material dropdown helpers (§10 materials dropdown) --------
+    _MAT_NONE_LABEL   = "(none — numbers only)"
+    _MAT_CUSTOM_LABEL = "Custom…"
+    _GROUP_TITLES = {"metal": "Metal / heat-sink", "hot_structure": "Hot structure",
+                     "insulative": "Insulative tile", "ablative": "Ablator"}
+
+    def _material_choices(self):
+        """Return (display_list, {display: material_key}) for the grouped catalog,
+        bracketed by "(none)" and "Custom…"."""
+        by_group = heating.materials_by_group()
+        displays = [self._MAT_NONE_LABEL]
+        mapping = {self._MAT_NONE_LABEL: ""}
+        for grp in heating.TPS_MATERIAL_GROUPS:
+            title = self._GROUP_TITLES.get(grp, grp)
+            for key, label in by_group.get(grp, []):
+                disp = f"{title} · {label}"
+                displays.append(disp)
+                mapping[disp] = key
+        displays.append(self._MAT_CUSTOM_LABEL)
+        return displays, mapping
+
+    def _display_for_key(self, key):
+        """Reverse-map a stored material key to its dropdown display string."""
+        if key in (heating.CUSTOM_NOSE_KEY, heating.CUSTOM_BODY_KEY):
+            return self._MAT_CUSTOM_LABEL
+        for disp, k in self._mat_map.items():
+            if k == key and k != "":
+                return disp
+        return self._MAT_NONE_LABEL
+
+    def _build_custom_fields(self, parent, row, cust):
+        """Build the hidden per-location 'Custom…' property sub-frame; return
+        (frame, vars_dict).  `cust` prefills from an existing custom dict."""
+        cust = cust or {}
+        frm = ttk.Frame(parent, padding=(16, 2, 0, 2))
+        frm.grid(row=row, column=0, columnspan=2, sticky=tk.W)
+        v = {}
+        v['name'] = tk.StringVar(value=str(cust.get('label', '') or ''))
+        v['ablator'] = tk.BooleanVar(value=bool(cust.get('is_ablator', False)))
+        v['limit'] = tk.StringVar(
+            value=str(cust.get('continuous_K') or cust.get('peak_K') or ''))
+        v['density'] = tk.StringVar(value=str(cust.get('density_kg_m3', '') or ''))
+        v['heff'] = tk.StringVar(value=str(cust.get('H_eff_MJ_kg', '') or ''))
+        r = 0
+        ttk.Label(frm, text="Name:").grid(row=r, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(frm, textvariable=v['name'], width=22).grid(row=r, column=1, sticky=tk.W); r += 1
+        ttk.Checkbutton(frm, text="Ablator (recedes)",
+                        variable=v['ablator']).grid(row=r, column=1, sticky=tk.W, pady=1); r += 1
+        ttk.Label(frm, text="Temp. limit (K):").grid(row=r, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(frm, textvariable=v['limit'], width=10).grid(row=r, column=1, sticky=tk.W); r += 1
+        ttk.Label(frm, text="Density (kg/m³):").grid(row=r, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(frm, textvariable=v['density'], width=10).grid(row=r, column=1, sticky=tk.W); r += 1
+        ttk.Label(frm, text="Heat of ablation (MJ/kg):").grid(row=r, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(frm, textvariable=v['heff'], width=10).grid(row=r, column=1, sticky=tk.W); r += 1
+        frm.grid_remove()
+        return frm, v
+
+    def _update_custom_state(self, loc):
+        """Show the Custom… sub-frame only when that location's dropdown is Custom…."""
+        var = self._nose_mat_var if loc == "nose" else self._body_mat_var
+        frm = self._nose_cust_frm if loc == "nose" else self._body_cust_frm
+        if var.get() == self._MAT_CUSTOM_LABEL:
+            frm.grid()
+        else:
+            frm.grid_remove()
+
+    def _custom_dict_from(self, v):
+        """Build a custom-material dict from the sub-frame vars, or None if blank."""
+        def _f(s):
+            try:
+                return float(s)
+            except (TypeError, ValueError):
+                return None
+        limit = _f(v['limit'].get())
+        if limit is None and not v['name'].get().strip():
+            return None
+        return {
+            'label': v['name'].get().strip() or 'Custom material',
+            'is_ablator': bool(v['ablator'].get()),
+            'continuous_K': limit,
+            'peak_K': limit,
+            'density_kg_m3': _f(v['density'].get()),
+            'H_eff_MJ_kg': _f(v['heff'].get()),
+        }
 
     def _update_separation_state(self):
         """When 'Body (no separation)' is selected, mass/diameter/length

@@ -117,6 +117,49 @@ def is_hot_structure(material_key):
     m = TPS_MATERIALS.get(material_key or "")
     return bool(m) and m.get("group") in ("metal", "hot_structure")
 
+
+# Sentinel material keys for user-defined (bespoke) materials, one per location.
+CUSTOM_NOSE_KEY = "custom_nose"
+CUSTOM_BODY_KEY = "custom_body"
+
+
+def register_custom_material(key, props):
+    """Inject a user-defined material into TPS_MATERIALS so the key-based FOM can consume it.
+
+    `props` is a partial catalog entry (from RVParams.nose_tps_custom / body_tps_custom);
+    missing fields are filled with safe defaults so a bespoke material is always well-formed.
+    Called for any RV carrying custom props before the heating FOM runs.  A falsy `props`
+    removes any stale registration for `key`.  Returns the resolved key (or "" if cleared).
+    """
+    if not key or not props:
+        TPS_MATERIALS.pop(key, None)
+        return ""
+    is_abl = bool(props.get("is_ablator", False))
+    limit = props.get("continuous_K") or props.get("peak_K") or 0.0
+    try:
+        limit = float(limit)
+    except (TypeError, ValueError):
+        limit = 0.0
+    def _num(v, default):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+    entry = dict(
+        label=str(props.get("label") or "Custom material"),
+        group="ablative" if is_abl else "hot_structure",
+        is_ablator=is_abl,
+        peak_K=_num(props.get("peak_K"), limit),
+        continuous_K=_num(props.get("continuous_K"), limit),
+        melt_K=_num(props.get("melt_K"), limit) if props.get("melt_K") else None,
+        c_J_kgK=_num(props.get("c_J_kgK"), 1200.0),
+        density_kg_m3=_num(props.get("density_kg_m3"), 1800.0),
+        H_eff_MJ_kg=(_num(props.get("H_eff_MJ_kg"), 15.0) if is_abl else None),
+        oxidation_dwell_s=None,
+    )
+    TPS_MATERIALS[key] = entry
+    return key
+
 # Reentry heating benchmarks — HEATING_TPS_REFERENCES.md §3.  Per entry:
 #   q_MW : peak stagnation flux (MW/m²);  Q_MJ : integrated load (MJ/m², per
 #   unit area, = ∫q̇ dt);  conf : 'solid' (CFD reconstruction) or 'rough'.
