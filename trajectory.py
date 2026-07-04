@@ -599,6 +599,45 @@ def _aero_polar(rv) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# Commanded thrust direction — the single source of truth for attitude
+# ---------------------------------------------------------------------------
+
+def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
+                          azimuth_rad, t, gt_turn_start_s, gt_turn_stop_s,
+                          t_final_ignition=0.0):
+    """Unit thrust-pointing vector (ECEF) for the active guidance law.
+
+    Single source of truth for commanded attitude: the EOM applies thrust along
+    exactly this vector, and the guidance-program plot derives its pitch/azimuth
+    from the SAME call — so the plotted command can never drift from what was
+    flown (previously the plot re-derived pitch with a parallel formula that
+    diverged whenever the per-stage fields changed).  `azimuth_rad` must already
+    include any yaw / dogleg program.
+    """
+    if params.guidance == "true_gravity_turn":
+        return _true_gravity_turn_thrust_dir(
+            pos, vel, lat_rad, lon_rad, azimuth_rad, t, astage)
+    if astage is not None and astage.stage_burnout_angle_deg is not None:
+        _eff_start = (astage.stage_turn_start_s
+                      if astage.stage_turn_start_s is not None else gt_turn_start_s)
+        _eff_stop  = (astage.stage_turn_stop_s
+                      if astage.stage_turn_stop_s is not None else gt_turn_stop_s)
+        return _gravity_turn_thrust_dir(
+            lat_rad, lon_rad, azimuth_rad,
+            astage.stage_burnout_angle_deg, _eff_start, _eff_stop, t,
+            start_angle_deg=_prev_burnout_angle(params, astage))
+    if params.guidance == "orbital_insertion":
+        return _orbital_insertion_thrust_dir(
+            lat_rad, lon_rad, azimuth_rad,
+            params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s,
+            t_final_ignition, t)
+    return _gravity_turn_thrust_dir(
+        lat_rad, lon_rad, azimuth_rad,
+        params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s, t,
+        start_angle_deg=params.launch_elevation_deg)
+
+
+# ---------------------------------------------------------------------------
 # Equations of motion
 # ---------------------------------------------------------------------------
 
@@ -960,45 +999,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     azimuth_rad = _yaw_program(t, azimuth_rad, astage, yaw_maneuvers)
 
     if engine_on:
-        # Per-stage advanced pitch: if the active stage carries its own
-        # turn_start / turn_stop / burnout_angle overrides, use those;
-        # otherwise fall back to the global gravity-turn params.
-        # For orbital_insertion without per-stage overrides, the two-phase
-        # function applies (final stage forced horizontal).
-        if params.guidance == "true_gravity_turn":
-            # Thrust along velocity, with optional per-stage η kick.
-            thrust_dir = _true_gravity_turn_thrust_dir(
-                pos, vel, lat, lon, azimuth_rad, t, astage)
-        elif (astage is not None and
-              astage.stage_burnout_angle_deg is not None):
-            _eff_angle = astage.stage_burnout_angle_deg
-            _eff_start = (astage.stage_turn_start_s
-                          if astage.stage_turn_start_s is not None
-                          else gt_turn_start_s)
-            _eff_stop  = (astage.stage_turn_stop_s
-                          if astage.stage_turn_stop_s is not None
-                          else gt_turn_stop_s)
-            _entry_ang = _prev_burnout_angle(params, astage)
-            thrust_dir = _gravity_turn_thrust_dir(
-                lat, lon, azimuth_rad,
-                _eff_angle, _eff_start, _eff_stop, t,
-                start_angle_deg=_entry_ang)
-        elif params.guidance == "orbital_insertion":
-            thrust_dir = _orbital_insertion_thrust_dir(
-                lat, lon, azimuth_rad,
-                params.burnout_angle_deg,
-                gt_turn_start_s,
-                gt_turn_stop_s,
-                t_final_ignition,
-                t)
-        else:
-            thrust_dir = _gravity_turn_thrust_dir(
-                lat, lon, azimuth_rad,
-                params.burnout_angle_deg,
-                gt_turn_start_s,
-                gt_turn_stop_s,
-                t,
-                start_angle_deg=params.launch_elevation_deg)
+        # Commanded attitude comes from the single shared guidance function so
+        # the guidance-program plot (which calls the same function) shows exactly
+        # what was flown.
+        thrust_dir = _commanded_thrust_dir(
+            params, astage, pos, vel, lat, lon, azimuth_rad, t,
+            gt_turn_start_s, gt_turn_stop_s, t_final_ignition)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -2946,57 +2952,40 @@ def integrate_trajectory(params: MissileParams,
 
     _final_burn_end = _burn_windows[-1][1] if _burn_windows else 0.0
 
+    # Derive the commanded pitch/azimuth from the SAME thrust-direction function
+    # the EOM flew (_commanded_thrust_dir) — no parallel pitch formula, so the
+    # plot cannot disagree with the trajectory.  During a burn we evaluate the
+    # real thrust vector at that step's state and read its elevation/azimuth;
+    # through inter-stage coasts we hold the last commanded value; after final
+    # burnout the arrays go NaN so the plot shows a gap.
     _pitch_cmd  = []
     _az_cmd     = []
-    _last_pitch = 90.0          # carry forward for _last_pitch tracking only
-    _last_az    = float('nan')  # carry forward through inter-stage coasts
-    for _t_gp in t_arr:
-        # Active stage at this time.
-        # active_stage_and_t returns (next_stage, 0.0) during an inter-stage
-        # coast — the next stage hasn't ignited yet.
+    _last_pitch = float(params.launch_elevation_deg)
+    _last_az    = float('nan')
+    for _i_gp, _t_gp in enumerate(t_arr):
         _gp_stage, _t_since = active_stage_and_t(params, _t_gp)
-        _burning = _in_burn_window(_t_gp)
-        # Commanded azimuth: hold last value through inter-stage coasts,
-        # blank after final burnout (same cutoff as pitch).
-        _az_val = np.degrees(_yaw_program(_t_gp, az, _gp_stage, _yaw_maneuvers))
-        if _burning:
-            _last_az = _az_val
-        _az_cmd.append(_last_az if _t_gp <= _final_burn_end else float('nan'))
-        # Commanded pitch (elevation angle)
-        if params.guidance in ("pitch_program", "orbital_insertion"):
-            _gp_angle = (_gp_stage.stage_burnout_angle_deg
-                         if _gp_stage is not None
-                         and _gp_stage.stage_burnout_angle_deg is not None
-                         else params.burnout_angle_deg)
-            _gp_ts = (_gp_stage.stage_turn_start_s
-                      if _gp_stage is not None
-                      and _gp_stage.stage_turn_start_s is not None
-                      else gt_turn_start_s)
-            _gp_tp = (_gp_stage.stage_turn_stop_s
-                      if _gp_stage is not None
-                      and _gp_stage.stage_turn_stop_s is not None
-                      else gt_turn_stop_s)
-            _in_coast = (_t_since == 0.0
-                         and _gp_stage is not params
-                         and _gp_ts is not None
-                         and _t_gp < _gp_ts)
-            # Ramp starts from the previous stage's burnout angle (not 90°)
-            # for stages beyond the first, matching the EOM guidance law.
-            _entry_ang = _prev_burnout_angle(params, _gp_stage)
-            if _in_coast:
-                _pitch_val = _last_pitch
-            elif _gp_ts is None or _t_gp <= _gp_ts:
-                _pitch_val = _entry_ang
-            elif _gp_tp is None or _t_gp >= _gp_tp:
-                _pitch_val = _gp_angle
-            else:
-                _frac = (_t_gp - _gp_ts) / max(_gp_tp - _gp_ts, 1.0)
-                _pitch_val = _entry_ang - _frac * (_entry_ang - _gp_angle)
+        if _in_burn_window(_t_gp):
+            _lat_i = np.radians(lats[_i_gp])
+            _lon_i = np.radians(lons[_i_gp])
+            _az_i  = _yaw_program(_t_gp, az, _gp_stage, _yaw_maneuvers)
+            _tdir  = _commanded_thrust_dir(
+                params, _gp_stage, pos_arr[_i_gp], vel_arr[_i_gp],
+                _lat_i, _lon_i, _az_i, _t_gp,
+                gt_turn_start_s, gt_turn_stop_s, _t_final_ignition)
+            _ee, _en, _eu = _enu_frame(_lat_i, _lon_i)
+            _last_pitch = float(np.degrees(np.arcsin(
+                np.clip(float(np.dot(_tdir, _eu)), -1.0, 1.0))))
+            # Azimuth from the horizontal projection; undefined near vertical
+            # thrust (cos elevation ~ 0), so hold the last value there.
+            _e_comp, _n_comp = float(np.dot(_tdir, _ee)), float(np.dot(_tdir, _en))
+            if _e_comp * _e_comp + _n_comp * _n_comp > 1e-8:
+                _last_az = float(np.degrees(np.arctan2(_e_comp, _n_comp))) % 360.0
+        if _t_gp <= _final_burn_end:
+            _pitch_cmd.append(_last_pitch)
+            _az_cmd.append(_last_az)
         else:
-            _pitch_val = _last_pitch
-        _last_pitch = _pitch_val
-        # Show pitch during burns and inter-stage coasts; blank after final burnout
-        _pitch_cmd.append(_pitch_val if _t_gp <= _final_burn_end else float('nan'))
+            _pitch_cmd.append(float('nan'))
+            _az_cmd.append(float('nan'))
 
     # Diagnostic glide-regime verdict (skip / capture / plunge) for lifting
     # glide RVs.  See glide_regime.py and GLIDE_CAPTURE_DESIGN.md.
