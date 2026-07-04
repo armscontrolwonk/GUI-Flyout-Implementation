@@ -54,10 +54,9 @@ _R: dict[str, int] = {
     'b_cd':        38,
     'b_delay':     39,
     'b_jett':      40,
-    # PAYLOAD — mass + the "carries a separating RV" flag.  The reentry vehicle
-    # itself is a separate object chosen from the RV library (attached at flyout
-    # time), not described inline here.
-    'payload':     47,
+    # PAYLOAD — only the "carries a separating RV" flag.  Payload mass is derived
+    # at flyout (bus + selected RV); the reentry vehicle is chosen from the RV
+    # library, not described inline here.
     'rv_sep':      48,
     # SHROUD / FAIRING
     'shr_mass':    60,
@@ -437,17 +436,14 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
               f'=IF({mi1}>0,({bn_}*{bth}+{th1})/({mi1}*9.80665),"—")', '0.00')
 
     # ── PAYLOAD ──────────────────────────────────────────────────────────────
-    # Mass only.  The reentry vehicle / warhead is a separate object selected
-    # from the RV library and attached at flyout time — it is NOT described here.
-    _section(ws, r['payload'] - 1, 'PAYLOAD')
-    _label(ws, r['payload'], 'Payload mass', 'kg',
-           'Mass carried through boost; the reentry vehicle is chosen separately '
-           'from the RV library')
-    _pl = top.get('payload_kg')
-    _inputs(ws, r['payload'], [4], [float(_pl) if _pl not in (None, '') else None])
+    # No payload MASS field: throw-weight = shroud (its own section) + PBV/bus +
+    # reentry vehicle, and the payload carried through boost is derived at flyout
+    # from the separately-selected RV (plus any bus mass).  Only the "carries a
+    # separating RV" flag is a missile property.
+    _section(ws, r['rv_sep'] - 1, 'PAYLOAD')
     _label(ws, r['rv_sep'], 'Carries separating RV', '—',
            'YES → a reentry vehicle selected from the RV library separates at '
-           'burnout and flies its own arc')
+           'burnout; its mass becomes the payload. Throw-weight = shroud + bus + RV.')
     _inputs(ws, r['rv_sep'], [4], [_yn(top.get('rv_separates', False))])
     _dropdown(ws, r['rv_sep'], 4, _YESNO_OPTS)
 
@@ -704,7 +700,6 @@ def import_missile_xlsx(path: str):
     # Top-level fields (stored on stage 1 node only).  The reentry vehicle is not
     # described in the missile sheet — it is selected from the RV library — so the
     # inline rv_*/pbv_*/bus fields are left at their MissileParams defaults.
-    top_stage.payload_kg          = _rnum(ws, r['payload'],  4)
     top_stage.rv_separates        = _rbool(ws, r['rv_sep'],  4)
     top_stage.shroud_mass_kg      = _rnum(ws, r['shr_mass'], 4)
     top_stage.shroud_jettison_alt_km = _rnum(ws, r['shr_alt'], 4, 80.0)
