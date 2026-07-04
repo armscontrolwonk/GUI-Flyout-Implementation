@@ -1940,7 +1940,7 @@ def _zoljanah_slv():
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage3,
-        coast_time_s=30.0,
+        coast_time_s=0.0,   # coast is guidance (flown ~30 s)
     )
 
     # ── Stage 1 (solid) ──────────────────────────────────────────────────────
@@ -1967,7 +1967,7 @@ def _zoljanah_slv():
         mach_table=_FORDEN_MACH,
         cd_table=_FORDEN_CD,
         stage2=stage2,
-        coast_time_s=12.0,
+        coast_time_s=0.0,   # coast is guidance (flown ~12 s)
         payload_kg=float(satellite),
         shroud_mass_kg=float(shroud),
         shroud_jettison_alt_km=80.0,
@@ -2321,7 +2321,7 @@ def _strypi_viii_r(castor2: bool = False):
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0,
         stage_turn_stop_s=25.0,
-        coast_time_s=120.0,
+        coast_time_s=0.0,   # guidance, not hardware; flown value ~120 s (loft to apogee)
         payload_kg=_swerve.mass_kg,
         rv_separates=True,
         rv=_swerve,
@@ -2393,7 +2393,7 @@ def _stars_1():
         burn_time_s=65.0,
         isp_s=280.0,
         guidance="pitch_program",
-        burnout_angle_deg=8.0, coast_time_s=5.0,
+        burnout_angle_deg=8.0, coast_time_s=0.0,   # coast is guidance (flown ~5 s)
         stage2=stage3,
         mach_table=[], cd_table=[],
     )
@@ -2412,7 +2412,7 @@ def _stars_1():
         guidance="pitch_program",
         burnout_angle_deg=45.0, loft_angle_rate_deg_s=1.5,
         stage_turn_start_s=2.0, stage_turn_stop_s=55.0,
- coast_time_s=5.0,
+        coast_time_s=0.0,   # coast is guidance (flown ~5 s)
         payload_kg=_hgb.mass_kg, rv_separates=True, rv=_hgb, stage2=stage2,
         # Eight grid (lattice) fins on the first stage of the AHW-test STARS,
         # for ascent stability/control; they jettison with stage 1.  Frame and
@@ -2499,7 +2499,7 @@ def _strypi_vii_r():
         guidance="pitch_program",
         solid_motor=True,                        # Aerojet Alcor IB — solid
         burnout_angle_deg=5.0,
-        coast_time_s=7.5,                        # Alcor burnout 254.5 -> BE-3B ignite 262 s
+        coast_time_s=0.0,   # guidance, not hardware; flown value ~7.5 s (Alcor->BE-3B)
         stage2=stage3,
         mach_table=[], cd_table=[],
     )
@@ -2532,7 +2532,9 @@ def _strypi_vii_r():
         burnout_angle_deg=30.0,
         loft_angle_rate_deg_s=2.0,
         stage_turn_start_s=0.0, stage_turn_stop_s=25.0,
-        coast_time_s=182.0,                      # 43 s S1 burnout -> ~225 s S2 ignite
+        coast_time_s=0.0,   # coast is guidance, not vehicle hardware — set it in the
+                            # flight plan (advanced-pitch panel / guidance profile).
+                            # Flown value: ~182 s (43 s S1 burnout -> ~225 s S2 ignite).
         payload_kg=rv.mass_kg,
         rv_separates=True, rv=rv,
         stage2=stage2,
