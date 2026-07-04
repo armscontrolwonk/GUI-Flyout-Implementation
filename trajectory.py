@@ -2790,6 +2790,15 @@ def integrate_trajectory(params: MissileParams,
                 # call — byte-identical for existing RVs.
                 _split = bool(getattr(_erv_ms, 'nose_tps_material', '') or
                               getattr(_erv_ms, 'body_tps_material', ''))
+                # Bespoke materials: inject the RV's user-defined props into the
+                # catalog under their sentinel keys so the key-based FOM resolves
+                # them (§10 materials dropdown, "Custom…").
+                if getattr(_erv_ms, 'nose_tps_custom', None):
+                    heating.register_custom_material(
+                        heating.CUSTOM_NOSE_KEY, _erv_ms.nose_tps_custom)
+                if getattr(_erv_ms, 'body_tps_custom', None):
+                    heating.register_custom_material(
+                        heating.CUSTOM_BODY_KEY, _erv_ms.body_tps_custom)
                 if _split:
                     _heating_fom = heating.heating_fom_per_location(
                         t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],

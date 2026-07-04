@@ -432,6 +432,14 @@ class RVParams:
     body_tps_thickness_m:   float = 0.0
     structure_material:     str   = ""
     structure_limit_K:      float = 0.0
+    # Bespoke (user-defined) material properties, keyed by location.  When a
+    # location's material is the sentinel 'custom_nose' / 'custom_body', the
+    # matching dict here holds a catalog-shaped entry (label, group, is_ablator,
+    # peak_K/continuous_K/melt_K, density_kg_m3, H_eff_MJ_kg) that
+    # heating.register_custom_material() injects into TPS_MATERIALS before the FOM
+    # runs.  Empty/None for the usual catalog-key case.
+    nose_tps_custom:        Optional[dict] = None
+    body_tps_custom:        Optional[dict] = None
 
     def nose_material(self) -> str:
         """Nose TPS material key, falling back to the single tps_material (Phase-1
@@ -485,6 +493,8 @@ def rv_to_dict(rv: RVParams) -> dict:
         'body_tps_thickness_m':  rv.body_tps_thickness_m,
         'structure_material':    rv.structure_material,
         'structure_limit_K':     rv.structure_limit_K,
+        'nose_tps_custom':       rv.nose_tps_custom,
+        'body_tps_custom':       rv.body_tps_custom,
     }
 
 
@@ -530,6 +540,8 @@ def rv_from_dict(d: dict) -> RVParams:
         body_tps_thickness_m=float(d.get('body_tps_thickness_m', 0.0)),
         structure_material=str(d.get('structure_material', '')),
         structure_limit_K=float(d.get('structure_limit_K', 0.0)),
+        nose_tps_custom=(d.get('nose_tps_custom') or None),
+        body_tps_custom=(d.get('body_tps_custom') or None),
     )
 
 
