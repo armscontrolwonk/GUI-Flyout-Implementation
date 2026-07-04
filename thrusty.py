@@ -8144,6 +8144,7 @@ class MissileFlyoutApp(tk.Tk):
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
+            parent=self,
             defaultextension=".csv",
             initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
             initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
@@ -8152,21 +8153,29 @@ class MissileFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        r = self._result
-        rows = [
-            self._CSV_SCENARIO_PREFIX + json.dumps(self._scenario_dict()),
-            "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km",
-        ]
-        for i, ti in enumerate(r['t']):
-            rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
-                        f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
-        for d in r.get('debris_trajectories', []):
-            label = d['label'].replace(',', ' ')
-            for i, ti in enumerate(d['t']):
-                rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
-                            f"{d['alt'][i]:.1f},,")
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(rows) + "\n")
+        try:
+            r = self._result
+            rows = [
+                self._CSV_SCENARIO_PREFIX + json.dumps(self._scenario_dict()),
+                "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km",
+            ]
+            for i, ti in enumerate(r['t']):
+                rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
+                            f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
+            for d in r.get('debris_trajectories', []):
+                label = str(d.get('label', 'debris')).replace(',', ' ')
+                for i, ti in enumerate(d['t']):
+                    rows.append(f"{label},{ti:.3f},{d['lat'][i]:.6f},{d['lon'][i]:.6f},"
+                                f"{d['alt'][i]:.1f},,")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(rows) + "\n")
+        except Exception as exc:
+            import traceback
+            messagebox.showerror(
+                "Export Trajectory",
+                f"Could not export trajectory:\n{exc}\n\n{traceback.format_exc()}",
+                parent=self)
+            return
         self._status_var.set(f"Trajectory CSV exported: {path}")
 
     def _export_trajectory_xlsx(self):
@@ -9626,10 +9635,11 @@ class MissileFlyoutApp(tk.Tk):
         sel = self._rv_main_var.get()
         rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
         if rv is None or not getattr(rv, 'name', ''):
-            messagebox.showinfo("No RV", "Select an RV first.")
+            messagebox.showinfo("No RV", "Select an RV first.", parent=self)
             return
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
+            parent=self,
             defaultextension=".json",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile=f"{_safe_name(rv.name)}.rv.json",
@@ -9639,7 +9649,12 @@ class MissileFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+        try:
+            Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+        except Exception as exc:
+            messagebox.showerror("Save RV",
+                                 f"Could not write RV file:\n{exc}", parent=self)
+            return
         self._status_var.set(f"RV exported: {path}")
 
     def _export_missile_xlsx(self):
