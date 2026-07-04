@@ -440,6 +440,13 @@ class RVParams:
     # runs.  Empty/None for the usual catalog-key case.
     nose_tps_custom:        Optional[dict] = None
     body_tps_custom:        Optional[dict] = None
+    # Provenance: where this vehicle's numbers came from and how firm they are.
+    # `source` is a short citation; `notes` is free-form (e.g. "mass 300 kg is a
+    # trajectory-fit value, no primary source").  Round-tripped by
+    # rv_to_dict/rv_from_dict so the justification travels with the vehicle and
+    # is never silently dropped on a GUI/library save.
+    source:                 str   = ""
+    notes:                  str   = ""
 
     def nose_material(self) -> str:
         """Nose TPS material key, falling back to the single tps_material (Phase-1
@@ -495,6 +502,8 @@ def rv_to_dict(rv: RVParams) -> dict:
         'structure_limit_K':     rv.structure_limit_K,
         'nose_tps_custom':       rv.nose_tps_custom,
         'body_tps_custom':       rv.body_tps_custom,
+        'source':                rv.source,
+        'notes':                 rv.notes,
     }
 
 
@@ -542,6 +551,8 @@ def rv_from_dict(d: dict) -> RVParams:
         structure_limit_K=float(d.get('structure_limit_K', 0.0)),
         nose_tps_custom=(d.get('nose_tps_custom') or None),
         body_tps_custom=(d.get('body_tps_custom') or None),
+        source=str(d.get('source', '')),
+        notes=str(d.get('notes', '')),
     )
 
 

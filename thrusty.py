@@ -2541,6 +2541,23 @@ class RVEditorDialog(tk.Toplevel):
         self._update_custom_state("nose")
         self._update_custom_state("body")
 
+        # ── Provenance — where these numbers came from / how firm they are ──
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
+        ttk.Label(self, text="Provenance",
+                  font=("TkDefaultFont", 9, "bold")).pack(anchor=tk.W, padx=12, pady=(8, 0))
+        prov_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        prov_frm.pack(fill=tk.X)
+        prov_frm.columnconfigure(1, weight=1)
+        ttk.Label(prov_frm, text="Source:").grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        self._source_var = tk.StringVar(value=(rv.source if rv else ""))
+        ttk.Entry(prov_frm, textvariable=self._source_var, width=52).grid(
+            row=0, column=1, sticky=tk.EW, pady=2)
+        ttk.Label(prov_frm, text="Notes:").grid(row=1, column=0, sticky=tk.NW, padx=(0, 8), pady=2)
+        self._notes_text = tk.Text(prov_frm, width=52, height=3, wrap=tk.WORD)
+        self._notes_text.grid(row=1, column=1, sticky=tk.EW, pady=2)
+        if rv and rv.notes:
+            self._notes_text.insert("1.0", rv.notes)
+
         # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
         btn_frm = ttk.Frame(self, padding=(12, 0, 12, 12))
@@ -2753,6 +2770,8 @@ class RVEditorDialog(tk.Toplevel):
             body_tps_thickness_m=body_thick,
             nose_tps_custom=nose_custom,
             body_tps_custom=body_custom,
+            source=self._source_var.get().strip(),
+            notes=self._notes_text.get("1.0", "end-1c").strip(),
         )
 
     def _update_glider_state(self):
