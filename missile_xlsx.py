@@ -54,18 +54,11 @@ _R: dict[str, int] = {
     'b_cd':        38,
     'b_delay':     39,
     'b_jett':      40,
-    # PAYLOAD & RV
+    # PAYLOAD — mass + the "carries a separating RV" flag.  The reentry vehicle
+    # itself is a separate object chosen from the RV library (attached at flyout
+    # time), not described inline here.
     'payload':     47,
-    'bus_mass':    48,
-    'n_rvs':       49,
-    'rv_mass':     50,
-    'rv_sep':      51,
-    'rv_beta':     52,
-    'rv_shape':    53,
-    'rv_diam':     54,
-    'rv_len':      55,
-    'pbv_diam':    56,
-    'pbv_len':     57,
+    'rv_sep':      48,
     # SHROUD / FAIRING
     'shr_mass':    60,
     'shr_alt':     61,
@@ -443,32 +436,20 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     _computed(ws, _RC_BOOSTERS+3, 4,
               f'=IF({mi1}>0,({bn_}*{bth}+{th1})/({mi1}*9.80665),"—")', '0.00')
 
-    # ── PAYLOAD & RV ─────────────────────────────────────────────────────────
-    _section(ws, r['payload'] - 1, 'PAYLOAD & REENTRY VEHICLE')
-
-    def prow(rk, label, unit, key, cast=float, notes=''):
-        _label(ws, r[rk], label, unit, notes)
-        v = top.get(key)
-        _inputs(ws, r[rk], [4], [cast(v) if v not in (None, '') else None])
-
-    prow('payload',  'Payload (total)',         'kg',    'payload_kg',
-         notes='Bus + all RVs')
-    prow('bus_mass', 'Bus (PBV) mass',          'kg',    'bus_mass_kg')
-    prow('n_rvs',    'Number of RVs',           '—',     'num_rvs',     cast=int)
-    prow('rv_mass',  'RV mass (each)',           'kg',    'rv_mass_kg')
-    _label(ws, r['rv_sep'], 'RV separates at burnout', '—',
-           'YES → empty stage follows a separate debris arc')
+    # ── PAYLOAD ──────────────────────────────────────────────────────────────
+    # Mass only.  The reentry vehicle / warhead is a separate object selected
+    # from the RV library and attached at flyout time — it is NOT described here.
+    _section(ws, r['payload'] - 1, 'PAYLOAD')
+    _label(ws, r['payload'], 'Payload mass', 'kg',
+           'Mass carried through boost; the reentry vehicle is chosen separately '
+           'from the RV library')
+    _pl = top.get('payload_kg')
+    _inputs(ws, r['payload'], [4], [float(_pl) if _pl not in (None, '') else None])
+    _label(ws, r['rv_sep'], 'Carries separating RV', '—',
+           'YES → a reentry vehicle selected from the RV library separates at '
+           'burnout and flies its own arc')
     _inputs(ws, r['rv_sep'], [4], [_yn(top.get('rv_separates', False))])
     _dropdown(ws, r['rv_sep'], 4, _YESNO_OPTS)
-    prow('rv_beta',  'RV β (ballistic coeff.)', 'kg/m²', 'rv_beta_kg_m2',
-         notes='Higher β → less drag deceleration')
-    _label(ws, r['rv_shape'], 'RV nose shape', '—')
-    _inputs(ws, r['rv_shape'], [4], [_nose_label(top.get('rv_shape', ''))])
-    _dropdown(ws, r['rv_shape'], 4, _NOSE_OPTS)
-    prow('rv_diam',  'RV diameter',             'm',     'rv_diameter_m')
-    prow('rv_len',   'RV length',               'm',     'rv_length_m')
-    prow('pbv_diam', 'PBV diameter',            'm',     'pbv_diameter_m')
-    prow('pbv_len',  'PBV length',              'm',     'pbv_length_m')
 
     # ── SHROUD / FAIRING ─────────────────────────────────────────────────────
     _section(ws, r['shr_mass'] - 1, 'SHROUD / FAIRING')
@@ -720,18 +701,11 @@ def import_missile_xlsx(path: str):
          'mass_final': 0, 'diameter_m': 0, 'length_m': 0,
          'thrust_N': 0, 'burn_time_s': 1, 'isp_s': 250})
 
-    # Top-level fields (stored on stage 1 node only)
+    # Top-level fields (stored on stage 1 node only).  The reentry vehicle is not
+    # described in the missile sheet — it is selected from the RV library — so the
+    # inline rv_*/pbv_*/bus fields are left at their MissileParams defaults.
     top_stage.payload_kg          = _rnum(ws, r['payload'],  4)
-    top_stage.bus_mass_kg         = _rnum(ws, r['bus_mass'], 4)
-    top_stage.num_rvs             = _rint(ws, r['n_rvs'],    4, 1)
-    top_stage.rv_mass_kg          = _rnum(ws, r['rv_mass'],  4)
     top_stage.rv_separates        = _rbool(ws, r['rv_sep'],  4)
-    top_stage.rv_beta_kg_m2       = _rnum(ws, r['rv_beta'],  4)
-    top_stage.rv_shape    = _NOSE_KEY.get(_rstr(ws, r['rv_shape'],  4), '')
-    top_stage.rv_diameter_m       = _rnum(ws, r['rv_diam'],  4)
-    top_stage.rv_length_m         = _rnum(ws, r['rv_len'],   4)
-    top_stage.pbv_diameter_m      = _rnum(ws, r['pbv_diam'], 4)
-    top_stage.pbv_length_m        = _rnum(ws, r['pbv_len'],  4)
     top_stage.shroud_mass_kg      = _rnum(ws, r['shr_mass'], 4)
     top_stage.shroud_jettison_alt_km = _rnum(ws, r['shr_alt'], 4, 80.0)
     top_stage.shroud_length_m     = _rnum(ws, r['shr_len'],  4)
