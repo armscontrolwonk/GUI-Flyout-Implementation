@@ -7344,6 +7344,12 @@ class MissileFlyoutApp(tk.Tk):
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
                 missile.rv = _user_rv
+            # Payload carried through boost = throw-weight minus the shroud (which
+            # is jettisoned mid-boost and tracked separately): the PBV/bus mass
+            # plus the selected reentry vehicle's mass.  Derived here so payload
+            # follows the RV you pick rather than being a stale hand-entered number.
+            missile.payload_kg = (getattr(missile, 'bus_mass_kg', 0.0) or 0.0) \
+                + _user_rv.mass_kg
 
         guidance = self._guidance_var.get()
         lat      = float(self._launch_lat.get())
