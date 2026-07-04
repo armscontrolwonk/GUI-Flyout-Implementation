@@ -4382,6 +4382,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Load RV…",                 command=self._load_rv)
         file_menu.add_command(label="Save RV…",                 command=self._export_rv)
+        file_menu.add_command(label="Load RV from XLSX…",       command=self._import_rv_xlsx)
+        file_menu.add_command(label="Save RV to XLSX…",         command=self._export_rv_xlsx)
+        file_menu.add_command(label="New RV XLSX Template…",    command=self._new_rv_template)
         file_menu.add_separator()
         file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
         file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
@@ -9866,6 +9869,89 @@ class MissileFlyoutApp(tk.Tk):
                                  f"Could not write RV file:\n{exc}", parent=self)
             return
         self._status_var.set(f"RV exported: {path}")
+
+    def _export_rv_xlsx(self):
+        """Export the selected RV to a fillable XLSX spreadsheet."""
+        sel = self._rv_main_var.get()
+        rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
+        if rv is None or not getattr(rv, 'name', ''):
+            messagebox.showinfo("No RV", "Select an RV first.", parent=self)
+            return
+        try:
+            from rv_xlsx import export_rv_xlsx
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            parent=self, title="Save RV to XLSX",
+            defaultextension=".xlsx",
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialfile=f"{_safe_name(rv.name)}.rv.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            export_rv_xlsx(path, rv)
+            self._status_var.set(f"RV exported: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Export error", str(exc), parent=self)
+
+    def _import_rv_xlsx(self):
+        """Import an RV from a filled XLSX spreadsheet into the library."""
+        try:
+            from rv_xlsx import import_rv_xlsx
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import askopenfilename
+        path = askopenfilename(
+            parent=self, title="Load RV from XLSX",
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            rv = import_rv_xlsx(path)
+        except Exception as exc:
+            messagebox.showerror("Import error", str(exc), parent=self)
+            return
+        if not rv.name:
+            messagebox.showwarning(
+                "Import warning",
+                "RV name is blank — fill in the Name field in the XLSX and "
+                "re-import.", parent=self)
+            return
+        try:
+            _save_rv_to_library(rv)
+        except Exception as exc:
+            messagebox.showerror("Save RV",
+                                 f"Could not write RV file:\n{exc}", parent=self)
+            return
+        self._refresh_rv_list(select_name=rv.name)
+        self._status_var.set(f"RV imported: {rv.name}")
+
+    def _new_rv_template(self):
+        """Save a blank RV XLSX template the user fills in from scratch."""
+        try:
+            from rv_xlsx import make_blank_rv_template
+        except ImportError as exc:
+            messagebox.showerror("Missing dependency", str(exc), parent=self)
+            return
+        from tkinter.filedialog import asksaveasfilename
+        path = asksaveasfilename(
+            parent=self, title="Save Blank RV Template",
+            defaultextension=".xlsx",
+            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialfile="new_rv.rv.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            make_blank_rv_template(path)
+            self._status_var.set(f"Template saved: {os.path.basename(path)}")
+        except Exception as exc:
+            messagebox.showerror("Template error", str(exc), parent=self)
 
     def _export_missile_xlsx(self):
         """Export current missile to a filled-in XLSX template."""
