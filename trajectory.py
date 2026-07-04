@@ -299,6 +299,18 @@ def _interp_milestone(t_event, t_arr, alt_arr, range_arr, speed_arr,
 # Guidance helpers
 # ---------------------------------------------------------------------------
 
+def _cross3(a, b):
+    """Cross product of two length-3 vectors, returned as a length-3 ndarray.
+
+    numpy's generic np.cross spends most of its time dispatching on shape/axis;
+    for the fixed 3-vectors in the per-step EOM/guidance hot path this explicit
+    form is several times faster and bit-for-bit identical.
+    """
+    return np.array((a[1] * b[2] - a[2] * b[1],
+                     a[2] * b[0] - a[0] * b[2],
+                     a[0] * b[1] - a[1] * b[0]))
+
+
 def _enu_frame(lat_rad: float, lon_rad: float):
     """Return (e_east, e_north, e_up) unit vectors in ECEF at given geodetic pos."""
     sin_lat, cos_lat = np.sin(lat_rad), np.cos(lat_rad)
@@ -481,14 +493,14 @@ def _true_gravity_turn_thrust_dir(pos, vel, lat_rad, lon_rad,
         e_east, e_north, _ = _enu_frame(lat_rad, lon_rad)
         e_az = (np.sin(azimuth_rad) * e_east
                 + np.cos(azimuth_rad) * e_north)
-        n_side = np.cross(v_hat, e_az)
+        n_side = _cross3(v_hat, e_az)
         ns_mag = float(np.linalg.norm(n_side))
         if ns_mag > 1e-6:
             n_side = n_side / ns_mag
             # cross(v_hat, n_side) gives the "below velocity, toward
             # +e_az" direction in the trajectory plane — i.e., the
             # direction we want to subtract from v_hat for η > 0.
-            n_perp = np.cross(v_hat, n_side)
+            n_perp = _cross3(v_hat, n_side)
         else:
             # v_hat ‖ e_az (purely horizontal along launch heading) —
             # use local-up directly.
@@ -731,7 +743,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                     n_up_mag = np.linalg.norm(n_up)
                     if n_up_mag > 1e-9:
                         n_up   = n_up / n_up_mag
-                        n_side = np.cross(v_hat, n_up)
+                        n_side = _cross3(v_hat, n_up)
                         g_mag  = np.linalg.norm(g)
                         # Bank angle from the user's bank schedule (list of
                         # (t_start_s, t_end_s, bank_deg) entries in mission-
@@ -975,7 +987,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             _final_stage = _final_stage.stage2
         if astage is _final_stage and not _final_stage.solid_motor:
             omega_vec = np.array([0.0, 0.0, OMEGA_EARTH])
-            vel_eci   = vel + np.cross(omega_vec, pos)
+            vel_eci   = vel + _cross3(omega_vec, pos)
             r         = np.linalg.norm(pos)
             eps_now   = 0.5 * np.dot(vel_eci, vel_eci) - GM / r
             eps_target = -GM / (2.0 * (RE + target_orbit_alt_m))
@@ -985,7 +997,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 # is underground even though the energy is correct; the altitude
                 # guard in the previous version was too strict (blocked insertion
                 # burns at 150–200 km for 500 km target orbits).
-                h_vec = np.cross(pos, vel_eci)
+                h_vec = _cross3(pos, vel_eci)
                 h2    = np.dot(h_vec, h_vec)
                 a     = -GM / (2.0 * eps_now)
                 e     = np.sqrt(max(0.0, 1.0 - h2 / (GM * a)))
@@ -1372,10 +1384,14 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
     _ground.direction = -1
 
     state0 = np.concatenate([pos_ecef, vel_ecef])
-    # First pass: find the impact time with the event detector.
+    # Single pass: find the impact time with the event detector.  When the
+    # caller wants the trajectory we request dense output and SAMPLE the same
+    # integration's interpolant rather than re-integrating a second time — the
+    # old code ran solve_ivp twice per debris piece, and debris was ~half of a
+    # multi-stage run's cost.
     sol_ev = solve_ivp(_eom, (0.0, max_time_s), state0,
                        method='RK45', events=_ground,
-                       rtol=1e-5, atol=10.0, dense_output=False)
+                       rtol=1e-5, atol=10.0, dense_output=return_trajectory)
 
     # If the ground event never fired the stage did not impact within the
     # timeout — it is in orbit (or on a very long sub-orbital arc).  Return
@@ -1385,40 +1401,31 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
         return None
 
     t_impact = float(sol_ev.t_events[0][0])
-
-    if not return_trajectory:
-        # Re-use the last state from the event solution for the impact point.
-        pos_f = sol_ev.y[:3, -1]
-        vel_f = sol_ev.y[3:, -1]
-        lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
-        return (float(np.degrees(lat_f)),
-                float(np.degrees(lon_f)),
-                t_impact,
-                float(np.linalg.norm(vel_f)))
-
-    # Second pass: re-integrate on a regular 10-second grid for smooth output.
-    t_eval = np.arange(0.0, t_impact, 10.0)
-    t_eval = np.append(t_eval, t_impact)
-    sol = solve_ivp(_eom, (0.0, t_impact), state0,
-                    method='RK45', t_eval=t_eval,
-                    rtol=1e-5, atol=10.0, dense_output=False)
-
-    pos_f = sol.y[:3, -1]
-    vel_f = sol.y[3:, -1]
+    # Impact state from the event detector (exact terminal state).
+    pos_f = sol_ev.y_events[0][0][:3]
+    vel_f = sol_ev.y_events[0][0][3:]
     lat_f, lon_f, _ = ecef_to_geodetic(pos_f)
     result = (float(np.degrees(lat_f)),
               float(np.degrees(lon_f)),
               t_impact,
               float(np.linalg.norm(vel_f)))
 
+    if not return_trajectory:
+        return result
+
+    # Smooth output on a regular 10-second grid, sampled from the SAME
+    # integration's dense interpolant (no second integration).
+    t_eval = np.append(np.arange(0.0, t_impact, 10.0), t_impact)
+    ys = sol_ev.sol(t_eval)          # shape (6, N)
+
     d_lats, d_lons, d_alts = [], [], []
-    for i in range(sol.y.shape[1]):
-        la, lo, al = ecef_to_geodetic(sol.y[:3, i])
+    for i in range(ys.shape[1]):
+        la, lo, al = ecef_to_geodetic(ys[:3, i])
         d_lats.append(float(np.degrees(la)))
         d_lons.append(float(np.degrees(lo)))
         d_alts.append(float(al))
     traj = {
-        't':   sol.t,
+        't':   t_eval,
         'lat': np.array(d_lats),
         'lon': np.array(d_lons),
         'alt': np.array(d_alts),
