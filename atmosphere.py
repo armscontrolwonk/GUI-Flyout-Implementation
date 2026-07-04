@@ -13,6 +13,9 @@ configure_atmosphere() before running trajectories.  All callers use
 atmosphere(altitude_m) — the signature never changes.
 """
 
+import math
+from functools import lru_cache
+
 import numpy as np
 
 # ---------------------------------------------------------------------------
@@ -211,6 +214,10 @@ def _build_msis_table(cfg):
 
 def _init_atmosphere():
     global _ATM_TABLE, _ATM_SOURCE
+    # Invalidate the scalar cache — it may hold values from the previous model.
+    _cs = globals().get('_atmosphere_scalar')
+    if _cs is not None:
+        _cs.cache_clear()
     model = _ATM_CONFIG['model']
     if model != 'msis':
         # 'std1976' or a MIL-STD-210A day ('hot'/'cold'/'polar'/'tropical')
@@ -284,24 +291,51 @@ def atmosphere(altitude_m):
     altitude_m : float or array-like
         Geometric altitude in metres.
     """
-    if _ATM_TABLE is not None:
-        scalar = np.ndim(altitude_m) == 0
-        h = np.atleast_1d(np.asarray(altitude_m, dtype=float))
-        h = np.clip(h, 0.0, 1_000_000.0)
+    # Scalar fast path — the per-integration-step case.  Route through a cached
+    # helper (exact-altitude key → identical result), which also skips the
+    # array-wrapping overhead: within one EOM step drag and thrust query the
+    # SAME altitude, so the second call is a cache hit, and repeated altitudes
+    # across a run are served without recomputation.  ~40% of trajectory runtime
+    # was here.
+    if np.ndim(altitude_m) == 0:
+        h = float(altitude_m)
+        if h < 0.0:
+            h = 0.0
+        elif h > 1_000_000.0:
+            h = 1_000_000.0
+        return _atmosphere_scalar(h)
 
+    if _ATM_TABLE is not None:
+        h = np.clip(np.asarray(altitude_m, dtype=float), 0.0, 1_000_000.0)
         h_tab = _ATM_TABLE['h_m']
         T   = np.interp(h, h_tab, _ATM_TABLE['T'])
         rho = np.exp(np.interp(h, h_tab, _ATM_TABLE['log_rho']))
         P   = np.exp(np.interp(h, h_tab, _ATM_TABLE['log_P']))
         a   = np.sqrt(_GAMMA * _R * T)
-
-        if scalar:
-            return float(T[0]), float(P[0]), float(rho[0]), float(a[0])
         return T, P, rho, a
 
     if _ATM_SOURCE in _MIL_DAYS:
         return _atmosphere_nonstd(altitude_m, _ATM_SOURCE)
     return _atmosphere_std1976(altitude_m)
+
+
+@lru_cache(maxsize=1 << 17)
+def _atmosphere_scalar(h):
+    """Cached single-altitude atmosphere lookup.  `h` is a pre-clamped float.
+
+    Cleared by _init_atmosphere() whenever the model/table is reconfigured, so
+    the cache never serves values from a stale model.
+    """
+    if _ATM_TABLE is not None:
+        h_tab = _ATM_TABLE['h_m']
+        T   = float(np.interp(h, h_tab, _ATM_TABLE['T']))
+        rho = math.exp(float(np.interp(h, h_tab, _ATM_TABLE['log_rho'])))
+        P   = math.exp(float(np.interp(h, h_tab, _ATM_TABLE['log_P'])))
+        a   = math.sqrt(_GAMMA * _R * T)
+        return T, P, rho, a
+    if _ATM_SOURCE in _MIL_DAYS:
+        return _atmosphere_nonstd(h, _ATM_SOURCE)
+    return _atmosphere_std1976(h)
 
 
 def atmosphere_source():
