@@ -53,6 +53,7 @@ _R: dict[str, int] = {
     'b_len':       37,
     'b_cd':        38,
     'b_delay':     39,
+    'b_jett':      40,
     # PAYLOAD & RV
     'payload':     47,
     'bus_mass':    48,
