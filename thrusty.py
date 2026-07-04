@@ -7777,9 +7777,32 @@ class MissileFlyoutApp(tk.Tk):
                       f"Impact spd: {_spd_str}")
             self._status_var.set("Done.  " + _strip)
         self._results_strip_var.set(_strip)
-        self._plot_results(r, scale, ulbl)
-        self._populate_timeline(r)
-        self._populate_heating(r)
+        # Rendering runs here (scheduled via after(), OUTSIDE the flyout's
+        # try/except).  Guard it: an unhandled exception here fires after
+        # _plot_results has already cla()'d every axis but before its final
+        # canvas.draw(), so it would silently blank every plot and leave the
+        # previous run's image on screen — which reads as "all plots broken /
+        # every missile shows the same hardcoded plot".  On failure, force a
+        # draw so partial plots show, and surface the traceback instead of
+        # hiding it in the terminal.
+        try:
+            self._plot_results(r, scale, ulbl)
+            self._populate_timeline(r)
+            self._populate_heating(r)
+        except Exception as exc:
+            import traceback as _tb
+            _tb_str = _tb.format_exc()
+            _tb.print_exc()
+            try:
+                self._canvas.draw()
+            except Exception:
+                pass
+            self._status_var.set(f"Plot error: {exc}")
+            messagebox.showerror(
+                "Plot error",
+                f"The trajectory ran, but rendering the plots failed:\n\n{exc}"
+                f"\n\n{_tb_str}",
+                parent=self)
 
     # ------------------------------------------------------------------
     def _populate_timeline(self, r):
