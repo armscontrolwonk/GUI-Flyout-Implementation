@@ -3266,3 +3266,44 @@ def booster_drag_vector(top_params: BoosterParams, vel_ecef: np.ndarray,
     A_total  = n * np.pi * (d / 2.0) ** 2
     drag_mag = top_params.booster_cd * q * A_total
     return -drag_mag * (vel_ecef / speed)
+
+
+# ---------------------------------------------------------------------------
+# Booster library — shipped boosters live as data files (booster_library/
+# *.booster.json), the same pattern as the reentry-object library.  The files
+# are loaded here and overlaid onto BOOSTER_DB; the builder functions above
+# remain as a fallback if a file is missing or fails to load.  Writers emit
+# the new file form; the migration keeps builders authoritative until the
+# file path is proven equivalent.
+# ---------------------------------------------------------------------------
+import glob as _glob
+import json as _json
+from pathlib import Path as _Path
+
+_BUNDLED_BOOSTER_LIB = _Path(__file__).resolve().parent / "booster_library"
+
+
+def load_booster_library(extra_dirs=()) -> int:
+    """Overlay booster_library/*.booster.json onto BOOSTER_DB.
+
+    Bundled files load first; any extra dirs (e.g. the user's writable
+    library) override same-name entries.  Returns the number of files loaded.
+    Never raises: a bad file is logged and skipped so the app still starts.
+    """
+    dirs = [_BUNDLED_BOOSTER_LIB, *[_Path(d) for d in extra_dirs]]
+    n = 0
+    for d in dirs:
+        if not d.exists():
+            continue
+        for fp in sorted(d.glob("*.booster.json")):
+            try:
+                p = booster_from_dict(_json.loads(fp.read_text()))
+                key = p.name or fp.name.replace(".booster.json", "")
+                BOOSTER_DB[key] = (lambda _p=p: _p)
+                n += 1
+            except Exception as exc:   # pragma: no cover
+                print(f"Warning: could not load booster '{fp.name}': {exc}")
+    return n
+
+
+load_booster_library()
