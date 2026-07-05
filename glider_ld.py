@@ -1,5 +1,5 @@
 """
-Whole-missile (no-separation body) lift-to-drag estimate at angle of attack.
+Whole-booster (no-separation body) lift-to-drag estimate at angle of attack.
 
 For a vehicle whose RV does NOT separate, the gliding/maneuvering body is the
 ENTIRE airframe (nose + body + fins) flying at a trim angle of attack.  Its L/D
@@ -8,7 +8,7 @@ geometry here -- in contrast to a separating RV, whose L/D is the RV's own
 designed property and is supplied directly as ro.glider_LD.
 
 Method: the standard semi-empirical component build-up for slender body+fin
-configurations at angle of attack (the same theoretical core Missile DATCOM
+configurations at angle of attack (the same theoretical core Booster DATCOM
 uses), assembled from primary sources, all in data/:
   * Allen & Perkins, NACA Rep. 1048 (1951): the two-term body normal force
     (slender-body potential + viscous crossflow); origin of the crossflow term.
@@ -35,14 +35,14 @@ supersonic Mach, extended into hypersonic by the modified-Newtonian crossflow
 and to high AoA by the sin(2a)/(2a) term; linear-theory wing slope assumes
 unbanked fins without swept-forward LE / swept-back TE (NACA 1307).
 
-CAVEATS: a slender whole missile is a POOR lifting shape, so the resulting L/D
+CAVEATS: a slender whole booster is a POOR lifting shape, so the resulting L/D
 is modest; this is a preliminary-design estimate, not a substitute for
 wind-tunnel/CFD.  The body planform is the cone/slender ~0.5*L*d approximation.
 """
 
 from __future__ import annotations
 import math
-from missile_models import MissileParams, _cd_nose_shape, drag_coefficient, _SHAPE_ALIAS
+from booster_models import BoosterParams, _cd_nose_shape, drag_coefficient, _SHAPE_ALIAS
 
 _ETA = 1.0       # crossflow drag proportionality factor.  Jorgensen (NASA TN
                  # D-7228, 1973) states eta = 1 for supersonic/hypersonic
@@ -132,14 +132,14 @@ def wing_alone_cla(exposed_semispan: float, c_root: float, c_tip: float,
     return 2.0 * math.pi * ar / (2.0 + math.sqrt(4.0 + (beta * ar / cos_gc) ** 2))
 
 
-def _last_stage(params: MissileParams) -> MissileParams:
+def _last_stage(params: BoosterParams) -> BoosterParams:
     last = params
     while last.stage2 is not None:
         last = last.stage2
     return last
 
 
-def _body_cd0(last: MissileParams, mach: float) -> float:
+def _body_cd0(last: BoosterParams, mach: float) -> float:
     """Body zero-lift drag coefficient (referenced to base area)."""
     nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
     d = last.diameter_m
@@ -152,7 +152,7 @@ def _body_cd0(last: MissileParams, mach: float) -> float:
     return drag_coefficient(last, mach)
 
 
-def whole_missile_LD(params: MissileParams, mach: float = 3.0,
+def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
                      return_curve: bool = False) -> dict:
     """Maximum L/D (and the angle of attack) of the whole no-sep airframe at the
     given Mach, by the Jorgensen + Allen-Perkins + N-K-P build-up above.
@@ -233,18 +233,18 @@ def whole_missile_LD(params: MissileParams, mach: float = 3.0,
     return out
 
 
-def derive_glider_LD(params: MissileParams, mach: float = GLIDE_MACH_REF) -> float:
+def derive_glider_LD(params: BoosterParams, mach: float = GLIDE_MACH_REF) -> float:
     """Geometry-derived max L/D of a no-separation airframe (the value to use as
-    glider_LD for a body glider).  Thin wrapper over whole_missile_LD; returns
+    glider_LD for a body glider).  Thin wrapper over whole_booster_LD; returns
     0.0 if it cannot be computed."""
     try:
-        return float(whole_missile_LD(params, mach=mach).get("ld_max", 0.0))
+        return float(whole_booster_LD(params, mach=mach).get("ld_max", 0.0))
     except Exception:
         return 0.0
 
 
 if __name__ == "__main__":
-    from missile_models import get_missile, MissileParams as MP
+    from booster_models import get_booster, BoosterParams as MP
     # 1) N-K-P identity check
     for rs in (0.0, 0.25, 0.5, 0.75, 1.0):
         r, s = rs, 1.0
@@ -258,7 +258,7 @@ if __name__ == "__main__":
               mass_initial=500, mass_propellant=0, mass_final=500, burn_time_s=1,
               isp_s=1, thrust_N=1)
     for M in (2.0, 3.0, 5.0):
-        r = whole_missile_LD(body, mach=M)
+        r = whole_booster_LD(body, mach=M)
         print(f"finless slender body  M{M}: L/D_max={r['ld_max']:.2f} at "
               f"{r['alpha_deg']:.0f}deg  (Cd0={r['cd0']:.3f})")
     finned = MP(name="no-sep finned body", diameter_m=0.5, length_m=4.0,
@@ -268,7 +268,7 @@ if __name__ == "__main__":
                 mass_initial=500, mass_propellant=0, mass_final=500, burn_time_s=1,
                 isp_s=1, thrust_N=1)
     for M in (2.0, 3.0, 5.0):
-        r = whole_missile_LD(finned, mach=M)
+        r = whole_booster_LD(finned, mach=M)
         print(f"no-sep finned body    M{M}: L/D_max={r['ld_max']:.2f} at "
               f"{r['alpha_deg']:.0f}deg  (k_sum={r['k_sum']:.2f}, "
               f"cla_W={r['cla_wing']:.2f})")

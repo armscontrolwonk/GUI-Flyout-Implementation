@@ -31,7 +31,7 @@ Schilling equations used
 """
 
 import numpy as np
-from missile_models import MissileParams, total_burn_time
+from booster_models import BoosterParams, total_burn_time
 from coordinates import OMEGA_EARTH
 
 _G0      = 9.80665          # standard gravity, m/s²
@@ -43,7 +43,7 @@ _R_EARTH = 6371000.0        # mean Earth radius, m
 # Per-stage and full-stack delta-V (Tsiolkovsky rocket equation, vacuum)
 # ---------------------------------------------------------------------------
 
-def stage_delta_v(stage: MissileParams) -> float:
+def stage_delta_v(stage: BoosterParams) -> float:
     """
     Vacuum delta-V (m/s) for one stage via the Tsiolkovsky rocket equation.
 
@@ -59,7 +59,7 @@ def stage_delta_v(stage: MissileParams) -> float:
     return _G0 * stage.isp_s * np.log(stage.mass_initial / m_burnout)
 
 
-def total_delta_v(params: MissileParams) -> float:
+def total_delta_v(params: BoosterParams) -> float:
     """Total vacuum delta-V (m/s) summed across all stages."""
     dv, s = 0.0, params
     while s is not None:
@@ -130,7 +130,7 @@ def _t3stage(dv_total: float, isp_s: float, a0_ms2: float) -> float:
     return 3.0 * (1.0 - np.exp(exponent)) * _G0 * isp_s / a0_ms2
 
 
-def _dv_for_extra_payload(params: MissileParams, extra_kg: float) -> float:
+def _dv_for_extra_payload(params: BoosterParams, extra_kg: float) -> float:
     """
     Total vacuum ΔV (m/s) when the payload is changed by *extra_kg* kg
     relative to params.payload_kg.
@@ -141,7 +141,7 @@ def _dv_for_extra_payload(params: MissileParams, extra_kg: float) -> float:
     Intermediate-stage mass_final values are unchanged because those stages
     jettison only their own dry hardware.
     """
-    stages: list[MissileParams] = []
+    stages: list[BoosterParams] = []
     s = params
     while s is not None:
         stages.append(s)
@@ -156,7 +156,7 @@ def _dv_for_extra_payload(params: MissileParams, extra_kg: float) -> float:
     return dv
 
 
-def _compute_t_mix(params: MissileParams, dv_avail: float,
+def _compute_t_mix(params: BoosterParams, dv_avail: float,
                    t_actual: float, a0: float) -> tuple[float, float]:
     """Return (T_3s, T_mix) for the given vehicle state."""
     t3s   = _t3stage(dv_avail, params.isp_s, a0)
@@ -168,7 +168,7 @@ def _compute_t_mix(params: MissileParams, dv_avail: float,
 # Public interface
 # ---------------------------------------------------------------------------
 
-def schilling_performance(params: MissileParams,
+def schilling_performance(params: BoosterParams,
                            target_perigee_km: float,
                            launch_lat_deg: float = 0.0,
                            launch_az_deg: float = 90.0,
@@ -179,7 +179,7 @@ def schilling_performance(params: MissileParams,
 
     Parameters
     ----------
-    params             : MissileParams — full SLV stage stack;
+    params             : BoosterParams — full SLV stage stack;
                          params.payload_kg is the claimed payload for margin
                          reporting.
     target_perigee_km  : perigee altitude of the target orbit (km).

@@ -585,7 +585,7 @@ _SOLID_STAGE_LEWIS = {
     #   m_inert = k · m_prop^b · (L/D)^c          [lbm, L/D dimensionless]
     # The L/D exponent is POSITIVE: a more slender motor carries more inert per
     # unit propellant (case wall + insulation scale with surface area, not
-    # volume).  This is what makes the fit usable on slender missile stages,
+    # volume).  This is what makes the fit usable on slender booster stages,
     # which the stubby-skewed catalogue under-covers.  Significant (p≈0.006),
     # cuts RMS 21.6%→18.1%.  Steel uses the composite coefficients × a reduced
     # 1.347 material multiplier — down from the size-only 1.50, because the

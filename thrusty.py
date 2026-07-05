@@ -2,7 +2,7 @@
 Thrusty — Python/tkinter port of Forden's MATLAB GUIDE application.
 
 Layout mirrors the original MATLAB GUIDE application:
-  Left panel  : missile type, units, launch site (decimal °), target (decimal °),
+  Left panel  : booster type, units, launch site (decimal °), target (decimal °),
                 cutoff time, run buttons, range/apogee results
   Right panel : 4-up matplotlib plots (altitude, speed, trajectory, ground track)
   Bottom bar  : status line
@@ -28,14 +28,14 @@ from matplotlib.figure import Figure
 
 import matplotlib.ticker
 
-import missile_models as mm
-from missile_models import (MISSILE_DB, get_missile,
-                           missile_to_dict, missile_from_dict,
+import booster_models as mm
+from booster_models import (BOOSTER_DB, get_booster,
+                           booster_to_dict, booster_from_dict,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
                            ROParams, ro_from_dict, ro_to_dict, effective_ro)
-from trajectory import (integrate_trajectory, maximize_range, aim_missile,
+from trajectory import (integrate_trajectory, maximize_range, aim_booster,
                         plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
 from slv_performance import schilling_performance
@@ -109,11 +109,11 @@ def _draw_borders(ax, center_lon):
 
 
 # ---------------------------------------------------------------------------
-# Custom missile persistence
+# Custom booster persistence
 # ---------------------------------------------------------------------------
 
-# Sentinel string inserted into the missile combobox between non-Forden and
-# Forden entries.  It is never a valid missile name.
+# Sentinel string inserted into the booster combobox between non-Forden and
+# Forden entries.  It is never a valid booster name.
 
 # ---------------------------------------------------------------------------
 # Newtonian blunted-cone Cd table — Ref (4) Ch. 5, hypersonic / zero AoA.
@@ -172,8 +172,8 @@ def _cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
 
 
 # Names that ship with the program and cannot be deleted
-_PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
-# Packaged missiles the user has overridden with custom edits
+_PACKAGED_NAMES: set[str] = set(BOOSTER_DB.keys())
+# Packaged boosters the user has overridden with custom edits
 _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created boosters are saved.  Writers emit the new custom_boosters
 # path; the loader still reads the legacy custom_missiles file (see below).
@@ -183,12 +183,12 @@ _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.j
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_BOOSTERS     = _THRUSTY_ROOT / "boosters"
-_DIR_BOOSTERS_LEGACY = _THRUSTY_ROOT / "missiles"   # old export dir, still browsable
+_DIR_BOOSTERS_LEGACY = _THRUSTY_ROOT / "boosters"   # old export dir, still browsable
 
 
 def _boosters_dir():
     """Default folder for booster file dialogs.  Prefer the new boosters/ dir,
-    but fall back to the legacy missiles/ dir if that's where the user's files
+    but fall back to the legacy boosters/ dir if that's where the user's files
     already are (boosters/ not yet created)."""
     if not _DIR_BOOSTERS.exists() and _DIR_BOOSTERS_LEGACY.exists():
         return _DIR_BOOSTERS_LEGACY
@@ -261,7 +261,7 @@ def _format_deploy_schedule(sched) -> str:
 
 
 def _load_traj_profiles() -> dict:
-    """Return saved trajectory profiles keyed by missile name."""
+    """Return saved trajectory profiles keyed by booster name."""
     if not _TRAJ_PATH.exists():
         return {}
     try:
@@ -275,8 +275,8 @@ def _save_traj_profiles(profiles: dict) -> None:
     _TRAJ_PATH.write_text(json.dumps(profiles, indent=2))
 
 
-def _load_custom_missiles():
-    """Read the saved custom boosters and register them in MISSILE_DB.
+def _load_custom_boosters():
+    """Read the saved custom boosters and register them in BOOSTER_DB.
 
     Reads custom_boosters.json (current) or falls back to the legacy
     custom_missiles.json, so boosters saved before the rename still load."""
@@ -287,29 +287,29 @@ def _load_custom_missiles():
     try:
         data = json.loads(path.read_text())
         for name, d in data.items():
-            p = missile_from_dict(d)
-            MISSILE_DB[name] = lambda _p=p: _p
+            p = booster_from_dict(d)
+            BOOSTER_DB[name] = lambda _p=p: _p
             if name in _PACKAGED_NAMES:
                 _OVERRIDDEN_PACKAGED.add(name)
     except Exception as exc:
         print(f"Warning: could not load custom boosters: {exc}")
 
 
-def _save_custom_missiles():
+def _save_custom_boosters():
     """Write all non-packaged and overridden-packaged boosters to custom_boosters.json."""
     _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {}
-    for name in MISSILE_DB:
+    for name in BOOSTER_DB:
         if name not in _PACKAGED_NAMES or name in _OVERRIDDEN_PACKAGED:
-            data[name] = missile_to_dict(MISSILE_DB[name]())
+            data[name] = booster_to_dict(BOOSTER_DB[name]())
     _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
 
 
 # ---------------------------------------------------------------------------
 # RV library — RVs are first-class objects, decoupled from any specific
-# missile.  Each .ro.json file in ro_library/ becomes an entry in RO_DB,
+# booster.  Each .ro.json file in ro_library/ becomes an entry in RO_DB,
 # keyed by RV name.  The main control panel exposes the library via a
-# combobox; at run time the selected RV is injected into the missile.
+# combobox; at run time the selected RV is injected into the booster.
 # ---------------------------------------------------------------------------
 
 RO_DB: dict = {}   # name -> callable returning a fresh ROParams
@@ -356,16 +356,16 @@ def _save_ro_to_library(ro) -> Path:
     return fp
 
 
-def _extract_ros_from_missiles():
-    """One-time migration: copy every missile-embedded RV into ro_library/
+def _extract_ros_from_boosters():
+    """One-time migration: copy every booster-embedded RV into ro_library/
     if not already present.  Guarded by a marker file so the user can
     delete library entries without having them re-extracted on next launch."""
     marker = _RO_LIBRARY_PATH / ".migrated"
     if marker.exists():
         return
-    for name in list(MISSILE_DB.keys()):
+    for name in list(BOOSTER_DB.keys()):
         try:
-            p = MISSILE_DB[name]()
+            p = BOOSTER_DB[name]()
         except Exception:
             continue
         ero = effective_ro(p)
@@ -600,7 +600,7 @@ def _entry_row(parent, label, row, default, unit="", width=10):
 
 
 # ---------------------------------------------------------------------------
-# Stage sub-frame used inside MissileDialog
+# Stage sub-frame used inside BoosterDialog
 # ---------------------------------------------------------------------------
 
 class _StageFrame(ttk.LabelFrame):
@@ -1108,7 +1108,7 @@ class _StageFrame(ttk.LabelFrame):
                    command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     def set_readonly(self, readonly: bool):
-        """Set all editable entry fields to readonly (for Forden reference missiles)."""
+        """Set all editable entry fields to readonly (for Forden reference boosters)."""
         state = "readonly" if readonly else "normal"
         self._propellant_cb.config(state="disabled" if readonly else "readonly")
         self._grain_cb.config(state="disabled" if readonly else "readonly")
@@ -1223,11 +1223,11 @@ class _StageFrame(ttk.LabelFrame):
 
 
 # ---------------------------------------------------------------------------
-# New / Edit missile dialog
+# New / Edit booster dialog
 # ---------------------------------------------------------------------------
 
-class MissileDialog(tk.Toplevel):
-    """Modal dialog for creating or editing a custom missile."""
+class BoosterDialog(tk.Toplevel):
+    """Modal dialog for creating or editing a custom booster."""
 
     def __init__(self, parent, on_save, existing_name=None):
         super().__init__(parent)
@@ -1656,7 +1656,7 @@ class MissileDialog(tk.Toplevel):
                                        command=self._save_as_new)
         self._save_as_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
-        # Pre-fill if editing an existing missile
+        # Pre-fill if editing an existing booster
         if existing_name:
             self._prefill(existing_name)
             if self._readonly_mode:
@@ -1664,7 +1664,7 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _apply_readonly(self):
-        """Lock all input fields for Forden reference missiles."""
+        """Lock all input fields for Forden reference boosters."""
         for sf in self._stage_frames:
             sf.set_readonly(True)
         self._name_entry.config(state="readonly")
@@ -1910,8 +1910,8 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _prefill(self, name):
-        """Populate all fields from an existing missile (custom or packaged)."""
-        p = MISSILE_DB[name]()
+        """Populate all fields from an existing booster (custom or packaged)."""
+        p = BOOSTER_DB[name]()
 
         payload      = p.payload_kg
         shroud_mass  = p.shroud_mass_kg
@@ -1921,7 +1921,7 @@ class MissileDialog(tk.Toplevel):
         # per-stage fueled mass by differencing adjacent mass_initial values
         # and stripping payload/shroud from the appropriate stages.
         # dry is always fueled - mass_propellant: mass_propellant is per-stage
-        # and reliable even in missiles loaded from older JSON files, so this
+        # and reliable even in boosters loaded from older JSON files, so this
         # avoids any dependency on the (potentially corrupt) mass_final field.
         stage_data = []
         node = p
@@ -1931,7 +1931,7 @@ class MissileDialog(tk.Toplevel):
             is_first = (stage_idx == 0)
             is_last  = (nxt is None)
             if is_last and is_first:
-                # Single-stage missile
+                # Single-stage booster
                 fueled = node.mass_initial - payload - shroud_mass
             elif is_last:
                 # Last of multiple stages: no shroud here (lives on stage 1)
@@ -1982,7 +1982,7 @@ class MissileDialog(tk.Toplevel):
             self._pbv_mass_var.set("0")
             self._pbv_diameter_var.set("0")
             self._pbv_length_var.set("0")
-        # RV identity comes from the sidebar library, not from the missile;
+        # RV identity comes from the sidebar library, not from the booster;
         # just refresh the read-only summary to reflect that selection.
         self._update_ro_summary()
 
@@ -2068,9 +2068,9 @@ class MissileDialog(tk.Toplevel):
         self._guidance_var.set(p.guidance)
 
     # ------------------------------------------------------------------
-    def _collect(self) -> 'MissileParams':
-        """Read and validate all fields; return a MissileParams linked list."""
-        from missile_models import MissileParams, _FORDEN_MACH, _FORDEN_CD
+    def _collect(self) -> 'BoosterParams':
+        """Read and validate all fields; return a BoosterParams linked list."""
+        from booster_models import BoosterParams, _FORDEN_MACH, _FORDEN_CD
 
         name = self._name_var.get().strip()
         if not name:
@@ -2207,11 +2207,11 @@ class MissileDialog(tk.Toplevel):
         upper_mass = 0.0
         for idx, sd in enumerate(reversed(stages)):
             stage_num = n - idx
-            is_last  = (idx == 0)        # last stage of missile (first in reversed loop)
-            is_first = (idx == n - 1)    # first stage of missile (last in reversed loop)
+            is_last  = (idx == 0)        # last stage of booster (first in reversed loop)
+            is_first = (idx == n - 1)    # first stage of booster (last in reversed loop)
             prop = sd["fueled"] - sd["dry"]
             if is_last and is_first:
-                # Single-stage missile
+                # Single-stage booster
                 m0     = sd["fueled"] + payload + shroud_mass
                 mfinal = sd["dry"] if ro_separates else sd["dry"] + payload
             elif is_last:
@@ -2227,7 +2227,7 @@ class MissileDialog(tk.Toplevel):
                 m0     = sd["fueled"] + upper_mass
                 mfinal = sd["dry"]
             upper_mass = m0
-            node = MissileParams(
+            node = BoosterParams(
                 name=f"{name} Stage {stage_num}",
                 mass_initial=m0,
                 mass_propellant=prop,
@@ -2245,7 +2245,7 @@ class MissileDialog(tk.Toplevel):
                 thrust_profile=list(sd.get("thrust_profile", [])),
             )
 
-        # Saved missiles no longer embed an RV — RV identity lives in the
+        # Saved boosters no longer embed an RV — RV identity lives in the
         # library and is injected at run time from the sidebar selection.
         node.name                   = name
         node.guidance               = self._guidance_var.get()
@@ -2347,7 +2347,7 @@ class MissileDialog(tk.Toplevel):
         if not new_name or not new_name.strip():
             return
         new_name = new_name.strip()
-        if new_name in MISSILE_DB:
+        if new_name in BOOSTER_DB:
             if not messagebox.askyesno(
                     "Overwrite?",
                     f"A booster named '{new_name}' already exists. Overwrite it?",
@@ -2364,7 +2364,7 @@ class MissileDialog(tk.Toplevel):
 
 # Non-selectable divider in the reentry-mode dropdown, separating the primary
 # modes from the legacy/comparison equilibrium-glide laws.  Module-level so both
-# the main control panel (MissileFlyoutApp) and the RV editor can reference it.
+# the main control panel (BoosterFlyoutApp) and the RV editor can reference it.
 _GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
 
 
@@ -2408,7 +2408,7 @@ class ROEditorDialog(tk.Toplevel):
             e.grid(row=row, column=1, sticky=tk.W, pady=3)
             return e
 
-        # Separation mode — does the vehicle separate from the missile body?
+        # Separation mode — does the vehicle separate from the booster body?
         _lbl(-1 if False else 0, "Separation:")  # row 0
         self._sep_var = tk.StringVar(
             value=getattr(ro, 'separation_mode', 'separating_ro') if ro
@@ -2890,7 +2890,7 @@ class ROEditorDialog(tk.Toplevel):
 
     def _update_separation_state(self):
         """When 'Body (no separation)' is selected, mass/diameter/length
-        are inherited from the missile body at run-time, so disable those
+        are inherited from the booster body at run-time, so disable those
         entries to make the inheritance visible to the user.  β stays
         editable (it's a glide-phase scalar with no clean default from the
         body's Mach-dependent Cd table)."""
@@ -2946,7 +2946,7 @@ class ROEditorDialog(tk.Toplevel):
 # ---------------------------------------------------------------------------
 
 class RangeRingDialog(tk.Toplevel):
-    """Compute and export a maximum-range ring for the current missile.
+    """Compute and export a maximum-range ring for the current booster.
 
     Sweeps 72 azimuths (every 5°) using maximize_range(), collects the
     impact point for each direction, then renders the closed polygon on a
@@ -2969,12 +2969,12 @@ class RangeRingDialog(tk.Toplevel):
         frm.pack(fill=tk.BOTH)
         frm.columnconfigure(1, weight=1)
 
-        # Missile label (informational)
+        # Booster label (informational)
         ttk.Label(frm, text="Booster:").grid(
             row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
-        self._missile_lbl = ttk.Label(frm, text=app._missile_var.get(),
+        self._booster_lbl = ttk.Label(frm, text=app._booster_var.get(),
                                       foreground="navy")
-        self._missile_lbl.grid(row=0, column=1, sticky=tk.W)
+        self._booster_lbl.grid(row=0, column=1, sticky=tk.W)
 
         # Launch lat
         ttk.Label(frm, text="Launch lat (°N):").grid(
@@ -3033,7 +3033,7 @@ class RangeRingDialog(tk.Toplevel):
             return
 
         try:
-            (missile, guidance, _la, _lo, _az, cutoff, la,
+            (booster, guidance, _la, _lo, _az, cutoff, la,
              gt_start_s, gt_stop_s, _orb,
              _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
@@ -3050,7 +3050,7 @@ class RangeRingDialog(tk.Toplevel):
 
         threading.Thread(
             target=self._worker,
-            args=(missile, guidance, lat, lon, la,
+            args=(booster, guidance, lat, lon, la,
                   gt_start_s, gt_stop_s, launch_elevation_deg),
             daemon=True,
         ).start()
@@ -3058,7 +3058,7 @@ class RangeRingDialog(tk.Toplevel):
     def _cancel(self):
         self._stop.set()
 
-    def _worker(self, missile, guidance, lat, lon, la,
+    def _worker(self, booster, guidance, lat, lon, la,
                 gt_start_s, gt_stop_s, launch_elevation_deg):
         azimuths = np.linspace(0.0, 360.0, self._N_AZ, endpoint=False)
         points   = []   # (az, impact_lon, impact_lat)
@@ -3069,7 +3069,7 @@ class RangeRingDialog(tk.Toplevel):
                 return
             try:
                 result = maximize_range(
-                    missile, lat, lon, az,
+                    booster, lat, lon, az,
                     guidance=guidance,
                     burnout_angle_deg=la,
                     gt_turn_start_s=gt_start_s,
@@ -3152,11 +3152,11 @@ class RangeRingDialog(tk.Toplevel):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._app._missile_var.get())
+        booster = _safe_name(self._app._booster_var.get())
         path = asksaveasfilename(
             defaultextension=".png",
             initialdir=str(_ensure_dir(_DIR_MAPS)),
-            initialfile=f"{ts}_{missile}_rangering.cartopy.png",
+            initialfile=f"{ts}_{booster}_rangering.cartopy.png",
             filetypes=[("PNG image",    "*.png"), ("PDF document", "*.pdf"),
                        ("SVG image",    "*.svg"), ("All files",    "*.*")],
             title="Save range-ring map",
@@ -3227,8 +3227,8 @@ class RangeRingDialog(tk.Toplevel):
                 pass
         rng_str = (f"~{np.mean(ranges_km):.0f} km max range"
                    if ranges_km else "max range")
-        missile_name = self._app._missile_var.get()
-        ax.set_title(f"{missile_name}  ·  {rng_str}", fontsize=11, pad=8)
+        booster_name = self._app._booster_var.get()
+        ax.set_title(f"{booster_name}  ·  {rng_str}", fontsize=11, pad=8)
 
         fig.tight_layout()
         canvas.print_figure(path, bbox_inches="tight")
@@ -3364,10 +3364,10 @@ class ParametricSweepDialog(tk.Toplevel):
         lo   = info["lo"]
         hi   = info["hi"]
         if lo is None or hi is None:
-            # Cutoff: derive from selected missile
+            # Cutoff: derive from selected booster
             try:
-                missile, *_ = self._app._get_inputs()
-                lo, hi = 5.0, float(int(total_burn_time(missile)))
+                booster, *_ = self._app._get_inputs()
+                lo, hi = 5.0, float(int(total_burn_time(booster)))
             except Exception:
                 lo, hi = 5.0, 100.0
         self._lo_var  .set(str(lo))
@@ -3390,7 +3390,7 @@ class ParametricSweepDialog(tk.Toplevel):
     def _run(self):
         self._stop_evt.clear()
         try:
-            (missile, guidance, lat, lon, az, cutoff, la,
+            (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, _orb,
              _yaw_maneuvers, launch_elevation_deg) = self._app._get_inputs()
         except Exception as e:
@@ -3403,7 +3403,7 @@ class ParametricSweepDialog(tk.Toplevel):
             return
 
         if cutoff is None:
-            cutoff = total_burn_time(missile)
+            cutoff = total_burn_time(booster)
 
         overplot = self._overplot.get()
         if overplot and len(points) > 20:
@@ -3428,14 +3428,14 @@ class ParametricSweepDialog(tk.Toplevel):
 
         threading.Thread(
             target=self._sweep_worker,
-            args=(missile, guidance, lat, lon, az, la, cutoff,
+            args=(booster, guidance, lat, lon, az, la, cutoff,
                   param_key, points, overplot, gt_start_s, gt_stop_s,
                   launch_elevation_deg),
             daemon=True,
         ).start()
 
     # ------------------------------------------------------------------
-    def _sweep_worker(self, missile, guidance, lat, lon, az, la, cutoff,
+    def _sweep_worker(self, booster, guidance, lat, lon, az, la, cutoff,
                       param_key, points, store_trajs, gt_start_s=5.0, gt_stop_s=None,
                       launch_elevation_deg=90.0):
         for i, val in enumerate(points):
@@ -3447,7 +3447,7 @@ class ParametricSweepDialog(tk.Toplevel):
             run_gt_stop = val if param_key == "turn_stop"  else gt_stop_s
             try:
                 r = integrate_trajectory(
-                    missile, lat, lon, run_az,
+                    booster, lat, lon, run_az,
                     guidance=guidance,
                     burnout_angle_deg=run_la,
                     cutoff_time_s=run_cut,
@@ -3608,7 +3608,7 @@ def _dd_row(parent, label, row, default="0.0"):
 class FootprintDialog(tk.Toplevel):
     """Generate an HGV maneuver footprint by sweeping glider bank angle.
 
-    Runs N integrate_trajectory calls with the current missile/launch params
+    Runs N integrate_trajectory calls with the current booster/launch params
     but varying the glider bank angle (held for the full flight).  Negative
     banks turn left, positive banks turn right; zero produces the wings-
     level reference trajectory.  Results are written to a Folium HTML map
@@ -3672,7 +3672,7 @@ class FootprintDialog(tk.Toplevel):
             return
 
         try:
-            (missile, guidance, lat, lon, az, cutoff, la,
+            (booster, guidance, lat, lon, az, cutoff, la,
              gt_start, gt_stop, orb, yaw, el) = self._app._get_inputs()
         except Exception as exc:
             messagebox.showerror("Input error", str(exc), parent=self)
@@ -3696,7 +3696,7 @@ class FootprintDialog(tk.Toplevel):
 
         threading.Thread(
             target=self._worker,
-            args=(missile, guidance, lat, lon, az, cutoff, la,
+            args=(booster, guidance, lat, lon, az, cutoff, la,
                   gt_start, gt_stop, orb, yaw, el, bank_angles),
             daemon=True,
         ).start()
@@ -3704,11 +3704,11 @@ class FootprintDialog(tk.Toplevel):
     def _cancel(self):
         self._stop_evt.set()
 
-    def _worker(self, missile, guidance, lat, lon, az, cutoff, la,
+    def _worker(self, booster, guidance, lat, lon, az, cutoff, la,
                 gt_start, gt_stop, orb, yaw, el, bank_angles):
         import copy, dataclasses
         from trajectory import integrate_trajectory
-        from missile_models import effective_ro
+        from booster_models import effective_ro
 
         _max_t = 3600.0
         results = []
@@ -3717,7 +3717,7 @@ class FootprintDialog(tk.Toplevel):
             if self._stop_evt.is_set():
                 break
 
-            m = copy.deepcopy(missile)
+            m = copy.deepcopy(booster)
             _ero = effective_ro(m)
             if _ero is not None:
                 # Hold the swept bank angle for the entire flight.  The bank
@@ -4043,12 +4043,12 @@ class DampingEstimatorDialog(tk.Toplevel):
 
 class MassEstimatorDialog(tk.Toplevel):
     """Estimate a stage's dry (inert) mass from parameters and report how far
-    the missile's stated burnout mass diverges from known mass relationships.
+    the booster's stated burnout mass diverges from known mass relationships.
 
     Wraps mass_estimator.py: component-level Wilhite-school MERs (Akin/UMD)
     plus aggregate relations (Pietrobon hydrolox, structural coefficient,
     Zandbergen solid-stage regressions).  Stage parameters are prefilled from
-    the currently selected missile; the user picks the propellant combination
+    the currently selected booster; the user picks the propellant combination
     (liquid) or casing material (solid) and any unknowns, then recomputes.
     """
 
@@ -4058,9 +4058,9 @@ class MassEstimatorDialog(tk.Toplevel):
         self.title("Dry Mass Estimator")
         self.resizable(True, True)
 
-        name = app._missile_var.get()
+        name = app._booster_var.get()
         try:
-            self._params = get_missile(name)
+            self._params = get_booster(name)
         except Exception as exc:                       # pragma: no cover
             messagebox.showerror("Dry Mass Estimator",
                                  f"Could not load booster {name!r}:\n{exc}",
@@ -4077,9 +4077,9 @@ class MassEstimatorDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     @staticmethod
     def _decompose(p):
-        """Per-stage (fueled, dry, prop, thrust, geometry) for a missile.
+        """Per-stage (fueled, dry, prop, thrust, geometry) for a booster.
 
-        Mirrors MissileDialog._prefill: mass_initial is cumulative, so per-stage
+        Mirrors BoosterDialog._prefill: mass_initial is cumulative, so per-stage
         fueled mass is recovered by differencing adjacent stages and stripping
         payload / shroud; the stage's own dry (structural) mass is
         fueled − propellant, independent of the possibly-cumulative mass_final.
@@ -4343,7 +4343,7 @@ class MassEstimatorDialog(tk.Toplevel):
 # ---------------------------------------------------------------------------
 # Main application window
 # ---------------------------------------------------------------------------
-class MissileFlyoutApp(tk.Tk):
+class BoosterFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
@@ -4372,12 +4372,12 @@ class MissileFlyoutApp(tk.Tk):
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
-        _load_custom_missiles()      # restore any user-saved boosters
-        _extract_ros_from_missiles() # migrate: pull embedded RVs into the library
+        _load_custom_boosters()      # restore any user-saved boosters
+        _extract_ros_from_boosters() # migrate: pull embedded RVs into the library
 
         self._build_menu()
         self._build_ui()
-        self._on_missile_changed()   # populate params tab with default missile
+        self._on_booster_changed()   # populate params tab with default booster
 
     # ------------------------------------------------------------------
     # Utility
@@ -4397,11 +4397,11 @@ class MissileFlyoutApp(tk.Tk):
 
         file_menu = tk.Menu(menubar, tearoff=0)
         # ── Modeling inputs (load/save) ───────────────────────────────
-        file_menu.add_command(label="Load Booster…",            command=self._load_missile)
-        file_menu.add_command(label="Save Booster…",            command=self._export_missile)
-        file_menu.add_command(label="Load Booster from XLSX…",  command=self._import_missile_xlsx)
-        file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_missile_xlsx)
-        file_menu.add_command(label="New Booster XLSX Template…", command=self._new_missile_template)
+        file_menu.add_command(label="Load Booster…",            command=self._load_booster)
+        file_menu.add_command(label="Save Booster…",            command=self._export_booster)
+        file_menu.add_command(label="Load Booster from XLSX…",  command=self._import_booster_xlsx)
+        file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_booster_xlsx)
+        file_menu.add_command(label="New Booster XLSX Template…", command=self._new_booster_template)
         file_menu.add_separator()
         file_menu.add_command(label="Load Reentry Object…",                 command=self._load_ro)
         file_menu.add_command(label="Save Reentry Object…",                 command=self._export_ro)
@@ -4436,7 +4436,7 @@ class MissileFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
 
         # Reference Data — swap the empirical source behind a model term.
-        # Built automatically from missile_models.MODEL_OPTIONS so new toggles
+        # Built automatically from booster_models.MODEL_OPTIONS so new toggles
         # (atmosphere, etc.) appear here without touching this code.
         ref_menu = tk.Menu(analysis_menu, tearoff=0)
         self._model_option_vars = {}
@@ -4614,34 +4614,34 @@ class MissileFlyoutApp(tk.Tk):
     # Control panel  (mirrors Forden's left-side panel)
     # ------------------------------------------------------------------
     def _build_control_panel(self, parent):
-        # ── Missile type ───────────────────────────────────────────────
+        # ── Booster type ───────────────────────────────────────────────
         mf = ttk.LabelFrame(parent, text="Booster Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
-        _cb_values   = list(MISSILE_DB.keys())
+        _cb_values   = list(BOOSTER_DB.keys())
         _first_valid = _cb_values[0] if _cb_values else ""
-        self._last_valid_missile = _first_valid
-        self._missile_var = tk.StringVar(value=_first_valid)
-        self._missile_cb = ttk.Combobox(mf, textvariable=self._missile_var,
+        self._last_valid_booster = _first_valid
+        self._booster_var = tk.StringVar(value=_first_valid)
+        self._booster_cb = ttk.Combobox(mf, textvariable=self._booster_var,
                                         values=_cb_values,
                                         state="readonly", width=24)
-        self._missile_cb.pack(padx=6, pady=(4, 2))
-        self._missile_cb.bind("<<ComboboxSelected>>", self._on_missile_changed)
-        _bind_typeahead(self._missile_cb)
+        self._booster_cb.pack(padx=6, pady=(4, 2))
+        self._booster_cb.bind("<<ComboboxSelected>>", self._on_booster_changed)
+        _bind_typeahead(self._booster_cb)
 
         mb = ttk.Frame(mf)
         mb.pack(padx=6, pady=(0, 4))
         ttk.Button(mb, text="New",    width=7,
-                   command=self._new_missile).pack(side=tk.LEFT, padx=2)
+                   command=self._new_booster).pack(side=tk.LEFT, padx=2)
         ttk.Button(mb, text="Edit…",  width=7,
-                   command=self._edit_missile).pack(side=tk.LEFT, padx=2)
+                   command=self._edit_booster).pack(side=tk.LEFT, padx=2)
         self._del_btn = ttk.Button(mb, text="Delete", width=7,
-                                   command=self._delete_missile,
+                                   command=self._delete_booster,
                                    state=tk.DISABLED)
         self._del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Reentry vehicle (payload) ─────────────────────────────────
-        # The RV library is independent of any missile; the run-time
-        # selection here overrides whatever RV the missile was saved with.
+        # The RV library is independent of any booster; the run-time
+        # selection here overrides whatever RV the booster was saved with.
         rf = ttk.LabelFrame(parent, text="Reentry Object")
         rf.pack(fill=tk.X, padx=6, pady=3)
         self._ro_main_var = tk.StringVar(value="(booster default)")
@@ -4792,7 +4792,7 @@ class MissileFlyoutApp(tk.Tk):
         self._adv_pitch_chk.grid(row=9, column=0, columnspan=2,
                                   sticky=tk.W, padx=8, pady=(0, 2))
 
-        # Row 10: Per-stage inline rows — rebuilt whenever missile changes
+        # Row 10: Per-stage inline rows — rebuilt whenever booster changes
         self._adv_pitch_frame = ttk.Frame(gf)
         self._stage_rows = []   # list of dicts with StringVars per stage
 
@@ -5193,8 +5193,8 @@ class MissileFlyoutApp(tk.Tk):
                 "that reenters the atmosphere.")
             return
 
-        ro = effective_ro(get_missile(self._missile_var.get()))
-        name = ro.name if ro is not None else self._missile_var.get()
+        ro = effective_ro(get_booster(self._booster_var.get()))
+        name = ro.name if ro is not None else self._booster_var.get()
 
         out = ["Booster:  %s" % name]
         if s["nose_q_MW"] is not None:
@@ -5275,10 +5275,10 @@ class MissileFlyoutApp(tk.Tk):
                                  "Check launch latitude and azimuth.", parent=self)
             return
 
-        missile = get_missile(self._missile_var.get())
+        booster = get_booster(self._booster_var.get())
 
         try:
-            r = schilling_performance(missile, perigee_km, lat, az,
+            r = schilling_performance(booster, perigee_km, lat, az,
                                       target_apogee_km=apogee_km)
         except Exception as exc:
             messagebox.showerror("Analysis error", str(exc), parent=self)
@@ -5288,13 +5288,13 @@ class MissileFlyoutApp(tk.Tk):
         from slv_performance import stage_delta_v as _sdv
 
         n_stages = 0
-        s = missile
+        s = booster
         while s:
             n_stages += 1
             s = s.stage2
 
         stage_lines = []
-        s, i = missile, 1
+        s, i = booster, 1
         while s:
             stage_lines.append(
                 f"    Stage {i} ({s.isp_s:.0f} s Isp):\t{_sdv(s):8.0f} m/s")
@@ -5314,16 +5314,16 @@ class MissileFlyoutApp(tk.Tk):
         margin_sign = "+" if r['dv_margin_ms'] >= 0 else ""
 
         payload_line = ""
-        if missile.payload_kg > 0:
+        if booster.payload_kg > 0:
             pm   = r['payload_margin_kg'] or 0.0
             sign = "+" if pm >= 0 else ""
             payload_line = (
-                f"  Claimed payload:\t{missile.payload_kg:8.0f} kg\n"
+                f"  Claimed payload:\t{booster.payload_kg:8.0f} kg\n"
                 f"  Payload margin:\t{sign}{pm:7.0f} kg\n"
             )
 
         body = (
-            f"Booster:  {missile.name}  ({n_stages}-stage)\n"
+            f"Booster:  {booster.name}  ({n_stages}-stage)\n"
             f"Target:   {orbit_desc}\n"
             f"Launch:   {lat:.2f}° lat,  azimuth {az:.1f}°\n"
             "\n"
@@ -5486,7 +5486,7 @@ class MissileFlyoutApp(tk.Tk):
     # Booster Parameters tab
     # ------------------------------------------------------------------
     def _build_params_tab(self, parent):
-        """Scrollable structured display — rebuilt on each missile change."""
+        """Scrollable structured display — rebuilt on each booster change."""
         self._params_canvas = tk.Canvas(
             parent, borderwidth=0, highlightthickness=0)
         vsb = ttk.Scrollbar(parent, orient="vertical",
@@ -5518,14 +5518,14 @@ class MissileFlyoutApp(tk.Tk):
             lambda _e: self._params_canvas.unbind_all("<MouseWheel>"))
 
     # ------------------------------------------------------------------
-    # Missile selection
+    # Booster selection
     # ------------------------------------------------------------------
-    def _on_missile_changed(self, _event=None):
-        name = self._missile_var.get()
-        if name not in MISSILE_DB:
+    def _on_booster_changed(self, _event=None):
+        name = self._booster_var.get()
+        if name not in BOOSTER_DB:
             return
-        self._last_valid_missile = name
-        p = get_missile(name)
+        self._last_valid_booster = name
+        p = get_booster(name)
 
         prof = _load_traj_profiles().get(name)
         if prof:
@@ -5579,14 +5579,14 @@ class MissileFlyoutApp(tk.Tk):
         # Seed glider mission-control fields from the RV if it has glider
         # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
         # belong to the RV editor — they're not displayed here; the status
-        # line summarises them.  When the missile loads with an RV that has
+        # line summarises them.  When the booster loads with an RV that has
         # glider_enabled, populate self._ro so the status line and the
         # mission-control frame appear automatically.
         _p_ero = effective_ro(p)
-        # If the missile carries a named RV that we have in the library, point
+        # If the booster carries a named RV that we have in the library, point
         # the main-panel combobox at it.  Otherwise leave the user's current
         # selection (or the sentinel) alone — they may want the same RV across
-        # different missiles.
+        # different boosters.
         if (hasattr(self, '_ro_main_cb') and _p_ero is not None
                 and _p_ero.name and _p_ero.name in RO_DB
                 and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
@@ -5798,7 +5798,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _estimate_body_LD(self):
         """Derive the terminal/glide vehicle's max L/D from geometry, via the
-        rigorous whole-missile build-up (glider_ld.py): Jorgensen TR R-474 body
+        rigorous whole-booster build-up (glider_ld.py): Jorgensen TR R-474 body
         normal force + Allen-Perkins NACA 1048 viscous crossflow + N-K-P NACA
         1307 wing-body interference, with Jorgensen's sin(2a)/(2a) high-AoA
         correction, maximised over angle of attack.
@@ -5809,11 +5809,11 @@ class MissileFlyoutApp(tk.Tk):
         (not Barrowman fin theory, which is for booster static margin)."""
         import glider_ld
         try:
-            p = get_missile(self._missile_var.get())
+            p = get_booster(self._booster_var.get())
         except Exception:
             return
         mach_ref = glider_ld.GLIDE_MACH_REF
-        r = glider_ld.whole_missile_LD(p, mach=mach_ref)
+        r = glider_ld.whole_booster_LD(p, mach=mach_ref)
         if r.get("error"):
             messagebox.showinfo("L/D Estimate", r["error"])
             return
@@ -5833,12 +5833,12 @@ class MissileFlyoutApp(tk.Tk):
         )
 
     def _rebuild_stage_rows(self):
-        """Rebuild inline per-stage pitch rows from the current missile."""
+        """Rebuild inline per-stage pitch rows from the current booster."""
         for w in self._adv_pitch_frame.winfo_children():
             w.destroy()
         self._stage_rows = []
 
-        p = get_missile(self._missile_var.get())
+        p = get_booster(self._booster_var.get())
         if p is None:
             return
 
@@ -5921,7 +5921,7 @@ class MissileFlyoutApp(tk.Tk):
             sv_stop  = tk.StringVar(value=f"{def_stop:.1f}")
             sv_angle = tk.StringVar(value=f"{def_angle:.1f}")
 
-            # Coast — pre-populate from missile definition; blank for last stage
+            # Coast — pre-populate from booster definition; blank for last stage
             sv_coast = tk.StringVar(
                 value=f"{node.coast_time_s:.1f}" if not is_last else "")
 
@@ -6147,52 +6147,52 @@ class MissileFlyoutApp(tk.Tk):
                 # the active terminal vehicle changes; just ensure it's readable.
 
     # ------------------------------------------------------------------
-    # Custom missile management
+    # Custom booster management
     # ------------------------------------------------------------------
-    def _refresh_missile_list(self, select_name=None):
-        """Rebuild the combobox values from the current MISSILE_DB."""
-        names = list(MISSILE_DB.keys())
-        self._missile_cb.configure(values=names)
-        target = select_name or self._missile_var.get()
-        if target not in MISSILE_DB:
+    def _refresh_booster_list(self, select_name=None):
+        """Rebuild the combobox values from the current BOOSTER_DB."""
+        names = list(BOOSTER_DB.keys())
+        self._booster_cb.configure(values=names)
+        target = select_name or self._booster_var.get()
+        if target not in BOOSTER_DB:
             target = names[0] if names else ""
-        self._missile_var.set(target)
+        self._booster_var.set(target)
         self._del_btn.config(state=tk.NORMAL if target else tk.DISABLED)
         if target:
-            self._on_missile_changed()
+            self._on_booster_changed()
 
-    def _on_missile_saved(self, p):
-        """Callback invoked by MissileDialog when the user clicks Save."""
+    def _on_booster_saved(self, p):
+        """Callback invoked by BoosterDialog when the user clicks Save."""
         name = p.name
-        MISSILE_DB[name] = lambda _p=p: _p
-        _save_custom_missiles()
-        # Snapshot trajectory panel so saving the missile doesn't reset it.
+        BOOSTER_DB[name] = lambda _p=p: _p
+        _save_custom_boosters()
+        # Snapshot trajectory panel so saving the booster doesn't reset it.
         self._snapshot_traj_profile(name)
-        self._refresh_missile_list(select_name=name)
+        self._refresh_booster_list(select_name=name)
         self._status_var.set(f"Booster '{name}' saved.")
 
-    def _new_missile(self):
-        MissileDialog(self, on_save=self._on_missile_saved)
+    def _new_booster(self):
+        BoosterDialog(self, on_save=self._on_booster_saved)
 
-    def _edit_missile(self):
-        name = self._missile_var.get()
-        MissileDialog(self, on_save=self._on_missile_saved, existing_name=name)
+    def _edit_booster(self):
+        name = self._booster_var.get()
+        BoosterDialog(self, on_save=self._on_booster_saved, existing_name=name)
 
-    def _delete_missile(self):
-        name = self._missile_var.get()
-        if not name or name not in MISSILE_DB:
+    def _delete_booster(self):
+        name = self._booster_var.get()
+        if not name or name not in BOOSTER_DB:
             return
         if not messagebox.askyesno("Delete booster",
                                    f"Permanently delete '{name}'?",
                                    parent=self):
             return
-        del MISSILE_DB[name]
-        _save_custom_missiles()
+        del BOOSTER_DB[name]
+        _save_custom_boosters()
         profiles = _load_traj_profiles()
         if name in profiles:
             del profiles[name]
             _save_traj_profiles(profiles)
-        self._refresh_missile_list()
+        self._refresh_booster_list()
         self._status_var.set(f"Booster '{name}' deleted.")
 
     # ------------------------------------------------------------------
@@ -6225,9 +6225,9 @@ class MissileFlyoutApp(tk.Tk):
             self._ro_del_btn.config(state=tk.NORMAL)
         else:
             self._ro_del_btn.config(state=tk.DISABLED)
-            # Fall back to whatever the active missile carries.
+            # Fall back to whatever the active booster carries.
             try:
-                p = get_missile(self._missile_var.get())
+                p = get_booster(self._booster_var.get())
                 self._ro = effective_ro(p)
             except Exception:
                 self._ro = None
@@ -6307,15 +6307,15 @@ class MissileFlyoutApp(tk.Tk):
         self._refresh_ro_list(select_name=self._RO_DEFAULT_SENTINEL)
         self._status_var.set(f"Reentry object '{sel}' deleted.")
 
-    def _snapshot_traj_profile(self, missile_name: str) -> None:
-        """Save current trajectory panel fields as a profile for missile_name.
+    def _snapshot_traj_profile(self, booster_name: str) -> None:
+        """Save current trajectory panel fields as a profile for booster_name.
 
         Captures everything the user can change in the Guidance panel —
         global pitch / cutoff fields, the Advanced Pitch Program rows
         (per stage), and the Yaw / dogleg program — so the next time this
-        missile is loaded the panel can be restored exactly.  This is
+        booster is loaded the panel can be restored exactly.  This is
         called after Save Booster so the editor dialog cannot wipe out
-        the user's trajectory work just by re-saving the missile.
+        the user's trajectory work just by re-saving the booster.
         """
         cutoff_str   = self._cutoff_var.get().strip()
         gt_start_str = self._gt_turn_start_var.get().strip()
@@ -6365,19 +6365,19 @@ class MissileFlyoutApp(tk.Tk):
             'yaw_rows':              yaw_rows_data,
         }
         profiles = _load_traj_profiles()
-        profiles[missile_name] = prof
+        profiles[booster_name] = prof
         _save_traj_profiles(profiles)
 
     def _reset_traj_profile(self) -> None:
-        """Delete the saved trajectory profile for the current missile and restore defaults."""
-        name = self._missile_var.get()
+        """Delete the saved trajectory profile for the current booster and restore defaults."""
+        name = self._booster_var.get()
         if not name:
             return
         profiles = _load_traj_profiles()
         if name in profiles:
             del profiles[name]
             _save_traj_profiles(profiles)
-        p = get_missile(name)
+        p = get_booster(name)
         self._cutoff_var.set(str(int(total_burn_time(p))))
         self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
         self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
@@ -6400,12 +6400,12 @@ class MissileFlyoutApp(tk.Tk):
         from tkinter import filedialog
         import datetime as _dt
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         path = filedialog.asksaveasfilename(
             title="Export guidance program",
             defaultextension=".json",
             initialdir=str(_ensure_dir(_DIR_GUIDANCE)),
-            initialfile=f"{ts}_{missile}.guidance.json",
+            initialfile=f"{ts}_{booster}.guidance.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             parent=self,
         )
@@ -6443,7 +6443,7 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Import error", str(exc), parent=self)
 
     # ------------------------------------------------------------------
-    # Scenario save / load (bundle: missile + RV + site + guidance)
+    # Scenario save / load (bundle: booster + RV + site + guidance)
     # ------------------------------------------------------------------
     _CSV_SCENARIO_PREFIX = "# scenario: "
     _XLSX_SCENARIO_SHEET = "Scenario"
@@ -6460,7 +6460,7 @@ class MissileFlyoutApp(tk.Tk):
         """Parse the leading '# scenario: <json>' line from a trajectory CSV."""
         with open(path, encoding="utf-8-sig") as fh:
             first = fh.readline().strip()
-        prefix = MissileFlyoutApp._CSV_SCENARIO_PREFIX.strip()
+        prefix = BoosterFlyoutApp._CSV_SCENARIO_PREFIX.strip()
         if not first.startswith(prefix):
             raise ValueError("CSV does not start with a scenario header line.")
         return json.loads(first[len(prefix):].strip())
@@ -6470,7 +6470,7 @@ class MissileFlyoutApp(tk.Tk):
         """Read the 'Scenario' sheet of a trajectory XLSX into a dict."""
         from openpyxl import load_workbook
         wb = load_workbook(path, read_only=True, data_only=True)
-        sheet = MissileFlyoutApp._XLSX_SCENARIO_SHEET
+        sheet = BoosterFlyoutApp._XLSX_SCENARIO_SHEET
         if sheet not in wb.sheetnames:
             raise ValueError(f"XLSX has no '{sheet}' sheet.")
         ws = wb[sheet]
@@ -6488,18 +6488,18 @@ class MissileFlyoutApp(tk.Tk):
         return data
 
     def _save_scenario(self):
-        """Save the full input state — missile name, RV name, launch site,
+        """Save the full input state — booster name, RV name, launch site,
         azimuth, and every guidance / glider field — as a .scenario.json."""
         from tkinter import filedialog
         import datetime as _dt
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         path = filedialog.asksaveasfilename(
             parent=self,
             title="Save scenario",
             defaultextension=".json",
             initialdir=str(_ensure_dir(_DIR_SCENARIOS)),
-            initialfile=f"{ts}_{missile}.scenario.json",
+            initialfile=f"{ts}_{booster}.scenario.json",
             filetypes=[("Scenario files (*.scenario.json)", "*.json"),
                        ("All files", "*.*")],
         )
@@ -6567,7 +6567,7 @@ class MissileFlyoutApp(tk.Tk):
     def _update_params_display(self, p=None):
         """Rebuild the Booster Parameters tab with structured label rows."""
         if p is None:
-            p = get_missile(self._missile_var.get())
+            p = get_booster(self._booster_var.get())
 
         _G0 = 9.80665
         pad = dict(padx=8, pady=4)
@@ -7136,7 +7136,7 @@ class MissileFlyoutApp(tk.Tk):
 
             # Target drifts east by Ω·T during flight; aim at where it
             # WILL BE, i.e. shift the aim longitude east by the same amount.
-            # (Equivalently: the missile's inertial trajectory must end
+            # (Equivalently: the booster's inertial trajectory must end
             # at the target's future ECI position.)
             dlon_corr = OMEGA * T
 
@@ -7311,7 +7311,7 @@ class MissileFlyoutApp(tk.Tk):
                 f"Target: {rng_km:.1f} km  |  Azimuth: {az:.1f}°  —  "
                 "Computing cutoff time…")
 
-            missile  = get_missile(self._missile_var.get())
+            booster  = get_booster(self._booster_var.get())
             guidance = self._guidance_var.get()
             la           = float(self._loft_angle_var.get())
             gt_start_str = self._gt_turn_start_var.get().strip()
@@ -7319,12 +7319,12 @@ class MissileFlyoutApp(tk.Tk):
             gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
             gt_stop_s    = float(gt_stop_str)  if gt_stop_str  else None
             try:
-                missile.launch_elevation_deg = float(self._launch_el_var.get())
+                booster.launch_elevation_deg = float(self._launch_el_var.get())
             except (ValueError, AttributeError):
                 pass
             threading.Thread(
                 target=self._aim_thread,
-                args=(missile, guidance, lat1_dd, lon1_dd, az, rng_km, la,
+                args=(booster, guidance, lat1_dd, lon1_dd, az, rng_km, la,
                       gt_start_s, gt_stop_s),
                 daemon=True,
             ).start()
@@ -7332,10 +7332,10 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Aim error", str(e))
 
-    def _aim_thread(self, missile, guidance, lat, lon, az, rng_km, la,
+    def _aim_thread(self, booster, guidance, lat, lon, az, rng_km, la,
                     gt_start_s=5.0, gt_stop_s=None):
         try:
-            cutoff = aim_missile(missile, lat, lon, az, rng_km,
+            cutoff = aim_booster(booster, lat, lon, az, rng_km,
                                  guidance=guidance,
                                  burnout_angle_deg=la,
                                  gt_turn_start_s=gt_start_s,
@@ -7351,18 +7351,18 @@ class MissileFlyoutApp(tk.Tk):
     # Run buttons
     # ------------------------------------------------------------------
     def _get_inputs(self):
-        missile  = get_missile(self._missile_var.get())
+        booster  = get_booster(self._booster_var.get())
 
-        # Override / supply the missile's RV from the sidebar library.
-        # Only applies when the missile is configured for a separating RV;
-        # otherwise the missile is treated as a ballistic body and the
+        # Override / supply the booster's RV from the sidebar library.
+        # Only applies when the booster is configured for a separating RV;
+        # otherwise the booster is treated as a ballistic body and the
         # selection is ignored.
         _ro_sel = getattr(self, '_ro_main_var', None)
         _ro_name = _ro_sel.get() if _ro_sel is not None else ""
-        if _ro_name in RO_DB and getattr(missile, 'ro_separates', False):
+        if _ro_name in RO_DB and getattr(booster, 'ro_separates', False):
             _user_ro = RO_DB[_ro_name]()
-            missile = copy.deepcopy(missile)
-            _node, _placed = missile, False
+            booster = copy.deepcopy(booster)
+            _node, _placed = booster, False
             while _node is not None:
                 if _node.ro is not None:
                     _node.ro = _user_ro
@@ -7370,12 +7370,12 @@ class MissileFlyoutApp(tk.Tk):
                     break
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
-                missile.ro = _user_ro
+                booster.ro = _user_ro
             # Payload carried through boost = throw-weight minus the shroud (which
             # is jettisoned mid-boost and tracked separately): the PBV/bus mass
             # plus the selected reentry object's mass.  Derived here so payload
             # follows the RV you pick rather than being a stale hand-entered number.
-            missile.payload_kg = (getattr(missile, 'bus_mass_kg', 0.0) or 0.0) \
+            booster.payload_kg = (getattr(booster, 'bus_mass_kg', 0.0) or 0.0) \
                 + _user_ro.mass_kg
 
         guidance = self._guidance_var.get()
@@ -7393,13 +7393,13 @@ class MissileFlyoutApp(tk.Tk):
         target_orbit_km = float(orb_alt_str) if (guidance == "orbital_insertion"
                                                    and orb_alt_str) else None
 
-        # Advanced per-stage pitch: deep-copy the missile and stamp each
+        # Advanced per-stage pitch: deep-copy the booster and stamp each
         # stage object with the values from the inline rows.
         if (self._adv_pitch_var.get()
                 and guidance in ("pitch_program", "orbital_insertion")
                 and self._stage_rows):
-            missile = copy.deepcopy(missile)
-            node = missile
+            booster = copy.deepcopy(booster)
+            node = booster
             for row in self._stage_rows:
                 if node is None:
                     break
@@ -7440,7 +7440,7 @@ class MissileFlyoutApp(tk.Tk):
             launch_elevation_deg = float(self._launch_el_var.get())
         except (ValueError, AttributeError):
             launch_elevation_deg = 90.0
-        missile.launch_elevation_deg = launch_elevation_deg
+        booster.launch_elevation_deg = launch_elevation_deg
 
         # Glider / HGV mission control — write only mission-time fields.
         # Vehicle properties (glider_enabled, glider_LD, glider_pullup_g_max,
@@ -7448,10 +7448,10 @@ class MissileFlyoutApp(tk.Tk):
         # Terminal Vehicle editor and live on self._ro / params.ro.  This
         # block runs only when the active terminal vehicle has glider mode
         # enabled.
-        _g_ero = effective_ro(missile)
+        _g_ero = effective_ro(booster)
         if _g_ero is not None:
             import dataclasses as _dc
-            missile = copy.deepcopy(missile)
+            booster = copy.deepcopy(booster)
             try:
                 _g_dalt = float(self._main_dive_alt_var.get())
             except ValueError:
@@ -7523,7 +7523,7 @@ class MissileFlyoutApp(tk.Tk):
                 )
                 _g_new_ro = _dc.replace(_g_ero, **_replace_kw)
             # Write back into wherever the ro currently lives in the stack
-            _g_node = missile
+            _g_node = booster
             _g_saved = False
             while _g_node is not None:
                 if _g_node.ro is not None:
@@ -7532,9 +7532,9 @@ class MissileFlyoutApp(tk.Tk):
                     break
                 _g_node = _g_node.stage2
             if not _g_saved:
-                missile.ro = _g_new_ro
+                booster.ro = _g_new_ro
 
-        return (missile, guidance, lat, lon, az, cutoff, la,
+        return (booster, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
                 yaw_maneuvers, launch_elevation_deg)
 
@@ -7577,7 +7577,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la,
+            (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
@@ -7587,7 +7587,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Running simulation…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la,
+            args=(booster, guidance, lat, lon, az, cutoff, la,
                   gt_start_s, gt_stop_s, target_orbit_km,
                   yaw_maneuvers, launch_elevation_deg, False),
             daemon=True,
@@ -7602,7 +7602,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la,
+            (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              yaw_maneuvers, launch_elevation_deg) = self._get_inputs()
         except ValueError as e:
@@ -7614,7 +7614,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set("Optimising for maximum range…")
         threading.Thread(
             target=self._run_thread,
-            args=(missile, guidance, lat, lon, az, cutoff, la,
+            args=(booster, guidance, lat, lon, az, cutoff, la,
                   gt_start_s, None, target_orbit_km,
                   yaw_maneuvers, launch_elevation_deg, True),
             daemon=True,
@@ -7625,7 +7625,7 @@ class MissileFlyoutApp(tk.Tk):
         if self._running:
             return
         try:
-            (missile, guidance, lat, lon, az, cutoff, la,
+            (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
              _yaw_maneuvers, _launch_el) = self._get_inputs()
         except ValueError as e:
@@ -7640,16 +7640,16 @@ class MissileFlyoutApp(tk.Tk):
             f"Planning orbital trajectory to {target_orbit_km:.0f} km…")
         threading.Thread(
             target=self._plan_orbit_thread,
-            args=(missile, lat, lon, az, target_orbit_km, gt_start_s),
+            args=(booster, lat, lon, az, target_orbit_km, gt_start_s),
             daemon=True,
         ).start()
 
-    def _plan_orbit_thread(self, missile, lat, lon, az,
+    def _plan_orbit_thread(self, booster, lat, lon, az,
                            target_orbit_km, gt_start_s):
         """Worker: runs plan_orbital_insertion then fires the full simulation."""
         try:
             plan = plan_orbital_insertion(
-                missile, lat, lon, az, target_orbit_km,
+                booster, lat, lon, az, target_orbit_km,
                 gt_turn_start_s=gt_start_s)
         except Exception as e:
             self._running = False
@@ -7682,7 +7682,7 @@ class MissileFlyoutApp(tk.Tk):
             #     [gt_start_s, turn_stop], then hold boost_angle.
             #   • Final stage: horizontal (0°) from ignition onwards.
             if self._adv_pitch_var.get() and self._stage_rows:
-                p = get_missile(self._missile_var.get())
+                p = get_booster(self._booster_var.get())
                 # Walk stage chain to find ignition/burnout times
                 times, node, t_ign = [], p, 0.0
                 while node is not None:
@@ -7708,7 +7708,7 @@ class MissileFlyoutApp(tk.Tk):
                         row['angle'].set(f"{boost_angle:.1f}")
 
             # Use _get_inputs() so per-stage overrides (when advanced is active)
-            # are applied to the missile before running the simulation.
+            # are applied to the booster before running the simulation.
             try:
                 (m_run, guidance_run, lat_run, lon_run, az_run,
                  cutoff_run, la_run,
@@ -7716,7 +7716,7 @@ class MissileFlyoutApp(tk.Tk):
                  yaw_maneuvers_run, el_run) = self._get_inputs()
             except ValueError:
                 # Fallback: use the original plan parameters without per-stage overrides.
-                m_run, guidance_run = missile, "orbital_insertion"
+                m_run, guidance_run = booster, "orbital_insertion"
                 lat_run, lon_run, az_run = lat, lon, az
                 cutoff_run, la_run = None, boost_angle
                 gts_run, gtstp_run, orb_run = gt_start_s, turn_stop, target_orbit_km
@@ -7735,14 +7735,14 @@ class MissileFlyoutApp(tk.Tk):
 
         self.after(0, _apply_and_run)
 
-    def _run_thread(self, missile, guidance, lat, lon, az, cutoff, la,
+    def _run_thread(self, booster, guidance, lat, lon, az, cutoff, la,
                     gt_start_s, gt_stop_s, target_orbit_km,
                     yaw_maneuvers, launch_elevation_deg, maximise):
         q_str = self._query_alt_km_var.get().strip()
         q_alt = float(q_str) if (self._query_alt_enable.get() and q_str) else None
         try:
             if maximise:
-                result = maximize_range(missile, lat, lon, az, guidance=guidance,
+                result = maximize_range(booster, lat, lon, az, guidance=guidance,
                                         cutoff_time_s=cutoff,
                                         gt_turn_start_s=gt_start_s,
                                         gt_turn_stop_s=gt_stop_s,
@@ -7755,7 +7755,7 @@ class MissileFlyoutApp(tk.Tk):
                 # so the integrator always reaches the ground.
                 _max_t = 10800.0 if guidance == "orbital_insertion" else 3600.0
                 result = integrate_trajectory(
-                    missile, lat, lon, az,
+                    booster, lat, lon, az,
                     guidance=guidance,
                     burnout_angle_deg=la,
                     cutoff_time_s=cutoff,
@@ -7837,7 +7837,7 @@ class MissileFlyoutApp(tk.Tk):
         # _plot_results has already cla()'d every axis but before its final
         # canvas.draw(), so it would silently blank every plot and leave the
         # previous run's image on screen — which reads as "all plots broken /
-        # every missile shows the same hardcoded plot".  On failure, force a
+        # every booster shows the same hardcoded plot".  On failure, force a
         # draw so partial plots show, and surface the traceback instead of
         # hiding it in the terminal.
         try:
@@ -8208,13 +8208,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km') if self._result else None
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".png",
             initialdir=str(_ensure_dir(_DIR_PLOTS)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.figures.png",
+            initialfile=f"{ts}_{booster}{rng_sfx}.figures.png",
             filetypes=[
                 ("PNG image",    "*.png"),
                 ("PDF document", "*.pdf"),
@@ -8238,7 +8238,7 @@ class MissileFlyoutApp(tk.Tk):
                           and self._site_var.get() in getattr(self, '_site_map', {}))
                       else '')
         meta = {
-            'booster':              self._missile_var.get(),
+            'booster':              self._booster_var.get(),
             'ro':                   _ro_name,
             'site_name':            _site_name,
             'launch_lat':           self._launch_lat.get(),
@@ -8290,10 +8290,10 @@ class MissileFlyoutApp(tk.Tk):
 
     def _apply_trajectory_metadata(self, meta):
         """Restore GUI fields from a metadata dict loaded from a CSV header."""
-        name = meta.get('booster', meta.get('missile', ''))
-        if name in MISSILE_DB or name in [m for m in MISSILE_DB]:
-            self._missile_var.set(name)
-            self._on_missile_changed()
+        name = meta.get('booster', meta.get('booster', ''))
+        if name in BOOSTER_DB or name in [m for m in BOOSTER_DB]:
+            self._booster_var.set(name)
+            self._on_booster_changed()
         # RV selection (added with the scenario schema; absent in older files)
         if hasattr(self, '_ro_main_var'):
             _ro_name = meta.get('ro', '')
@@ -8386,14 +8386,14 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             parent=self,
             defaultextension=".csv",
             initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.traj.csv",
+            initialfile=f"{ts}_{booster}{rng_sfx}.traj.csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             title="Export Trajectory",
         )
@@ -8438,13 +8438,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.traj.xlsx",
+            initialfile=f"{ts}_{booster}{rng_sfx}.traj.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             title="Export Trajectory XLSX",
         )
@@ -8482,13 +8482,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".kml",
             initialdir=str(_ensure_dir(_DIR_TRAJECTORIES)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.traj.kml",
+            initialfile=f"{ts}_{booster}{rng_sfx}.traj.kml",
             filetypes=[("KML files", "*.kml"), ("All files", "*.*")],
             title="Export trajectory KML",
         )
@@ -8511,7 +8511,7 @@ class MissileFlyoutApp(tk.Tk):
             for lo, la in zip(lon, lat)
         )
 
-        missile_name = self._missile_var.get()
+        booster_name = self._booster_var.get()
 
         # Build debris Placemarks
         debris_placemarks = []
@@ -8558,7 +8558,7 @@ class MissileFlyoutApp(tk.Tk):
         kml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>{missile_name} Trajectory</name>
+    <name>{booster_name} Trajectory</name>
 
     <Style id="traj3d">
       <LineStyle><color>ffff0000</color><width>2</width></LineStyle>
@@ -8923,13 +8923,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = r.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".png",
             initialdir=str(_ensure_dir(_DIR_MAPS)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.cartopy.png",
+            initialfile=f"{ts}_{booster}{rng_sfx}.cartopy.png",
             filetypes=[("PNG image", "*.png"), ("PDF document", "*.pdf"),
                        ("SVG image", "*.svg"), ("All files", "*.*")],
             title="Save Cartopy map",
@@ -9091,7 +9091,7 @@ class MissileFlyoutApp(tk.Tk):
                         transform=geo, zorder=6)
 
         # ── Title ─────────────────────────────────────────────────────
-        parts = [self._missile_var.get()]
+        parts = [self._booster_var.get()]
         rng = r.get('range_km')
         apo = r.get('apogee_km')
         if rng is not None: parts.append(f"Range {rng:.0f} km")
@@ -9121,13 +9121,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".html",
             initialdir=str(_ensure_dir(_DIR_MAPS)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.folium.html",
+            initialfile=f"{ts}_{booster}{rng_sfx}.folium.html",
             filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
             title="Save Folium map",
         )
@@ -9744,13 +9744,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".csv",
             initialdir=str(_ensure_dir(_DIR_EVENTS)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.events.csv",
+            initialfile=f"{ts}_{booster}{rng_sfx}.events.csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             title="Export flight events",
         )
@@ -9790,13 +9790,13 @@ class MissileFlyoutApp(tk.Tk):
         import datetime as _dt
         from tkinter.filedialog import asksaveasfilename
         ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        missile = _safe_name(self._missile_var.get())
+        booster = _safe_name(self._booster_var.get())
         rng_km  = self._result.get('range_km')
         rng_sfx = f"_{rng_km:.0f}km" if rng_km is not None else ""
         path = asksaveasfilename(
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_DIR_EVENTS)),
-            initialfile=f"{ts}_{missile}{rng_sfx}.events.xlsx",
+            initialfile=f"{ts}_{booster}{rng_sfx}.events.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             title="Export flight events XLSX",
         )
@@ -9824,10 +9824,10 @@ class MissileFlyoutApp(tk.Tk):
         wb.save(path)
         self._status_var.set(f"Timeline XLSX exported: {path}")
 
-    def _export_missile(self):
+    def _export_booster(self):
         """Export the current booster definition to a .booster.json file."""
-        name = self._missile_var.get()
-        if not name or name not in MISSILE_DB:
+        name = self._booster_var.get()
+        if not name or name not in BOOSTER_DB:
             messagebox.showinfo("No booster", "Select a booster first.")
             return
         from tkinter.filedialog import asksaveasfilename
@@ -9841,7 +9841,7 @@ class MissileFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        data = missile_to_dict(MISSILE_DB[name]())
+        data = booster_to_dict(BOOSTER_DB[name]())
         Path(path).write_text(json.dumps(data, indent=2))
         self._status_var.set(f"Booster exported: {path}")
 
@@ -9877,7 +9877,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Reentry object '{name}' loaded from {Path(path).name}")
 
     def _export_ro(self):
-        """Export the selected RV (or the missile's RV) to a .ro.json file."""
+        """Export the selected RV (or the booster's RV) to a .ro.json file."""
         sel = self._ro_main_var.get()
         ro = RO_DB[sel]() if sel in RO_DB else getattr(self, '_ro', None)
         if ro is None or not getattr(ro, 'name', ''):
@@ -9986,14 +9986,14 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Template error", str(exc), parent=self)
 
-    def _export_missile_xlsx(self):
-        """Export current missile to a filled-in XLSX template."""
-        name = self._missile_var.get()
-        if not name or name not in MISSILE_DB:
+    def _export_booster_xlsx(self):
+        """Export current booster to a filled-in XLSX template."""
+        name = self._booster_var.get()
+        if not name or name not in BOOSTER_DB:
             messagebox.showinfo("No booster", "Select a booster first.", parent=self)
             return
         try:
-            from missile_xlsx import export_missile_xlsx
+            from booster_xlsx import export_booster_xlsx
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
@@ -10010,15 +10010,15 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            export_missile_xlsx(path, MISSILE_DB[name]())
+            export_booster_xlsx(path, BOOSTER_DB[name]())
             self._status_var.set(f"Booster exported: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
 
-    def _import_missile_xlsx(self):
-        """Import a missile from a filled XLSX template."""
+    def _import_booster_xlsx(self):
+        """Import a booster from a filled XLSX template."""
         try:
-            from missile_xlsx import import_missile_xlsx
+            from booster_xlsx import import_booster_xlsx
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
@@ -10032,7 +10032,7 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            params = import_missile_xlsx(path)
+            params = import_booster_xlsx(path)
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
             return
@@ -10042,19 +10042,19 @@ class MissileFlyoutApp(tk.Tk):
                                    "the Name field in the XLSX and re-import.",
                                    parent=self)
             return
-        if params.name in MISSILE_DB and not messagebox.askyesno(
+        if params.name in BOOSTER_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{params.name}' already exists. Overwrite?",
                 parent=self):
             return
-        MISSILE_DB[params.name] = lambda p=params: p
-        _save_custom_missiles()
-        self._refresh_missile_list(select_name=params.name)
+        BOOSTER_DB[params.name] = lambda p=params: p
+        _save_custom_boosters()
+        self._refresh_booster_list(select_name=params.name)
         self._status_var.set(f"Booster imported: {params.name}")
 
-    def _new_missile_template(self):
+    def _new_booster_template(self):
         """Save a blank XLSX template the user fills in from scratch."""
         try:
-            from missile_xlsx import make_blank_template
+            from booster_xlsx import make_blank_template
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
@@ -10063,7 +10063,7 @@ class MissileFlyoutApp(tk.Tk):
             title="Save Blank Booster Template",
             defaultextension=".xlsx",
             initialdir=str(_boosters_dir()),
-            initialfile="missile_template.xlsx",
+            initialfile="booster_template.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
         )
@@ -10075,7 +10075,7 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Template error", str(exc), parent=self)
 
-    def _load_missile(self):
+    def _load_booster(self):
         """Import a .booster.json file into the custom booster library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
@@ -10087,20 +10087,20 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             data = json.loads(Path(path).read_text())
-            p    = missile_from_dict(data)
+            p    = booster_from_dict(data)
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse booster file:\n{e}")
             return
-        name = data.get('name') or Path(path).stem.replace('.booster', '').replace('.missile', '')
+        name = data.get('name') or Path(path).stem.replace('.booster', '').replace('.booster', '')
         if not name:
             messagebox.showerror("Load error", "Booster file has no name field.")
             return
-        if name in MISSILE_DB and not messagebox.askyesno(
+        if name in BOOSTER_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
             return
-        MISSILE_DB[name] = lambda p=p: p
-        _save_custom_missiles()
-        self._refresh_missile_list(select_name=name)
+        BOOSTER_DB[name] = lambda p=p: p
+        _save_custom_boosters()
+        self._refresh_booster_list(select_name=name)
         self._status_var.set(f"Booster '{name}' loaded from {Path(path).name}")
 
     def _export_site(self):
@@ -10181,7 +10181,7 @@ class MissileFlyoutApp(tk.Tk):
 
 # ---------------------------------------------------------------------------
 def main():
-    app = MissileFlyoutApp()
+    app = BoosterFlyoutApp()
     app.mainloop()
 
 

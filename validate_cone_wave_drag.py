@@ -2,7 +2,7 @@
 Validate _cd_wave_cone against the EXACT Taylor-Maccoll conical-flow solution.
 
 The supersonic nose wave drag is the dominant body-drag term, and it is the one
-term we could not cleanly cross-check against Missile DATCOM (its chart is read
+term we could not cleanly cross-check against Booster DATCOM (its chart is read
 through a 2-D INTERX interpolator) or PDAS WAVEDRAG (far-field area rule for
 whole aircraft).  Taylor-Maccoll gives the exact inviscid flow over a sharp cone
 at zero angle of attack; for such a cone the surface pressure coefficient is
@@ -22,7 +22,7 @@ inherited from the slender-body (3/ld)^2 fineness scaling.
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
-from missile_models import _cd_wave_cone
+from booster_models import _cd_wave_cone
 
 GAMMA = 1.4
 

@@ -1,5 +1,5 @@
 """
-missile_xlsx.py — XLSX import/export for Thrusty missile parameters.
+booster_xlsx.py — XLSX import/export for Thrusty booster parameters.
 
 Requires openpyxl (pip install openpyxl).  Import is lazy so the rest of
 the app starts without it; the user sees a friendly error only when they
@@ -13,8 +13,8 @@ Sheet layout
 
 Public API
 ----------
-  export_missile_xlsx(path, params)   -> None
-  import_missile_xlsx(path)           -> MissileParams
+  export_booster_xlsx(path, params)   -> None
+  import_booster_xlsx(path)           -> BoosterParams
   make_blank_template(path)           -> None
 """
 
@@ -251,13 +251,13 @@ def _yn(val: bool) -> str:
 # Stage-chain flattener
 # ---------------------------------------------------------------------------
 def _stage_dicts(params) -> list:
-    """Return list of up to 4 missile_to_dict dicts, one per stage.
+    """Return list of up to 4 booster_to_dict dicts, one per stage.
     thrust_N is injected directly from the params object because
-    missile_to_dict derives (and discards) it from Isp."""
-    from missile_models import missile_to_dict
+    booster_to_dict derives (and discards) it from Isp."""
+    from booster_models import booster_to_dict
     out, node = [], params
     while node is not None and len(out) < 4:
-        d = missile_to_dict(node)
+        d = booster_to_dict(node)
         d['thrust_N'] = node.thrust_N
         out.append(d)
         node = node.stage2
@@ -267,7 +267,7 @@ def _stage_dicts(params) -> list:
 # ---------------------------------------------------------------------------
 # Sheet builders  (stubs — filled section by section)
 # ---------------------------------------------------------------------------
-def _build_missile_sheet(ws, stages: list, top: dict) -> None:
+def _build_booster_sheet(ws, stages: list, top: dict) -> None:
     r = _R
 
     # Column widths
@@ -439,7 +439,7 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     # No payload MASS field: throw-weight = shroud (its own section) + PBV/bus +
     # reentry vehicle, and the payload carried through boost is derived at flyout
     # from the separately-selected RV (plus any bus mass).  Only the "carries a
-    # separating reentry object" flag is a missile property.
+    # separating reentry object" flag is a booster property.
     _section(ws, r['ro_sep'] - 1, 'PAYLOAD')
     _label(ws, r['ro_sep'], 'Carries separating reentry object', '—',
            'YES → a reentry object selected from the RO library separates at '
@@ -605,7 +605,7 @@ def _rbool(ws, row: int, col: int, default: bool = False) -> bool:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def export_missile_xlsx(path: str, params) -> None:
+def export_booster_xlsx(path: str, params) -> None:
     """Write params to a fully filled-in XLSX template at path."""
     xl = _xl()
     stages = _stage_dicts(params)
@@ -619,18 +619,18 @@ def export_missile_xlsx(path: str, params) -> None:
     ws_c = wb.create_sheet('Cd Table')
     ws_r = wb.create_sheet('Reference')
 
-    _build_missile_sheet(ws_m, stages, top)
+    _build_booster_sheet(ws_m, stages, top)
     _build_cd_sheet(ws_c, mach, cd)
     _build_reference_sheet(ws_r)
     wb.save(path)
 
 
-def import_missile_xlsx(path: str):
-    """Read an XLSX template and return a MissileParams chain."""
-    from missile_models import missile_from_dict
+def import_booster_xlsx(path: str):
+    """Read an XLSX template and return a BoosterParams chain."""
+    from booster_models import booster_from_dict
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
-    ws = wb['Booster'] if 'Booster' in wb.sheetnames else wb['Missile']
+    ws = wb['Booster'] if 'Booster' in wb.sheetnames else wb['Booster']
     r  = _R
 
     name = _rstr(ws, r['name'], 4, 'Unnamed')
@@ -681,25 +681,25 @@ def import_missile_xlsx(path: str):
     # Chain stages (reverse order so we can set stage2 pointers)
     chain = None
     for sd in reversed(stage_dicts):
-        sd['stage2'] = missile_from_dict(chain.__dict__ if chain else
+        sd['stage2'] = booster_from_dict(chain.__dict__ if chain else
                                          {k: None for k in []}) if False else None
-        chain = missile_from_dict(sd)
+        chain = booster_from_dict(sd)
         if len(stage_dicts) > 1:
             # Re-attach already-built later stage
             pass
 
     # Rebuild chain properly
-    stages_built = [missile_from_dict(sd) for sd in stage_dicts]
+    stages_built = [booster_from_dict(sd) for sd in stage_dicts]
     for i in range(len(stages_built) - 1):
         stages_built[i].stage2 = stages_built[i + 1]
-    top_stage = stages_built[0] if stages_built else missile_from_dict(
+    top_stage = stages_built[0] if stages_built else booster_from_dict(
         {'name': name, 'mass_initial': 0, 'mass_propellant': 0,
          'mass_final': 0, 'diameter_m': 0, 'length_m': 0,
          'thrust_N': 0, 'burn_time_s': 1, 'isp_s': 250})
 
     # Top-level fields (stored on stage 1 node only).  The reentry vehicle is not
-    # described in the missile sheet — it is selected from the RV library — so the
-    # inline rv_*/pbv_*/bus fields are left at their MissileParams defaults.
+    # described in the booster sheet — it is selected from the RV library — so the
+    # inline rv_*/pbv_*/bus fields are left at their BoosterParams defaults.
     top_stage.ro_separates        = _rbool(ws, r['ro_sep'],  4)
     top_stage.shroud_mass_kg      = _rnum(ws, r['shr_mass'], 4)
     top_stage.shroud_jettison_alt_km = _rnum(ws, r['shr_alt'], 4, 80.0)
@@ -728,9 +728,9 @@ def import_missile_xlsx(path: str):
 
 def make_blank_template(path: str) -> None:
     """Write a blank (unfilled) template the user fills in from scratch."""
-    from missile_models import MissileParams
-    blank = MissileParams(
+    from booster_models import BoosterParams
+    blank = BoosterParams(
         name='', mass_initial=0, mass_propellant=0, mass_final=0,
         diameter_m=0, length_m=0, thrust_N=0, burn_time_s=1, isp_s=250,
     )
-    export_missile_xlsx(path, blank)
+    export_booster_xlsx(path, blank)
