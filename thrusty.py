@@ -175,12 +175,24 @@ def _cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
 _PACKAGED_NAMES: set[str] = set(MISSILE_DB.keys())
 # Packaged missiles the user has overridden with custom edits
 _OVERRIDDEN_PACKAGED: set[str] = set()
-# Where user-created missiles are saved
-_CUSTOM_PATH      = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
+# Where user-created boosters are saved.  Writers emit the new custom_boosters
+# path; the loader still reads the legacy custom_missiles file (see below).
+_CUSTOM_PATH        = Path.home() / ".gui_missile_flyout" / "custom_boosters.json"
+_CUSTOM_PATH_LEGACY = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
-_DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
+_DIR_BOOSTERS     = _THRUSTY_ROOT / "boosters"
+_DIR_BOOSTERS_LEGACY = _THRUSTY_ROOT / "missiles"   # old export dir, still browsable
+
+
+def _boosters_dir():
+    """Default folder for booster file dialogs.  Prefer the new boosters/ dir,
+    but fall back to the legacy missiles/ dir if that's where the user's files
+    already are (boosters/ not yet created)."""
+    if not _DIR_BOOSTERS.exists() and _DIR_BOOSTERS_LEGACY.exists():
+        return _DIR_BOOSTERS_LEGACY
+    return _ensure_dir(_DIR_BOOSTERS)
 _RO_LIBRARY_PATH  = _THRUSTY_ROOT / "ro_library"
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
@@ -264,11 +276,16 @@ def _save_traj_profiles(profiles: dict) -> None:
 
 
 def _load_custom_missiles():
-    """Read custom_missiles.json and register any saved missiles in MISSILE_DB."""
-    if not _CUSTOM_PATH.exists():
+    """Read the saved custom boosters and register them in MISSILE_DB.
+
+    Reads custom_boosters.json (current) or falls back to the legacy
+    custom_missiles.json, so boosters saved before the rename still load."""
+    path = (_CUSTOM_PATH if _CUSTOM_PATH.exists()
+            else _CUSTOM_PATH_LEGACY if _CUSTOM_PATH_LEGACY.exists() else None)
+    if path is None:
         return
     try:
-        data = json.loads(_CUSTOM_PATH.read_text())
+        data = json.loads(path.read_text())
         for name, d in data.items():
             p = missile_from_dict(d)
             MISSILE_DB[name] = lambda _p=p: _p
@@ -279,7 +296,7 @@ def _load_custom_missiles():
 
 
 def _save_custom_missiles():
-    """Write all non-packaged and overridden-packaged missiles to custom_missiles.json."""
+    """Write all non-packaged and overridden-packaged boosters to custom_boosters.json."""
     _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {}
     for name in MISSILE_DB:
@@ -2373,7 +2390,7 @@ class ROEditorDialog(tk.Toplevel):
 
     def __init__(self, parent, ro=None, mass_kg=500.0):
         super().__init__(parent)
-        self.title("Edit Terminal Object" if ro is not None else "New Terminal Object")
+        self.title("Edit Reentry Object" if ro is not None else "New Reentry Object")
         self.resizable(False, True)
         self.grab_set()
         self._result = None
@@ -3917,7 +3934,7 @@ class DampingEstimatorDialog(tk.Toplevel):
                 row=self._r, column=0, columnspan=3, sticky='ew', pady=4)
             self._r += 1
 
-        ttk.Label(frm, text="Reentry object (from terminal object; editable)",
+        ttk.Label(frm, text="Reentry object (from reentry-object editor; editable)",
                   font=("TkDefaultFont", 9, "bold")).grid(
             row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
         self._r += 1
@@ -4355,7 +4372,7 @@ class MissileFlyoutApp(tk.Tk):
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
-        _load_custom_missiles()      # restore any user-saved missiles
+        _load_custom_missiles()      # restore any user-saved boosters
         _extract_ros_from_missiles() # migrate: pull embedded RVs into the library
 
         self._build_menu()
@@ -4834,8 +4851,8 @@ class MissileFlyoutApp(tk.Tk):
 
         # Row 0: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
-            value="Terminal reentry object not configured for maneuvering"
-            " — set L/D in Edit Terminal Object…")
+            value="Reentry object not configured for maneuvering"
+            " — set L/D in Edit Reentry Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
         self._glider_status_lbl.grid(row=0, column=0, columnspan=2,
@@ -5675,14 +5692,14 @@ class MissileFlyoutApp(tk.Tk):
             sep = getattr(ro, 'separation_mode', 'separating_ro')
             sep_lbl = "body" if sep == "body" else "separating reentry object"
             self._glider_status_var.set(
-                f"Terminal reentry object: {ro.name or 'RO'}  "
+                f"Reentry object: {ro.name or 'RO'}  "
                 f"({sep_lbl}, L/D {ro.glider_LD:.2f}, "
                 f"g-lim {ro.glider_pullup_g_max:.0f})  "
-                f"— edit in Edit Terminal Object…")
+                f"— edit in Edit Reentry Object…")
         else:
             self._glider_status_var.set(
-                "Terminal reentry object not configured for maneuvering"
-                " — set L/D in Edit Terminal Object…")
+                "Reentry object not configured for maneuvering"
+                " — set L/D in Edit Reentry Object…")
         # Reentry mode combobox is always visible regardless of glider config.
         self._glider_main_frame.grid(row=1, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
@@ -8221,7 +8238,7 @@ class MissileFlyoutApp(tk.Tk):
                           and self._site_var.get() in getattr(self, '_site_map', {}))
                       else '')
         meta = {
-            'missile':              self._missile_var.get(),
+            'booster':              self._missile_var.get(),
             'ro':                   _ro_name,
             'site_name':            _site_name,
             'launch_lat':           self._launch_lat.get(),
@@ -8273,7 +8290,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def _apply_trajectory_metadata(self, meta):
         """Restore GUI fields from a metadata dict loaded from a CSV header."""
-        name = meta.get('missile', '')
+        name = meta.get('booster', meta.get('missile', ''))
         if name in MISSILE_DB or name in [m for m in MISSILE_DB]:
             self._missile_var.set(name)
             self._on_missile_changed()
@@ -8389,7 +8406,7 @@ class MissileFlyoutApp(tk.Tk):
                 "piece,time_s,lat_deg,lon_deg,alt_m,speed_ms,range_km",
             ]
             for i, ti in enumerate(r['t']):
-                rows.append(f"vehicle,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
+                rows.append(f"primary,{ti:.3f},{r['lat'][i]:.6f},{r['lon'][i]:.6f},"
                             f"{r['alt'][i]:.1f},{r['speed'][i]:.2f},{r['range'][i]/1000.0:.3f}")
             for d in r.get('debris_trajectories', []):
                 label = str(d.get('label', 'debris')).replace(',', ' ')
@@ -8440,7 +8457,7 @@ class MissileFlyoutApp(tk.Tk):
         ws.append(["piece", "time_s", "lat_deg", "lon_deg",
                    "alt_m", "speed_ms", "range_km"])
         for i, ti in enumerate(r['t']):
-            ws.append(["vehicle", float(ti),
+            ws.append(["primary", float(ti),
                        float(r['lat'][i]), float(r['lon'][i]),
                        float(r['alt'][i]), float(r['speed'][i]),
                        float(r['range'][i]) / 1000.0])
@@ -9808,7 +9825,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Timeline XLSX exported: {path}")
 
     def _export_missile(self):
-        """Export the current missile definition to a .missile.json file."""
+        """Export the current booster definition to a .booster.json file."""
         name = self._missile_var.get()
         if not name or name not in MISSILE_DB:
             messagebox.showinfo("No booster", "Select a booster first.")
@@ -9817,8 +9834,8 @@ class MissileFlyoutApp(tk.Tk):
         safe = _safe_name(name)
         path = asksaveasfilename(
             defaultextension=".json",
-            initialdir=str(_ensure_dir(_DIR_MISSILES)),
-            initialfile=f"{safe}.missile.json",
+            initialdir=str(_boosters_dir()),
+            initialfile=f"{safe}.booster.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Export Booster",
         )
@@ -9985,8 +10002,8 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             title="Export Booster to XLSX",
             defaultextension=".xlsx",
-            initialdir=str(_ensure_dir(_DIR_MISSILES)),
-            initialfile=f"{safe}.missile.xlsx",
+            initialdir=str(_boosters_dir()),
+            initialfile=f"{safe}.booster.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
         )
@@ -10008,7 +10025,7 @@ class MissileFlyoutApp(tk.Tk):
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
             title="Import Booster from XLSX",
-            initialdir=str(_ensure_dir(_DIR_MISSILES)),
+            initialdir=str(_boosters_dir()),
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
         )
@@ -10045,7 +10062,7 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             title="Save Blank Booster Template",
             defaultextension=".xlsx",
-            initialdir=str(_ensure_dir(_DIR_MISSILES)),
+            initialdir=str(_boosters_dir()),
             initialfile="missile_template.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
@@ -10059,10 +10076,10 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Template error", str(exc), parent=self)
 
     def _load_missile(self):
-        """Import a .missile.json file into the custom missile library."""
+        """Import a .booster.json file into the custom booster library."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            initialdir=str(_ensure_dir(_DIR_MISSILES)),
+            initialdir=str(_boosters_dir()),
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             title="Load Booster",
         )
@@ -10074,7 +10091,7 @@ class MissileFlyoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse booster file:\n{e}")
             return
-        name = data.get('name') or Path(path).stem.replace('.missile', '')
+        name = data.get('name') or Path(path).stem.replace('.booster', '').replace('.missile', '')
         if not name:
             messagebox.showerror("Load error", "Booster file has no name field.")
             return
