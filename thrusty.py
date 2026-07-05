@@ -8361,10 +8361,22 @@ class BoosterFlyoutApp(tk.Tk):
 
     def _apply_trajectory_metadata(self, meta):
         """Restore GUI fields from a metadata dict loaded from a CSV header."""
-        name = meta.get('booster', meta.get('booster', ''))
-        if name in BOOSTER_DB or name in [m for m in BOOSTER_DB]:
+        name = meta.get('booster', meta.get('missile', ''))
+        if name and name in BOOSTER_DB:
             self._booster_var.set(name)
             self._on_booster_changed()
+        elif name:
+            # Don't silently leave the previously-selected booster in place —
+            # the rest of the scenario would then be applied to the wrong
+            # booster and "produce no (or wrong) results".  Say so plainly.
+            messagebox.showwarning(
+                "Load scenario",
+                f"Booster '{name}' is not available, so the scenario was applied "
+                f"to whatever booster is currently selected.\n\n"
+                f"It is not a shipped booster and is not in your saved boosters "
+                f"(~/.gui_missile_flyout/custom_boosters.json).  Load or recreate "
+                f"'{name}', select it, then reload the scenario.",
+                parent=self)
         # RV selection (added with the scenario schema; absent in older files)
         if hasattr(self, '_ro_main_var'):
             _ro_name = meta.get('ro', '')
