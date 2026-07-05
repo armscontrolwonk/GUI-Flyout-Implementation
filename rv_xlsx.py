@@ -1,7 +1,7 @@
 """
-rv_xlsx.py — XLSX import/export for Thrusty reentry vehicles (RVParams).
+rv_xlsx.py — XLSX import/export for Thrusty reentry objects (RVParams).
 
-The reentry-vehicle counterpart to missile_xlsx.py: edit a vehicle in a
+The reentry-object counterpart to missile_xlsx.py: edit a reentry object in a
 familiar spreadsheet grid instead of hand-editing rv.json.  Reuses that
 module's low-level cell writers/readers so the two stay visually consistent.
 
@@ -17,7 +17,7 @@ Public API
   make_blank_rv_template(path)  -> None
 
 Google Sheets: no dedicated integration is needed — in Google Sheets use
-File > Download > Microsoft Excel (.xlsx), then Load RV from XLSX.  A native
+File > Download > Microsoft Excel (.xlsx), then Load Reentry Object from XLSX.  A native
 Sheets read/write is a possible future enhancement.
 """
 
@@ -102,7 +102,7 @@ def _build_rv_sheet(ws, rv) -> None:
     ws.column_dimensions['I'].width = 40
 
     ws.merge_cells('B1:D1')
-    t = ws.cell(row=1, column=2, value='Thrusty — Reentry Vehicle')
+    t = ws.cell(row=1, column=2, value='Thrusty — Reentry Object')
     from openpyxl.styles import Font
     t.font = Font(bold=True, size=13)
 
