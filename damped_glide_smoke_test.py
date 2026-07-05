@@ -20,7 +20,7 @@ import json
 
 import numpy as np
 
-from missile_models import get_missile, ro_from_dict, ro_to_dict, effective_rv
+from missile_models import get_missile, ro_from_dict, ro_to_dict, effective_ro
 from trajectory import integrate_trajectory
 from glide_regime import regime_from_result
 
@@ -32,14 +32,14 @@ _CUTOFF = 170.0
 def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
     """Lofted sub-circular C-HGB entry (steep → uncapturable)."""
     p = get_missile(_BOOSTER)
-    rv = copy.deepcopy(_CHGB)
-    rv.glider_guidance, rv.glider_aero_model = mode, aero
+    ro = copy.deepcopy(_CHGB)
+    ro.glider_guidance, ro.glider_aero_model = mode, aero
     if zeta is not None:
-        rv.glider_damping_zeta = zeta
-    p.rv = rv
+        ro.glider_damping_zeta = zeta
+    p.ro = ro
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, max_time_s=8000.0,
                              dt_output=2.0, cutoff_time_s=cutoff)
-    return r, rv
+    return r, ro
 
 
 def _fly_aur_shallow(mode, zeta=None, aero="polar"):
@@ -52,21 +52,21 @@ def _fly_aur_shallow(mode, zeta=None, aero="polar"):
         p.stage2.stage_turn_stop_s = 90.0
         p.stage2.stage_burnout_angle_deg = 0.0
     p.launch_elevation_deg = 80.0
-    rv = copy.deepcopy(effective_rv(p))
-    rv.glider_guidance, rv.glider_aero_model = mode, aero
+    ro = copy.deepcopy(effective_ro(p))
+    ro.glider_guidance, ro.glider_aero_model = mode, aero
     if zeta is not None:
-        rv.glider_damping_zeta = zeta
+        ro.glider_damping_zeta = zeta
     node = p
     while node is not None:
-        if node.rv is not None:
-            node.rv = rv
+        if node.ro is not None:
+            node.ro = ro
             break
         node = node.stage2
     r = integrate_trajectory(p, 28.458, -80.5286, 103.0, guidance="pitch_program",
                              burnout_angle_deg=25.0, cutoff_time_s=117.0,
                              gt_turn_start_s=5.0, launch_elevation_deg=80.0,
                              max_time_s=8000.0, dt_output=2.0)
-    return r, rv
+    return r, ro
 
 
 def _alt(r):
@@ -86,11 +86,11 @@ def _reclimb_km(r):
 # --------------------------------------------------------------------------
 def test_serialization_roundtrip():
     for mode in ("damped_glide", "dynamic_equilibrium_glide"):
-        rv = copy.deepcopy(_CHGB)
-        rv.glider_guidance, rv.glider_damping_zeta = mode, 0.55
-        rv2 = ro_from_dict(ro_to_dict(rv))
-        assert rv2.glider_guidance == mode
-        assert abs(rv2.glider_damping_zeta - 0.55) < 1e-9
+        ro = copy.deepcopy(_CHGB)
+        ro.glider_guidance, ro.glider_damping_zeta = mode, 0.55
+        ro2 = ro_from_dict(ro_to_dict(ro))
+        assert ro2.glider_guidance == mode
+        assert abs(ro2.glider_damping_zeta - 0.55) < 1e-9
     print("  ok  serialization round-trip (both modes)")
 
 
@@ -128,8 +128,8 @@ def test_damped_no_free_lift():
 def test_lofted_plunges_both_modes():
     for mode in ("damped_glide", "dynamic_equilibrium_glide"):
         for aero in ("polar", "constant_LD"):
-            r, rv = _fly(mode, zeta=0.7, aero=aero)
-            g = regime_from_result(r, rv=rv)
+            r, ro = _fly(mode, zeta=0.7, aero=aero)
+            g = regime_from_result(r, ro=ro)
             assert g.verdict == "plunge", f"{mode}/{aero} lofted: expected plunge, got {g}"
     print("  ok  lofted entry plunges (both modes, both aero)")
 
@@ -138,8 +138,8 @@ def test_dyneq_captures_smoothly():
     # dynamic_equilibrium_glide captures the shallow insertion with NO skips
     # (smooth) and no free lift.
     eq = _range_km(_fly_aur_shallow("equilibrium_glide", aero="polar")[0])
-    r, rv = _fly_aur_shallow("dynamic_equilibrium_glide", zeta=0.7, aero="polar")
-    g = regime_from_result(r, rv=rv)
+    r, ro = _fly_aur_shallow("dynamic_equilibrium_glide", zeta=0.7, aero="polar")
+    g = regime_from_result(r, ro=ro)
     assert g.verdict == "capture", f"dyn-eq should capture, got {g}"
     assert _reclimb_km(r) < 1.0, "dyn-eq should capture smoothly (no climb)"
     assert _range_km(r) <= eq * 1.02, "dyn-eq exceeds equilibrium (free lift!)"

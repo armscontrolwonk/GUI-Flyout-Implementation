@@ -77,7 +77,7 @@ from coordinates import (
 from missile_models import (
     MissileParams, missile_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
-    booster_drag_vector, effective_rv, booster_separation_time,
+    booster_drag_vector, effective_ro, booster_separation_time,
 )
 
 
@@ -564,7 +564,7 @@ def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
 # Slender-body drag polar (Munk 1924, Ashley & Landahl §6-7, §9-8)
 # ---------------------------------------------------------------------------
 
-def _aero_polar(rv) -> tuple:
+def _aero_polar(ro) -> tuple:
     """Return (C_D0, k, A_ref) for the slender-body drag polar.
 
     Linear slender-body theory gives C_L = 2α (Munk 1924; Ashley & Landahl
@@ -589,13 +589,13 @@ def _aero_polar(rv) -> tuple:
     Returns (C_D0, k, A_ref).  Falls back to generic-HGV defaults if the
     inputs are missing or non-physical.
     """
-    d = float(getattr(rv, 'diameter_m', 0.0) or 0.0)
+    d = float(getattr(ro, 'diameter_m', 0.0) or 0.0)
     if d <= 0.0:
         d = 0.5                                 # generic HGV fallback
     A_ref = 0.25 * np.pi * d * d
-    m   = float(getattr(rv, 'mass_kg', 0.0) or 0.0)
-    bet = float(getattr(rv, 'beta_kg_m2', 0.0) or 0.0)
-    LD  = float(getattr(rv, 'glider_LD', 0.0) or 0.0)
+    m   = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
+    bet = float(getattr(ro, 'beta_kg_m2', 0.0) or 0.0)
+    LD  = float(getattr(ro, 'glider_LD', 0.0) or 0.0)
     if m > 0.0 and bet > 0.0:
         C_D0 = m / (bet * A_ref)               # β at zero lift
     else:
@@ -704,14 +704,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # tabulated to 1000 km, so drag is computed from the physical ρ at any
     # altitude — no hard cutoff.  At high altitudes ρ is small enough that
     # the drag force is naturally negligible.
-    if (_erv := effective_rv(params)) is not None and t > total_burn_time(params):
+    if (_ero := effective_ro(params)) is not None and t > total_burn_time(params):
         # After final-stage burnout, RV is flying: use β-based drag + optional lift.
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
             _, _, rho, _ = atmosphere(alt)
             q        = 0.5 * rho * speed ** 2
-            rv_mass  = _erv.mass_kg
-            drag_mag = q * rv_mass / _erv.beta_kg_m2
+            ro_mass  = _ero.mass_kg
+            drag_mag = q * ro_mass / _ero.beta_kg_m2
             # Reentry-phase activation: glider lift / polar drag override
             # are allowed only after the vehicle has crossed the 100 km
             # pierce altitude going down.  The _gl_above_pierce latch
@@ -732,7 +732,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # (C_D = 2·C_D0) during the post-burnout ascent through the
             # 86–120 km band, costing velocity and dropping apogee
             # relative to constant_LD.
-            if (_erv.glider_enabled and _erv.glider_LD > 0
+            if (_ero.glider_enabled and _ero.glider_LD > 0
                     and alt < ACTON_PIERCE_ALT_M
                     and _glider_active):
                 # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
@@ -749,19 +749,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         # (t_start_s, t_end_s, bank_deg) entries in mission-
                         # elapsed seconds).  Positive bank = right turn.
                         bank_rad = 0.0
-                        for (_bt_s, _bt_e, _bk_deg) in (_erv.glider_bank_schedule or []):
+                        for (_bt_s, _bt_e, _bk_deg) in (_ero.glider_bank_schedule or []):
                             if _bt_s <= t <= _bt_e:
                                 bank_rad = np.radians(_bk_deg)
                                 break
-                        if _erv.glider_terminal_dive:
-                            _dive_now = (alt < _erv.glider_terminal_alt_km * 1000.0)
+                        if _ero.glider_terminal_dive:
+                            _dive_now = (alt < _ero.glider_terminal_alt_km * 1000.0)
                             # Target-proximity dive trigger: bypasses the
                             # altitude check when the vehicle gets within
                             # the user-set radius of (target_lat, target_lon).
-                            _td_r = float(getattr(_erv, 'glider_dive_target_radius_km', 0.0) or 0.0)
+                            _td_r = float(getattr(_ero, 'glider_dive_target_radius_km', 0.0) or 0.0)
                             if not _dive_now and _td_r > 0.0:
-                                _t_lat = np.radians(float(_erv.glider_dive_target_lat_deg))
-                                _t_lon = np.radians(float(_erv.glider_dive_target_lon_deg))
+                                _t_lat = np.radians(float(_ero.glider_dive_target_lat_deg))
+                                _t_lon = np.radians(float(_ero.glider_dive_target_lon_deg))
                                 # Haversine distance, vehicle ↔ target
                                 _dlat = lat - _t_lat
                                 _dlon = lon - _t_lon
@@ -774,7 +774,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             if _dive_now:
                                 bank_rad = np.pi
 
-                        if _erv.glider_guidance == 'damped_glide':
+                        if _ero.glider_guidance == 'damped_glide':
                             # Damped-phugoid glide.  NOMINAL = the max-L/D α* (skip)
                             # lift — so the natural phugoid is preserved (α* lift ∝ q
                             # over/undershoots equilibrium) — plus ζ altitude-rate
@@ -788,26 +788,26 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # there is NO free lift.  On an uncapturable (lofted)
                             # entry it plunges, like skip_glide.  (For a smooth,
                             # non-oscillatory capture see dynamic_equilibrium_glide.)
-                            _polar = (getattr(_erv,'glider_aero_model','polar')=='polar')
-                            _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
+                            _polar = (getattr(_ero,'glider_aero_model','polar')=='polar')
+                            _L_max = _ero.glider_pullup_g_max * g_mag * ro_mass
                             _cos_b = max(abs(float(np.cos(bank_rad))), 0.05)
                             _g_eff = max(g_mag - speed*speed/r_mag, 0.0)
                             if q > 1.0:
                                 if _polar:
-                                    _CD0,_kp,_Aref=_aero_polar(_erv)
+                                    _CD0,_kp,_Aref=_aero_polar(_ero)
                                     _CLstar=min(np.sqrt(_CD0/_kp), 2.0*np.radians(25.0))
                                     _L_nom=q*_Aref*_CLstar
                                 else:
-                                    _drag_beta=(q/float(_erv.beta_kg_m2))*rv_mass
-                                    _L_nom=_drag_beta*_erv.glider_LD
+                                    _drag_beta=(q/float(_ero.beta_kg_m2))*ro_mass
+                                    _L_nom=_drag_beta*_ero.glider_LD
                                 if _g_eff > 1e-3:
                                     _dh=200.0
                                     _rho0=atmosphere(max(alt,0.0))[2]; _rho1=atmosphere(max(alt,0.0)+_dh)[2]
                                     _Hrho=(_dh/np.log(_rho0/_rho1) if (_rho1>0.0 and _rho0>_rho1) else 7000.0)
                                     _Hrho=min(max(_Hrho,4000.0),12000.0)
                                     _hdot=speed*float(np.dot(v_hat,r_hat))
-                                    _gstar=(-2.0*_Hrho*g_mag/(speed*speed*_cos_b*_erv.glider_LD))
-                                    _k_h=(2.0*max(float(_erv.glider_damping_zeta),0.0)*rv_mass*np.sqrt(_g_eff/_Hrho))
+                                    _gstar=(-2.0*_Hrho*g_mag/(speed*speed*_cos_b*_ero.glider_LD))
+                                    _k_h=(2.0*max(float(_ero.glider_damping_zeta),0.0)*ro_mass*np.sqrt(_g_eff/_Hrho))
                                     _L_target=_L_nom - _k_h*(_hdot - speed*_gstar)
                                 else:
                                     _L_target=_L_nom
@@ -824,11 +824,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     # capture a lofted entry).  Feedback can still
                                     # reduce lift to damp the skip-up.
                                     lift_mag=min(max(_L_target,0.0),_L_nom,_L_max)
-                                    drag_mag=lift_mag/max(_erv.glider_LD,1e-6)
+                                    drag_mag=lift_mag/max(_ero.glider_LD,1e-6)
                                 f_drag=-drag_mag*v_hat
                             else:
                                 lift_mag=0.0
-                        elif _erv.glider_guidance == 'dynamic_equilibrium_glide':
+                        elif _ero.glider_guidance == 'dynamic_equilibrium_glide':
                             # Dynamic equilibrium glide (EOM).  NOMINAL = the
                             # equilibrium-glide trim L·cosσ = m·(g − V²/r); the ζ
                             # knob here is a TRACKING GAIN on the altitude-rate
@@ -840,9 +840,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # from the analytic equilibrium_glide (which always
                             # captures via the closed-form arc).  See
                             # GLIDE_CAPTURE_DESIGN.md §8.
-                            _polar = (getattr(_erv, 'glider_aero_model',
+                            _polar = (getattr(_ero, 'glider_aero_model',
                                               'polar') == 'polar')
-                            _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
+                            _L_max = _ero.glider_pullup_g_max * g_mag * ro_mass
                             _cos_b = max(abs(float(np.cos(bank_rad))), 0.05)
                             _g_eff = max(g_mag - speed * speed / r_mag, 0.0)
                             if q > 1.0 and _g_eff > 1e-3:
@@ -856,14 +856,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 _hdot = speed * float(np.dot(v_hat, r_hat))
                                 _gstar = (-2.0 * _Hrho * g_mag
                                           / (speed * speed * _cos_b
-                                             * _erv.glider_LD))
-                                _k_h = (2.0 * max(float(_erv.glider_damping_zeta), 0.0)
-                                        * rv_mass * np.sqrt(_g_eff / _Hrho))
+                                             * _ero.glider_LD))
+                                _k_h = (2.0 * max(float(_ero.glider_damping_zeta), 0.0)
+                                        * ro_mass * np.sqrt(_g_eff / _Hrho))
                                 # equilibrium trim + phugoid damping:
-                                _L_target = (rv_mass * _g_eff / _cos_b
+                                _L_target = (ro_mass * _g_eff / _cos_b
                                              - _k_h * (_hdot - speed * _gstar))
                                 if _polar:
-                                    _CD0, _kp, _Aref = _aero_polar(_erv)
+                                    _CD0, _kp, _Aref = _aero_polar(_ero)
                                     # aerodynamic lift ceiling: C_L <= C_L,max
                                     _C_L = min(max(_L_target / (q * _Aref), 0.0),
                                                2.0 * np.radians(25.0))
@@ -878,17 +878,17 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     # zoom-climbing on the growing m·g_eff term
                                     # (the lumped model has no aerodynamic C_L,max
                                     # ceiling to do this on its own).
-                                    _beta_cap = (q / float(_erv.beta_kg_m2)) * rv_mass * _erv.glider_LD
+                                    _beta_cap = (q / float(_ero.beta_kg_m2)) * ro_mass * _ero.glider_LD
                                     lift_mag = min(max(_L_target, 0.0), _beta_cap, _L_max)
-                                    drag_mag = lift_mag / max(_erv.glider_LD, 1e-6)
+                                    drag_mag = lift_mag / max(_ero.glider_LD, 1e-6)
                                 f_drag = -drag_mag * v_hat
                             else:
                                 lift_mag = 0.0
-                        elif getattr(_erv, 'glider_aero_model', 'polar') == 'polar':
-                            _CD0, _kp, _Aref = _aero_polar(_erv)
+                        elif getattr(_ero, 'glider_aero_model', 'polar') == 'polar':
+                            _CD0, _kp, _Aref = _aero_polar(_ero)
                             _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
-                            _L_max = _erv.glider_pullup_g_max * g_mag * rv_mass
-                            if _erv.glider_guidance in (
+                            _L_max = _ero.glider_pullup_g_max * g_mag * ro_mass
+                            if _ero.glider_guidance in (
                                     'equilibrium_glide', 'equilibrium_glide_acton'):
                                 # Equilibrium trim: solve for the C_L that
                                 # satisfies L·cos σ = m·(g − V²/r).  Suppresses
@@ -906,9 +906,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # the analytic m·g_perp term grows as v decreases
                                 # (g_perp = g − v²/r increases), driving a zoom
                                 # climb instead of a descending equilibrium glide.
-                                _drag_beta  = (q / float(_erv.beta_kg_m2)) * rv_mass
-                                _lift_beta_cap = _drag_beta * _erv.glider_LD
-                                _L_total = min(rv_mass * _g_perp / _cos_b,
+                                _drag_beta  = (q / float(_ero.beta_kg_m2)) * ro_mass
+                                _lift_beta_cap = _drag_beta * _ero.glider_LD
+                                _L_total = min(ro_mass * _g_perp / _cos_b,
                                               _lift_beta_cap,
                                               _L_max)
                                 if q > 1.0:
@@ -936,7 +936,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             # equilibrium-glide guidance is selected, in which
                             # case we trim to L·cos σ = m·g⊥ (suppresses the
                             # phugoid, matching the closed-form Tracy/Acton soln).
-                            if _erv.glider_guidance in (
+                            if _ero.glider_guidance in (
                                     'equilibrium_glide', 'equilibrium_glide_acton'):
                                 _g_perp_c = max(g_mag - speed * speed / r_mag, 0.0)
                                 _cos_b_c  = max(abs(float(np.cos(bank_rad))), 0.05)
@@ -950,12 +950,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # aero cap is smaller than m·g⊥ and the vehicle
                                 # descends naturally to the proper glide altitude.
                                 lift_mag  = min(
-                                    rv_mass * _g_perp_c / _cos_b_c,
-                                    drag_mag * _erv.glider_LD,
-                                    _erv.glider_pullup_g_max * g_mag * rv_mass)
+                                    ro_mass * _g_perp_c / _cos_b_c,
+                                    drag_mag * _ero.glider_LD,
+                                    _ero.glider_pullup_g_max * g_mag * ro_mass)
                             else:
-                                lift_mag = drag_mag * _erv.glider_LD
-                            lift_cap = _erv.glider_pullup_g_max * g_mag * rv_mass
+                                lift_mag = drag_mag * _ero.glider_LD
+                            lift_cap = _ero.glider_pullup_g_max * g_mag * ro_mass
                             if lift_mag > lift_cap:
                                 lift_mag = lift_cap
 
@@ -1502,18 +1502,18 @@ def integrate_trajectory(params: MissileParams,
     # its (L/D)_max follows from the whole-missile build-up (glider_ld.py:
     # Jorgensen + Allen-Perkins + N-K-P).  A SEPARATING RV keeps its own
     # designed glider_LD; any body whose glider_LD was set >0 is untouched.
-    _rv = params.rv
-    if (_rv is not None
-            and getattr(_rv, 'separation_mode', 'separating_rv') == 'body'
-            and getattr(_rv, 'glider_enabled', False)
-            and float(getattr(_rv, 'glider_LD', 0.0)) <= 0.0):
+    _ro = params.ro
+    if (_ro is not None
+            and getattr(_ro, 'separation_mode', 'separating_ro') == 'body'
+            and getattr(_ro, 'glider_enabled', False)
+            and float(getattr(_ro, 'glider_LD', 0.0)) <= 0.0):
         try:
             import glider_ld
             import dataclasses as _dc
             _ld = glider_ld.derive_glider_LD(params)
             if _ld > 0.0:
                 params = copy.copy(params)
-                params.rv = _dc.replace(_rv, glider_LD=_ld)
+                params.ro = _dc.replace(_ro, glider_LD=_ld)
         except Exception:
             pass   # leave glider_LD at 0; glide modes will treat it as no lift
 
@@ -1623,8 +1623,8 @@ def integrate_trajectory(params: MissileParams,
     # Loosen them: a Tracy/Wright glide is already an idealisation; sub-metre
     # altitude precision over a 10 km skip is meaningless.
     t_eval = np.arange(0.0, max_time_s, dt_output)
-    _erv_full = effective_rv(params)
-    if _erv_full is not None and _erv_full.glider_enabled and _erv_full.glider_LD > 0:
+    _ero_full = effective_ro(params)
+    if _ero_full is not None and _ero_full.glider_enabled and _ero_full.glider_LD > 0:
         _rtol, _atol, _maxstep = 1e-5, 1e-2, 20.0
     else:
         _rtol, _atol, _maxstep = 1e-8, 1e-6, 5.0
@@ -1633,9 +1633,9 @@ def integrate_trajectory(params: MissileParams,
     # easy to leap over a small radius.  Tighten max_step to ~2 s so the
     # spatial granularity is ~6–8 km, which is sufficient for radii ≥ 10 km.
     _target_trigger_active = (
-        _erv_full is not None
-        and _erv_full.glider_enabled
-        and getattr(_erv_full, 'glider_dive_target_radius_km', 0.0) > 0.0)
+        _ero_full is not None
+        and _ero_full.glider_enabled
+        and getattr(_ero_full, 'glider_dive_target_radius_km', 0.0) > 0.0)
     if _target_trigger_active:
         _maxstep = min(_maxstep, 2.0)
     # Boost-glide modes with an analytical Acton pull-up arc applied at
@@ -1649,23 +1649,23 @@ def integrate_trajectory(params: MissileParams,
     #                                Phase-3→4 transition altitude
     #                                h_3 (t₃), where the analytical
     #                                pull-up arc starts.
-    _pullup_mode = (_erv_full is not None
-                    and _erv_full.glider_enabled
-                    and _erv_full.glider_LD > 0
-                    and _erv_full.glider_guidance in
+    _pullup_mode = (_ero_full is not None
+                    and _ero_full.glider_enabled
+                    and _ero_full.glider_LD > 0
+                    and _ero_full.glider_guidance in
                         ("equilibrium_glide", "equilibrium_glide_acton"))
     # Acton three-phase requires β_S > 0; otherwise we fall back to Tracy
     # (one-shot arc at the pierce point) so the user always gets an
     # analytical pull-up rather than a phugoid.
     _acton_mode = (_pullup_mode
-                   and _erv_full.glider_guidance == "equilibrium_glide_acton"
-                   and _erv_full.glider_beta_entry_kg_m2 > 0)
+                   and _ero_full.glider_guidance == "equilibrium_glide_acton"
+                   and _ero_full.glider_beta_entry_kg_m2 > 0)
     # Hybrid mode: phugoid skip-glide for N upward crossings of the
     # equilibrium speed curve, then one-way switch to equilibrium-glide EOM.
-    _skip_to_eq_mode = (_erv_full is not None
-                        and _erv_full.glider_enabled
-                        and _erv_full.glider_LD > 0
-                        and _erv_full.glider_guidance == "skip_to_equilibrium")
+    _skip_to_eq_mode = (_ero_full is not None
+                        and _ero_full.glider_enabled
+                        and _ero_full.glider_LD > 0
+                        and _ero_full.glider_guidance == "skip_to_equilibrium")
 
     # Apogee event: r̂·v crosses zero descending (ascending → descending).
     # Used to split Phase 1 (glider off, pre-apogee) from Phase 2 (glider
@@ -1713,14 +1713,14 @@ def integrate_trajectory(params: MissileParams,
         if _pierce_fired:
             t_pierce     = float(sol_pre.t_events[1][0])
             state_pierce = sol_pre.y_events[1][0]
-            beta_L = float(_erv_full.beta_kg_m2)
-            LD     = float(_erv_full.glider_LD)
+            beta_L = float(_ero_full.beta_kg_m2)
+            LD     = float(_ero_full.glider_LD)
             H    = ACTON_SCALE_HEIGHT_M
             rho0 = ACTON_SEA_LEVEL_RHO
 
             # ---- Acton Phase 3: analytical constant-γ drag descent ----------
             if _acton_mode:
-                beta_S  = float(_erv_full.glider_beta_entry_kg_m2)
+                beta_S  = float(_ero_full.glider_beta_entry_kg_m2)
                 v2      = float(np.linalg.norm(state_pierce[3:]))
                 rmag    = float(np.linalg.norm(state_pierce[:3]))
                 v_hat_p = state_pierce[3:] / max(v2, 1e-9)
@@ -1816,11 +1816,11 @@ def integrate_trajectory(params: MissileParams,
             _t_ms_glide_start  = float(t_glide_start)
 
             # ---- Phase 5: equilibrium glide (Tracy / Acton) ----------------
-            _h_term = (float(_erv_full.glider_terminal_alt_km) * 1e3
-                       if (_erv_full.glider_terminal_dive
-                           and _erv_full.glider_terminal_alt_km > 0)
+            _h_term = (float(_ero_full.glider_terminal_alt_km) * 1e3
+                       if (_ero_full.glider_terminal_dive
+                           and _ero_full.glider_terminal_alt_km > 0)
                        else 30_000.0)
-            _bank_sched = getattr(_erv_full, 'glider_bank_schedule', None) or []
+            _bank_sched = getattr(_ero_full, 'glider_bank_schedule', None) or []
             _bank_active = any(
                 (s is not None and e is not None and float(s) < float(e)
                  and float(b) != 0.0)
@@ -2018,15 +2018,15 @@ def integrate_trajectory(params: MissileParams,
         # equilibrium-glide EOM.  An "upward crossing" is when δ = v²−v_eq²
         # goes from + to − while the vehicle is ascending; this corresponds
         # to scipy event direction = −1.
-        _n_target  = max(1, int(getattr(_erv_full, 'glider_skip_count', 1)))
-        _beta_ste  = float(_erv_full.beta_kg_m2)
-        _LD_ste    = float(_erv_full.glider_LD)
+        _n_target  = max(1, int(getattr(_ero_full, 'glider_skip_count', 1)))
+        _beta_ste  = float(_ero_full.beta_kg_m2)
+        _LD_ste    = float(_ero_full.glider_LD)
 
         # Earliest time the equilibrium-crossing event is eligible to fire.
         # For a separating RV the vehicle is still attached to the last stage
         # until total_burn; for a body-mode vehicle, engine cutoff is enough.
-        _is_separating = (getattr(_erv_full, 'separation_mode', 'separating_rv')
-                          == 'separating_rv')
+        _is_separating = (getattr(_ero_full, 'separation_mode', 'separating_ro')
+                          == 'separating_ro')
         _t_eligible = total_burn if _is_separating else cutoff_time_s
 
         _t_handoff = None
@@ -2187,14 +2187,14 @@ def integrate_trajectory(params: MissileParams,
             if _t_handoff is not None:
                 import dataclasses as _dc_ste
                 _params_eq = copy.deepcopy(params)
-                _erv_eq_obj = effective_rv(_params_eq)
-                if _erv_eq_obj is not None:
-                    _erv_eq_new = _dc_ste.replace(_erv_eq_obj,
+                _ero_eq_obj = effective_ro(_params_eq)
+                if _ero_eq_obj is not None:
+                    _ero_eq_new = _dc_ste.replace(_ero_eq_obj,
                                                   glider_guidance="equilibrium_glide")
                     _neq = _params_eq
                     while _neq is not None:
-                        if _neq.rv is not None:
-                            _neq.rv = _erv_eq_new
+                        if _neq.ro is not None:
+                            _neq.ro = _ero_eq_new
                             break
                         _neq = getattr(_neq, 'stage2', None)
                 _eom_args_eq = (_params_eq, cutoff_time_s, az,
@@ -2241,9 +2241,9 @@ def integrate_trajectory(params: MissileParams,
         # For glider modes (non-pullup, non-skip), split at apogee:
         # Phase 1 (glider off) integrates to apogee so the ascent arc is
         # always mode-independent; Phase 2 (glider on) continues to ground.
-        _needs_apo_split = (_erv_full is not None
-                            and _erv_full.glider_enabled
-                            and _erv_full.glider_LD > 0)
+        _needs_apo_split = (_ero_full is not None
+                            and _ero_full.glider_enabled
+                            and _ero_full.glider_LD > 0)
         if _needs_apo_split:
             params._glider_phase1 = True
             _sol_p1 = solve_ivp(
@@ -2453,9 +2453,9 @@ def integrate_trajectory(params: MissileParams,
         _is_last = (_node.stage2 is None)
         if _is_last:
             # Last stage body is jettisoned only when the RV/payload separates
-            # explicitly (rv_separates flag).  Without it the body stays fused
+            # explicitly (ro_separates flag).  Without it the body stays fused
             # to the warhead (e.g. Scud-B) and is not separate debris.
-            _body_jettisoned = params.rv_separates
+            _body_jettisoned = params.ro_separates
         else:
             _body_jettisoned = True   # non-last stages always shed their body
 
@@ -2630,11 +2630,11 @@ def integrate_trajectory(params: MissileParams,
             _prev_az_deg = _yf
 
     # Bank-turn milestones
-    _erv_bk = effective_rv(params)
-    if (_erv_bk is not None and _erv_bk.glider_enabled
-            and _erv_bk.glider_bank_schedule):
-        for _bi, (_bs, _be, _bk) in enumerate(_erv_bk.glider_bank_schedule):
-            _lbl = (f"Bank {_bi + 1}" if len(_erv_bk.glider_bank_schedule) > 1
+    _ero_bk = effective_ro(params)
+    if (_ero_bk is not None and _ero_bk.glider_enabled
+            and _ero_bk.glider_bank_schedule):
+        for _bi, (_bs, _be, _bk) in enumerate(_ero_bk.glider_bank_schedule):
+            _lbl = (f"Bank {_bi + 1}" if len(_ero_bk.glider_bank_schedule) > 1
                     else "Bank turn")
             if _bs is not None and float(_bs) <= t_arr[-1]:
                 _bm = _milestone(float(_bs))
@@ -2666,10 +2666,10 @@ def integrate_trajectory(params: MissileParams,
     # Heating is evaluated for ANY re-entering RV — a steep ballistic RV is the
     # high-flux regime (cf. the ICBM-RV benchmark in heating.py), so excluding
     # it would skip the very case the survivability FOM most needs to score.
-    _erv_ms = effective_rv(params)
+    _ero_ms = effective_ro(params)
     _heating_fom = None
-    if _erv_ms is not None:
-        _is_glider = bool(_erv_ms.glider_enabled and _erv_ms.glider_LD > 0)
+    if _ero_ms is not None:
+        _is_glider = bool(_ero_ms.glider_enabled and _ero_ms.glider_LD > 0)
         # For trajectories that reach space use the 100 km descent crossing;
         # for sub-100 km HGV profiles use apogee as the glide-phase start.
         if np.max(alts) > REENTRY_ALT_M:
@@ -2771,9 +2771,9 @@ def integrate_trajectory(params: MissileParams,
             # nose-tip radius — explicit nose_radius_m, else a shape/diameter
             # screening default (ROParams.effective_nose_radius_m).  Peak time
             # is independent of RN; the reported MW/m² scales as 1/√RN.
-            _RN = (_erv_ms.effective_nose_radius_m()
-                   if hasattr(_erv_ms, 'effective_nose_radius_m')
-                   else float(getattr(_erv_ms, 'nose_radius_m', 0.05) or 0.05))
+            _RN = (_ero_ms.effective_nose_radius_m()
+                   if hasattr(_ero_ms, 'effective_nose_radius_m')
+                   else float(getattr(_ero_ms, 'nose_radius_m', 0.05) or 0.05))
             _glide_a = alts[_re_idx:]
             # Sutton-Graves uses airspeed (ECEF), not inertial speed,
             # because the atmosphere co-rotates with Earth.
@@ -2786,7 +2786,7 @@ def integrate_trajectory(params: MissileParams,
                 # Radiative-equilibrium stagnation temperature:
                 # T_eq = (q̇ / (σ·ε))^(1/4).  Validates against public-source
                 # claims about peak RV nose temperatures.
-                _eps  = float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85)
+                _eps  = float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85)
                 _T_eq = (_q_dot[_ipk] / (5.670374419e-8 * _eps)) ** 0.25
                 _row['event'] = (f"Peak heating "
                                  f"({_q_dot[_ipk]/1e6:.1f} MW/m², "
@@ -2797,38 +2797,38 @@ def integrate_trajectory(params: MissileParams,
             # oxidation-soak, and lumped heat-sink criteria → margins,
             # compromise point, and verdict (stored in result['heating_fom']).
             if len(_glide_v) > 1:
-                _diam = float(getattr(_erv_ms, 'diameter_m', 0.0) or 0.0)
+                _diam = float(getattr(_ero_ms, 'diameter_m', 0.0) or 0.0)
                 # Per-location (nose + body acreage) verdict when the RV sets
                 # split materials (§10.1); otherwise the legacy single-material
                 # call — byte-identical for existing RVs.
-                _split = bool(getattr(_erv_ms, 'nose_tps_material', '') or
-                              getattr(_erv_ms, 'body_tps_material', ''))
+                _split = bool(getattr(_ero_ms, 'nose_tps_material', '') or
+                              getattr(_ero_ms, 'body_tps_material', ''))
                 # Bespoke materials: inject the RV's user-defined props into the
                 # catalog under their sentinel keys so the key-based FOM resolves
                 # them (§10 materials dropdown, "Custom…").
-                if getattr(_erv_ms, 'nose_tps_custom', None):
+                if getattr(_ero_ms, 'nose_tps_custom', None):
                     heating.register_custom_material(
-                        heating.CUSTOM_NOSE_KEY, _erv_ms.nose_tps_custom)
-                if getattr(_erv_ms, 'body_tps_custom', None):
+                        heating.CUSTOM_NOSE_KEY, _ero_ms.nose_tps_custom)
+                if getattr(_ero_ms, 'body_tps_custom', None):
                     heating.register_custom_material(
-                        heating.CUSTOM_BODY_KEY, _erv_ms.body_tps_custom)
+                        heating.CUSTOM_BODY_KEY, _ero_ms.body_tps_custom)
                 if _split:
                     _heating_fom = heating.heating_fom_per_location(
                         t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
                         nose_radius_m=_RN, body_radius_m=_diam / 2.0,
-                        emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
-                        nose_material=_erv_ms.nose_material(),
-                        body_material=_erv_ms.body_material(),
-                        mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
+                        emissivity=float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85),
+                        nose_material=_ero_ms.nose_material(),
+                        body_material=_ero_ms.body_material(),
+                        mass_kg=float(getattr(_ero_ms, 'mass_kg', 0.0) or 0.0),
                         frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0),
-                        body_thickness_m=float(getattr(_erv_ms, 'body_tps_thickness_m', 0.0) or 0.0))
+                        body_thickness_m=float(getattr(_ero_ms, 'body_tps_thickness_m', 0.0) or 0.0))
                 else:
                     _heating_fom = heating.heating_figure_of_merit(
                         t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
                         nose_radius_m=_RN, body_radius_m=_diam / 2.0,
-                        emissivity=float(getattr(_erv_ms, 'emissivity', 0.85) or 0.85),
-                        material=str(getattr(_erv_ms, 'tps_material', '') or ''),
-                        mass_kg=float(getattr(_erv_ms, 'mass_kg', 0.0) or 0.0),
+                        emissivity=float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85),
+                        material=str(getattr(_ero_ms, 'tps_material', '') or ''),
+                        mass_kg=float(getattr(_ero_ms, 'mass_kg', 0.0) or 0.0),
                         frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
                 _cmp = _heating_fom.get('compromise')
                 if _cmp is not None:
@@ -2859,15 +2859,15 @@ def integrate_trajectory(params: MissileParams,
                     _row = _milestone(t_arr[_re_idx + _img])
                     _row['event'] = f"Max-G ({_n[_img]:.1f} g)"
                     _insert_chrono(_row)
-        if (_is_glider and _erv_ms.glider_terminal_dive
-                and _erv_ms.glider_terminal_alt_km > 0):
-            _td_m = _erv_ms.glider_terminal_alt_km * 1000.0
+        if (_is_glider and _ero_ms.glider_terminal_dive
+                and _ero_ms.glider_terminal_alt_km > 0):
+            _td_m = _ero_ms.glider_terminal_alt_km * 1000.0
             if np.max(alts) > _td_m:
                 _td_t = _alt_crossing(_td_m, ascending=False)
                 if _td_t is not None and _td_t > t_arr[apo_idx]:
                     _row = _milestone(_td_t)
                     _row['event'] = (f"Terminal dive "
-                                     f"({_erv_ms.glider_terminal_alt_km:.0f} km)")
+                                     f"({_ero_ms.glider_terminal_alt_km:.0f} km)")
                     _insert_chrono(_row)
 
     # Optional user-specified re-entry query altitude (e.g. 50 km for
@@ -2998,16 +2998,16 @@ def integrate_trajectory(params: MissileParams,
     # glide RVs.  See glide_regime.py and GLIDE_CAPTURE_DESIGN.md.
     _glide_regime = None
     try:
-        _rv_gr = effective_rv(params)
+        _ro_gr = effective_ro(params)
         _GLIDE_MODES = ('skip_glide', 'damped_glide', 'dynamic_equilibrium_glide',
                         'equilibrium_glide', 'equilibrium_glide_acton',
                         'skip_to_equilibrium')
-        if (_rv_gr is not None and not orbital
-                and getattr(_rv_gr, 'glider_guidance', None) in _GLIDE_MODES):
+        if (_ro_gr is not None and not orbital
+                and getattr(_ro_gr, 'glider_guidance', None) in _GLIDE_MODES):
             from glide_regime import classify_glide_regime
             _gr = classify_glide_regime(
                 np.asarray(alts) / 1000.0, np.asarray(speeds), np.asarray(t_arr),
-                g_limit_g=float(getattr(_rv_gr, 'glider_pullup_g_max', 10.0)))
+                g_limit_g=float(getattr(_ro_gr, 'glider_pullup_g_max', 10.0)))
             _glide_regime = {
                 'verdict': _gr.verdict, 'a_max_g': _gr.a_max_g,
                 'n_reascents': _gr.n_reascents, 'above_frac': _gr.above_frac,

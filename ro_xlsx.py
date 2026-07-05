@@ -12,7 +12,7 @@ Sheet layout
 
 Public API
 ----------
-  export_ro_xlsx(path, rv)      -> None
+  export_ro_xlsx(path, ro)      -> None
   import_ro_xlsx(path)          -> ROParams
   make_blank_ro_template(path)  -> None
 
@@ -80,7 +80,7 @@ _R: dict[str, int] = {
 
 _VAL_COL = 4   # column D
 
-_SEP_OPTS   = ['separating_rv', 'body']
+_SEP_OPTS   = ['separating_ro', 'body']
 _YESNO_OPTS = ['YES', 'NO']
 _CUSTOM     = 'custom'          # material-cell sentinel for a bespoke material
 
@@ -94,7 +94,7 @@ def _material_opts():
 # ---------------------------------------------------------------------------
 # Writer
 # ---------------------------------------------------------------------------
-def _build_ro_sheet(ws, rv) -> None:
+def _build_ro_sheet(ws, ro) -> None:
     ws.column_dimensions['A'].width = 2
     ws.column_dimensions['B'].width = 30
     ws.column_dimensions['C'].width = 10
@@ -114,7 +114,7 @@ def _build_ro_sheet(ws, rv) -> None:
     # Identity
     _section(ws, 3, 'Identity')
     _label(ws, _R['name'], 'Name')
-    put('name', rv.name)
+    put('name', ro.name)
 
     # Geometry & mass
     _section(ws, 6, 'Geometry & mass')
@@ -125,14 +125,14 @@ def _build_ro_sheet(ws, rv) -> None:
     _label(ws, _R['diam'],   'Base diameter', 'm')
     _label(ws, _R['length'], 'Length', 'm')
     _label(ws, _R['nose_rn'],'Nose-tip radius', 'm')
-    _label(ws, _R['sep'],    'Separation mode', '', 'separating_rv or body')
-    put('mass', rv.mass_kg); put('beta', rv.beta_kg_m2)
-    put('diam', rv.diameter_m); put('length', rv.length_m)
-    put('nose_rn', rv.nose_radius_m)
+    _label(ws, _R['sep'],    'Separation mode', '', 'separating_ro or body')
+    put('mass', ro.mass_kg); put('beta', ro.beta_kg_m2)
+    put('diam', ro.diameter_m); put('length', ro.length_m)
+    put('nose_rn', ro.nose_radius_m)
     _dropdown(ws, _R['shape'], _VAL_COL, _NOSE_OPTS)
-    ws.cell(row=_R['shape'], column=_VAL_COL, value=_NOSE_LABEL.get(rv.shape, 'Cone'))
+    ws.cell(row=_R['shape'], column=_VAL_COL, value=_NOSE_LABEL.get(ro.shape, 'Cone'))
     _dropdown(ws, _R['sep'], _VAL_COL, _SEP_OPTS)
-    ws.cell(row=_R['sep'], column=_VAL_COL, value=(rv.separation_mode or 'separating_rv'))
+    ws.cell(row=_R['sep'], column=_VAL_COL, value=(ro.separation_mode or 'separating_ro'))
 
     # Maneuvering / glider
     _section(ws, 15, 'Maneuvering (glider / HGV)')
@@ -147,15 +147,15 @@ def _build_ro_sheet(ws, rv) -> None:
     _label(ws, _R['g_tdive'], 'Terminal dive')
     _label(ws, _R['g_talt'],  'Terminal alt', 'km')
     _dropdown(ws, _R['g_on'], _VAL_COL, _YESNO_OPTS)
-    ws.cell(row=_R['g_on'], column=_VAL_COL, value=_yn(rv.glider_enabled))
-    put('g_ld', rv.glider_LD); put('g_gmax', rv.glider_pullup_g_max)
-    put('g_betaS', rv.glider_beta_entry_kg_m2)
-    put('g_guid', rv.glider_guidance); put('g_zeta', rv.glider_damping_zeta)
-    put('g_skip', rv.glider_skip_count)
-    put('g_aero', getattr(rv, 'glider_aero_model', 'polar'))
+    ws.cell(row=_R['g_on'], column=_VAL_COL, value=_yn(ro.glider_enabled))
+    put('g_ld', ro.glider_LD); put('g_gmax', ro.glider_pullup_g_max)
+    put('g_betaS', ro.glider_beta_entry_kg_m2)
+    put('g_guid', ro.glider_guidance); put('g_zeta', ro.glider_damping_zeta)
+    put('g_skip', ro.glider_skip_count)
+    put('g_aero', getattr(ro, 'glider_aero_model', 'polar'))
     _dropdown(ws, _R['g_tdive'], _VAL_COL, _YESNO_OPTS)
-    ws.cell(row=_R['g_tdive'], column=_VAL_COL, value=_yn(rv.glider_terminal_dive))
-    put('g_talt', rv.glider_terminal_alt_km)
+    ws.cell(row=_R['g_tdive'], column=_VAL_COL, value=_yn(ro.glider_terminal_dive))
+    put('g_talt', ro.glider_terminal_alt_km)
 
     # TPS materials
     _section(ws, 27, 'Thermal protection (TPS)')
@@ -165,12 +165,12 @@ def _build_ro_sheet(ws, rv) -> None:
     _label(ws, _R['body_thk'],  'Body layer thickness', 'm', '0 = auto')
     _label(ws, _R['struct_mat'],'Structure material')
     _label(ws, _R['struct_lim'],'Structure limit', 'K')
-    put('emiss', rv.emissivity); put('body_thk', rv.body_tps_thickness_m)
-    put('struct_lim', rv.structure_limit_K)
+    put('emiss', ro.emissivity); put('body_thk', ro.body_tps_thickness_m)
+    put('struct_lim', ro.structure_limit_K)
     import heating
-    for rk, key in (('nose_mat', rv.nose_tps_material),
-                    ('body_mat', rv.body_tps_material),
-                    ('struct_mat', rv.structure_material)):
+    for rk, key in (('nose_mat', ro.nose_tps_material),
+                    ('body_mat', ro.body_tps_material),
+                    ('struct_mat', ro.structure_material)):
         _dropdown(ws, _R[rk], _VAL_COL, mat_opts)
         cell_val = key
         if key == heating.CUSTOM_NOSE_KEY or key == heating.CUSTOM_BODY_KEY:
@@ -194,21 +194,21 @@ def _build_ro_sheet(ws, rv) -> None:
                        ('cn_lim', 'Temp. limit', 'K'), ('cn_dens', 'Density', 'kg/m³'),
                        ('cn_heff', 'Heat of ablation', 'MJ/kg')):
         _label(ws, _R[rk], lb, un)
-    _put_custom('cn', rv.nose_tps_custom)
+    _put_custom('cn', ro.nose_tps_custom)
 
     _section(ws, 42, 'Custom body material  (only if Body material = custom)')
     for rk, lb, un in (('cb_label', 'Name', ''), ('cb_abl', 'Ablator', ''),
                        ('cb_lim', 'Temp. limit', 'K'), ('cb_dens', 'Density', 'kg/m³'),
                        ('cb_heff', 'Heat of ablation', 'MJ/kg')):
         _label(ws, _R[rk], lb, un)
-    _put_custom('cb', rv.body_tps_custom)
+    _put_custom('cb', ro.body_tps_custom)
 
     # Provenance
     _section(ws, 49, 'Provenance')
     _label(ws, _R['source'], 'Source', '', 'short citation')
     _label(ws, _R['notes'],  'Notes', '', 'free-form; confidence, assumptions')
-    _inputs(ws, _R['source'], [_VAL_COL], [rv.source])
-    _inputs(ws, _R['notes'],  [_VAL_COL], [rv.notes])
+    _inputs(ws, _R['source'], [_VAL_COL], [ro.source])
+    _inputs(ws, _R['notes'],  [_VAL_COL], [ro.notes])
 
 
 def _build_ro_reference_sheet(ws) -> None:
@@ -256,9 +256,9 @@ def _read_material(ws, rk, prefix, sentinel):
 
 
 def import_ro_xlsx(path: str):
-    """Read an RV XLSX and return an ROParams."""
+    """Read a reentry-object XLSX and return an ROParams."""
     import heating
-    from missile_models import ROParams
+    from missile_models import ROParams, _norm_sep_mode
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
     # New workbooks use sheet "RO"; accept the legacy "RV" name too.
@@ -278,7 +278,7 @@ def import_ro_xlsx(path: str):
         diameter_m=_rnum(ws, _R['diam'], _VAL_COL),
         length_m=_rnum(ws, _R['length'], _VAL_COL),
         nose_radius_m=_rnum(ws, _R['nose_rn'], _VAL_COL),
-        separation_mode=_rstr(ws, _R['sep'], _VAL_COL, 'separating_rv') or 'separating_rv',
+        separation_mode=_norm_sep_mode(_rstr(ws, _R['sep'], _VAL_COL, 'separating_ro')),
         glider_enabled=_rbool(ws, _R['g_on'], _VAL_COL),
         glider_LD=_rnum(ws, _R['g_ld'], _VAL_COL),
         glider_pullup_g_max=_rnum(ws, _R['g_gmax'], _VAL_COL, 10.0),
@@ -305,13 +305,13 @@ def import_ro_xlsx(path: str):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def export_ro_xlsx(path: str, rv) -> None:
+def export_ro_xlsx(path: str, ro) -> None:
     """Write an ROParams to a fully filled-in XLSX at path."""
     xl = _xl()
     wb = xl.Workbook()
     ws = wb.active
     ws.title = 'RO'
-    _build_ro_sheet(ws, rv)
+    _build_ro_sheet(ws, ro)
     _build_ro_reference_sheet(wb.create_sheet('Reference'))
     wb.save(path)
 

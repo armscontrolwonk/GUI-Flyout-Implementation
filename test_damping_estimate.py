@@ -1,5 +1,5 @@
 """Smoke/▢ tests for damping_estimate.estimate_damping (docs/damping_estimate_spec.md)."""
-from damping_estimate import estimate_damping, estimate_for_rv
+from damping_estimate import estimate_damping, estimate_for_ro
 
 
 def _ordered(r):
@@ -69,14 +69,14 @@ def test_flown_state_override():
     print(f"  ok  flown-state override -> {r.text()}")
 
 
-def test_rv_wrapper():
-    class _RV:
+def test_ro_wrapper():
+    class _RO:
         beta_kg_m2 = 15000.0; glider_LD = 2.0; glider_pullup_g_max = 10.0
         glider_control_surfaces = "substantial"; glider_flap_area_ratio = 0.0
         glider_flap_deflection_deg = 0.0
-    r = estimate_for_rv(_RV())
+    r = estimate_for_ro(_RO())
     _ordered(r)
-    print(f"  ok  estimate_for_rv -> {r.text()}")
+    print(f"  ok  estimate_for_ro -> {r.text()}")
 
 
 def main():

@@ -96,35 +96,35 @@ def _fly(mode, cutoff, aero="polar", zeta=None, boost="Minotaur-IV + HTV-2"):
     from trajectory import integrate_trajectory
     chgb = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
     p = get_missile(boost)
-    rv = copy.deepcopy(chgb)
-    rv.glider_guidance = mode
-    rv.glider_aero_model = aero
+    ro = copy.deepcopy(chgb)
+    ro.glider_guidance = mode
+    ro.glider_aero_model = aero
     if zeta is not None:
-        rv.glider_damping_zeta = zeta
-    p.rv = rv
+        ro.glider_damping_zeta = zeta
+    p.ro = ro
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, max_time_s=6000.0,
                              dt_output=2.0, cutoff_time_s=cutoff)
-    return r, rv
+    return r, ro
 
 
 def test_skip_glide_lofted_is_plunge():
-    r, rv = _fly("skip_glide", 170.0)
-    g = regime_from_result(r, rv=rv)
+    r, ro = _fly("skip_glide", 170.0)
+    g = regime_from_result(r, ro=ro)
     assert g.verdict == "plunge", g
     print("  ok  skip_glide (lofted sub-circular) →", g)
 
 
 def test_equilibrium_glide_is_capture():
-    r, rv = _fly("equilibrium_glide", 170.0)
-    g = regime_from_result(r, rv=rv)
+    r, ro = _fly("equilibrium_glide", 170.0)
+    g = regime_from_result(r, ro=ro)
     assert g.verdict == "capture", g
     print("  ok  equilibrium_glide →", g)
 
 
 def test_skip_glide_near_orbital_is_skip():
     # Full HTV-2 burn → near-orbital entry; the classic undamped skip.
-    r, rv = _fly("skip_glide", None)
-    g = regime_from_result(r, rv=rv)
+    r, ro = _fly("skip_glide", None)
+    g = regime_from_result(r, ro=ro)
     assert g.verdict == "skip", g
     print("  ok  skip_glide (near-orbital) →", g)
 

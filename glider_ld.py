@@ -5,7 +5,7 @@ For a vehicle whose RV does NOT separate, the gliding/maneuvering body is the
 ENTIRE airframe (nose + body + fins) flying at a trim angle of attack.  Its L/D
 is an emergent geometric property, not a designed value, so it is DERIVED from
 geometry here -- in contrast to a separating RV, whose L/D is the RV's own
-designed property and is supplied directly as rv.glider_LD.
+designed property and is supplied directly as ro.glider_LD.
 
 Method: the standard semi-empirical component build-up for slender body+fin
 configurations at angle of attack (the same theoretical core Missile DATCOM
