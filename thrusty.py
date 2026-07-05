@@ -275,7 +275,7 @@ def _load_custom_missiles():
             if name in _PACKAGED_NAMES:
                 _OVERRIDDEN_PACKAGED.add(name)
     except Exception as exc:
-        print(f"Warning: could not load custom missiles: {exc}")
+        print(f"Warning: could not load custom boosters: {exc}")
 
 
 def _save_custom_missiles():
@@ -332,7 +332,7 @@ def _load_ro_library():
 def _save_ro_to_library(ro) -> Path:
     """Write an ROParams to <safe_name>.ro.json and register it in RO_DB."""
     _ensure_dir(_RO_LIBRARY_PATH)
-    safe = _safe_name(ro.name) or "RV"
+    safe = _safe_name(ro.name) or "RO"
     fp = _RO_LIBRARY_PATH / f"{safe}.ro.json"
     fp.write_text(json.dumps(ro_to_dict(ro), indent=2))
     RO_DB[ro.name] = lambda _r=ro: _r
@@ -1219,9 +1219,9 @@ class MissileDialog(tk.Toplevel):
         self._readonly_mode = (existing_name is not None
                                and existing_name.endswith(" (Forden)"))
         if self._readonly_mode:
-            self.title("View Missile — Forden Reference")
+            self.title("View Booster — Forden Reference")
         elif existing_name:
-            self.title("Edit Missile")
+            self.title("Edit Booster")
         else:
             self.title("New Booster")
         self.resizable(False, True)
@@ -1245,7 +1245,7 @@ class MissileDialog(tk.Toplevel):
         nf = ttk.Frame(self)
         nf.pack(fill=tk.X, **pad)
         ttk.Label(nf, text="Booster name:").pack(side=tk.LEFT)
-        self._name_var = tk.StringVar(value=existing_name or "My Missile")
+        self._name_var = tk.StringVar(value=existing_name or "My Booster")
         self._name_entry = ttk.Entry(nf, textvariable=self._name_var, width=24)
         self._name_entry.pack(side=tk.LEFT, padx=(6, 16))
         ttk.Label(nf, text="Stages:").pack(side=tk.LEFT)
@@ -1383,7 +1383,7 @@ class MissileDialog(tk.Toplevel):
         self._ro_section.grid_remove()
 
         # No. of RVs (per-Object mass is a property of the loaded RV)
-        ttk.Label(self._ro_section, text="No. of RVs:").grid(
+        ttk.Label(self._ro_section, text="No. of reentry objects:").grid(
             row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._num_ros_var = tk.StringVar(value="1")
         _ron_inner = ttk.Frame(self._ro_section)
@@ -2068,12 +2068,12 @@ class MissileDialog(tk.Toplevel):
             if main_ro is None:
                 raise ValueError(
                     "No reentry object selected in the sidebar's Reentry Object panel. "
-                    "Pick or create an RV there before saving this missile.")
+                    "Pick or create a reentry object there before saving this booster.")
             try:
                 num_ros  = max(1, int(self._num_ros_var.get()))
                 bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
             except ValueError:
-                raise ValueError("No. of RVs and PBV mass must be numbers.")
+                raise ValueError("No. of reentry objects and PBV mass must be numbers.")
             ro_mass = float(main_ro.mass_kg)
             payload = num_ros * ro_mass + bus_mass
         else:
@@ -2324,7 +2324,7 @@ class MissileDialog(tk.Toplevel):
             return
         new_name = simpledialog.askstring(
             "Save as New Booster",
-            "Enter a name for the new missile:",
+            "Enter a name for the new booster:",
             initialvalue=p.name,
             parent=self)
         if not new_name or not new_name.strip():
@@ -2333,7 +2333,7 @@ class MissileDialog(tk.Toplevel):
         if new_name in MISSILE_DB:
             if not messagebox.askyesno(
                     "Overwrite?",
-                    f"A missile named '{new_name}' already exists. Overwrite it?",
+                    f"A booster named '{new_name}' already exists. Overwrite it?",
                     parent=self):
                 return
         p.name = new_name
@@ -2373,7 +2373,7 @@ class ROEditorDialog(tk.Toplevel):
 
     def __init__(self, parent, ro=None, mass_kg=500.0):
         super().__init__(parent)
-        self.title("Edit Terminal Object" if ro is not None else "New Terminal Vehicle")
+        self.title("Edit Terminal Object" if ro is not None else "New Terminal Object")
         self.resizable(False, True)
         self.grab_set()
         self._result = None
@@ -2607,7 +2607,7 @@ class ROEditorDialog(tk.Toplevel):
         mass_var = tk.StringVar(value=self._mass_var.get())
         ttk.Entry(frm, textvariable=mass_var, width=10).grid(row=0, column=1, sticky=tk.W)
 
-        _lbl(1, "RV base diameter (m):")
+        _lbl(1, "Reentry object base diameter (m):")
         dia_var = tk.StringVar(value=_dia_dflt)
         ttk.Entry(frm, textvariable=dia_var, width=10).grid(row=1, column=1, sticky=tk.W)
 
@@ -2899,7 +2899,7 @@ class ROEditorDialog(tk.Toplevel):
             return
         from tkinter import filedialog
         _safe_name = "".join(c if c.isalnum() or c in "-_" else "_"
-                             for c in ro.name).strip("_") or "RV"
+                             for c in ro.name).strip("_") or "RO"
         path = filedialog.asksaveasfilename(
             parent=self,
             title="Save Reentry Object to Library",
@@ -3099,7 +3099,7 @@ class RangeRingDialog(tk.Toplevel):
         self._compute_btn.config(state=tk.NORMAL)
         if len(points) < 3:
             self._prog_var.set(
-                f"Too few valid azimuths ({len(points)}). Check missile params.")
+                f"Too few valid azimuths ({len(points)}). Check booster params.")
             return
         avg_range = float(np.mean([
             np.sqrt((p[2] - launch_lat)**2 + (p[1] - launch_lon)**2)
@@ -4046,7 +4046,7 @@ class MassEstimatorDialog(tk.Toplevel):
             self._params = get_missile(name)
         except Exception as exc:                       # pragma: no cover
             messagebox.showerror("Dry Mass Estimator",
-                                 f"Could not load missile {name!r}:\n{exc}",
+                                 f"Could not load booster {name!r}:\n{exc}",
                                  parent=app)
             self.destroy()
             return
@@ -4330,7 +4330,7 @@ class MissileFlyoutApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Thrusty — A Rocket Performance Calculator")
+        self.title("Thrusty — A Booster Performance Calculator")
         # Disable macOS window-tabbing so the system doesn't inject
         # Hide/Show Tab Bar into the View menu (Thrusty is single-window).
         try:
@@ -4627,7 +4627,7 @@ class MissileFlyoutApp(tk.Tk):
         # selection here overrides whatever RV the missile was saved with.
         rf = ttk.LabelFrame(parent, text="Reentry Object")
         rf.pack(fill=tk.X, padx=6, pady=3)
-        self._ro_main_var = tk.StringVar(value="(missile default)")
+        self._ro_main_var = tk.StringVar(value="(booster default)")
         self._ro_main_cb = ttk.Combobox(rf, textvariable=self._ro_main_var,
                                         values=self._ro_combo_values(),
                                         state="readonly", width=24)
@@ -4834,7 +4834,7 @@ class MissileFlyoutApp(tk.Tk):
 
         # Row 0: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
-            value="Terminal vehicle not configured for maneuvering"
+            value="Terminal reentry object not configured for maneuvering"
             " — set L/D in Edit Terminal Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
@@ -5100,11 +5100,11 @@ class MissileFlyoutApp(tk.Tk):
         self._slv_text.tag_configure("hdr", font=("TkFixedFont", 9, "bold"))
 
         self._slv_set_text(
-            "Select a missile, set the launch site and azimuth in the left\n"
+            "Select a booster, set the launch site and azimuth in the left\n"
             "panel, enter a target orbit above, then click Analyze.\n\n"
             "For a circular orbit enter only the perigee altitude (apogee\n"
             "blank or equal to perigee).  For a Hohmann transfer or GTO set\n"
-            "apogee higher than perigee; the rocket burns to the perigee\n"
+            "apogee higher than perigee; the booster burns to the perigee\n"
             "injection speed and coasts to apogee.\n\n"
             "The launch azimuth determines the orbital inclination and the\n"
             "Earth-rotation benefit (maximum for a due-east launch).\n\n"
@@ -5146,7 +5146,7 @@ class MissileFlyoutApp(tk.Tk):
             "Fly a trajectory (Launch / Max Range).  This panel then shows a\n"
             "rough screening estimate of whether the reentry object survives\n"
             "the aerodynamic heat load — evaluated at the nose tip and the body\n"
-            "acreage, using the per-location TPS materials set for the RV.\n\n"
+            "acreage, using the per-location TPS materials set for the reentry object.\n\n"
             "It is a screening indicator (Sutton-Graves stagnation flux +\n"
             "radiative-equilibrium wall temperature), NOT a through-wall TPS\n"
             "design analysis.  Read the verdict as 'likely', not certain.")
@@ -5172,7 +5172,7 @@ class MissileFlyoutApp(tk.Tk):
                 "none", s["headline"],
                 "No reentry heating was computed for this flight.\n\n"
                 "Heating is assessed on the reentry / glide arc: set a TPS\n"
-                "material on the RV (Booster Parameters) and fly a trajectory\n"
+                "material on the reentry object (Booster Parameters) and fly a trajectory\n"
                 "that reenters the atmosphere.")
             return
 
@@ -5673,15 +5673,15 @@ class MissileFlyoutApp(tk.Tk):
         ro = getattr(self, '_ro', None)
         if ro and ro.glider_enabled and ro.glider_LD > 0:
             sep = getattr(ro, 'separation_mode', 'separating_ro')
-            sep_lbl = "body" if sep == "body" else "separating RV"
+            sep_lbl = "body" if sep == "body" else "separating reentry object"
             self._glider_status_var.set(
-                f"Terminal vehicle: {ro.name or 'RV'}  "
+                f"Terminal reentry object: {ro.name or 'RO'}  "
                 f"({sep_lbl}, L/D {ro.glider_LD:.2f}, "
                 f"g-lim {ro.glider_pullup_g_max:.0f})  "
                 f"— edit in Edit Terminal Object…")
         else:
             self._glider_status_var.set(
-                "Terminal vehicle not configured for maneuvering"
+                "Terminal reentry object not configured for maneuvering"
                 " — set L/D in Edit Terminal Object…")
         # Reentry mode combobox is always visible regardless of glider config.
         self._glider_main_frame.grid(row=1, column=0, columnspan=2,
@@ -6165,7 +6165,7 @@ class MissileFlyoutApp(tk.Tk):
         name = self._missile_var.get()
         if not name or name not in MISSILE_DB:
             return
-        if not messagebox.askyesno("Delete missile",
+        if not messagebox.askyesno("Delete booster",
                                    f"Permanently delete '{name}'?",
                                    parent=self):
             return
@@ -6181,7 +6181,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Reentry vehicle (payload) selection
     # ------------------------------------------------------------------
-    _RO_DEFAULT_SENTINEL = "(missile default)"
+    _RO_DEFAULT_SENTINEL = "(booster default)"
 
     def _ro_combo_values(self):
         """Combobox values: the sentinel plus every name in RO_DB."""
@@ -6242,7 +6242,7 @@ class MissileFlyoutApp(tk.Tk):
         sel = self._ro_main_var.get()
         if sel not in RO_DB:
             messagebox.showinfo("Edit Reentry Object",
-                                "Select an RV from the library to edit, "
+                                "Select a reentry object from the library to edit, "
                                 "or use 'New' to create one.", parent=self)
             return
         base = RO_DB[sel]()
@@ -6718,7 +6718,7 @@ class MissileFlyoutApp(tk.Tk):
                   f"{_aero_dD:.2f}" if _aero_dD > 0 else "— (pointed)"); r += 1
 
         if p.ro_separates:
-            _row2(af, r, "No. of RVs:", str(p.num_ros),
+            _row2(af, r, "No. of reentry objects:", str(p.num_ros),
                   "Per-object mass:", f"{p.ro_mass_kg:,.0f} kg"); r += 1
             _ero     = effective_ro(p)
             _ro_beta = _ero.beta_kg_m2 if _ero else p.ro_beta_kg_m2
@@ -6737,7 +6737,7 @@ class MissileFlyoutApp(tk.Tk):
                     getattr(p, 'ro_shape', ''), NOSE_SHAPE_LABELS['cone'])
                 _ro_d = getattr(p, 'ro_diameter_m', 0.0)
                 _ro_l = getattr(p, 'ro_length_m', 0.0)
-            _row2(af, r, "RV shape:", _ro_shape_s,
+            _row2(af, r, "Reentry object shape:", _ro_shape_s,
                   "Object diameter:", f"{_ro_d:.2f} m" if _ro_d > 0 else "—"); r += 1
             if _ro_l > 0:
                 _row2(af, r, "Object length:", f"{_ro_l:.2f} m"); r += 1
@@ -9811,7 +9811,7 @@ class MissileFlyoutApp(tk.Tk):
         """Export the current missile definition to a .missile.json file."""
         name = self._missile_var.get()
         if not name or name not in MISSILE_DB:
-            messagebox.showinfo("No missile", "Select a missile first.")
+            messagebox.showinfo("No booster", "Select a booster first.")
             return
         from tkinter.filedialog import asksaveasfilename
         safe = _safe_name(name)
@@ -9935,7 +9935,7 @@ class MissileFlyoutApp(tk.Tk):
         if not ro.name:
             messagebox.showwarning(
                 "Import warning",
-                "RV name is blank — fill in the Name field in the XLSX and "
+                "Reentry object name is blank — fill in the Name field in the XLSX and "
                 "re-import.", parent=self)
             return
         try:
@@ -9973,7 +9973,7 @@ class MissileFlyoutApp(tk.Tk):
         """Export current missile to a filled-in XLSX template."""
         name = self._missile_var.get()
         if not name or name not in MISSILE_DB:
-            messagebox.showinfo("No missile", "Select a missile first.", parent=self)
+            messagebox.showinfo("No booster", "Select a booster first.", parent=self)
             return
         try:
             from missile_xlsx import export_missile_xlsx
@@ -10072,7 +10072,7 @@ class MissileFlyoutApp(tk.Tk):
             data = json.loads(Path(path).read_text())
             p    = missile_from_dict(data)
         except Exception as e:
-            messagebox.showerror("Load error", f"Could not parse missile file:\n{e}")
+            messagebox.showerror("Load error", f"Could not parse booster file:\n{e}")
             return
         name = data.get('name') or Path(path).stem.replace('.missile', '')
         if not name:
@@ -10155,7 +10155,7 @@ class MissileFlyoutApp(tk.Tk):
             "  • Coriolis & centrifugal corrections\n"
             "  • Gravity-turn guidance with per-stage pitch profiles\n"
             "  • Up to 4 stages with inter-stage coast\n\n"
-            "Packaged missiles (Forden Table 1 + extension):\n"
+            "Packaged boosters (Forden Table 1 + extension):\n"
             "  Scud-B, Al Hussein, No-dong,\n"
             "  Taepodong-I, Taepodong-II (3-stage),\n"
             "  Shahab-3, Generic ICBM\n"
