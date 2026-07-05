@@ -1,20 +1,20 @@
 """
-rv_xlsx.py — XLSX import/export for Thrusty reentry objects (RVParams).
+ro_xlsx.py — XLSX import/export for Thrusty reentry objects (ROParams).
 
 The reentry-object counterpart to missile_xlsx.py: edit a reentry object in a
-familiar spreadsheet grid instead of hand-editing rv.json.  Reuses that
+familiar spreadsheet grid instead of hand-editing ro.json.  Reuses that
 module's low-level cell writers/readers so the two stay visually consistent.
 
 Sheet layout
 ------------
-  Sheet 1 "RV"        — every RVParams field, fields-as-rows, values in col D
+  Sheet 1 "RO"        — every ROParams field, fields-as-rows, values in col D
   Sheet 2 "Reference" — read-only TPS material catalog + emissivity guidance
 
 Public API
 ----------
-  export_rv_xlsx(path, rv)      -> None
-  import_rv_xlsx(path)          -> RVParams
-  make_blank_rv_template(path)  -> None
+  export_ro_xlsx(path, rv)      -> None
+  import_ro_xlsx(path)          -> ROParams
+  make_blank_ro_template(path)  -> None
 
 Google Sheets: no dedicated integration is needed — in Google Sheets use
 File > Download > Microsoft Excel (.xlsx), then Load Reentry Object from XLSX.  A native
@@ -94,7 +94,7 @@ def _material_opts():
 # ---------------------------------------------------------------------------
 # Writer
 # ---------------------------------------------------------------------------
-def _build_rv_sheet(ws, rv) -> None:
+def _build_ro_sheet(ws, rv) -> None:
     ws.column_dimensions['A'].width = 2
     ws.column_dimensions['B'].width = 30
     ws.column_dimensions['C'].width = 10
@@ -211,7 +211,7 @@ def _build_rv_sheet(ws, rv) -> None:
     _inputs(ws, _R['notes'],  [_VAL_COL], [rv.notes])
 
 
-def _build_rv_reference_sheet(ws) -> None:
+def _build_ro_reference_sheet(ws) -> None:
     import heating
     ws.column_dimensions['A'].width = 22
     ws.column_dimensions['B'].width = 30
@@ -255,13 +255,14 @@ def _read_material(ws, rk, prefix, sentinel):
     return val, None
 
 
-def import_rv_xlsx(path: str):
-    """Read an RV XLSX and return an RVParams."""
+def import_ro_xlsx(path: str):
+    """Read an RV XLSX and return an ROParams."""
     import heating
-    from missile_models import RVParams
+    from missile_models import ROParams
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
-    ws = wb['RV']
+    # New workbooks use sheet "RO"; accept the legacy "RV" name too.
+    ws = wb['RO'] if 'RO' in wb.sheetnames else wb['RV']
 
     nose_key, nose_cust = _read_material(ws, 'nose_mat', 'cn', heating.CUSTOM_NOSE_KEY)
     body_key, body_cust = _read_material(ws, 'body_mat', 'cb', heating.CUSTOM_BODY_KEY)
@@ -269,7 +270,7 @@ def import_rv_xlsx(path: str):
     if struct_key.lower() == _CUSTOM:
         struct_key = ''      # custom not supported for the structure slot
 
-    return RVParams(
+    return ROParams(
         name=_rstr(ws, _R['name'], _VAL_COL, 'Unnamed'),
         mass_kg=_rnum(ws, _R['mass'], _VAL_COL),
         beta_kg_m2=_rnum(ws, _R['beta'], _VAL_COL),
@@ -304,18 +305,18 @@ def import_rv_xlsx(path: str):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def export_rv_xlsx(path: str, rv) -> None:
-    """Write an RVParams to a fully filled-in XLSX at path."""
+def export_ro_xlsx(path: str, rv) -> None:
+    """Write an ROParams to a fully filled-in XLSX at path."""
     xl = _xl()
     wb = xl.Workbook()
     ws = wb.active
-    ws.title = 'RV'
-    _build_rv_sheet(ws, rv)
-    _build_rv_reference_sheet(wb.create_sheet('Reference'))
+    ws.title = 'RO'
+    _build_ro_sheet(ws, rv)
+    _build_ro_reference_sheet(wb.create_sheet('Reference'))
     wb.save(path)
 
 
-def make_blank_rv_template(path: str) -> None:
+def make_blank_ro_template(path: str) -> None:
     """Write a blank RV template for the user to fill in from scratch."""
-    from missile_models import RVParams
-    export_rv_xlsx(path, RVParams(name='', mass_kg=0, beta_kg_m2=0))
+    from missile_models import ROParams
+    export_ro_xlsx(path, ROParams(name='', mass_kg=0, beta_kg_m2=0))

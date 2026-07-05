@@ -20,12 +20,12 @@ import json
 
 import numpy as np
 
-from missile_models import get_missile, rv_from_dict, rv_to_dict, effective_rv
+from missile_models import get_missile, ro_from_dict, ro_to_dict, effective_rv
 from trajectory import integrate_trajectory
 from glide_regime import regime_from_result
 
 _BOOSTER = "Minotaur-IV + HTV-2"
-_CHGB = rv_from_dict(json.load(open("rv_library/C-HGB.rv.json")))
+_CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
 _CUTOFF = 170.0
 
 
@@ -88,7 +88,7 @@ def test_serialization_roundtrip():
     for mode in ("damped_glide", "dynamic_equilibrium_glide"):
         rv = copy.deepcopy(_CHGB)
         rv.glider_guidance, rv.glider_damping_zeta = mode, 0.55
-        rv2 = rv_from_dict(rv_to_dict(rv))
+        rv2 = ro_from_dict(ro_to_dict(rv))
         assert rv2.glider_guidance == mode
         assert abs(rv2.glider_damping_zeta - 0.55) < 1e-9
     print("  ok  serialization round-trip (both modes)")

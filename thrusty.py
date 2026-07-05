@@ -34,7 +34,7 @@ from missile_models import (MISSILE_DB, get_missile,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
-                           RVParams, rv_from_dict, rv_to_dict, effective_rv)
+                           ROParams, ro_from_dict, ro_to_dict, effective_rv)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
@@ -181,10 +181,13 @@ _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.j
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_MISSILES     = _THRUSTY_ROOT / "missiles"
-_RV_LIBRARY_PATH  = _THRUSTY_ROOT / "rv_library"
+_RO_LIBRARY_PATH  = _THRUSTY_ROOT / "ro_library"
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
-_BUNDLED_RV_LIBRARY_PATH = Path(__file__).resolve().parent / "rv_library"
+_BUNDLED_RO_LIBRARY_PATH = Path(__file__).resolve().parent / "ro_library"
+# Back-compat: reentry objects used to live in rv_library/*.rv.json.  We still
+# read those (old locally-saved files) but only ever write the new .ro.json form.
+_LEGACY_RO_LIBRARY_PATH = _THRUSTY_ROOT / "rv_library"
 _DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
 _DIR_SITES        = _THRUSTY_ROOT / "sites"
 _DIR_TRAJECTORIES = _THRUSTY_ROOT / "trajectories"
@@ -287,57 +290,60 @@ def _save_custom_missiles():
 
 # ---------------------------------------------------------------------------
 # RV library — RVs are first-class objects, decoupled from any specific
-# missile.  Each .rv.json file in rv_library/ becomes an entry in RV_DB,
+# missile.  Each .ro.json file in ro_library/ becomes an entry in RO_DB,
 # keyed by RV name.  The main control panel exposes the library via a
 # combobox; at run time the selected RV is injected into the missile.
 # ---------------------------------------------------------------------------
 
-RV_DB: dict = {}   # name -> callable returning a fresh RVParams
+RO_DB: dict = {}   # name -> callable returning a fresh ROParams
 
 
-def _load_rv_library():
-    """Register every .rv.json into RV_DB.
+def _load_ro_library():
+    """Register every .ro.json into RO_DB.
 
-    RVs are loaded from two places: the **bundled** rv_library/ shipped next to
+    RVs are loaded from two places: the **bundled** ro_library/ shipped next to
     thrusty.py (the canonical RVs that travel with the code — SWERVE, AHW, …),
-    and the user's writable ~/Documents/Thrusty/rv_library (saved or edited
+    and the user's writable ~/Documents/Thrusty/ro_library (saved or edited
     RVs).  Bundled RVs load first; a user RV of the same name overrides the
     bundled one, so a fresh checkout always exposes the shipped RVs while the
     user's own edits still win."""
-    _ensure_dir(_RV_LIBRARY_PATH)
-    RV_DB.clear()
+    _ensure_dir(_RO_LIBRARY_PATH)
+    RO_DB.clear()
     dirs, seen = [], set()
-    for d in (_BUNDLED_RV_LIBRARY_PATH, _RV_LIBRARY_PATH):
+    # Legacy dir last so a new-form file of the same name wins on override.
+    for d in (_BUNDLED_RO_LIBRARY_PATH, _LEGACY_RO_LIBRARY_PATH, _RO_LIBRARY_PATH):
         rp = str(d.resolve())
         if rp not in seen:          # skip if bundled == user (e.g. run in place)
             seen.add(rp); dirs.append(d)
     for d in dirs:
         if not d.exists():
             continue
-        for fp in sorted(d.glob("*.rv.json")):
+        # Accept both the new .ro.json and legacy .rv.json extensions.
+        files = sorted(list(d.glob("*.ro.json")) + list(d.glob("*.rv.json")))
+        for fp in files:
             try:
-                rv = rv_from_dict(json.loads(fp.read_text()))
-                key = rv.name or fp.stem.replace(".rv", "")
-                RV_DB[key] = lambda _r=rv: _r
+                rv = ro_from_dict(json.loads(fp.read_text()))
+                key = rv.name or fp.stem.replace(".ro", "").replace(".rv", "")
+                RO_DB[key] = lambda _r=rv: _r
             except Exception as exc:
                 print(f"Warning: could not load Reentry object '{fp.name}': {exc}")
 
 
-def _save_rv_to_library(rv) -> Path:
-    """Write an RVParams to <safe_name>.rv.json and register it in RV_DB."""
-    _ensure_dir(_RV_LIBRARY_PATH)
+def _save_ro_to_library(rv) -> Path:
+    """Write an ROParams to <safe_name>.ro.json and register it in RO_DB."""
+    _ensure_dir(_RO_LIBRARY_PATH)
     safe = _safe_name(rv.name) or "RV"
-    fp = _RV_LIBRARY_PATH / f"{safe}.rv.json"
-    fp.write_text(json.dumps(rv_to_dict(rv), indent=2))
-    RV_DB[rv.name] = lambda _r=rv: _r
+    fp = _RO_LIBRARY_PATH / f"{safe}.ro.json"
+    fp.write_text(json.dumps(ro_to_dict(rv), indent=2))
+    RO_DB[rv.name] = lambda _r=rv: _r
     return fp
 
 
-def _extract_rvs_from_missiles():
-    """One-time migration: copy every missile-embedded RV into rv_library/
+def _extract_ros_from_missiles():
+    """One-time migration: copy every missile-embedded RV into ro_library/
     if not already present.  Guarded by a marker file so the user can
     delete library entries without having them re-extracted on next launch."""
-    marker = _RV_LIBRARY_PATH / ".migrated"
+    marker = _RO_LIBRARY_PATH / ".migrated"
     if marker.exists():
         return
     for name in list(MISSILE_DB.keys()):
@@ -346,10 +352,10 @@ def _extract_rvs_from_missiles():
         except Exception:
             continue
         erv = effective_rv(p)
-        if erv is None or not erv.name or erv.name in RV_DB:
+        if erv is None or not erv.name or erv.name in RO_DB:
             continue
         try:
-            _save_rv_to_library(erv)
+            _save_ro_to_library(erv)
         except Exception as exc:
             print(f"Warning: could not extract Reentry object '{erv.name}' from '{name}': {exc}")
     try:
@@ -1833,11 +1839,11 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _current_main_rv(self):
-        """Return the RVParams currently selected in the parent app's
+        """Return the ROParams currently selected in the parent app's
         sidebar combobox, or None if the sentinel is active."""
         app = self.master
         name = app._rv_main_var.get() if hasattr(app, '_rv_main_var') else ""
-        return RV_DB[name]() if name in RV_DB else None
+        return RO_DB[name]() if name in RO_DB else None
 
     def _update_rv_summary(self):
         """Refresh the summary label from the main panel's RV selection."""
@@ -2345,11 +2351,11 @@ class MissileDialog(tk.Toplevel):
 _GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
 
 
-class RVEditorDialog(tk.Toplevel):
-    """Modal dialog for creating or editing an RVParams object.
+class ROEditorDialog(tk.Toplevel):
+    """Modal dialog for creating or editing an ROParams object.
 
     Usage::
-        dlg = RVEditorDialog(parent, rv=existing_rv, mass_kg=rv_mass)
+        dlg = ROEditorDialog(parent, rv=existing_rv, mass_kg=rv_mass)
         parent.wait_window(dlg)
         if dlg.result is not None:
             self._rv = dlg.result
@@ -2695,7 +2701,7 @@ class RVEditorDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _build_rv(self):
-        """Validate fields and build an RVParams.  Returns None on input error
+        """Validate fields and build an ROParams.  Returns None on input error
         (after showing a messagebox).
         """
         try:
@@ -2755,7 +2761,7 @@ class RVEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
-        return RVParams(
+        return ROParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             nose_radius_m=nose_rn,
@@ -2887,7 +2893,7 @@ class RVEditorDialog(tk.Toplevel):
         self.destroy()
 
     def _save_to_library(self):
-        """Validate + write to a .rv.json file in the library, then close."""
+        """Validate + write to a .ro.json file in the library, then close."""
         rv = self._build_rv()
         if rv is None:
             return
@@ -2897,14 +2903,14 @@ class RVEditorDialog(tk.Toplevel):
         path = filedialog.asksaveasfilename(
             parent=self,
             title="Save Reentry Object to Library",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
-            initialfile=f"{_safe_name}.rv.json",
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
+            initialfile=f"{_safe_name}.ro.json",
             defaultextension=".json",
-            filetypes=[("reentry-object files (*.rv.json)", "*.json"), ("All files", "*.*")])
+            filetypes=[("reentry-object files (*.ro.json)", "*.json"), ("All files", "*.*")])
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+            Path(path).write_text(json.dumps(ro_to_dict(rv), indent=2))
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}",
@@ -4348,9 +4354,9 @@ class MissileFlyoutApp(tk.Tk):
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
-        _load_rv_library()           # populate RV_DB from rv_library/*.rv.json
+        _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
         _load_custom_missiles()      # restore any user-saved missiles
-        _extract_rvs_from_missiles() # migrate: pull embedded RVs into the library
+        _extract_ros_from_missiles() # migrate: pull embedded RVs into the library
 
         self._build_menu()
         self._build_ui()
@@ -4382,9 +4388,9 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Load Reentry Object…",                 command=self._load_rv)
         file_menu.add_command(label="Save Reentry Object…",                 command=self._export_rv)
-        file_menu.add_command(label="Load Reentry Object from XLSX…",       command=self._import_rv_xlsx)
-        file_menu.add_command(label="Save Reentry Object to XLSX…",         command=self._export_rv_xlsx)
-        file_menu.add_command(label="New Reentry Object XLSX Template…",    command=self._new_rv_template)
+        file_menu.add_command(label="Load Reentry Object from XLSX…",       command=self._import_ro_xlsx)
+        file_menu.add_command(label="Save Reentry Object to XLSX…",         command=self._export_ro_xlsx)
+        file_menu.add_command(label="New Reentry Object XLSX Template…",    command=self._new_ro_template)
         file_menu.add_separator()
         file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
         file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
@@ -5565,7 +5571,7 @@ class MissileFlyoutApp(tk.Tk):
         # selection (or the sentinel) alone — they may want the same RV across
         # different missiles.
         if (hasattr(self, '_rv_main_cb') and _p_erv is not None
-                and _p_erv.name and _p_erv.name in RV_DB
+                and _p_erv.name and _p_erv.name in RO_DB
                 and self._rv_main_var.get() == self._RV_DEFAULT_SENTINEL):
             self._rv_main_var.set(_p_erv.name)
             self._rv_del_btn.config(state=tk.NORMAL)
@@ -6178,27 +6184,27 @@ class MissileFlyoutApp(tk.Tk):
     _RV_DEFAULT_SENTINEL = "(missile default)"
 
     def _rv_combo_values(self):
-        """Combobox values: the sentinel plus every name in RV_DB."""
-        return [self._RV_DEFAULT_SENTINEL] + sorted(RV_DB.keys())
+        """Combobox values: the sentinel plus every name in RO_DB."""
+        return [self._RV_DEFAULT_SENTINEL] + sorted(RO_DB.keys())
 
     def _refresh_rv_list(self, select_name=None):
         """Rebuild the RV combobox after a library change."""
-        _load_rv_library()
+        _load_ro_library()
         self._rv_main_cb.configure(values=self._rv_combo_values())
         target = select_name or self._rv_main_var.get()
-        if target not in RV_DB and target != self._RV_DEFAULT_SENTINEL:
+        if target not in RO_DB and target != self._RV_DEFAULT_SENTINEL:
             target = self._RV_DEFAULT_SENTINEL
         self._rv_main_var.set(target)
         self._rv_del_btn.config(
-            state=tk.NORMAL if target in RV_DB else tk.DISABLED)
+            state=tk.NORMAL if target in RO_DB else tk.DISABLED)
         self._on_rv_selected_main()
 
     def _on_rv_selected_main(self, _event=None):
         """Sync self._rv to the selected library entry and refresh the
         glider mission-control panel."""
         sel = self._rv_main_var.get()
-        if sel in RV_DB:
-            self._rv = RV_DB[sel]()
+        if sel in RO_DB:
+            self._rv = RO_DB[sel]()
             self._rv_del_btn.config(state=tk.NORMAL)
         else:
             self._rv_del_btn.config(state=tk.DISABLED)
@@ -6218,12 +6224,12 @@ class MissileFlyoutApp(tk.Tk):
 
     def _new_rv_main(self):
         """Create an RV in the editor; on Save, write it to the library."""
-        dlg = RVEditorDialog(self, rv=None, mass_kg=500.0)
+        dlg = ROEditorDialog(self, rv=None, mass_kg=500.0)
         self.wait_window(dlg)
         if dlg.result is None:
             return
         try:
-            _save_rv_to_library(dlg.result)
+            _save_ro_to_library(dlg.result)
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
@@ -6234,25 +6240,27 @@ class MissileFlyoutApp(tk.Tk):
     def _edit_rv_main(self):
         """Edit the currently selected RV in place; rewrite the library file."""
         sel = self._rv_main_var.get()
-        if sel not in RV_DB:
+        if sel not in RO_DB:
             messagebox.showinfo("Edit Reentry Object",
                                 "Select an RV from the library to edit, "
                                 "or use 'New' to create one.", parent=self)
             return
-        base = RV_DB[sel]()
-        dlg = RVEditorDialog(self, rv=base, mass_kg=base.mass_kg)
+        base = RO_DB[sel]()
+        dlg = ROEditorDialog(self, rv=base, mass_kg=base.mass_kg)
         self.wait_window(dlg)
         if dlg.result is None:
             return
         # If the user renamed it, delete the old file so we don't leak orphans.
         if dlg.result.name != base.name:
-            old_fp = _RV_LIBRARY_PATH / f"{_safe_name(base.name)}.rv.json"
-            try:
-                old_fp.unlink(missing_ok=True)
-            except Exception:
-                pass
+            _stem = _safe_name(base.name)
+            for _ext in (".ro.json", ".rv.json"):   # sweep legacy form too
+                try:
+                    (_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
+                    (_LEGACY_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
+                except Exception:
+                    pass
         try:
-            _save_rv_to_library(dlg.result)
+            _save_ro_to_library(dlg.result)
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
@@ -6261,22 +6269,24 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Reentry object '{dlg.result.name}' updated.")
 
     def _delete_rv_main(self):
-        """Remove the selected RV from RV_DB and from rv_library/."""
+        """Remove the selected RV from RO_DB and from ro_library/."""
         sel = self._rv_main_var.get()
-        if sel not in RV_DB:
+        if sel not in RO_DB:
             return
         if not messagebox.askyesno("Delete Reentry Object",
                                    f"Permanently delete '{sel}' from the library?",
                                    parent=self):
             return
-        fp = _RV_LIBRARY_PATH / f"{_safe_name(sel)}.rv.json"
+        _stem = _safe_name(sel)
         try:
-            fp.unlink(missing_ok=True)
+            for _ext in (".ro.json", ".rv.json"):   # sweep legacy form too
+                (_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
+                (_LEGACY_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
         except Exception as exc:
             messagebox.showerror("Delete Reentry Object",
                                  f"Could not delete reentry-object file:\n{exc}", parent=self)
             return
-        RV_DB.pop(sel, None)
+        RO_DB.pop(sel, None)
         self._refresh_rv_list(select_name=self._RV_DEFAULT_SENTINEL)
         self._status_var.set(f"Reentry object '{sel}' deleted.")
 
@@ -7332,8 +7342,8 @@ class MissileFlyoutApp(tk.Tk):
         # selection is ignored.
         _rv_sel = getattr(self, '_rv_main_var', None)
         _rv_name = _rv_sel.get() if _rv_sel is not None else ""
-        if _rv_name in RV_DB and getattr(missile, 'rv_separates', False):
-            _user_rv = RV_DB[_rv_name]()
+        if _rv_name in RO_DB and getattr(missile, 'rv_separates', False):
+            _user_rv = RO_DB[_rv_name]()
             missile = copy.deepcopy(missile)
             _node, _placed = missile, False
             while _node is not None:
@@ -8270,7 +8280,7 @@ class MissileFlyoutApp(tk.Tk):
         # RV selection (added with the scenario schema; absent in older files)
         if hasattr(self, '_rv_main_var'):
             _rv_name = meta.get('rv', '')
-            if _rv_name in RV_DB:
+            if _rv_name in RO_DB:
                 self._rv_main_var.set(_rv_name)
             else:
                 self._rv_main_var.set(self._RV_DEFAULT_SENTINEL)
@@ -9819,18 +9829,18 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Booster exported: {path}")
 
     def _load_rv(self):
-        """Import a .rv.json file into the RV library (parallel to Load Booster)."""
+        """Import a .ro.json file into the RV library (parallel to Load Booster)."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
-            filetypes=[("reentry-object files", "*.rv.json"), ("JSON files", "*.json"),
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
+            filetypes=[("reentry-object files", "*.ro.json"), ("JSON files", "*.json"),
                        ("All files", "*.*")],
             title="Load Reentry Object",
         )
         if not path:
             return
         try:
-            rv = rv_from_dict(json.loads(Path(path).read_text()))
+            rv = ro_from_dict(json.loads(Path(path).read_text()))
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse reentry-object file:\n{e}")
             return
@@ -9838,11 +9848,11 @@ class MissileFlyoutApp(tk.Tk):
         if not name:
             messagebox.showerror("Load error", "reentry-object file has no name field.")
             return
-        if name in RV_DB and not messagebox.askyesno(
+        if name in RO_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
             return
         try:
-            _save_rv_to_library(rv)        # copy into the writable user library
+            _save_ro_to_library(rv)        # copy into the writable user library
         except Exception as exc:
             messagebox.showerror("Load Reentry Object", f"Could not write reentry-object file:\n{exc}")
             return
@@ -9850,9 +9860,9 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Reentry object '{name}' loaded from {Path(path).name}")
 
     def _export_rv(self):
-        """Export the selected RV (or the missile's RV) to a .rv.json file."""
+        """Export the selected RV (or the missile's RV) to a .ro.json file."""
         sel = self._rv_main_var.get()
-        rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
+        rv = RO_DB[sel]() if sel in RO_DB else getattr(self, '_rv', None)
         if rv is None or not getattr(rv, 'name', ''):
             messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
@@ -9860,31 +9870,31 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             parent=self,
             defaultextension=".json",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
-            initialfile=f"{_safe_name(rv.name)}.rv.json",
-            filetypes=[("reentry-object files", "*.rv.json"), ("JSON files", "*.json"),
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
+            initialfile=f"{_safe_name(rv.name)}.ro.json",
+            filetypes=[("reentry-object files", "*.ro.json"), ("JSON files", "*.json"),
                        ("All files", "*.*")],
             title="Export Reentry Object",
         )
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
+            Path(path).write_text(json.dumps(ro_to_dict(rv), indent=2))
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
             return
         self._status_var.set(f"Reentry object exported: {path}")
 
-    def _export_rv_xlsx(self):
+    def _export_ro_xlsx(self):
         """Export the selected RV to a fillable XLSX spreadsheet."""
         sel = self._rv_main_var.get()
-        rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
+        rv = RO_DB[sel]() if sel in RO_DB else getattr(self, '_rv', None)
         if rv is None or not getattr(rv, 'name', ''):
             messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
         try:
-            from rv_xlsx import export_rv_xlsx
+            from ro_xlsx import export_ro_xlsx
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
@@ -9892,33 +9902,33 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             parent=self, title="Save Reentry Object to XLSX",
             defaultextension=".xlsx",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
             initialfile=f"{_safe_name(rv.name)}.rv.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
             return
         try:
-            export_rv_xlsx(path, rv)
+            export_ro_xlsx(path, rv)
             self._status_var.set(f"Reentry object exported: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
 
-    def _import_rv_xlsx(self):
+    def _import_ro_xlsx(self):
         """Import an RV from a filled XLSX spreadsheet into the library."""
         try:
-            from rv_xlsx import import_rv_xlsx
+            from ro_xlsx import import_ro_xlsx
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
             parent=self, title="Load Reentry Object from XLSX",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
             return
         try:
-            rv = import_rv_xlsx(path)
+            rv = import_ro_xlsx(path)
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
             return
@@ -9929,7 +9939,7 @@ class MissileFlyoutApp(tk.Tk):
                 "re-import.", parent=self)
             return
         try:
-            _save_rv_to_library(rv)
+            _save_ro_to_library(rv)
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
@@ -9937,10 +9947,10 @@ class MissileFlyoutApp(tk.Tk):
         self._refresh_rv_list(select_name=rv.name)
         self._status_var.set(f"Reentry object imported: {rv.name}")
 
-    def _new_rv_template(self):
+    def _new_ro_template(self):
         """Save a blank RV XLSX template the user fills in from scratch."""
         try:
-            from rv_xlsx import make_blank_rv_template
+            from ro_xlsx import make_blank_ro_template
         except ImportError as exc:
             messagebox.showerror("Missing dependency", str(exc), parent=self)
             return
@@ -9948,13 +9958,13 @@ class MissileFlyoutApp(tk.Tk):
         path = asksaveasfilename(
             parent=self, title="Save Blank Reentry Object Template",
             defaultextension=".xlsx",
-            initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
+            initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
             initialfile="new_rv.rv.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
             return
         try:
-            make_blank_rv_template(path)
+            make_blank_ro_template(path)
             self._status_var.set(f"Template saved: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Template error", str(exc), parent=self)

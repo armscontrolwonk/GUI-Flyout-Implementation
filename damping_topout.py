@@ -14,11 +14,11 @@ zeta_max is highly leveraged in M.
 """
 import copy, json
 import numpy as np
-from missile_models import get_missile, rv_from_dict
+from missile_models import get_missile, ro_from_dict
 from trajectory import integrate_trajectory
 from atmosphere import atmosphere
 
-CHGB = rv_from_dict(json.load(open("rv_library/C-HGB.rv.json")))
+CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
 KICK = 17.0
 G0, RE, HR = 9.80665, 6.378137e6, 7000.0
 BETA, LD = CHGB.beta_kg_m2, CHGB.glider_LD

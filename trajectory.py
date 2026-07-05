@@ -2769,7 +2769,7 @@ def integrate_trajectory(params: MissileParams,
 
             # Peak heating: Sutton-Graves stagnation-point rate using the RV's
             # nose-tip radius — explicit nose_radius_m, else a shape/diameter
-            # screening default (RVParams.effective_nose_radius_m).  Peak time
+            # screening default (ROParams.effective_nose_radius_m).  Peak time
             # is independent of RN; the reported MW/m² scales as 1/√RN.
             _RN = (_erv_ms.effective_nose_radius_m()
                    if hasattr(_erv_ms, 'effective_nose_radius_m')
