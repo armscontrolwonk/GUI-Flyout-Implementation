@@ -83,7 +83,7 @@ three modes work — they refine the verdict, they don't change the architecture
 | Windward turbulent | spec uses `0.0296 …Re*^(−1/5)` | **Fletcher p.112** uses **0.0288** | ⚠ pick one + cite (both in literature; ~3%) |
 | Reradiation wall temp | `T_w = (q̇/εσ)^¼` | **Duffa p.36 Fig 1.8** (ceramic ≤ ~2000 K oxidizing; ε matters) | ✔ |
 | Heat ∝ ρV³ (windward avg) | `q̇ ∝ ρV³` via Reynolds analogy | **Regan Eq. 6.110** (`q̇ = c_f ρV³/4`) | ✔ corroborates n=3 exponent |
-| β convention | `β = W/(C_D A)` (repo: `RVParams.beta_kg_m2`) | **Regan Ch. VI** (Cases I–V parameterized by β, L/D) | ✔ |
+| β convention | `β = W/(C_D A)` (repo: `ROParams.beta_kg_m2`) | **Regan Ch. VI** (Cases I–V parameterized by β, L/D) | ✔ |
 
 **Net:** the correlation forms and constants are correct and mutually consistent
 across Duffa (ablation/stagnation), Fletcher (windward/reference-enthalpy), and
@@ -838,13 +838,13 @@ the same evaluator. Screening tier throughout (not FIAT; see §3 for the tier ab
 ```
 
 ### Phase 1 — Data layer (back-compatible, no behavior change)
-**Files:** `heating.py` (`TPS_MATERIALS`), `missile_models.py` (RVParams + JSON loader).
+**Files:** `heating.py` (`TPS_MATERIALS`), `booster_models.py` (ROParams + JSON loader).
 - Extend `TPS_MATERIALS` to the §10.4 grouped catalog: add `density`, `H_eff`, `is_ablator`,
   `oxidation_dwell_s`, and a **`group`** field (`sacrificial` / `hot_structure` / `metal`). Split
   `carbon_ablator` → `carbon_carbon` + `carbon_phenolic`; add `c_sic`, `cc_hot_structure`,
   `silica_phenolic`, `sirca`, `pica`; regrade `uhtc` (§10.4).
 - Add `nose_tps_material`, `body_tps_material`, `body_tps_thickness_m`, optional
-  `structure_material`/`structure_limit_K` to RVParams + the JSON loader (§10.1).
+  `structure_material`/`structure_limit_K` to ROParams + the JSON loader (§10.1).
 - **Back-compat guarantee:** if the new fields are absent, fall back to the single `tps_material`
   for *both* nose and body. Every current `rv.json` yields the identical verdict.
 - **Verify:** existing RVs load with byte-identical FOM output; catalog round-trips; the GUI flyout

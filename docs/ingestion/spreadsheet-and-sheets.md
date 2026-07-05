@@ -13,7 +13,7 @@ Nothing below is wired into the app yet — this is the design.
 
 ## 1. Why the current format doesn't scale
 
-`missile_xlsx.py` today is **one workbook = one missile**, laid out
+`booster_xlsx.py` today is **one workbook = one missile**, laid out
 *fields-as-rows, stages-as-columns* (D–G). It's excellent for tuning a single
 complex vehicle — rich notes, live computed cross-checks, dropdowns — but:
 
@@ -114,7 +114,7 @@ Pick based on how much "live" you want vs how much auth plumbing you'll tolerate
  Detailed workbook ─┐
                     ├─▶ parse ─▶ normalize units ─▶ RESOLVE ─▶ validate ─▶ *.thrusty.json  ┐
  Catalog sheet ─────┤        (one row/stage)        (estimators.md)         + provenance    ├─▶ catalog.json
- (xlsx / CSV / URL)─┘                                                        + ingest report ┘      (+ rv_library/)
+ (xlsx / CSV / URL)─┘                                                        + ingest report ┘      (+ ro_library/)
 ```
 
 One resolver, one schema, one report format — three ways in (detailed xlsx,

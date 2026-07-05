@@ -8,7 +8,7 @@ see `DAMPED_GLIDE_MEMO.md`). Literature support and citations:
 
 Implementation: backend in `damping_estimate.py` (tested by
 `test_damping_estimate.py`); GUI button + dialog in `thrusty.py`; persistence
-fields on `RVParams` in `missile_models.py`.
+fields on `ROParams` in `booster_models.py`.
 
 ---
 
@@ -44,7 +44,7 @@ limited to ~ζ_max."
 ## 2. Inputs
 
 **Pre-populated from the active RV** (read at button press, via
-`effective_rv`): `beta_kg_m2`, `glider_LD`, `diameter_m`, `length_m`,
+`effective_ro`): `beta_kg_m2`, `glider_LD`, `diameter_m`, `length_m`,
 `nose_radius_m`, `glider_pullup_g_max`.
 
 **User-supplied / editable:**
@@ -111,8 +111,8 @@ well-damped — free to choose up to 0.7."
 ## 5. Persistence — RV-embedded
 
 Reentry guidance stays on the RV (no separate preset; saved with the
-`*.rv.json` and the missile JSON). New `RVParams` fields (serialized in
-`rv_to_dict`/`rv_from_dict`):
+`*.ro.json` and the missile JSON). New `ROParams` fields (serialized in
+`ro_to_dict`/`ro_from_dict`):
 
 - `glider_control_surfaces: str = "unknown"`  (`none`/`small`/`substantial`/`unknown`)
 - `glider_flap_area_ratio: float = 0.0`  (0 ⇒ use the tier default)
