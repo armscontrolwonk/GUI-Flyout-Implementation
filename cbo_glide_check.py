@@ -8,10 +8,10 @@ dip, and the fraction of the in-atmosphere glide in the 30-40 km (CBO) and
 """
 import copy, json
 import numpy as np
-from missile_models import get_missile, rv_from_dict
+from missile_models import get_missile, ro_from_dict
 from trajectory import integrate_trajectory
 
-CHGB = rv_from_dict(json.load(open("rv_library/C-HGB.rv.json")))
+CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
 
 
 def fly(zeta, burnout_deg, mode="damped_glide", aero="constant_LD"):

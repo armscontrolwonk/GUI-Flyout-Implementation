@@ -92,9 +92,9 @@ def test_synthetic_no_entry():
 # Integrator-backed tests — real Thrusty trajectories, stable fixtures.
 # --------------------------------------------------------------------------
 def _fly(mode, cutoff, aero="polar", zeta=None, boost="Minotaur-IV + HTV-2"):
-    from missile_models import get_missile, rv_from_dict
+    from missile_models import get_missile, ro_from_dict
     from trajectory import integrate_trajectory
-    chgb = rv_from_dict(json.load(open("rv_library/C-HGB.rv.json")))
+    chgb = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
     p = get_missile(boost)
     rv = copy.deepcopy(chgb)
     rv.glider_guidance = mode

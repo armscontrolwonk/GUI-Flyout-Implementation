@@ -165,7 +165,7 @@ def estimate_damping(beta_kg_m2: float, glider_ld: float, nmax: float = 10.0,
 
 
 def estimate_for_rv(rv, v_glide=None, h_glide=None) -> EstimateResult:
-    """Convenience wrapper taking an RVParams-like object."""
+    """Convenience wrapper taking an ROParams-like object."""
     return estimate_damping(
         beta_kg_m2=getattr(rv, "beta_kg_m2", 0.0),
         glider_ld=getattr(rv, "glider_LD", 0.0),

@@ -126,7 +126,7 @@ CUSTOM_BODY_KEY = "custom_body"
 def register_custom_material(key, props):
     """Inject a user-defined material into TPS_MATERIALS so the key-based FOM can consume it.
 
-    `props` is a partial catalog entry (from RVParams.nose_tps_custom / body_tps_custom);
+    `props` is a partial catalog entry (from ROParams.nose_tps_custom / body_tps_custom);
     missing fields are filled with safe defaults so a bespoke material is always well-formed.
     Called for any RV carrying custom props before the heating FOM runs.  A falsy `props`
     removes any stale registration for `key`.  Returns the resolved key (or "" if cleared).
