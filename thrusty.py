@@ -5559,6 +5559,8 @@ class BoosterFlyoutApp(tk.Tk):
                     if 'stop'  in saved: row['stop'].set(saved['stop'])
                     if 'angle' in saved: row['angle'].set(saved['angle'])
                     if 'coast' in saved: row['coast'].set(saved['coast'])
+                    if 'cutoff' in saved and not row.get('solid') and 'cutoff' in row:
+                        row['cutoff'].set(saved['cutoff'])
         elif self._adv_pitch_var.get():
             self._rebuild_stage_rows()
 
@@ -5873,7 +5875,8 @@ class BoosterFlyoutApp(tk.Tk):
             (2, "Turn stop (s)"),
             (3, "Angle (°)"),
             (4, "Coast (s)"),
-            (5, "Burn window"),
+            (5, "Cutoff (s)"),
+            (6, "Burn window"),
         ]
         for col, hdr in _headers:
             ttk.Label(af, text=hdr, foreground="#555555").grid(
@@ -5922,6 +5925,12 @@ class BoosterFlyoutApp(tk.Tk):
             sv_coast = tk.StringVar(
                 value=f"{node.coast_time_s:.1f}" if not is_last else "")
 
+            # Engine cutoff — commanded burn duration for this stage (blank =
+            # full burn).  Liquid engines only; solid motors burn to completion.
+            sv_cutoff = tk.StringVar(
+                value=f"{node.stage_cutoff_s:.1f}"
+                      if node.stage_cutoff_s is not None else "")
+
             row = i + 1
             ttk.Label(af, text=f"Stage {i+1}:").grid(
                 row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
@@ -5935,13 +5944,20 @@ class BoosterFlyoutApp(tk.Tk):
             coast_e.grid(row=row, column=4, padx=3, pady=1)
             if is_last:
                 coast_e.config(state="disabled")
+            cutoff_e = ttk.Entry(af, textvariable=sv_cutoff, width=5)
+            cutoff_e.grid(row=row, column=5, padx=3, pady=1)
+            if node.solid_motor:
+                # Solid motors cannot be shut down — no cutoff.
+                sv_cutoff.set("")
+                cutoff_e.config(state="disabled")
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
-                row=row, column=5, sticky=tk.W, padx=(4, 8), pady=1)
+                row=row, column=6, sticky=tk.W, padx=(4, 8), pady=1)
 
             self._stage_rows.append(
                 {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
-                 'coast': sv_coast, 'node': node})
+                 'coast': sv_coast, 'cutoff': sv_cutoff,
+                 'solid': node.solid_motor, 'node': node})
 
     # ------------------------------------------------------------------
     def _on_site_selected(self, _event=None):
@@ -6336,6 +6352,7 @@ class BoosterFlyoutApp(tk.Tk):
                     'stop':  row['stop'].get().strip(),
                     'angle': row['angle'].get().strip(),
                     'coast': row['coast'].get().strip(),
+                    'cutoff': row.get('cutoff', tk.StringVar()).get().strip(),
                 })
 
         # Yaw / dogleg program.
@@ -7459,6 +7476,16 @@ class BoosterFlyoutApp(tk.Tk):
                         node.coast_time_s = float(coast_s)
                     except ValueError:
                         pass
+                # Per-stage engine cutoff — liquid only; blank clears it.
+                cut_s = row.get('cutoff', tk.StringVar()).get().strip()
+                if cut_s and not node.solid_motor:
+                    try:
+                        node.stage_cutoff_s = self._field_float(
+                            f"Stage cutoff (s)", cut_s)
+                    except ValueError:
+                        node.stage_cutoff_s = None
+                else:
+                    node.stage_cutoff_s = None
                 node = node.stage2
 
         # Global yaw program (checkbox + three fields)
