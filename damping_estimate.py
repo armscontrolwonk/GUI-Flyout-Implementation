@@ -164,15 +164,15 @@ def estimate_damping(beta_kg_m2: float, glider_ld: float, nmax: float = 10.0,
                           M, ratio, "tier" if from_tier else "computed", note)
 
 
-def estimate_for_rv(rv, v_glide=None, h_glide=None) -> EstimateResult:
+def estimate_for_ro(ro, v_glide=None, h_glide=None) -> EstimateResult:
     """Convenience wrapper taking an ROParams-like object."""
     return estimate_damping(
-        beta_kg_m2=getattr(rv, "beta_kg_m2", 0.0),
-        glider_ld=getattr(rv, "glider_LD", 0.0),
-        nmax=getattr(rv, "glider_pullup_g_max", 10.0),
-        control=getattr(rv, "glider_control_surfaces", "unknown"),
-        flap_area_ratio=getattr(rv, "glider_flap_area_ratio", 0.0),
-        flap_deflection_deg=getattr(rv, "glider_flap_deflection_deg", 0.0),
+        beta_kg_m2=getattr(ro, "beta_kg_m2", 0.0),
+        glider_ld=getattr(ro, "glider_LD", 0.0),
+        nmax=getattr(ro, "glider_pullup_g_max", 10.0),
+        control=getattr(ro, "glider_control_surfaces", "unknown"),
+        flap_area_ratio=getattr(ro, "glider_flap_area_ratio", 0.0),
+        flap_deflection_deg=getattr(ro, "glider_flap_deflection_deg", 0.0),
         v_glide=v_glide, h_glide=h_glide)
 
 

@@ -28,10 +28,10 @@ def glide_states():
     p = get_missile("AUR+HGB")
     p.burnout_angle_deg = KICK; p.stage_burnout_angle_deg = KICK
     if p.stage2: p.stage2.stage_burnout_angle_deg = KICK
-    rv = copy.deepcopy(CHGB)
-    rv.glider_guidance = "damped_glide"; rv.glider_aero_model = "constant_LD"
-    rv.glider_damping_zeta = 0.5
-    p.rv = rv
+    ro = copy.deepcopy(CHGB)
+    ro.glider_guidance = "damped_glide"; ro.glider_aero_model = "constant_LD"
+    ro.glider_damping_zeta = 0.5
+    p.ro = ro
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, burnout_angle_deg=KICK,
                              dt_output=1.0, max_time_s=6000.0)
     alt = np.asarray(r['alt']).ravel(); spd = np.asarray(r['speed']).ravel()

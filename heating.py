@@ -57,7 +57,7 @@ NOTHING_SURVIVES_K = 4000.0       # T_eq above all usable materials → the
 #                  (UHTC ~60-140 s at 2700 °C, §10.4/Tului); None if not dwell-limited
 # NEW entries (carbon_carbon, carbon_phenolic, c_sic, cc_hot_structure, silica_phenolic, sirca,
 # pica) carry SCREENING-tier peak/continuous estimates pending a verification pass (§10.4); they
-# are not referenced by any existing rv.json, so they do not affect current verdicts.  The `uhtc`
+# are not referenced by any existing ro.json, so they do not affect current verdicts.  The `uhtc`
 # temperature limits are the LEGACY screening values, kept for verdict stability; the grounded
 # regrade (recede >~2000 °C, dwell-limited) lands when the oxidation-dwell criterion is built.
 TPS_MATERIALS = {

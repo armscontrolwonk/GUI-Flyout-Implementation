@@ -173,15 +173,15 @@ def classify_glide_regime(alt_km, speed_ms, t_s, *,
 
 def regime_from_result(result: dict, *,
                        g_limit_g: float | None = None,
-                       rv=None, **kw) -> GlideRegime:
+                       ro=None, **kw) -> GlideRegime:
     """Convenience wrapper: classify directly from an ``integrate_trajectory``
     result dict (uses its ``alt``, ``speed`` and ``t`` arrays).
 
-    If ``rv`` is given and ``g_limit_g`` is not, the RV's ``glider_pullup_g_max``
+    If ``ro`` is given and ``g_limit_g`` is not, the RV's ``glider_pullup_g_max``
     is used as the deceleration (undershoot) limit.
     """
     if g_limit_g is None:
-        g_limit_g = float(getattr(rv, "glider_pullup_g_max", DECEL_LIMIT_G)) if rv is not None else DECEL_LIMIT_G
+        g_limit_g = float(getattr(ro, "glider_pullup_g_max", DECEL_LIMIT_G)) if ro is not None else DECEL_LIMIT_G
     return classify_glide_regime(
         np.asarray(result["alt"]).ravel() / 1000.0,
         np.asarray(result["speed"]).ravel(),

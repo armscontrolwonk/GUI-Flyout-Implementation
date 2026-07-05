@@ -34,7 +34,7 @@ from missile_models import (MISSILE_DB, get_missile,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
-                           ROParams, ro_from_dict, ro_to_dict, effective_rv)
+                           ROParams, ro_from_dict, ro_to_dict, effective_ro)
 from trajectory import (integrate_trajectory, maximize_range, aim_missile,
                         plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
@@ -185,7 +185,7 @@ _RO_LIBRARY_PATH  = _THRUSTY_ROOT / "ro_library"
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
 _BUNDLED_RO_LIBRARY_PATH = Path(__file__).resolve().parent / "ro_library"
-# Back-compat: reentry objects used to live in rv_library/*.rv.json.  We still
+# Back-compat: reentry objects used to live in rv_library/*.ro.json.  We still
 # read those (old locally-saved files) but only ever write the new .ro.json form.
 _LEGACY_RO_LIBRARY_PATH = _THRUSTY_ROOT / "rv_library"
 _DIR_GUIDANCE     = _THRUSTY_ROOT / "guidance"
@@ -318,24 +318,24 @@ def _load_ro_library():
     for d in dirs:
         if not d.exists():
             continue
-        # Accept both the new .ro.json and legacy .rv.json extensions.
-        files = sorted(list(d.glob("*.ro.json")) + list(d.glob("*.rv.json")))
+        # Accept both the new .ro.json and legacy .ro.json extensions.
+        files = sorted(list(d.glob("*.ro.json")) + list(d.glob("*.ro.json")))
         for fp in files:
             try:
-                rv = ro_from_dict(json.loads(fp.read_text()))
-                key = rv.name or fp.stem.replace(".ro", "").replace(".rv", "")
-                RO_DB[key] = lambda _r=rv: _r
+                ro = ro_from_dict(json.loads(fp.read_text()))
+                key = ro.name or fp.stem.replace(".ro", "").replace(".ro", "")
+                RO_DB[key] = lambda _r=ro: _r
             except Exception as exc:
                 print(f"Warning: could not load Reentry object '{fp.name}': {exc}")
 
 
-def _save_ro_to_library(rv) -> Path:
+def _save_ro_to_library(ro) -> Path:
     """Write an ROParams to <safe_name>.ro.json and register it in RO_DB."""
     _ensure_dir(_RO_LIBRARY_PATH)
-    safe = _safe_name(rv.name) or "RV"
+    safe = _safe_name(ro.name) or "RV"
     fp = _RO_LIBRARY_PATH / f"{safe}.ro.json"
-    fp.write_text(json.dumps(ro_to_dict(rv), indent=2))
-    RO_DB[rv.name] = lambda _r=rv: _r
+    fp.write_text(json.dumps(ro_to_dict(ro), indent=2))
+    RO_DB[ro.name] = lambda _r=ro: _r
     return fp
 
 
@@ -351,13 +351,13 @@ def _extract_ros_from_missiles():
             p = MISSILE_DB[name]()
         except Exception:
             continue
-        erv = effective_rv(p)
-        if erv is None or not erv.name or erv.name in RO_DB:
+        ero = effective_ro(p)
+        if ero is None or not ero.name or ero.name in RO_DB:
             continue
         try:
-            _save_ro_to_library(erv)
+            _save_ro_to_library(ero)
         except Exception as exc:
-            print(f"Warning: could not extract Reentry object '{erv.name}' from '{name}': {exc}")
+            print(f"Warning: could not extract Reentry object '{ero.name}' from '{name}': {exc}")
     try:
         marker.touch()
     except Exception:
@@ -1360,47 +1360,47 @@ class MissileDialog(tk.Toplevel):
         self._payload_length_var, self._payload_length_entry = _fe_entry(
             self._payload_shape_frame, "Payload length (m):", 2, "0", "m", pady=(2, 4))
 
-        # Keep legacy aliases so _calc_rv_beta pre-fill still resolves
+        # Keep legacy aliases so _calc_ro_beta pre-fill still resolves
         self._nose_shape_var    = self._payload_shape_var
         self._nose_length_var   = self._payload_length_var
         self._nose_shape_cb     = self._payload_shape_cb
         self._nose_length_entry = self._payload_length_entry
 
         # ── Row 2: Reentry object separates toggle (row numbering continues in pl) ────────
-        self._rv_separates_var = tk.BooleanVar(value=False)
-        self._rv_separates_check = ttk.Checkbutton(
+        self._ro_separates_var = tk.BooleanVar(value=False)
+        self._ro_separates_check = ttk.Checkbutton(
             pl, text="Reentry object separates",
-            variable=self._rv_separates_var,
-            command=self._update_rv_separates_state)
-        self._rv_separates_check.grid(
+            variable=self._ro_separates_var,
+            command=self._update_ro_separates_state)
+        self._ro_separates_check.grid(
             row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
         # ── Row 3: RV section (hidden until checkbox ticked) ─────────────────
-        self._rv_section = ttk.Frame(pl)
-        self._rv_section.grid(row=3, column=0, columnspan=2,
+        self._ro_section = ttk.Frame(pl)
+        self._ro_section.grid(row=3, column=0, columnspan=2,
                               sticky=tk.EW, padx=(16, 0))
-        self._rv_section.columnconfigure(1, weight=1)
-        self._rv_section.grid_remove()
+        self._ro_section.columnconfigure(1, weight=1)
+        self._ro_section.grid_remove()
 
         # No. of RVs (per-Object mass is a property of the loaded RV)
-        ttk.Label(self._rv_section, text="No. of RVs:").grid(
+        ttk.Label(self._ro_section, text="No. of RVs:").grid(
             row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._num_rvs_var = tk.StringVar(value="1")
-        _rvn_inner = ttk.Frame(self._rv_section)
-        _rvn_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._num_rvs_spinbox = ttk.Spinbox(
-            _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
-        self._num_rvs_spinbox.pack(side=tk.LEFT)
+        self._num_ros_var = tk.StringVar(value="1")
+        _ron_inner = ttk.Frame(self._ro_section)
+        _ron_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._num_ros_spinbox = ttk.Spinbox(
+            _ron_inner, textvariable=self._num_ros_var, from_=1, to=24, width=4)
+        self._num_ros_spinbox.pack(side=tk.LEFT)
 
         # RV identity is owned by the sidebar's Reentry Object library
         # (since the recent refactor).  The dialog shows a read-only
         # summary of whatever is selected there, so the user can verify
         # the loadout without re-editing it from here.
-        self._rv_summary_var = tk.StringVar(value="")
-        ttk.Label(self._rv_section, textvariable=self._rv_summary_var,
+        self._ro_summary_var = tk.StringVar(value="")
+        ttk.Label(self._ro_section, textvariable=self._ro_summary_var,
                   wraplength=320, foreground="navy").grid(
             row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
-        ttk.Label(self._rv_section,
+        ttk.Label(self._ro_section,
                   text="(choose the reentry object in the sidebar's Reentry Object panel)",
                   foreground="gray").grid(
             row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
@@ -1408,14 +1408,14 @@ class MissileDialog(tk.Toplevel):
         # Has PBV toggle
         self._has_pbv_var = tk.BooleanVar(value=False)
         self._has_pbv_check = ttk.Checkbutton(
-            self._rv_section, text="Has PBV (post-boost bus)",
+            self._ro_section, text="Has PBV (post-boost bus)",
             variable=self._has_pbv_var,
             command=self._update_pbv_state)
         self._has_pbv_check.grid(
             row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
         # PBV sub-section
-        self._pbv_section = ttk.Frame(self._rv_section)
+        self._pbv_section = ttk.Frame(self._ro_section)
         self._pbv_section.grid(row=4, column=0, columnspan=2,
                                sticky=tk.EW, padx=(16, 0))
         self._pbv_section.columnconfigure(1, weight=1)
@@ -1487,8 +1487,8 @@ class MissileDialog(tk.Toplevel):
             pady=(2, 4))
 
         # Live throw-weight update when RV-count or PBV mass changes.
-        # Object mass per unit comes from the sidebar selection via _current_main_rv().
-        for _v in (self._num_rvs_var, self._pbv_mass_var):
+        # Object mass per unit comes from the sidebar selection via _current_main_ro().
+        for _v in (self._num_ros_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
 
         # ── Fins ─────────────────────────────────────────────────────────
@@ -1659,8 +1659,8 @@ class MissileDialog(tk.Toplevel):
         self._payload_length_entry.config(state="disabled")
         # RV section (RV identity is owned by the sidebar — nothing to
         # disable in the dialog itself; the summary label is non-editable.)
-        self._rv_separates_check.config(state="disabled")
-        self._num_rvs_spinbox.config(state="disabled")
+        self._ro_separates_check.config(state="disabled")
+        self._num_ros_spinbox.config(state="disabled")
         self._has_pbv_check.config(state="disabled")
         self._pbv_mass_entry.config(state="disabled")
         self._pbv_diameter_entry.config(state="disabled")
@@ -1696,31 +1696,31 @@ class MissileDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _update_throw_weight(self, *_):
         """Recompute throw weight = N × RV.mass_kg + PBV when Reentry object separates is active."""
-        if not self._rv_separates_var.get():
+        if not self._ro_separates_var.get():
             return
-        rv = self._current_main_rv()
-        if rv is None:
+        ro = self._current_main_ro()
+        if ro is None:
             return  # No reentry object selected in sidebar; leave throw weight untouched.
         try:
-            n   = max(1, int(self._num_rvs_var.get()))
+            n   = max(1, int(self._num_ros_var.get()))
             bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
-            total = n * rv.mass_kg + bus
+            total = n * ro.mass_kg + bus
             self._throw_weight_entry.config(state="normal")
             self._throw_weight_var.set(f"{total:.0f}")
             self._throw_weight_entry.config(state="readonly")
         except (ValueError, tk.TclError):
             pass
 
-    def _update_rv_separates_state(self):
+    def _update_ro_separates_state(self):
         """Show/hide the RV sub-section; toggle payload-shape rows and throw weight."""
-        if self._rv_separates_var.get():
-            self._rv_section.grid()
+        if self._ro_separates_var.get():
+            self._ro_section.grid()
             self._payload_shape_frame.grid_remove()   # RV geometry takes over
             self._throw_weight_entry.config(state="readonly")
-            self._update_rv_summary()
+            self._update_ro_summary()
             self._update_throw_weight()
         else:
-            self._rv_section.grid_remove()
+            self._ro_section.grid_remove()
             self._payload_shape_frame.grid()
             self._throw_weight_entry.config(state="normal")
 
@@ -1838,32 +1838,32 @@ class MissileDialog(tk.Toplevel):
         dlg.geometry(f"+{px}+{py}")
 
     # ------------------------------------------------------------------
-    def _current_main_rv(self):
+    def _current_main_ro(self):
         """Return the ROParams currently selected in the parent app's
         sidebar combobox, or None if the sentinel is active."""
         app = self.master
-        name = app._rv_main_var.get() if hasattr(app, '_rv_main_var') else ""
+        name = app._ro_main_var.get() if hasattr(app, '_ro_main_var') else ""
         return RO_DB[name]() if name in RO_DB else None
 
-    def _update_rv_summary(self):
+    def _update_ro_summary(self):
         """Refresh the summary label from the main panel's RV selection."""
-        rv = self._current_main_rv()
-        if rv is None:
-            self._rv_summary_var.set("No reentry object selected in sidebar")
+        ro = self._current_main_ro()
+        if ro is None:
+            self._ro_summary_var.set("No reentry object selected in sidebar")
         else:
-            parts = [rv.name,
-                     f"{rv.mass_kg:,.0f} kg",
-                     f"β {rv.beta_kg_m2:,.0f} kg/m²"]
-            if rv.glider_enabled and rv.glider_LD > 0:
-                _g = rv.glider_guidance
+            parts = [ro.name,
+                     f"{ro.mass_kg:,.0f} kg",
+                     f"β {ro.beta_kg_m2:,.0f} kg/m²"]
+            if ro.glider_enabled and ro.glider_LD > 0:
+                _g = ro.glider_guidance
                 guid = ("Tracy"        if _g == "equilibrium_glide"
                         else "Acton"   if _g == "equilibrium_glide_acton"
                         else "skip→eq" if _g == "skip_to_equilibrium"
                         else "damped"  if _g == "damped_glide"
                         else "dyn-eq"  if _g == "dynamic_equilibrium_glide"
                         else "skip")
-                parts.append(f"L/D {rv.glider_LD:.2f} ({guid})")
-            self._rv_summary_var.set(" — ".join(parts))
+                parts.append(f"L/D {ro.glider_LD:.2f} ({guid})")
+            self._ro_summary_var.set(" — ".join(parts))
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
 
@@ -1950,24 +1950,24 @@ class MissileDialog(tk.Toplevel):
             self._stage_frames[i].populate(sd)
 
         # Throw weight and RV decomposition
-        self._rv_separates_var.set(p.rv_separates)
+        self._ro_separates_var.set(p.ro_separates)
         self._throw_weight_var.set(f"{payload:.0f}")
-        if p.rv_separates and p.rv_mass_kg > 0:
-            self._num_rvs_var.set(str(p.num_rvs))
+        if p.ro_separates and p.ro_mass_kg > 0:
+            self._num_ros_var.set(str(p.num_ros))
             has_pbv = p.bus_mass_kg > 0
             self._has_pbv_var.set(has_pbv)
             self._pbv_mass_var.set(f"{p.bus_mass_kg:.0f}")
             self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
             self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
         else:
-            self._num_rvs_var.set("1")
+            self._num_ros_var.set("1")
             self._has_pbv_var.set(False)
             self._pbv_mass_var.set("0")
             self._pbv_diameter_var.set("0")
             self._pbv_length_var.set("0")
         # RV identity comes from the sidebar library, not from the missile;
         # just refresh the read-only summary to reflect that selection.
-        self._update_rv_summary()
+        self._update_ro_summary()
 
         # Payload shape / diameter / length
         self._payload_shape_var.set(
@@ -2043,7 +2043,7 @@ class MissileDialog(tk.Toplevel):
         self._update_booster_frame()
 
         # Apply show/hide state for all sections
-        self._update_rv_separates_state()
+        self._update_ro_separates_state()
         self._update_pbv_state()
         self._update_shroud_state()
 
@@ -2062,27 +2062,27 @@ class MissileDialog(tk.Toplevel):
         n = int(self._n_stages_var.get())
 
         # Throw weight / payload decomposition
-        rv_separates = self._rv_separates_var.get()
-        if rv_separates:
-            main_rv = self._current_main_rv()
-            if main_rv is None:
+        ro_separates = self._ro_separates_var.get()
+        if ro_separates:
+            main_ro = self._current_main_ro()
+            if main_ro is None:
                 raise ValueError(
                     "No reentry object selected in the sidebar's Reentry Object panel. "
                     "Pick or create an RV there before saving this missile.")
             try:
-                num_rvs  = max(1, int(self._num_rvs_var.get()))
+                num_ros  = max(1, int(self._num_ros_var.get()))
                 bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
             except ValueError:
                 raise ValueError("No. of RVs and PBV mass must be numbers.")
-            rv_mass = float(main_rv.mass_kg)
-            payload = num_rvs * rv_mass + bus_mass
+            ro_mass = float(main_ro.mass_kg)
+            payload = num_ros * ro_mass + bus_mass
         else:
             try:
                 payload = float(self._throw_weight_var.get())
             except ValueError:
                 raise ValueError("Throw weight must be a number.")
-            num_rvs = 1
-            rv_mass = payload
+            num_ros = 1
+            ro_mass = payload
             bus_mass = 0.0
 
         # Payload shape / diameter / length
@@ -2146,9 +2146,9 @@ class MissileDialog(tk.Toplevel):
         # PBV geometry
         try:
             pbv_diameter_m = (float(self._pbv_diameter_var.get())
-                              if (rv_separates and self._has_pbv_var.get()) else 0.0)
+                              if (ro_separates and self._has_pbv_var.get()) else 0.0)
             pbv_length_m   = (float(self._pbv_length_var.get())
-                              if (rv_separates and self._has_pbv_var.get()) else 0.0)
+                              if (ro_separates and self._has_pbv_var.get()) else 0.0)
         except ValueError:
             raise ValueError("PBV diameter and length must be numbers.")
 
@@ -2196,11 +2196,11 @@ class MissileDialog(tk.Toplevel):
             if is_last and is_first:
                 # Single-stage missile
                 m0     = sd["fueled"] + payload + shroud_mass
-                mfinal = sd["dry"] if rv_separates else sd["dry"] + payload
+                mfinal = sd["dry"] if ro_separates else sd["dry"] + payload
             elif is_last:
                 # Last of multiple stages: payload present, shroud is on stage 1
                 m0     = sd["fueled"] + payload
-                mfinal = sd["dry"] if rv_separates else sd["dry"] + payload
+                mfinal = sd["dry"] if ro_separates else sd["dry"] + payload
             elif is_first:
                 # First of multiple stages: add shroud here
                 m0     = sd["fueled"] + shroud_mass + upper_mass
@@ -2233,11 +2233,11 @@ class MissileDialog(tk.Toplevel):
         node.name                   = name
         node.guidance               = self._guidance_var.get()
         node.payload_kg             = payload
-        node.rv                     = None
+        node.ro                     = None
         node.bus_mass_kg            = bus_mass
-        node.num_rvs                = num_rvs
-        node.rv_mass_kg             = rv_mass
-        node.rv_separates           = rv_separates
+        node.num_ros                = num_ros
+        node.ro_mass_kg             = ro_mass
+        node.ro_separates           = ro_separates
         node.nose_shape             = nose_shape
         node.nose_length_m          = nose_length_m
         node.payload_diameter_m     = payload_diameter_m
@@ -2355,10 +2355,10 @@ class ROEditorDialog(tk.Toplevel):
     """Modal dialog for creating or editing an ROParams object.
 
     Usage::
-        dlg = ROEditorDialog(parent, rv=existing_rv, mass_kg=rv_mass)
+        dlg = ROEditorDialog(parent, ro=existing_ro, mass_kg=ro_mass)
         parent.wait_window(dlg)
         if dlg.result is not None:
-            self._rv = dlg.result
+            self._ro = dlg.result
     """
 
     _GUIDANCE_LABELS = {
@@ -2371,9 +2371,9 @@ class ROEditorDialog(tk.Toplevel):
         "dynamic_equilibrium_glide": "Dynamic equilibrium glide",
     }
 
-    def __init__(self, parent, rv=None, mass_kg=500.0):
+    def __init__(self, parent, ro=None, mass_kg=500.0):
         super().__init__(parent)
-        self.title("Edit Terminal Object" if rv is not None else "New Terminal Vehicle")
+        self.title("Edit Terminal Object" if ro is not None else "New Terminal Vehicle")
         self.resizable(False, True)
         self.grab_set()
         self._result = None
@@ -2394,12 +2394,12 @@ class ROEditorDialog(tk.Toplevel):
         # Separation mode — does the vehicle separate from the missile body?
         _lbl(-1 if False else 0, "Separation:")  # row 0
         self._sep_var = tk.StringVar(
-            value=getattr(rv, 'separation_mode', 'separating_rv') if rv
-                  else 'separating_rv')
+            value=getattr(ro, 'separation_mode', 'separating_ro') if ro
+                  else 'separating_ro')
         _sep_row = ttk.Frame(frm)
         _sep_row.grid(row=0, column=1, sticky=tk.W, pady=3)
         ttk.Radiobutton(_sep_row, text="Separating reentry object",
-                        variable=self._sep_var, value='separating_rv',
+                        variable=self._sep_var, value='separating_ro',
                         command=self._update_separation_state).pack(side=tk.LEFT)
         ttk.Radiobutton(_sep_row, text="Body (no separation)",
                         variable=self._sep_var, value='body',
@@ -2407,19 +2407,19 @@ class ROEditorDialog(tk.Toplevel):
 
         # Name
         _lbl(1, "Name:")
-        self._name_var = tk.StringVar(value=rv.name if rv else "")
+        self._name_var = tk.StringVar(value=ro.name if ro else "")
         self._name_entry = _entry(1, self._name_var)
 
         # Mass
         _lbl(2, "Mass (kg):")
         self._mass_var = tk.StringVar(
-            value=f"{rv.mass_kg:.0f}" if rv else f"{mass_kg:.0f}")
+            value=f"{ro.mass_kg:.0f}" if ro else f"{mass_kg:.0f}")
         self._mass_entry = _entry(2, self._mass_var, width=10)
 
         # β with Estimate button
         _lbl(3, "β (kg/m²):")
         self._beta_var = tk.StringVar(
-            value=f"{rv.beta_kg_m2:.0f}" if rv else "10000")
+            value=f"{ro.beta_kg_m2:.0f}" if ro else "10000")
         _beta_row = ttk.Frame(frm)
         _beta_row.grid(row=3, column=1, sticky=tk.W, pady=3)
         self._beta_entry = ttk.Entry(_beta_row, textvariable=self._beta_var, width=10)
@@ -2431,7 +2431,7 @@ class ROEditorDialog(tk.Toplevel):
         # Shape
         _lbl(4, "Shape:")
         self._shape_var = tk.StringVar(
-            value=NOSE_SHAPE_LABELS.get(rv.shape if rv else "cone",
+            value=NOSE_SHAPE_LABELS.get(ro.shape if ro else "cone",
                                         NOSE_SHAPE_LABELS["cone"]))
         _ns_labels = list(NOSE_SHAPE_LABELS.values())
         self._shape_combo = ttk.Combobox(frm, textvariable=self._shape_var,
@@ -2441,12 +2441,12 @@ class ROEditorDialog(tk.Toplevel):
         # Diameter + length
         _lbl(5, "Diameter (m):")
         self._dia_var = tk.StringVar(
-            value=f"{rv.diameter_m:.2f}" if rv else "0.5")
+            value=f"{ro.diameter_m:.2f}" if ro else "0.5")
         self._dia_entry = _entry(5, self._dia_var, width=10)
 
         _lbl(6, "Length (m):")
         self._len_var = tk.StringVar(
-            value=f"{rv.length_m:.2f}" if rv else "2.0")
+            value=f"{ro.length_m:.2f}" if ro else "2.0")
         self._len_entry = _entry(6, self._len_var, width=10)
 
         # Nose-tip radius — drives Sutton-Graves stagnation heating (∝ 1/√RN).
@@ -2455,7 +2455,7 @@ class ROEditorDialog(tk.Toplevel):
         # 0.000 for an auto RV).
         _lbl(7, "Nose radius (m):")
         self._nose_var = tk.StringVar(
-            value=f"{rv.effective_nose_radius_m():.3f}" if rv else "0.050")
+            value=f"{ro.effective_nose_radius_m():.3f}" if ro else "0.050")
         self._nose_entry = _entry(7, self._nose_var, width=10)
 
         # Sync the read-only state of mass/diameter/length to separation mode
@@ -2463,7 +2463,7 @@ class ROEditorDialog(tk.Toplevel):
 
         # ── Maneuvering (glider / HGV) — vehicle properties only ──────
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
-        self._glider_var = tk.BooleanVar(value=rv.glider_enabled if rv else False)
+        self._glider_var = tk.BooleanVar(value=ro.glider_enabled if ro else False)
         ttk.Checkbutton(self, text="Maneuvering (glider / HGV)",
                         variable=self._glider_var,
                         command=self._update_glider_state).pack(
@@ -2484,10 +2484,10 @@ class ROEditorDialog(tk.Toplevel):
                 ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
             return var
 
-        _LD = f"{rv.glider_LD:.2f}"          if (rv and rv.glider_LD > 0) else "2.5"
-        _g  = f"{rv.glider_pullup_g_max:.0f}" if rv                       else "10"
-        _bS = (f"{rv.glider_beta_entry_kg_m2:.0f}"
-               if (rv and rv.glider_beta_entry_kg_m2 > 0) else "0")
+        _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
+        _g  = f"{ro.glider_pullup_g_max:.0f}" if ro                       else "10"
+        _bS = (f"{ro.glider_beta_entry_kg_m2:.0f}"
+               if (ro and ro.glider_beta_entry_kg_m2 > 0) else "0")
         self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
         self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
         self._bS_var = _gfe(
@@ -2516,18 +2516,18 @@ class ROEditorDialog(tk.Toplevel):
             cb.grid(row=row, column=1, sticky=tk.W, pady=2)
             return var, cb
 
-        _nk = (rv.nose_tps_material or rv.tps_material) if rv else ""
-        _bk = (rv.body_tps_material or rv.tps_material) if rv else ""
+        _nk = (ro.nose_tps_material or ro.tps_material) if ro else ""
+        _bk = (ro.body_tps_material or ro.tps_material) if ro else ""
         self._nose_mat_var, self._nose_mat_cb = _mat_row(0, "Nose / leading edge:", _nk)
         self._nose_cust_frm, self._nose_cust = self._build_custom_fields(
-            tps_frm, 1, rv.nose_tps_custom if rv else None)
+            tps_frm, 1, ro.nose_tps_custom if ro else None)
         self._body_mat_var, self._body_mat_cb = _mat_row(2, "Body / acreage:", _bk)
         self._body_cust_frm, self._body_cust = self._build_custom_fields(
-            tps_frm, 3, rv.body_tps_custom if rv else None)
+            tps_frm, 3, ro.body_tps_custom if ro else None)
 
         ttk.Label(tps_frm, text="Body layer thickness:").grid(
             row=4, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        _bt = f"{rv.body_tps_thickness_m:.4f}" if (rv and rv.body_tps_thickness_m > 0) else "0"
+        _bt = f"{ro.body_tps_thickness_m:.4f}" if (ro and ro.body_tps_thickness_m > 0) else "0"
         self._body_thick_var = tk.StringVar(value=_bt)
         _bt_in = ttk.Frame(tps_frm); _bt_in.grid(row=4, column=1, sticky=tk.W, pady=2)
         ttk.Entry(_bt_in, textvariable=self._body_thick_var, width=10).pack(side=tk.LEFT)
@@ -2535,7 +2535,7 @@ class ROEditorDialog(tk.Toplevel):
 
         ttk.Label(tps_frm, text="Emissivity:").grid(
             row=5, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        self._emiss_var = tk.StringVar(value=f"{rv.emissivity:.2f}" if rv else "0.85")
+        self._emiss_var = tk.StringVar(value=f"{ro.emissivity:.2f}" if ro else "0.85")
         _em_in = ttk.Frame(tps_frm); _em_in.grid(row=5, column=1, sticky=tk.W, pady=2)
         ttk.Entry(_em_in, textvariable=self._emiss_var, width=10).pack(side=tk.LEFT)
         ttk.Label(_em_in, text="  (0.85 typical; range 0.75–0.90)").pack(side=tk.LEFT)
@@ -2555,14 +2555,14 @@ class ROEditorDialog(tk.Toplevel):
         prov_frm.pack(fill=tk.X)
         prov_frm.columnconfigure(1, weight=1)
         ttk.Label(prov_frm, text="Source:").grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        self._source_var = tk.StringVar(value=(rv.source if rv else ""))
+        self._source_var = tk.StringVar(value=(ro.source if ro else ""))
         ttk.Entry(prov_frm, textvariable=self._source_var, width=52).grid(
             row=0, column=1, sticky=tk.EW, pady=2)
         ttk.Label(prov_frm, text="Notes:").grid(row=1, column=0, sticky=tk.NW, padx=(0, 8), pady=2)
         self._notes_text = tk.Text(prov_frm, width=52, height=3, wrap=tk.WORD)
         self._notes_text.grid(row=1, column=1, sticky=tk.EW, pady=2)
-        if rv and rv.notes:
-            self._notes_text.insert("1.0", rv.notes)
+        if ro and ro.notes:
+            self._notes_text.insert("1.0", ro.notes)
 
         # OK / Save to Library / Cancel
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
@@ -2700,7 +2700,7 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     # ------------------------------------------------------------------
-    def _build_rv(self):
+    def _build_ro(self):
         """Validate fields and build an ROParams.  Returns None on input error
         (after showing a messagebox).
         """
@@ -2886,20 +2886,20 @@ class ROEditorDialog(tk.Toplevel):
                 w.configure(state=state)
 
     def _ok(self):
-        rv = self._build_rv()
-        if rv is None:
+        ro = self._build_ro()
+        if ro is None:
             return
-        self._result = rv
+        self._result = ro
         self.destroy()
 
     def _save_to_library(self):
         """Validate + write to a .ro.json file in the library, then close."""
-        rv = self._build_rv()
-        if rv is None:
+        ro = self._build_ro()
+        if ro is None:
             return
         from tkinter import filedialog
         _safe_name = "".join(c if c.isalnum() or c in "-_" else "_"
-                             for c in rv.name).strip("_") or "RV"
+                             for c in ro.name).strip("_") or "RV"
         path = filedialog.asksaveasfilename(
             parent=self,
             title="Save Reentry Object to Library",
@@ -2910,13 +2910,13 @@ class ROEditorDialog(tk.Toplevel):
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(ro_to_dict(rv), indent=2))
+            Path(path).write_text(json.dumps(ro_to_dict(ro), indent=2))
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}",
                                  parent=self)
             return
-        self._result = rv
+        self._result = ro
         self.destroy()
 
     @property
@@ -3691,7 +3691,7 @@ class FootprintDialog(tk.Toplevel):
                 gt_start, gt_stop, orb, yaw, el, bank_angles):
         import copy, dataclasses
         from trajectory import integrate_trajectory
-        from missile_models import effective_rv
+        from missile_models import effective_ro
 
         _max_t = 3600.0
         results = []
@@ -3701,21 +3701,21 @@ class FootprintDialog(tk.Toplevel):
                 break
 
             m = copy.deepcopy(missile)
-            _erv = effective_rv(m)
-            if _erv is not None:
+            _ero = effective_ro(m)
+            if _ero is not None:
                 # Hold the swept bank angle for the entire flight.  The bank
                 # is only applied while the glider is active (post-pierce
                 # lift block in _eom), so the [0, _max_t] window safely
                 # covers the whole glide phase regardless of when it starts.
-                new_rv = dataclasses.replace(
-                    _erv,
+                new_ro = dataclasses.replace(
+                    _ero,
                     glider_enabled=True,
                     glider_bank_schedule=[(0.0, _max_t, float(bk))],
                 )
                 node = m
                 while node is not None:
-                    if node.rv is not None:
-                        node.rv = new_rv
+                    if node.ro is not None:
+                        node.ro = new_ro
                         break
                     node = node.stage2
 
@@ -3881,7 +3881,7 @@ class DampingEstimatorDialog(tk.Toplevel):
         self.title("Estimate damping ratio ζ")
         self.resizable(False, False)
         self._result = None
-        rv = getattr(app, "_rv", None)
+        ro = getattr(app, "_ro", None)
         self._flown = None
         store = getattr(app, "_traj_store", None)
         if store:
@@ -3889,14 +3889,14 @@ class DampingEstimatorDialog(tk.Toplevel):
                 self._flown = _glide_state_from_result(store[-1][1])
             except Exception:
                 self._flown = None
-        self._build(rv)
+        self._build(ro)
         self._compute()
         try:
             app._center_dialog(self)
         except Exception:
             pass
 
-    def _build(self, rv):
+    def _build(self, ro):
         pad = dict(padx=6, pady=3)
         frm = ttk.Frame(self)
         frm.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -3921,9 +3921,9 @@ class DampingEstimatorDialog(tk.Toplevel):
                   font=("TkDefaultFont", 9, "bold")).grid(
             row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
         self._r += 1
-        beta = getattr(rv, "beta_kg_m2", 0.0) if rv else 0.0
-        ld = getattr(rv, "glider_LD", 0.0) if rv else 0.0
-        nmax = getattr(rv, "glider_pullup_g_max", 10.0) if rv else 10.0
+        beta = getattr(ro, "beta_kg_m2", 0.0) if ro else 0.0
+        ld = getattr(ro, "glider_LD", 0.0) if ro else 0.0
+        nmax = getattr(ro, "glider_pullup_g_max", 10.0) if ro else 10.0
         self._beta = _row("Ballistic coeff β", f"{beta:g}", "kg/m²")
         self._ld = _row("Lift-to-drag L/D", f"{ld:g}")
         self._nmax = _row("Max pull-up", f"{nmax:g}", "g")
@@ -3932,13 +3932,13 @@ class DampingEstimatorDialog(tk.Toplevel):
         ttk.Label(frm, text="Control surfaces").grid(
             row=self._r, column=0, sticky=tk.W, **pad)
         self._ctrl = tk.StringVar(
-            value=(getattr(rv, "glider_control_surfaces", "unknown") if rv else "unknown"))
+            value=(getattr(ro, "glider_control_surfaces", "unknown") if ro else "unknown"))
         ttk.Combobox(frm, textvariable=self._ctrl, state="readonly", width=12,
                      values=["unknown", "none", "small", "substantial"]).grid(
             row=self._r, column=1, columnspan=2, sticky=tk.W, **pad)
         self._r += 1
-        far = getattr(rv, "glider_flap_area_ratio", 0.0) if rv else 0.0
-        dfl = getattr(rv, "glider_flap_deflection_deg", 0.0) if rv else 0.0
+        far = getattr(ro, "glider_flap_area_ratio", 0.0) if ro else 0.0
+        dfl = getattr(ro, "glider_flap_deflection_deg", 0.0) if ro else 0.0
         self._far = _row("  Flap area S_flap/S_ref (opt.)", f"{far:g}" if far > 0 else "")
         self._dfl = _row("  Flap deflection (opt.)", f"{dfl:g}" if dfl > 0 else "", "deg")
 
@@ -4013,12 +4013,12 @@ class DampingEstimatorDialog(tk.Toplevel):
             self._app._main_zeta_var.set(f"{r.zeta:.2f}")
         except Exception:
             pass
-        rv = getattr(self._app, "_rv", None)
-        if rv is not None:
+        ro = getattr(self._app, "_ro", None)
+        if ro is not None:
             try:
-                rv.glider_control_surfaces = self._ctrl.get()
-                rv.glider_flap_area_ratio = self._fval(self._far, 0.0) or 0.0
-                rv.glider_flap_deflection_deg = self._fval(self._dfl, 0.0) or 0.0
+                ro.glider_control_surfaces = self._ctrl.get()
+                ro.glider_flap_area_ratio = self._fval(self._far, 0.0) or 0.0
+                ro.glider_flap_deflection_deg = self._fval(self._dfl, 0.0) or 0.0
             except Exception:
                 pass
         self.destroy()
@@ -4386,8 +4386,8 @@ class MissileFlyoutApp(tk.Tk):
         file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_missile_xlsx)
         file_menu.add_command(label="New Booster XLSX Template…", command=self._new_missile_template)
         file_menu.add_separator()
-        file_menu.add_command(label="Load Reentry Object…",                 command=self._load_rv)
-        file_menu.add_command(label="Save Reentry Object…",                 command=self._export_rv)
+        file_menu.add_command(label="Load Reentry Object…",                 command=self._load_ro)
+        file_menu.add_command(label="Save Reentry Object…",                 command=self._export_ro)
         file_menu.add_command(label="Load Reentry Object from XLSX…",       command=self._import_ro_xlsx)
         file_menu.add_command(label="Save Reentry Object to XLSX…",         command=self._export_ro_xlsx)
         file_menu.add_command(label="New Reentry Object XLSX Template…",    command=self._new_ro_template)
@@ -4627,24 +4627,24 @@ class MissileFlyoutApp(tk.Tk):
         # selection here overrides whatever RV the missile was saved with.
         rf = ttk.LabelFrame(parent, text="Reentry Object")
         rf.pack(fill=tk.X, padx=6, pady=3)
-        self._rv_main_var = tk.StringVar(value="(missile default)")
-        self._rv_main_cb = ttk.Combobox(rf, textvariable=self._rv_main_var,
-                                        values=self._rv_combo_values(),
+        self._ro_main_var = tk.StringVar(value="(missile default)")
+        self._ro_main_cb = ttk.Combobox(rf, textvariable=self._ro_main_var,
+                                        values=self._ro_combo_values(),
                                         state="readonly", width=24)
-        self._rv_main_cb.pack(padx=6, pady=(4, 2))
-        self._rv_main_cb.bind("<<ComboboxSelected>>", self._on_rv_selected_main)
-        _bind_typeahead(self._rv_main_cb)
+        self._ro_main_cb.pack(padx=6, pady=(4, 2))
+        self._ro_main_cb.bind("<<ComboboxSelected>>", self._on_ro_selected_main)
+        _bind_typeahead(self._ro_main_cb)
 
         rb = ttk.Frame(rf)
         rb.pack(padx=6, pady=(0, 4))
         ttk.Button(rb, text="New",   width=7,
-                   command=self._new_rv_main).pack(side=tk.LEFT, padx=2)
+                   command=self._new_ro_main).pack(side=tk.LEFT, padx=2)
         ttk.Button(rb, text="Edit…", width=7,
-                   command=self._edit_rv_main).pack(side=tk.LEFT, padx=2)
-        self._rv_del_btn = ttk.Button(rb, text="Delete", width=7,
-                                      command=self._delete_rv_main,
+                   command=self._edit_ro_main).pack(side=tk.LEFT, padx=2)
+        self._ro_del_btn = ttk.Button(rb, text="Delete", width=7,
+                                      command=self._delete_ro_main,
                                       state=tk.DISABLED)
-        self._rv_del_btn.pack(side=tk.LEFT, padx=2)
+        self._ro_del_btn.pack(side=tk.LEFT, padx=2)
 
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
@@ -5176,8 +5176,8 @@ class MissileFlyoutApp(tk.Tk):
                 "that reenters the atmosphere.")
             return
 
-        rv = effective_rv(get_missile(self._missile_var.get()))
-        name = rv.name if rv is not None else self._missile_var.get()
+        ro = effective_ro(get_missile(self._missile_var.get()))
+        name = ro.name if ro is not None else self._missile_var.get()
 
         out = ["Booster:  %s" % name]
         if s["nose_q_MW"] is not None:
@@ -5563,24 +5563,24 @@ class MissileFlyoutApp(tk.Tk):
         # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
         # belong to the RV editor — they're not displayed here; the status
         # line summarises them.  When the missile loads with an RV that has
-        # glider_enabled, populate self._rv so the status line and the
+        # glider_enabled, populate self._ro so the status line and the
         # mission-control frame appear automatically.
-        _p_erv = effective_rv(p)
+        _p_ero = effective_ro(p)
         # If the missile carries a named RV that we have in the library, point
         # the main-panel combobox at it.  Otherwise leave the user's current
         # selection (or the sentinel) alone — they may want the same RV across
         # different missiles.
-        if (hasattr(self, '_rv_main_cb') and _p_erv is not None
-                and _p_erv.name and _p_erv.name in RO_DB
-                and self._rv_main_var.get() == self._RV_DEFAULT_SENTINEL):
-            self._rv_main_var.set(_p_erv.name)
-            self._rv_del_btn.config(state=tk.NORMAL)
-        if _p_erv is not None:
-            # Sync self._rv so _refresh_glider_status_line picks it up.
+        if (hasattr(self, '_ro_main_cb') and _p_ero is not None
+                and _p_ero.name and _p_ero.name in RO_DB
+                and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
+            self._ro_main_var.set(_p_ero.name)
+            self._ro_del_btn.config(state=tk.NORMAL)
+        if _p_ero is not None:
+            # Sync self._ro so _refresh_glider_status_line picks it up.
             # Reentry mode is always loaded, regardless of glider_enabled.
-            self._rv = _p_erv
-            _guid = (_p_erv.glider_guidance
-                     if _p_erv.glider_enabled else "ballistic")
+            self._ro = _p_ero
+            _guid = (_p_ero.glider_guidance
+                     if _p_ero.glider_enabled else "ballistic")
             self._main_guidance_var.set(
                 "Phugoid / skip-glide"
                 if _guid in ("skip_glide", "azimuth_command")
@@ -5595,8 +5595,8 @@ class MissileFlyoutApp(tk.Tk):
                 else "Equilibrium glide (Tracy)"
                 if _guid == "equilibrium_glide"
                 else "Ballistic (drag · gravity · rotation)")
-            self._main_dive_alt_var.set(f"{_p_erv.glider_terminal_alt_km:.0f}")
-            _sched = _p_erv.glider_bank_schedule or []
+            self._main_dive_alt_var.set(f"{_p_ero.glider_terminal_alt_km:.0f}")
+            _sched = _p_ero.glider_bank_schedule or []
             self._main_bank_sched_var.set(bool(_sched))
             for _i, _bvars in enumerate(self._main_bank_vars):
                 if _i < len(_sched):
@@ -5611,23 +5611,23 @@ class MissileFlyoutApp(tk.Tk):
             if hasattr(self, '_main_aero_var'):
                 self._main_aero_var.set(
                     "Drag polar (realistic)"
-                    if getattr(_p_erv, 'glider_aero_model', 'polar') == 'polar'
+                    if getattr(_p_ero, 'glider_aero_model', 'polar') == 'polar'
                     else "Fixed L/D (idealized)")
             if hasattr(self, '_main_dive_target_var'):
-                _dt_r = float(getattr(_p_erv, 'glider_dive_target_radius_km', 0.0) or 0.0)
+                _dt_r = float(getattr(_p_ero, 'glider_dive_target_radius_km', 0.0) or 0.0)
                 self._main_dive_target_var.set(_dt_r > 0.0)
                 self._main_dt_lat_var.set(
-                    f"{getattr(_p_erv, 'glider_dive_target_lat_deg', 0.0):.4f}")
+                    f"{getattr(_p_ero, 'glider_dive_target_lat_deg', 0.0):.4f}")
                 self._main_dt_lon_var.set(
-                    f"{getattr(_p_erv, 'glider_dive_target_lon_deg', 0.0):.4f}")
+                    f"{getattr(_p_ero, 'glider_dive_target_lon_deg', 0.0):.4f}")
                 self._main_dt_radius_var.set(
                     f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
             if hasattr(self, '_main_skip_count_var'):
                 self._main_skip_count_var.set(
-                    str(getattr(_p_erv, 'glider_skip_count', 1)))
+                    str(getattr(_p_ero, 'glider_skip_count', 1)))
             if hasattr(self, '_main_zeta_var'):
                 self._main_zeta_var.set(
-                    f"{getattr(_p_erv, 'glider_damping_zeta', 0.7):g}")
+                    f"{getattr(_p_ero, 'glider_damping_zeta', 0.7):g}")
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             self._on_main_bank_toggled()
@@ -5670,14 +5670,14 @@ class MissileFlyoutApp(tk.Tk):
     def _refresh_glider_status_line(self):
         """Update the Glider/HGV status label.  The reentry-mode combobox is
         always shown; this line summarises the terminal vehicle's properties."""
-        rv = getattr(self, '_rv', None)
-        if rv and rv.glider_enabled and rv.glider_LD > 0:
-            sep = getattr(rv, 'separation_mode', 'separating_rv')
+        ro = getattr(self, '_ro', None)
+        if ro and ro.glider_enabled and ro.glider_LD > 0:
+            sep = getattr(ro, 'separation_mode', 'separating_ro')
             sep_lbl = "body" if sep == "body" else "separating RV"
             self._glider_status_var.set(
-                f"Terminal vehicle: {rv.name or 'RV'}  "
-                f"({sep_lbl}, L/D {rv.glider_LD:.2f}, "
-                f"g-lim {rv.glider_pullup_g_max:.0f})  "
+                f"Terminal vehicle: {ro.name or 'RV'}  "
+                f"({sep_lbl}, L/D {ro.glider_LD:.2f}, "
+                f"g-lim {ro.glider_pullup_g_max:.0f})  "
                 f"— edit in Edit Terminal Object…")
         else:
             self._glider_status_var.set(
@@ -5689,8 +5689,8 @@ class MissileFlyoutApp(tk.Tk):
 
     def _is_glider_active(self) -> bool:
         """True iff the active terminal vehicle is a maneuvering glider."""
-        rv = getattr(self, '_rv', None)
-        return bool(rv and rv.glider_enabled and rv.glider_LD > 0)
+        ro = getattr(self, '_ro', None)
+        return bool(ro and ro.glider_enabled and ro.glider_LD > 0)
 
     def _on_main_bank_toggled(self):
         if self._is_glider_active() and self._main_bank_sched_var.get():
@@ -6181,39 +6181,39 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Reentry vehicle (payload) selection
     # ------------------------------------------------------------------
-    _RV_DEFAULT_SENTINEL = "(missile default)"
+    _RO_DEFAULT_SENTINEL = "(missile default)"
 
-    def _rv_combo_values(self):
+    def _ro_combo_values(self):
         """Combobox values: the sentinel plus every name in RO_DB."""
-        return [self._RV_DEFAULT_SENTINEL] + sorted(RO_DB.keys())
+        return [self._RO_DEFAULT_SENTINEL] + sorted(RO_DB.keys())
 
-    def _refresh_rv_list(self, select_name=None):
+    def _refresh_ro_list(self, select_name=None):
         """Rebuild the RV combobox after a library change."""
         _load_ro_library()
-        self._rv_main_cb.configure(values=self._rv_combo_values())
-        target = select_name or self._rv_main_var.get()
-        if target not in RO_DB and target != self._RV_DEFAULT_SENTINEL:
-            target = self._RV_DEFAULT_SENTINEL
-        self._rv_main_var.set(target)
-        self._rv_del_btn.config(
+        self._ro_main_cb.configure(values=self._ro_combo_values())
+        target = select_name or self._ro_main_var.get()
+        if target not in RO_DB and target != self._RO_DEFAULT_SENTINEL:
+            target = self._RO_DEFAULT_SENTINEL
+        self._ro_main_var.set(target)
+        self._ro_del_btn.config(
             state=tk.NORMAL if target in RO_DB else tk.DISABLED)
-        self._on_rv_selected_main()
+        self._on_ro_selected_main()
 
-    def _on_rv_selected_main(self, _event=None):
-        """Sync self._rv to the selected library entry and refresh the
+    def _on_ro_selected_main(self, _event=None):
+        """Sync self._ro to the selected library entry and refresh the
         glider mission-control panel."""
-        sel = self._rv_main_var.get()
+        sel = self._ro_main_var.get()
         if sel in RO_DB:
-            self._rv = RO_DB[sel]()
-            self._rv_del_btn.config(state=tk.NORMAL)
+            self._ro = RO_DB[sel]()
+            self._ro_del_btn.config(state=tk.NORMAL)
         else:
-            self._rv_del_btn.config(state=tk.DISABLED)
+            self._ro_del_btn.config(state=tk.DISABLED)
             # Fall back to whatever the active missile carries.
             try:
                 p = get_missile(self._missile_var.get())
-                self._rv = effective_rv(p)
+                self._ro = effective_ro(p)
             except Exception:
-                self._rv = None
+                self._ro = None
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             if hasattr(self, '_main_bank_sched_var'):
@@ -6222,9 +6222,9 @@ class MissileFlyoutApp(tk.Tk):
                 self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
 
-    def _new_rv_main(self):
+    def _new_ro_main(self):
         """Create an RV in the editor; on Save, write it to the library."""
-        dlg = ROEditorDialog(self, rv=None, mass_kg=500.0)
+        dlg = ROEditorDialog(self, ro=None, mass_kg=500.0)
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -6234,26 +6234,26 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
             return
-        self._refresh_rv_list(select_name=dlg.result.name)
+        self._refresh_ro_list(select_name=dlg.result.name)
         self._status_var.set(f"Reentry object '{dlg.result.name}' saved to library.")
 
-    def _edit_rv_main(self):
+    def _edit_ro_main(self):
         """Edit the currently selected RV in place; rewrite the library file."""
-        sel = self._rv_main_var.get()
+        sel = self._ro_main_var.get()
         if sel not in RO_DB:
             messagebox.showinfo("Edit Reentry Object",
                                 "Select an RV from the library to edit, "
                                 "or use 'New' to create one.", parent=self)
             return
         base = RO_DB[sel]()
-        dlg = ROEditorDialog(self, rv=base, mass_kg=base.mass_kg)
+        dlg = ROEditorDialog(self, ro=base, mass_kg=base.mass_kg)
         self.wait_window(dlg)
         if dlg.result is None:
             return
         # If the user renamed it, delete the old file so we don't leak orphans.
         if dlg.result.name != base.name:
             _stem = _safe_name(base.name)
-            for _ext in (".ro.json", ".rv.json"):   # sweep legacy form too
+            for _ext in (".ro.json", ".ro.json"):   # sweep legacy form too
                 try:
                     (_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
                     (_LEGACY_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
@@ -6265,12 +6265,12 @@ class MissileFlyoutApp(tk.Tk):
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
             return
-        self._refresh_rv_list(select_name=dlg.result.name)
+        self._refresh_ro_list(select_name=dlg.result.name)
         self._status_var.set(f"Reentry object '{dlg.result.name}' updated.")
 
-    def _delete_rv_main(self):
+    def _delete_ro_main(self):
         """Remove the selected RV from RO_DB and from ro_library/."""
-        sel = self._rv_main_var.get()
+        sel = self._ro_main_var.get()
         if sel not in RO_DB:
             return
         if not messagebox.askyesno("Delete Reentry Object",
@@ -6279,7 +6279,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         _stem = _safe_name(sel)
         try:
-            for _ext in (".ro.json", ".rv.json"):   # sweep legacy form too
+            for _ext in (".ro.json", ".ro.json"):   # sweep legacy form too
                 (_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
                 (_LEGACY_RO_LIBRARY_PATH / f"{_stem}{_ext}").unlink(missing_ok=True)
         except Exception as exc:
@@ -6287,7 +6287,7 @@ class MissileFlyoutApp(tk.Tk):
                                  f"Could not delete reentry-object file:\n{exc}", parent=self)
             return
         RO_DB.pop(sel, None)
-        self._refresh_rv_list(select_name=self._RV_DEFAULT_SENTINEL)
+        self._refresh_ro_list(select_name=self._RO_DEFAULT_SENTINEL)
         self._status_var.set(f"Reentry object '{sel}' deleted.")
 
     def _snapshot_traj_profile(self, missile_name: str) -> None:
@@ -6615,7 +6615,7 @@ class MissileFlyoutApp(tk.Tk):
         _row2(sf, r, "Total propellant:", f"{total_prop:,.0f} kg",
               "Liftoff T/W:", f"{liftoff_tw:.2f}"); r += 1
         if p.payload_kg > 0:
-            _tw_lbl = "Throw weight:" if p.rv_separates else "Payload:"
+            _tw_lbl = "Throw weight:" if p.ro_separates else "Payload:"
             _row2(sf, r, _tw_lbl, f"{p.payload_kg:,.0f} kg"); r += 1
 
         # ── Per-stage blocks ──────────────────────────────────────────
@@ -6672,7 +6672,7 @@ class MissileFlyoutApp(tk.Tk):
             if not is_last:
                 _row(left, r, "Coast (s):",      f"{node.coast_time_s:.0f}");     r += 1
             # Debris β for jettisoned stage bodies.
-            _body_jettisoned = (not is_last) or p.rv_separates
+            _body_jettisoned = (not is_last) or p.ro_separates
             if _body_jettisoned:
                 beta = tumbling_cylinder_beta(node.mass_final,
                                               node.diameter_m, node.length_m)
@@ -6717,38 +6717,38 @@ class MissileFlyoutApp(tk.Tk):
                   "Aerodisk d/D:",
                   f"{_aero_dD:.2f}" if _aero_dD > 0 else "— (pointed)"); r += 1
 
-        if p.rv_separates:
-            _row2(af, r, "No. of RVs:", str(p.num_rvs),
-                  "Per-object mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
-            _erv     = effective_rv(p)
-            _rv_beta = _erv.beta_kg_m2 if _erv else p.rv_beta_kg_m2
+        if p.ro_separates:
+            _row2(af, r, "No. of RVs:", str(p.num_ros),
+                  "Per-object mass:", f"{p.ro_mass_kg:,.0f} kg"); r += 1
+            _ero     = effective_ro(p)
+            _ro_beta = _ero.beta_kg_m2 if _ero else p.ro_beta_kg_m2
             _pbv_m   = p.bus_mass_kg
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
-                      "Object β:", f"{_rv_beta:,.0f} kg/m²" if _rv_beta > 0 else "—"); r += 1
-            elif _rv_beta > 0:
-                _row2(af, r, "Object β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
-            if _erv:
-                _rv_shape_s = NOSE_SHAPE_LABELS.get(_erv.shape, NOSE_SHAPE_LABELS['cone'])
-                _rv_d = _erv.diameter_m
-                _rv_l = _erv.length_m
+                      "Object β:", f"{_ro_beta:,.0f} kg/m²" if _ro_beta > 0 else "—"); r += 1
+            elif _ro_beta > 0:
+                _row2(af, r, "Object β:", f"{_ro_beta:,.0f} kg/m²"); r += 1
+            if _ero:
+                _ro_shape_s = NOSE_SHAPE_LABELS.get(_ero.shape, NOSE_SHAPE_LABELS['cone'])
+                _ro_d = _ero.diameter_m
+                _ro_l = _ero.length_m
             else:
-                _rv_shape_s = NOSE_SHAPE_LABELS.get(
-                    getattr(p, 'rv_shape', ''), NOSE_SHAPE_LABELS['cone'])
-                _rv_d = getattr(p, 'rv_diameter_m', 0.0)
-                _rv_l = getattr(p, 'rv_length_m', 0.0)
-            _row2(af, r, "RV shape:", _rv_shape_s,
-                  "Object diameter:", f"{_rv_d:.2f} m" if _rv_d > 0 else "—"); r += 1
-            if _rv_l > 0:
-                _row2(af, r, "Object length:", f"{_rv_l:.2f} m"); r += 1
-            if _erv and _erv.glider_enabled:
+                _ro_shape_s = NOSE_SHAPE_LABELS.get(
+                    getattr(p, 'ro_shape', ''), NOSE_SHAPE_LABELS['cone'])
+                _ro_d = getattr(p, 'ro_diameter_m', 0.0)
+                _ro_l = getattr(p, 'ro_length_m', 0.0)
+            _row2(af, r, "RV shape:", _ro_shape_s,
+                  "Object diameter:", f"{_ro_d:.2f} m" if _ro_d > 0 else "—"); r += 1
+            if _ro_l > 0:
+                _row2(af, r, "Object length:", f"{_ro_l:.2f} m"); r += 1
+            if _ero and _ero.glider_enabled:
                 _guid_lbl = (
                     "Equilibrium glide (Tracy)"
-                        if _erv.glider_guidance == "equilibrium_glide"
+                        if _ero.glider_guidance == "equilibrium_glide"
                     else "Non-oscillatory glide (Acton)"
-                        if _erv.glider_guidance == "equilibrium_glide_acton"
+                        if _ero.glider_guidance == "equilibrium_glide_acton"
                     else "Skip-glide")
-                _row2(af, r, "Glider L/D:", f"{_erv.glider_LD:.2f}",
+                _row2(af, r, "Glider L/D:", f"{_ero.glider_LD:.2f}",
                       "Guidance:", _guid_lbl); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
@@ -7340,26 +7340,26 @@ class MissileFlyoutApp(tk.Tk):
         # Only applies when the missile is configured for a separating RV;
         # otherwise the missile is treated as a ballistic body and the
         # selection is ignored.
-        _rv_sel = getattr(self, '_rv_main_var', None)
-        _rv_name = _rv_sel.get() if _rv_sel is not None else ""
-        if _rv_name in RO_DB and getattr(missile, 'rv_separates', False):
-            _user_rv = RO_DB[_rv_name]()
+        _ro_sel = getattr(self, '_ro_main_var', None)
+        _ro_name = _ro_sel.get() if _ro_sel is not None else ""
+        if _ro_name in RO_DB and getattr(missile, 'ro_separates', False):
+            _user_ro = RO_DB[_ro_name]()
             missile = copy.deepcopy(missile)
             _node, _placed = missile, False
             while _node is not None:
-                if _node.rv is not None:
-                    _node.rv = _user_rv
+                if _node.ro is not None:
+                    _node.ro = _user_ro
                     _placed = True
                     break
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
-                missile.rv = _user_rv
+                missile.ro = _user_ro
             # Payload carried through boost = throw-weight minus the shroud (which
             # is jettisoned mid-boost and tracked separately): the PBV/bus mass
             # plus the selected reentry object's mass.  Derived here so payload
             # follows the RV you pick rather than being a stale hand-entered number.
             missile.payload_kg = (getattr(missile, 'bus_mass_kg', 0.0) or 0.0) \
-                + _user_rv.mass_kg
+                + _user_ro.mass_kg
 
         guidance = self._guidance_var.get()
         lat      = float(self._launch_lat.get())
@@ -7428,11 +7428,11 @@ class MissileFlyoutApp(tk.Tk):
         # Glider / HGV mission control — write only mission-time fields.
         # Vehicle properties (glider_enabled, glider_LD, glider_pullup_g_max,
         # glider_beta_entry_kg_m2, separation_mode) are owned by the
-        # Terminal Vehicle editor and live on self._rv / params.rv.  This
+        # Terminal Vehicle editor and live on self._ro / params.ro.  This
         # block runs only when the active terminal vehicle has glider mode
         # enabled.
-        _g_erv = effective_rv(missile)
-        if _g_erv is not None:
+        _g_ero = effective_ro(missile)
+        if _g_ero is not None:
             import dataclasses as _dc
             missile = copy.deepcopy(missile)
             try:
@@ -7452,7 +7452,7 @@ class MissileFlyoutApp(tk.Tk):
             )
             if _g_guid_key == "ballistic":
                 # User wants no lift: override glider_enabled regardless of RV config
-                _g_new_rv = _dc.replace(_g_erv, glider_enabled=False)
+                _g_new_ro = _dc.replace(_g_ero, glider_enabled=False)
             else:
                 _g_skip_count = 1
                 if _g_guid_key == "skip_to_equilibrium":
@@ -7504,18 +7504,18 @@ class MissileFlyoutApp(tk.Tk):
                     glider_dive_target_lon_deg=_g_dt_lon,
                     glider_dive_target_radius_km=_g_dt_rad,
                 )
-                _g_new_rv = _dc.replace(_g_erv, **_replace_kw)
-            # Write back into wherever the rv currently lives in the stack
+                _g_new_ro = _dc.replace(_g_ero, **_replace_kw)
+            # Write back into wherever the ro currently lives in the stack
             _g_node = missile
             _g_saved = False
             while _g_node is not None:
-                if _g_node.rv is not None:
-                    _g_node.rv = _g_new_rv
+                if _g_node.ro is not None:
+                    _g_node.ro = _g_new_ro
                     _g_saved = True
                     break
                 _g_node = _g_node.stage2
             if not _g_saved:
-                missile.rv = _g_new_rv
+                missile.ro = _g_new_ro
 
         return (missile, guidance, lat, lon, az, cutoff, la,
                 gt_start_s, gt_stop_s, target_orbit_km,
@@ -8214,15 +8214,15 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _trajectory_metadata(self):
         """Return a dict of all guidance/launch settings for CSV header embedding."""
-        _rv_name = (self._rv_main_var.get()
-                    if hasattr(self, '_rv_main_var') else '')
+        _ro_name = (self._ro_main_var.get()
+                    if hasattr(self, '_ro_main_var') else '')
         _site_name = (self._site_var.get()
                       if (hasattr(self, '_site_var')
                           and self._site_var.get() in getattr(self, '_site_map', {}))
                       else '')
         meta = {
             'missile':              self._missile_var.get(),
-            'rv':                   _rv_name,
+            'ro':                   _ro_name,
             'site_name':            _site_name,
             'launch_lat':           self._launch_lat.get(),
             'launch_lon':           self._launch_lon.get(),
@@ -8278,13 +8278,13 @@ class MissileFlyoutApp(tk.Tk):
             self._missile_var.set(name)
             self._on_missile_changed()
         # RV selection (added with the scenario schema; absent in older files)
-        if hasattr(self, '_rv_main_var'):
-            _rv_name = meta.get('rv', '')
-            if _rv_name in RO_DB:
-                self._rv_main_var.set(_rv_name)
+        if hasattr(self, '_ro_main_var'):
+            _ro_name = meta.get('ro', '')
+            if _ro_name in RO_DB:
+                self._ro_main_var.set(_ro_name)
             else:
-                self._rv_main_var.set(self._RV_DEFAULT_SENTINEL)
-            self._on_rv_selected_main()
+                self._ro_main_var.set(self._RO_DEFAULT_SENTINEL)
+            self._on_ro_selected_main()
         # Launch coordinates are authoritative; site_name is for display only.
         self._launch_lat.set(meta.get('launch_lat', ''))
         self._launch_lon.set(meta.get('launch_lon', ''))
@@ -9224,11 +9224,11 @@ class MissileFlyoutApp(tk.Tk):
             merged.append(group)
             i += len(group)
 
-        def _is_rv_impact(group):
+        def _is_ro_impact(group):
             return any('impact' in g['event'].lower() and
                        not g.get('is_debris', False) for g in group)
 
-        merged.sort(key=lambda g: (1 if _is_rv_impact(g) else 0, g[0]['t_s']))
+        merged.sort(key=lambda g: (1 if _is_ro_impact(g) else 0, g[0]['t_s']))
 
         # ── Circle markers + label data collection ────────────────────
         # Labeled events (filled circle + label + popup):
@@ -9828,7 +9828,7 @@ class MissileFlyoutApp(tk.Tk):
         Path(path).write_text(json.dumps(data, indent=2))
         self._status_var.set(f"Booster exported: {path}")
 
-    def _load_rv(self):
+    def _load_ro(self):
         """Import a .ro.json file into the RV library (parallel to Load Booster)."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
@@ -9840,11 +9840,11 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            rv = ro_from_dict(json.loads(Path(path).read_text()))
+            ro = ro_from_dict(json.loads(Path(path).read_text()))
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse reentry-object file:\n{e}")
             return
-        name = rv.name or Path(path).stem.replace('.rv', '')
+        name = ro.name or Path(path).stem.replace('.ro', '')
         if not name:
             messagebox.showerror("Load error", "reentry-object file has no name field.")
             return
@@ -9852,18 +9852,18 @@ class MissileFlyoutApp(tk.Tk):
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
             return
         try:
-            _save_ro_to_library(rv)        # copy into the writable user library
+            _save_ro_to_library(ro)        # copy into the writable user library
         except Exception as exc:
             messagebox.showerror("Load Reentry Object", f"Could not write reentry-object file:\n{exc}")
             return
-        self._refresh_rv_list(select_name=name)
+        self._refresh_ro_list(select_name=name)
         self._status_var.set(f"Reentry object '{name}' loaded from {Path(path).name}")
 
-    def _export_rv(self):
+    def _export_ro(self):
         """Export the selected RV (or the missile's RV) to a .ro.json file."""
-        sel = self._rv_main_var.get()
-        rv = RO_DB[sel]() if sel in RO_DB else getattr(self, '_rv', None)
-        if rv is None or not getattr(rv, 'name', ''):
+        sel = self._ro_main_var.get()
+        ro = RO_DB[sel]() if sel in RO_DB else getattr(self, '_ro', None)
+        if ro is None or not getattr(ro, 'name', ''):
             messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
         from tkinter.filedialog import asksaveasfilename
@@ -9871,7 +9871,7 @@ class MissileFlyoutApp(tk.Tk):
             parent=self,
             defaultextension=".json",
             initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
-            initialfile=f"{_safe_name(rv.name)}.ro.json",
+            initialfile=f"{_safe_name(ro.name)}.ro.json",
             filetypes=[("reentry-object files", "*.ro.json"), ("JSON files", "*.json"),
                        ("All files", "*.*")],
             title="Export Reentry Object",
@@ -9879,7 +9879,7 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(ro_to_dict(rv), indent=2))
+            Path(path).write_text(json.dumps(ro_to_dict(ro), indent=2))
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
@@ -9888,9 +9888,9 @@ class MissileFlyoutApp(tk.Tk):
 
     def _export_ro_xlsx(self):
         """Export the selected RV to a fillable XLSX spreadsheet."""
-        sel = self._rv_main_var.get()
-        rv = RO_DB[sel]() if sel in RO_DB else getattr(self, '_rv', None)
-        if rv is None or not getattr(rv, 'name', ''):
+        sel = self._ro_main_var.get()
+        ro = RO_DB[sel]() if sel in RO_DB else getattr(self, '_ro', None)
+        if ro is None or not getattr(ro, 'name', ''):
             messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
         try:
@@ -9903,12 +9903,12 @@ class MissileFlyoutApp(tk.Tk):
             parent=self, title="Save Reentry Object to XLSX",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
-            initialfile=f"{_safe_name(rv.name)}.rv.xlsx",
+            initialfile=f"{_safe_name(ro.name)}.ro.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
             return
         try:
-            export_ro_xlsx(path, rv)
+            export_ro_xlsx(path, ro)
             self._status_var.set(f"Reentry object exported: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
@@ -9928,24 +9928,24 @@ class MissileFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            rv = import_ro_xlsx(path)
+            ro = import_ro_xlsx(path)
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
             return
-        if not rv.name:
+        if not ro.name:
             messagebox.showwarning(
                 "Import warning",
                 "RV name is blank — fill in the Name field in the XLSX and "
                 "re-import.", parent=self)
             return
         try:
-            _save_ro_to_library(rv)
+            _save_ro_to_library(ro)
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
             return
-        self._refresh_rv_list(select_name=rv.name)
-        self._status_var.set(f"Reentry object imported: {rv.name}")
+        self._refresh_ro_list(select_name=ro.name)
+        self._status_var.set(f"Reentry object imported: {ro.name}")
 
     def _new_ro_template(self):
         """Save a blank RV XLSX template the user fills in from scratch."""
@@ -9959,7 +9959,7 @@ class MissileFlyoutApp(tk.Tk):
             parent=self, title="Save Blank Reentry Object Template",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_RO_LIBRARY_PATH)),
-            initialfile="new_rv.rv.xlsx",
+            initialfile="new_ro.ro.xlsx",
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
             return

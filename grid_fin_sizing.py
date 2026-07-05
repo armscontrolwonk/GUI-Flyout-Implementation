@@ -48,7 +48,7 @@ Mach-resolved wind-tunnel/CFD stability data.
 
 from __future__ import annotations
 import math
-from missile_models import (MissileParams, _cl_alpha_gridfins, effective_rv,
+from missile_models import (MissileParams, _cl_alpha_gridfins, effective_ro,
                              _SHAPE_ALIAS)
 
 # Barrowman nose centre-of-pressure, as a fraction of nose length from the tip.
@@ -83,10 +83,10 @@ def _front_nose(params: MissileParams):
         return params.shroud_nose_shape, params.shroud_nose_length_m, d
     if params.nose_shape and params.nose_length_m > 0:
         return params.nose_shape, params.nose_length_m, d
-    rv = effective_rv(params)
-    if rv is not None and getattr(rv, 'shape', '') and getattr(rv, 'length_m', 0) > 0:
+    ro = effective_ro(params)
+    if ro is not None and getattr(ro, 'shape', '') and getattr(ro, 'length_m', 0) > 0:
         # RV/HGB caps the stack and acts as the nose
-        return rv.shape, rv.length_m, d
+        return ro.shape, ro.length_m, d
     return "tangent_ogive", 3.0 * d, d      # generic fallback
 
 
@@ -102,10 +102,10 @@ def estimate_cg(params: MissileParams):
     just behind a separate nose/shroud.  Approximate (see module docstring)."""
     nose_shape, nose_len, d = _front_nose(params)
     L_total = max(params.length_m, nose_len + 0.5)
-    rv = effective_rv(params)
+    ro = effective_ro(params)
     payload = (params.payload_kg if params.payload_kg > 0
-               else (rv.mass_kg if rv is not None else 0.0))
-    nose_is_rv = not ((params.shroud_nose_shape and params.shroud_nose_length_m > 0)
+               else (ro.mass_kg if ro is not None else 0.0))
+    nose_is_ro = not ((params.shroud_nose_shape and params.shroud_nose_length_m > 0)
                       or (params.nose_shape and params.nose_length_m > 0))
 
     chain = []
@@ -135,7 +135,7 @@ def estimate_cg(params: MissileParams):
 
     seg = []                                       # (mass, x_centroid)
     if payload > 0:
-        seg.append((payload, nose_len * 0.5 if nose_is_rv else nose_len))
+        seg.append((payload, nose_len * 0.5 if nose_is_ro else nose_len))
     x = body_start
     for st in fwd_to_aft:
         L = max(lens[id(st)], 1e-6)
@@ -161,14 +161,14 @@ def _stack_layout(params: MissileParams):
     estimate_cg (upper stages at their own length_m, aft stage takes the
     remainder), so the two agree on station positions."""
     d_body = params.diameter_m
-    rv = effective_rv(params)
+    ro = effective_ro(params)
     if params.shroud_nose_shape and params.shroud_nose_length_m > 0:
         nshape, nlen, nd = (params.shroud_nose_shape, params.shroud_nose_length_m,
                             (params.shroud_diameter_m or d_body))
     elif params.nose_shape and params.nose_length_m > 0:
         nshape, nlen, nd = params.nose_shape, params.nose_length_m, d_body
-    elif rv is not None and getattr(rv, 'shape', '') and getattr(rv, 'length_m', 0) > 0:
-        nshape, nlen, nd = rv.shape, rv.length_m, (rv.diameter_m or d_body)
+    elif ro is not None and getattr(ro, 'shape', '') and getattr(ro, 'length_m', 0) > 0:
+        nshape, nlen, nd = ro.shape, ro.length_m, (ro.diameter_m or d_body)
     else:
         nshape, nlen, nd = "tangent_ogive", 3.0 * d_body, d_body
     nose_x_cp = _nose_cp_fraction(nshape) * nlen

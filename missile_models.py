@@ -75,22 +75,22 @@ class MissileParams:
     # Stored on the top-level stage only so _prefill can round-trip correctly.
     payload_kg: float = 0.0
 
-    # DEPRECATED — superseded by params.rv (ROParams).  Kept only so old JSON
-    # files without an "rv" key can still be loaded by effective_rv().
-    # New code must NOT set these directly; use params.rv instead.
-    rv_beta_kg_m2: float = 0.0   # → rv.beta_kg_m2
-    rv_mass_kg:    float = 0.0   # → rv.mass_kg
+    # DEPRECATED — superseded by params.ro (ROParams).  Kept only so old JSON
+    # files without an "ro" key can still be loaded by effective_ro().
+    # New code must NOT set these directly; use params.ro instead.
+    ro_beta_kg_m2: float = 0.0   # → ro.beta_kg_m2
+    ro_mass_kg:    float = 0.0   # → ro.mass_kg
 
     # Payload decomposition: bus (post-boost vehicle) + N reentry vehicles.
-    # bus_mass_kg + num_rvs * rv_mass_kg should equal payload_kg.
+    # bus_mass_kg + num_ros * ro_mass_kg should equal payload_kg.
     bus_mass_kg:   float = 0.0
-    num_rvs:       int   = 1
+    num_ros:       int   = 1
 
     # When True the RV/payload separates from the last-stage body at burnout.
     # The empty stage body then follows a tumbling-cylinder debris arc.
     # When False (default) the stage body stays attached to the warhead
     # (e.g. Scud-B) and no separate stage debris is computed.
-    rv_separates:  bool  = False
+    ro_separates:  bool  = False
 
     # When True this stage uses a solid rocket motor that cannot be shut off.
     # Orbital insertion guidance runs the engine to natural burnout and reports
@@ -195,19 +195,19 @@ class MissileParams:
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
     payload_diameter_m:     float = 0.0
 
-    # DEPRECATED — superseded by params.rv (ROParams).  All of the fields
+    # DEPRECATED — superseded by params.ro (ROParams).  All of the fields
     # below are kept only to load old missile JSON files.  New code reads
-    # and writes only params.rv; effective_rv() falls back to these when
-    # params.rv is None.
-    glider_enabled:         bool  = False   # → rv.glider_enabled
-    glider_LD:              float = 0.0     # → rv.glider_LD
-    glider_pullup_g_max:    float = 10.0    # → rv.glider_pullup_g_max
-    glider_terminal_dive:   bool  = False   # → rv.glider_terminal_dive
-    glider_terminal_alt_km: float = 30.0    # → rv.glider_terminal_alt_km
-    glider_guidance:        str   = "equilibrium_glide"  # → rv.glider_guidance
-    rv_shape:               str   = ""      # → rv.shape
-    rv_diameter_m:          float = 0.0     # → rv.diameter_m
-    rv_length_m:            float = 0.0     # → rv.length_m
+    # and writes only params.ro; effective_ro() falls back to these when
+    # params.ro is None.
+    glider_enabled:         bool  = False   # → ro.glider_enabled
+    glider_LD:              float = 0.0     # → ro.glider_LD
+    glider_pullup_g_max:    float = 10.0    # → ro.glider_pullup_g_max
+    glider_terminal_dive:   bool  = False   # → ro.glider_terminal_dive
+    glider_terminal_alt_km: float = 30.0    # → ro.glider_terminal_alt_km
+    glider_guidance:        str   = "equilibrium_glide"  # → ro.glider_guidance
+    ro_shape:               str   = ""      # → ro.shape
+    ro_diameter_m:          float = 0.0     # → ro.diameter_m
+    ro_length_m:            float = 0.0     # → ro.length_m
 
     # Post-boost vehicle (PBV) geometry — mass is already carried in bus_mass_kg.
     pbv_diameter_m: float = 0.0
@@ -239,7 +239,7 @@ class MissileParams:
     # When set, all RV flight properties (β, shape, glider params) are read
     # from this object rather than from the deprecated inline fields below.
     # Populated by the missile editor when "RV separates" is checked.
-    rv: Optional['ROParams'] = None
+    ro: Optional['ROParams'] = None
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ class MissileParams:
 # All fields that were previously scattered across MissileParams as rv_* and
 # glider_* inline fields now live here.  The inline fields on MissileParams
 # are kept for backward-compatible reading of old JSON files but are no
-# longer written by the editor or read by the integrator when params.rv is set.
+# longer written by the editor or read by the integrator when params.ro is set.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -270,14 +270,14 @@ class ROParams:
 
     # Separation mode — does the terminal vehicle separate from the missile
     # body, or IS the missile body the terminal vehicle?
-    #   "separating_rv" — distinct payload, mass/beta/diameter independent
+    #   "separating_ro" — distinct payload, mass/beta/diameter independent
     #                     (ICBM with MIRV, Scud-style separated warhead, …)
     #   "body"          — vehicle IS the missile body (KN-23 / Iskander,
     #                     Pershing II MaRV, single-stage maneuvering body).
     #                     mass/beta/diameter are inherited from the missile's
     #                     last stage (mass_final, beta_kg_m2, diameter_m)
-    #                     by effective_rv() at runtime.
-    separation_mode: str = "separating_rv"
+    #                     by effective_ro() at runtime.
+    separation_mode: str = "separating_ro"
 
     # Glider / HGV properties
     #
@@ -466,44 +466,51 @@ class ROParams:
         return nose_tip_radius(self.shape, self.diameter_m)
 
 
-def ro_to_dict(rv: ROParams) -> dict:
+def _norm_sep_mode(v) -> str:
+    """Normalise a separation_mode value, mapping the legacy 'separating_rv'
+    token (pre-Phase-2 saved files) to the current 'separating_ro'."""
+    s = str(v or 'separating_ro')
+    return 'separating_ro' if s == 'separating_rv' else s
+
+
+def ro_to_dict(ro: ROParams) -> dict:
     return {
-        'name':                  rv.name,
-        'mass_kg':               rv.mass_kg,
-        'beta_kg_m2':            rv.beta_kg_m2,
-        'shape':                 rv.shape,
-        'diameter_m':            rv.diameter_m,
-        'length_m':              rv.length_m,
-        'nose_radius_m':         rv.nose_radius_m,
-        'glider_enabled':        rv.glider_enabled,
-        'glider_LD':             rv.glider_LD,
-        'glider_guidance':       rv.glider_guidance,
-        'glider_pullup_g_max':   rv.glider_pullup_g_max,
-        'glider_terminal_dive':  rv.glider_terminal_dive,
-        'glider_terminal_alt_km':rv.glider_terminal_alt_km,
-        'glider_bank_schedule':  rv.glider_bank_schedule,
-        'glider_aero_model':     rv.glider_aero_model,
-        'glider_dive_target_lat_deg':   rv.glider_dive_target_lat_deg,
-        'glider_dive_target_lon_deg':   rv.glider_dive_target_lon_deg,
-        'glider_dive_target_radius_km': rv.glider_dive_target_radius_km,
-        'glider_beta_entry_kg_m2': rv.glider_beta_entry_kg_m2,
-        'glider_skip_count':     rv.glider_skip_count,
-        'glider_damping_zeta':   rv.glider_damping_zeta,
-        'glider_control_surfaces':   rv.glider_control_surfaces,
-        'glider_flap_area_ratio':    rv.glider_flap_area_ratio,
-        'glider_flap_deflection_deg':rv.glider_flap_deflection_deg,
-        'separation_mode':       rv.separation_mode,
-        'emissivity':            rv.emissivity,
-        'tps_material':          rv.tps_material,
-        'nose_tps_material':     rv.nose_tps_material,
-        'body_tps_material':     rv.body_tps_material,
-        'body_tps_thickness_m':  rv.body_tps_thickness_m,
-        'structure_material':    rv.structure_material,
-        'structure_limit_K':     rv.structure_limit_K,
-        'nose_tps_custom':       rv.nose_tps_custom,
-        'body_tps_custom':       rv.body_tps_custom,
-        'source':                rv.source,
-        'notes':                 rv.notes,
+        'name':                  ro.name,
+        'mass_kg':               ro.mass_kg,
+        'beta_kg_m2':            ro.beta_kg_m2,
+        'shape':                 ro.shape,
+        'diameter_m':            ro.diameter_m,
+        'length_m':              ro.length_m,
+        'nose_radius_m':         ro.nose_radius_m,
+        'glider_enabled':        ro.glider_enabled,
+        'glider_LD':             ro.glider_LD,
+        'glider_guidance':       ro.glider_guidance,
+        'glider_pullup_g_max':   ro.glider_pullup_g_max,
+        'glider_terminal_dive':  ro.glider_terminal_dive,
+        'glider_terminal_alt_km':ro.glider_terminal_alt_km,
+        'glider_bank_schedule':  ro.glider_bank_schedule,
+        'glider_aero_model':     ro.glider_aero_model,
+        'glider_dive_target_lat_deg':   ro.glider_dive_target_lat_deg,
+        'glider_dive_target_lon_deg':   ro.glider_dive_target_lon_deg,
+        'glider_dive_target_radius_km': ro.glider_dive_target_radius_km,
+        'glider_beta_entry_kg_m2': ro.glider_beta_entry_kg_m2,
+        'glider_skip_count':     ro.glider_skip_count,
+        'glider_damping_zeta':   ro.glider_damping_zeta,
+        'glider_control_surfaces':   ro.glider_control_surfaces,
+        'glider_flap_area_ratio':    ro.glider_flap_area_ratio,
+        'glider_flap_deflection_deg':ro.glider_flap_deflection_deg,
+        'separation_mode':       ro.separation_mode,
+        'emissivity':            ro.emissivity,
+        'tps_material':          ro.tps_material,
+        'nose_tps_material':     ro.nose_tps_material,
+        'body_tps_material':     ro.body_tps_material,
+        'body_tps_thickness_m':  ro.body_tps_thickness_m,
+        'structure_material':    ro.structure_material,
+        'structure_limit_K':     ro.structure_limit_K,
+        'nose_tps_custom':       ro.nose_tps_custom,
+        'body_tps_custom':       ro.body_tps_custom,
+        'source':                ro.source,
+        'notes':                 ro.notes,
     }
 
 
@@ -541,7 +548,7 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_control_surfaces=str(d.get('glider_control_surfaces', 'unknown')),
         glider_flap_area_ratio=float(d.get('glider_flap_area_ratio', 0.0)),
         glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
-        separation_mode=str(d.get('separation_mode', 'separating_rv')),
+        separation_mode=_norm_sep_mode(d.get('separation_mode', 'separating_ro')),
         emissivity=float(d.get('emissivity', 0.85)),
         tps_material=str(d.get('tps_material', '')),
         nose_tps_material=str(d.get('nose_tps_material', '')),
@@ -556,13 +563,13 @@ def ro_from_dict(d: dict) -> ROParams:
     )
 
 
-def effective_rv(params: 'MissileParams') -> Optional[ROParams]:
+def effective_ro(params: 'MissileParams') -> Optional[ROParams]:
     """Return the active ROParams (the "terminal vehicle").
 
-    Priority: explicit params.rv → synthesise from deprecated inline fields.
+    Priority: explicit params.ro → synthesise from deprecated inline fields.
     Returns None when no RV configuration is present.
 
-    When params.rv has separation_mode == "body" the terminal vehicle IS the
+    When params.ro has separation_mode == "body" the terminal vehicle IS the
     missile body itself (KN-23 / Iskander, Pershing II MaRV class), not a
     separating warhead.  In that case mass_kg / beta_kg_m2 / diameter_m are
     inherited from the missile's last-stage burnout state (mass_final,
@@ -570,9 +577,9 @@ def effective_rv(params: 'MissileParams') -> Optional[ROParams]:
     The user only has to set the maneuvering properties (L/D, g-limit,
     βₛ) — the body's mass and shape come from the missile params.
     """
-    if params.rv is not None:
-        rv = params.rv
-        if getattr(rv, 'separation_mode', 'separating_rv') == 'body':
+    if params.ro is not None:
+        ro = params.ro
+        if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
             # The vehicle IS the missile body — inherit mass and geometry
             # from the last stage's burnout state.  β remains user-specified
             # on the RV itself because there's no clean way to derive a
@@ -583,24 +590,24 @@ def effective_rv(params: 'MissileParams') -> Optional[ROParams]:
             import dataclasses as _dc
             _body_mass = (_last.mass_initial - _last.mass_propellant
                           if _last.mass_propellant > 0 else _last.mass_final)
-            return _dc.replace(rv,
-                mass_kg=float(_body_mass) if _body_mass > 0 else rv.mass_kg,
+            return _dc.replace(ro,
+                mass_kg=float(_body_mass) if _body_mass > 0 else ro.mass_kg,
                 diameter_m=(float(_last.diameter_m)
-                            if _last.diameter_m > 0 else rv.diameter_m),
+                            if _last.diameter_m > 0 else ro.diameter_m),
                 length_m=(float(_last.length_m)
-                          if _last.length_m > 0 else rv.length_m))
-        return rv
+                          if _last.length_m > 0 else ro.length_m))
+        return ro
     # Legacy inline fields (deprecated; kept for reading old JSON files).
-    if getattr(params, 'rv_beta_kg_m2', 0.0) > 0:
-        mass = (getattr(params, 'rv_mass_kg', 0.0) or
+    if getattr(params, 'ro_beta_kg_m2', 0.0) > 0:
+        mass = (getattr(params, 'ro_mass_kg', 0.0) or
                 getattr(params, 'payload_kg', 0.0))
         return ROParams(
             name='(legacy)',
             mass_kg=float(mass),
-            beta_kg_m2=float(params.rv_beta_kg_m2),
-            shape=str(getattr(params, 'rv_shape', '')),
-            diameter_m=float(getattr(params, 'rv_diameter_m', 0.0)),
-            length_m=float(getattr(params, 'rv_length_m', 0.0)),
+            beta_kg_m2=float(params.ro_beta_kg_m2),
+            shape=str(getattr(params, 'ro_shape', '')),
+            diameter_m=float(getattr(params, 'ro_diameter_m', 0.0)),
+            length_m=float(getattr(params, 'ro_length_m', 0.0)),
             glider_enabled=bool(getattr(params, 'glider_enabled', False)),
             glider_LD=float(getattr(params, 'glider_LD', 0.0)),
             glider_guidance=('skip_glide'
@@ -1059,7 +1066,7 @@ def _cl_alpha_fins(n_fins: int, span_m: float, c_root_m: float,
     NOTE — REGIME: this is Barrowman's small-AoA, linear, fin-stabilized
     slender-vehicle theory.  It is for BOOSTER fins (ascent stability / static
     margin), NOT for a high-AoA hypersonic gliding RV, whose L/D is a
-    lifting-body (Newtonian) property and is supplied as rv.glider_LD.
+    lifting-body (Newtonian) property and is supplied as ro.glider_LD.
 
     Falls back gracefully when span or chords are not yet entered.
     """
@@ -1838,7 +1845,7 @@ def _zoljanah():
     # ── Stage 1 (liquid) ─────────────────────────────────────────────────────
     # RV ballistic coefficient estimate: cone-shaped RV, dia≈0.6 m, Cd≈0.25
     #   β = m / (Cd·A) = 100 / (0.25 · π·0.09) ≈ 1 415 kg/m²
-    rv_beta = 1400.0   # kg/m²  (round estimate)
+    ro_beta = 1400.0   # kg/m²  (round estimate)
 
     p = MissileParams(
         name="Zoljanah (IRBM)",
@@ -1859,8 +1866,8 @@ def _zoljanah():
         cd_table=_FORDEN_CD,
         stage2=stage2,
         payload_kg=float(payload),
-        rv_beta_kg_m2=rv_beta,
-        rv_separates=True,   # RV separates from stage-2 body at burnout
+        ro_beta_kg_m2=ro_beta,
+        ro_separates=True,   # RV separates from stage-2 body at burnout
     )
     return p
 
@@ -2029,8 +2036,8 @@ def _aur():
         stage_turn_stop_s=21.7,
         coast_time_s=0.0,
         payload_kg=450.0,
-        rv_beta_kg_m2=1500.0,
-        rv_separates=True,
+        ro_beta_kg_m2=1500.0,
+        ro_separates=True,
         stage2=stage2,
         # Empty tables → legacy 2 % sea-level back-pressure approximation used.
         mach_table=[],
@@ -2045,7 +2052,7 @@ def _aur_hgb():
     # ballistic coefficient than a slender RV.
     p      = _aur()
     p.name = "AUR+HGB"
-    p.rv   = ROParams(
+    p.ro   = ROParams(
         name       = "HGB",
         mass_kg    = p.payload_kg,       # 450 kg
         beta_kg_m2 = 15_000.0,           # gliding-orientation β (Tracy/Acton)
@@ -2190,9 +2197,9 @@ def _minotaur_4_htv2():
         shroud_length_m=4.0,
         # HTV-2 glide vehicle — Acton 2015 Table 3 fit values.
         payload_kg=1000.0,
-        rv_separates=True,
+        ro_separates=True,
         stage2=stage2,
-        rv=ROParams(
+        ro=ROParams(
             name="HTV-2",
             mass_kg=1000.0,
             beta_kg_m2=13_000.0,           # Acton β_L for HTV-2 (Table 3)
@@ -2323,8 +2330,8 @@ def _strypi_viii_r(castor2: bool = False):
         stage_turn_stop_s=25.0,
         coast_time_s=0.0,   # guidance, not hardware; flown value ~120 s (loft to apogee)
         payload_kg=_swerve.mass_kg,
-        rv_separates=True,
-        rv=_swerve,
+        ro_separates=True,
+        ro=_swerve,
         stage2=stage2,
         # Strap-on Recruits (2x TE-M-29): 59,723 lb-sec each, ~1.7 s, 35,222 lbf, Isp 223.
         n_boosters=2,
@@ -2413,7 +2420,7 @@ def _stars_1():
         burnout_angle_deg=45.0, loft_angle_rate_deg_s=1.5,
         stage_turn_start_s=2.0, stage_turn_stop_s=55.0,
         coast_time_s=0.0,   # coast is guidance (flown ~5 s)
-        payload_kg=_hgb.mass_kg, rv_separates=True, rv=_hgb, stage2=stage2,
+        payload_kg=_hgb.mass_kg, ro_separates=True, ro=_hgb, stage2=stage2,
         # Eight grid (lattice) fins on the first stage of the AHW-test STARS,
         # for ascent stability/control; they jettison with stage 1.  Frame and
         # cell dimensions here are ENGINEERING ESTIMATES scaled to the 1.37 m
@@ -2463,7 +2470,7 @@ def _strypi_vii_r():
     _LB = 0.453592
 
     # Generic 100 lbm test RV (RCTV/MTV/NRV class) — not SWERVE.
-    rv = ROParams(
+    ro = ROParams(
         name="Strypi VII R RV (100 lbm)",
         mass_kg=100.0 * _LB, beta_kg_m2=8000.0,
         shape="cone", diameter_m=0.30, length_m=1.0, nose_radius_m=0.02,
@@ -2474,7 +2481,7 @@ def _strypi_vii_r():
     # Stage 3 — Hercules BE-3B-1: 60,514 lb-sec vac, ~7.8 s, 7,700 lbf, Isp ~276.
     stage3 = MissileParams(
         name="BE-3B-1 (Strypi 3rd stage)",
-        mass_initial=317.4 * _LB + rv.mass_kg,   # 3rd-stage loaded 317.4 lbm + RV
+        mass_initial=317.4 * _LB + ro.mass_kg,   # 3rd-stage loaded 317.4 lbm + RV
         mass_propellant=219.1 * _LB,             # BE-3B prop
         mass_final=(317.4 - 219.1) * _LB,        # 3rd-stage inert (struct+motor case), jettisoned
         diameter_m=0.33, length_m=1.2,
@@ -2535,8 +2542,8 @@ def _strypi_vii_r():
         coast_time_s=0.0,   # coast is guidance, not vehicle hardware — set it in the
                             # flight plan (advanced-pitch panel / guidance profile).
                             # Flown value: ~182 s (43 s S1 burnout -> ~225 s S2 ignite).
-        payload_kg=rv.mass_kg,
-        rv_separates=True, rv=rv,
+        payload_kg=ro.mass_kg,
+        ro_separates=True, ro=ro,
         stage2=stage2,
         # Ascent heat shield jettisoned at first-stage separation (Wente).  Mass
         # only; the 0.787 m Castor core sets the ascent drag reference, so
@@ -2633,9 +2640,9 @@ def missile_to_dict(p: MissileParams) -> dict:
         'mach_table':            list(p.mach_table),
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
-        'rv_separates':          p.rv_separates,
+        'ro_separates':          p.ro_separates,
         'bus_mass_kg':           p.bus_mass_kg,
-        'num_rvs':               p.num_rvs,
+        'num_ros':               p.num_ros,
         'shroud_mass_kg':         p.shroud_mass_kg,
         'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
         'shroud_length_m':        p.shroud_length_m,
@@ -2684,17 +2691,17 @@ def missile_to_dict(p: MissileParams) -> dict:
         'booster_core_delay_s':   p.booster_core_delay_s,
         'booster_jettison_s':     p.booster_jettison_s,
     }
-    # RV: write the new rv object when present; otherwise write legacy inline
+    # RV: write the new ro object when present; otherwise write legacy inline
     # fields so that older software can still load this missile file.
-    if p.rv is not None:
-        d['rv'] = ro_to_dict(p.rv)
-    elif getattr(p, 'rv_beta_kg_m2', 0.0) > 0:
+    if p.ro is not None:
+        d['ro'] = ro_to_dict(p.ro)
+    elif getattr(p, 'ro_beta_kg_m2', 0.0) > 0:
         d.update({
-            'rv_beta_kg_m2':          p.rv_beta_kg_m2,
-            'rv_mass_kg':             p.rv_mass_kg,
-            'rv_shape':               p.rv_shape,
-            'rv_diameter_m':          p.rv_diameter_m,
-            'rv_length_m':            p.rv_length_m,
+            'ro_beta_kg_m2':          p.ro_beta_kg_m2,
+            'ro_mass_kg':             p.ro_mass_kg,
+            'ro_shape':               p.ro_shape,
+            'ro_diameter_m':          p.ro_diameter_m,
+            'ro_length_m':            p.ro_length_m,
             'glider_enabled':         p.glider_enabled,
             'glider_LD':              p.glider_LD,
             'glider_pullup_g_max':    p.glider_pullup_g_max,
@@ -2745,13 +2752,13 @@ def missile_from_dict(d: dict) -> MissileParams:
         cd_table=list(d.get('cd_table', _FORDEN_CD)),
         stage2=stage2,
         payload_kg=float(d.get('payload_kg', 0.0)),
-        rv_separates=bool(d.get('rv_separates', False)),
+        ro_separates=bool(d.get('ro_separates', d.get('rv_separates', False))),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
-        num_rvs=int(d.get('num_rvs', 1)),
-        # Legacy inline fields — populated only for old files lacking "rv" key;
-        # effective_rv() synthesises an ROParams from these when params.rv is None.
-        rv_beta_kg_m2=float(d.get('rv_beta_kg_m2', 0.0)),
-        rv_mass_kg=float(d.get('rv_mass_kg', 0.0)),
+        num_ros=int(d.get('num_ros', d.get('num_rvs', 1))),
+        # Legacy inline fields — populated only for old files lacking "ro" key;
+        # effective_ro() synthesises an ROParams from these when params.ro is None.
+        ro_beta_kg_m2=float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0))),
+        ro_mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))),
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
@@ -2796,9 +2803,9 @@ def missile_from_dict(d: dict) -> MissileParams:
                             == 'constant_bank'
                          else str(d.get('glider_guidance', 'equilibrium_glide'))),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
-        rv_shape=d.get('rv_shape', ''),
-        rv_diameter_m=float(d.get('rv_diameter_m', 0.0)),
-        rv_length_m=float(d.get('rv_length_m', 0.0)),
+        ro_shape=d.get('ro_shape', d.get('rv_shape', '')),
+        ro_diameter_m=float(d.get('ro_diameter_m', d.get('rv_diameter_m', 0.0))),
+        ro_length_m=float(d.get('ro_length_m', d.get('rv_length_m', 0.0))),
         pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
         pbv_length_m=float(d.get('pbv_length_m', 0.0)),
         n_boosters=int(d.get('n_boosters', 0)),
@@ -2827,9 +2834,9 @@ def missile_from_dict(d: dict) -> MissileParams:
                                 if d.get('stage_yaw_final_az_deg') is not None else None),
     )
     # Load RV object when present (new format); legacy inline fields stay on
-    # _p for effective_rv() to find when _p.rv is None (old format).
-    if 'rv' in d:
-        _p.rv = ro_from_dict(d['rv'])
+    # _p for effective_ro() to find when _p.ro is None (old format).
+    if 'ro' in d or 'rv' in d:          # 'rv' = legacy embedded-object key
+        _p.ro = ro_from_dict(d.get('ro') or d['rv'])
     # Backwards compatibility: old saved missiles with guidance="loft" are
     # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
     if d.get('guidance', '') == 'loft':
@@ -2990,7 +2997,7 @@ def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
     the payload shroud/fairing while it is still attached, and the RV/payload
     nose once the shroud is gone.  The SAME body supplies both the reference
     area and the nose-shape Cd, so the two can never disagree (previously the
-    area read the inline `rv_diameter_m` while the Cd read the ROParams
+    area read the inline `ro_diameter_m` while the Cd read the ROParams
     diameter, which could differ).
 
     The front end sets the nose SHAPE (Cd); the reference DIAMETER is the
@@ -3001,7 +3008,7 @@ def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
     case of an RV flared wider than its final stage.  When the diameters are
     equal — the usual nose-caps-body case — the choice is moot.
 
-    The "warhead does not separate" case is handled by effective_rv(): a
+    The "warhead does not separate" case is handled by effective_ro(): a
     body-mode RV (separation_mode='body') inherits the body's own diameter, so
     the front end is the full body width rather than a narrower notional RV.
     The RV nose is the front end whether or not it later separates —
@@ -3024,10 +3031,10 @@ def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
             and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
         return (top_params.shroud_nose_shape, top_params.shroud_diameter_m,
                 top_params.shroud_nose_length_m, top_params.shroud_length_m, True)
-    rv = effective_rv(top_params) if top_params is not None else None
-    if rv is not None and rv.diameter_m > 0:
-        return (rv.shape, max(rv.diameter_m, params.diameter_m),
-                rv.length_m, params.length_m, False)
+    ro = effective_ro(top_params) if top_params is not None else None
+    if ro is not None and ro.diameter_m > 0:
+        return (ro.shape, max(ro.diameter_m, params.diameter_m),
+                ro.length_m, params.length_m, False)
     if top_params is not None and top_params.payload_diameter_m > 0:
         return (top_params.nose_shape,
                 max(top_params.payload_diameter_m, params.diameter_m),
@@ -3056,20 +3063,20 @@ def drag_coefficient(params: MissileParams, mach: float) -> float:
     return float(_lin_interp(mach, _FORDEN_MACH, _FORDEN_CD))
 
 
-def _rv_nose_shape(p: MissileParams) -> str:
-    """RV nose shape: from params.rv when available, else deprecated inline field."""
-    rv = effective_rv(p)
-    return rv.shape if rv is not None else getattr(p, 'rv_shape', '')
+def _ro_nose_shape(p: MissileParams) -> str:
+    """RV nose shape: from params.ro when available, else deprecated inline field."""
+    ro = effective_ro(p)
+    return ro.shape if ro is not None else getattr(p, 'ro_shape', '')
 
 
-def _rv_diameter(p: MissileParams) -> float:
-    rv = effective_rv(p)
-    return rv.diameter_m if rv is not None else getattr(p, 'rv_diameter_m', 0.0)
+def _ro_diameter(p: MissileParams) -> float:
+    ro = effective_ro(p)
+    return ro.diameter_m if ro is not None else getattr(p, 'ro_diameter_m', 0.0)
 
 
-def _rv_length(p: MissileParams) -> float:
-    rv = effective_rv(p)
-    return rv.length_m if rv is not None else getattr(p, 'rv_length_m', 0.0)
+def _ro_length(p: MissileParams) -> float:
+    ro = effective_ro(p)
+    return ro.length_m if ro is not None else getattr(p, 'ro_length_m', 0.0)
 
 
 def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,

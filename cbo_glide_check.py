@@ -20,12 +20,12 @@ def fly(zeta, burnout_deg, mode="damped_glide", aero="constant_LD"):
     p.stage_burnout_angle_deg = burnout_deg
     if p.stage2:
         p.stage2.stage_burnout_angle_deg = burnout_deg
-    rv = copy.deepcopy(CHGB)
-    rv.glider_guidance = mode
-    rv.glider_aero_model = aero
+    ro = copy.deepcopy(CHGB)
+    ro.glider_guidance = mode
+    ro.glider_aero_model = aero
     if zeta is not None:
-        rv.glider_damping_zeta = zeta
-    p.rv = rv
+        ro.glider_damping_zeta = zeta
+    p.ro = ro
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, burnout_angle_deg=burnout_deg,
                              dt_output=1.0, max_time_s=6000.0)
     alt = np.asarray(r['alt']).ravel() / 1000.0
