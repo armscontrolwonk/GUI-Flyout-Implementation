@@ -208,6 +208,11 @@ class BoosterParams:
     pbv_diameter_m: float = 0.0
     pbv_length_m:   float = 0.0
 
+    # Provenance — where these numbers came from and how firm they are
+    # (mirrors ROParams.source/notes).
+    source: str = ""
+    notes:  str = ""
+
     # Strap-on boosters — fire from t=0 in parallel with stage 1; separate at
     # booster_burn_time_s.  These fields are only meaningful on the top-level
     # (stage-1) node; upper-stage nodes ignore them.
@@ -2655,6 +2660,8 @@ def booster_to_dict(p: BoosterParams) -> dict:
         'payload_diameter_m':     p.payload_diameter_m,
         'pbv_diameter_m':         p.pbv_diameter_m,
         'pbv_length_m':           p.pbv_length_m,
+        'source':                 p.source,
+        'notes':                  p.notes,
         'n_boosters':             p.n_boosters,
         'booster_thrust_n':       p.booster_thrust_n,
         'booster_burn_time_s':    p.booster_burn_time_s,
@@ -2758,6 +2765,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
         pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
         pbv_length_m=float(d.get('pbv_length_m', 0.0)),
+        source=str(d.get('source', '')),
+        notes=str(d.get('notes', '')),
         n_boosters=int(d.get('n_boosters', 0)),
         booster_thrust_n=float(d.get('booster_thrust_n', 0.0)),
         booster_burn_time_s=float(d.get('booster_burn_time_s', 0.0)),
