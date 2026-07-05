@@ -320,7 +320,7 @@ def _load_rv_library():
                 key = rv.name or fp.stem.replace(".rv", "")
                 RV_DB[key] = lambda _r=rv: _r
             except Exception as exc:
-                print(f"Warning: could not load RV '{fp.name}': {exc}")
+                print(f"Warning: could not load Reentry object '{fp.name}': {exc}")
 
 
 def _save_rv_to_library(rv) -> Path:
@@ -351,7 +351,7 @@ def _extract_rvs_from_missiles():
         try:
             _save_rv_to_library(erv)
         except Exception as exc:
-            print(f"Warning: could not extract RV '{erv.name}' from '{name}': {exc}")
+            print(f"Warning: could not extract Reentry object '{erv.name}' from '{name}': {exc}")
     try:
         marker.touch()
     except Exception:
@@ -1217,7 +1217,7 @@ class MissileDialog(tk.Toplevel):
         elif existing_name:
             self.title("Edit Missile")
         else:
-            self.title("New Missile")
+            self.title("New Booster")
         self.resizable(False, True)
         self.grab_set()               # modal
         self._build(existing_name)
@@ -1238,7 +1238,7 @@ class MissileDialog(tk.Toplevel):
         # Name row
         nf = ttk.Frame(self)
         nf.pack(fill=tk.X, **pad)
-        ttk.Label(nf, text="Missile name:").pack(side=tk.LEFT)
+        ttk.Label(nf, text="Booster name:").pack(side=tk.LEFT)
         self._name_var = tk.StringVar(value=existing_name or "My Missile")
         self._name_entry = ttk.Entry(nf, textvariable=self._name_var, width=24)
         self._name_entry.pack(side=tk.LEFT, padx=(6, 16))
@@ -1335,7 +1335,7 @@ class MissileDialog(tk.Toplevel):
         self._throw_weight_entry.pack(side=tk.LEFT)
         ttk.Label(_tw_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
 
-        # ── Rows 1-3: Payload nose shape/size (hidden when RV separates) ────────
+        # ── Rows 1-3: Payload nose shape/size (hidden when Reentry object separates) ────────
         self._payload_shape_frame = ttk.Frame(pl)
         self._payload_shape_frame.grid(row=1, column=0, columnspan=2,
                                        sticky=tk.EW, pady=0)
@@ -1360,10 +1360,10 @@ class MissileDialog(tk.Toplevel):
         self._nose_shape_cb     = self._payload_shape_cb
         self._nose_length_entry = self._payload_length_entry
 
-        # ── Row 2: RV separates toggle (row numbering continues in pl) ────────
+        # ── Row 2: Reentry object separates toggle (row numbering continues in pl) ────────
         self._rv_separates_var = tk.BooleanVar(value=False)
         self._rv_separates_check = ttk.Checkbutton(
-            pl, text="RV separates",
+            pl, text="Reentry object separates",
             variable=self._rv_separates_var,
             command=self._update_rv_separates_state)
         self._rv_separates_check.grid(
@@ -1376,7 +1376,7 @@ class MissileDialog(tk.Toplevel):
         self._rv_section.columnconfigure(1, weight=1)
         self._rv_section.grid_remove()
 
-        # No. of RVs (per-RV mass is a property of the loaded RV)
+        # No. of RVs (per-Object mass is a property of the loaded RV)
         ttk.Label(self._rv_section, text="No. of RVs:").grid(
             row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._num_rvs_var = tk.StringVar(value="1")
@@ -1386,7 +1386,7 @@ class MissileDialog(tk.Toplevel):
             _rvn_inner, textvariable=self._num_rvs_var, from_=1, to=24, width=4)
         self._num_rvs_spinbox.pack(side=tk.LEFT)
 
-        # RV identity is owned by the sidebar's Reentry Vehicle library
+        # RV identity is owned by the sidebar's Reentry Object library
         # (since the recent refactor).  The dialog shows a read-only
         # summary of whatever is selected there, so the user can verify
         # the loadout without re-editing it from here.
@@ -1395,14 +1395,14 @@ class MissileDialog(tk.Toplevel):
                   wraplength=320, foreground="navy").grid(
             row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
         ttk.Label(self._rv_section,
-                  text="(choose the RV in the sidebar's Reentry Vehicle panel)",
+                  text="(choose the reentry object in the sidebar's Reentry Object panel)",
                   foreground="gray").grid(
             row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
 
         # Has PBV toggle
         self._has_pbv_var = tk.BooleanVar(value=False)
         self._has_pbv_check = ttk.Checkbutton(
-            self._rv_section, text="Has PBV (post-boost vehicle)",
+            self._rv_section, text="Has PBV (post-boost bus)",
             variable=self._has_pbv_var,
             command=self._update_pbv_state)
         self._has_pbv_check.grid(
@@ -1481,7 +1481,7 @@ class MissileDialog(tk.Toplevel):
             pady=(2, 4))
 
         # Live throw-weight update when RV-count or PBV mass changes.
-        # RV mass per unit comes from the sidebar selection via _current_main_rv().
+        # Object mass per unit comes from the sidebar selection via _current_main_rv().
         for _v in (self._num_rvs_var, self._pbv_mass_var):
             _v.trace_add("write", self._update_throw_weight)
 
@@ -1627,9 +1627,9 @@ class MissileDialog(tk.Toplevel):
         bf.pack(fill=tk.X, padx=8, pady=(4, 8))
         ttk.Button(bf, text="Cancel", command=self.destroy).pack(
             side=tk.RIGHT, padx=(4, 0))
-        self._save_btn = ttk.Button(bf, text="Save Missile", command=self._save)
+        self._save_btn = ttk.Button(bf, text="Save Booster", command=self._save)
         self._save_btn.pack(side=tk.RIGHT)
-        self._save_as_btn = ttk.Button(bf, text="Save as New Missile",
+        self._save_as_btn = ttk.Button(bf, text="Save as New Booster",
                                        command=self._save_as_new)
         self._save_as_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
@@ -1689,12 +1689,12 @@ class MissileDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _update_throw_weight(self, *_):
-        """Recompute throw weight = N × RV.mass_kg + PBV when RV separates is active."""
+        """Recompute throw weight = N × RV.mass_kg + PBV when Reentry object separates is active."""
         if not self._rv_separates_var.get():
             return
         rv = self._current_main_rv()
         if rv is None:
-            return  # No RV selected in sidebar; leave throw weight untouched.
+            return  # No reentry object selected in sidebar; leave throw weight untouched.
         try:
             n   = max(1, int(self._num_rvs_var.get()))
             bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
@@ -1843,7 +1843,7 @@ class MissileDialog(tk.Toplevel):
         """Refresh the summary label from the main panel's RV selection."""
         rv = self._current_main_rv()
         if rv is None:
-            self._rv_summary_var.set("No RV selected in sidebar")
+            self._rv_summary_var.set("No reentry object selected in sidebar")
         else:
             parts = [rv.name,
                      f"{rv.mass_kg:,.0f} kg",
@@ -2051,7 +2051,7 @@ class MissileDialog(tk.Toplevel):
 
         name = self._name_var.get().strip()
         if not name:
-            raise ValueError("Missile name cannot be blank.")
+            raise ValueError("Booster name cannot be blank.")
 
         n = int(self._n_stages_var.get())
 
@@ -2061,7 +2061,7 @@ class MissileDialog(tk.Toplevel):
             main_rv = self._current_main_rv()
             if main_rv is None:
                 raise ValueError(
-                    "No RV selected in the sidebar's Reentry Vehicle panel. "
+                    "No reentry object selected in the sidebar's Reentry Object panel. "
                     "Pick or create an RV there before saving this missile.")
             try:
                 num_rvs  = max(1, int(self._num_rvs_var.get()))
@@ -2317,7 +2317,7 @@ class MissileDialog(tk.Toplevel):
             messagebox.showerror("Invalid input", str(e), parent=self)
             return
         new_name = simpledialog.askstring(
-            "Save as New Missile",
+            "Save as New Booster",
             "Enter a name for the new missile:",
             initialvalue=p.name,
             parent=self)
@@ -2367,7 +2367,7 @@ class RVEditorDialog(tk.Toplevel):
 
     def __init__(self, parent, rv=None, mass_kg=500.0):
         super().__init__(parent)
-        self.title("Edit Terminal Vehicle" if rv is not None else "New Terminal Vehicle")
+        self.title("Edit Terminal Object" if rv is not None else "New Terminal Vehicle")
         self.resizable(False, True)
         self.grab_set()
         self._result = None
@@ -2392,7 +2392,7 @@ class RVEditorDialog(tk.Toplevel):
                   else 'separating_rv')
         _sep_row = ttk.Frame(frm)
         _sep_row.grid(row=0, column=1, sticky=tk.W, pady=3)
-        ttk.Radiobutton(_sep_row, text="Separating RV",
+        ttk.Radiobutton(_sep_row, text="Separating reentry object",
                         variable=self._sep_var, value='separating_rv',
                         command=self._update_separation_state).pack(side=tk.LEFT)
         ttk.Radiobutton(_sep_row, text="Body (no separation)",
@@ -2573,7 +2573,7 @@ class RVEditorDialog(tk.Toplevel):
         """Open the Newtonian-cone β estimator sub-dialog."""
         import math
         dlg = tk.Toplevel(self)
-        dlg.title("Estimate RV β")
+        dlg.title("Estimate Object β")
         dlg.resizable(False, False)
         dlg.grab_set()
 
@@ -2597,7 +2597,7 @@ class RVEditorDialog(tk.Toplevel):
             ttk.Label(frm, text=text).grid(
                 row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
 
-        _lbl(0, "RV mass (kg):")
+        _lbl(0, "Object mass (kg):")
         mass_var = tk.StringVar(value=self._mass_var.get())
         ttk.Entry(frm, textvariable=mass_var, width=10).grid(row=0, column=1, sticky=tk.W)
 
@@ -2896,18 +2896,18 @@ class RVEditorDialog(tk.Toplevel):
                              for c in rv.name).strip("_") or "RV"
         path = filedialog.asksaveasfilename(
             parent=self,
-            title="Save RV to Library",
+            title="Save Reentry Object to Library",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile=f"{_safe_name}.rv.json",
             defaultextension=".json",
-            filetypes=[("RV files (*.rv.json)", "*.json"), ("All files", "*.*")])
+            filetypes=[("reentry-object files (*.rv.json)", "*.json"), ("All files", "*.*")])
         if not path:
             return
         try:
             Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
         except Exception as exc:
-            messagebox.showerror("Save RV",
-                                 f"Could not write RV file:\n{exc}",
+            messagebox.showerror("Save Reentry Object",
+                                 f"Could not write reentry-object file:\n{exc}",
                                  parent=self)
             return
         self._result = rv
@@ -2947,7 +2947,7 @@ class RangeRingDialog(tk.Toplevel):
         frm.columnconfigure(1, weight=1)
 
         # Missile label (informational)
-        ttk.Label(frm, text="Missile:").grid(
+        ttk.Label(frm, text="Booster:").grid(
             row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
         self._missile_lbl = ttk.Label(frm, text=app._missile_var.get(),
                                       foreground="navy")
@@ -3911,7 +3911,7 @@ class DampingEstimatorDialog(tk.Toplevel):
                 row=self._r, column=0, columnspan=3, sticky='ew', pady=4)
             self._r += 1
 
-        ttk.Label(frm, text="Vehicle (from terminal vehicle; editable)",
+        ttk.Label(frm, text="Reentry object (from terminal object; editable)",
                   font=("TkDefaultFont", 9, "bold")).grid(
             row=self._r, column=0, columnspan=3, sticky=tk.W, **pad)
         self._r += 1
@@ -4097,7 +4097,7 @@ class MassEstimatorDialog(tk.Toplevel):
         top.columnconfigure(1, weight=1)
         top.columnconfigure(3, weight=1)
 
-        ttk.Label(top, text="Missile:").grid(row=0, column=0, sticky=tk.W, **pad)
+        ttk.Label(top, text="Booster:").grid(row=0, column=0, sticky=tk.W, **pad)
         ttk.Label(top, text=name, foreground="navy").grid(
             row=0, column=1, sticky=tk.W, **pad)
 
@@ -4374,17 +4374,17 @@ class MissileFlyoutApp(tk.Tk):
 
         file_menu = tk.Menu(menubar, tearoff=0)
         # ── Modeling inputs (load/save) ───────────────────────────────
-        file_menu.add_command(label="Load Missile…",            command=self._load_missile)
-        file_menu.add_command(label="Save Missile…",            command=self._export_missile)
-        file_menu.add_command(label="Load Missile from XLSX…",  command=self._import_missile_xlsx)
-        file_menu.add_command(label="Save Missile to XLSX…",    command=self._export_missile_xlsx)
-        file_menu.add_command(label="New Missile XLSX Template…", command=self._new_missile_template)
+        file_menu.add_command(label="Load Booster…",            command=self._load_missile)
+        file_menu.add_command(label="Save Booster…",            command=self._export_missile)
+        file_menu.add_command(label="Load Booster from XLSX…",  command=self._import_missile_xlsx)
+        file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_missile_xlsx)
+        file_menu.add_command(label="New Booster XLSX Template…", command=self._new_missile_template)
         file_menu.add_separator()
-        file_menu.add_command(label="Load RV…",                 command=self._load_rv)
-        file_menu.add_command(label="Save RV…",                 command=self._export_rv)
-        file_menu.add_command(label="Load RV from XLSX…",       command=self._import_rv_xlsx)
-        file_menu.add_command(label="Save RV to XLSX…",         command=self._export_rv_xlsx)
-        file_menu.add_command(label="New RV XLSX Template…",    command=self._new_rv_template)
+        file_menu.add_command(label="Load Reentry Object…",                 command=self._load_rv)
+        file_menu.add_command(label="Save Reentry Object…",                 command=self._export_rv)
+        file_menu.add_command(label="Load Reentry Object from XLSX…",       command=self._import_rv_xlsx)
+        file_menu.add_command(label="Save Reentry Object to XLSX…",         command=self._export_rv_xlsx)
+        file_menu.add_command(label="New Reentry Object XLSX Template…",    command=self._new_rv_template)
         file_menu.add_separator()
         file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
         file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
@@ -4571,7 +4571,7 @@ class MissileFlyoutApp(tk.Tk):
         heat_tab     = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
-        self._right_nb.add(params_tab,   text="  Missile Parameters  ")
+        self._right_nb.add(params_tab,   text="  Booster Parameters  ")
         self._right_nb.add(slv_tab,      text="  SLV Performance  ")
         self._right_nb.add(heat_tab,     text="  Heating Survivability  ")
 
@@ -4592,7 +4592,7 @@ class MissileFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     def _build_control_panel(self, parent):
         # ── Missile type ───────────────────────────────────────────────
-        mf = ttk.LabelFrame(parent, text="Missile Type")
+        mf = ttk.LabelFrame(parent, text="Booster Type")
         mf.pack(fill=tk.X, padx=6, pady=3)
         _cb_values   = list(MISSILE_DB.keys())
         _first_valid = _cb_values[0] if _cb_values else ""
@@ -4619,7 +4619,7 @@ class MissileFlyoutApp(tk.Tk):
         # ── Reentry vehicle (payload) ─────────────────────────────────
         # The RV library is independent of any missile; the run-time
         # selection here overrides whatever RV the missile was saved with.
-        rf = ttk.LabelFrame(parent, text="Reentry Vehicle")
+        rf = ttk.LabelFrame(parent, text="Reentry Object")
         rf.pack(fill=tk.X, padx=6, pady=3)
         self._rv_main_var = tk.StringVar(value="(missile default)")
         self._rv_main_cb = ttk.Combobox(rf, textvariable=self._rv_main_var,
@@ -4829,7 +4829,7 @@ class MissileFlyoutApp(tk.Tk):
         # Row 0: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
             value="Terminal vehicle not configured for maneuvering"
-            " — set L/D in Edit Terminal Vehicle…")
+            " — set L/D in Edit Terminal Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
         self._glider_status_lbl.grid(row=0, column=0, columnspan=2,
@@ -5021,7 +5021,7 @@ class MissileFlyoutApp(tk.Tk):
                    command=self._open_sweep).pack(
             side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0), ipady=4)
 
-        # (Missile Parameters moved to right-panel notebook tab)
+        # (Booster Parameters moved to right-panel notebook tab)
 
     # ------------------------------------------------------------------
     # SLV Performance tab  (Schilling / Townsend algebraic analysis)
@@ -5138,7 +5138,7 @@ class MissileFlyoutApp(tk.Tk):
         self._heat_set_text(
             None, "",
             "Fly a trajectory (Launch / Max Range).  This panel then shows a\n"
-            "rough screening estimate of whether the reentry vehicle survives\n"
+            "rough screening estimate of whether the reentry object survives\n"
             "the aerodynamic heat load — evaluated at the nose tip and the body\n"
             "acreage, using the per-location TPS materials set for the RV.\n\n"
             "It is a screening indicator (Sutton-Graves stagnation flux +\n"
@@ -5166,14 +5166,14 @@ class MissileFlyoutApp(tk.Tk):
                 "none", s["headline"],
                 "No reentry heating was computed for this flight.\n\n"
                 "Heating is assessed on the reentry / glide arc: set a TPS\n"
-                "material on the RV (Missile Parameters) and fly a trajectory\n"
+                "material on the RV (Booster Parameters) and fly a trajectory\n"
                 "that reenters the atmosphere.")
             return
 
         rv = effective_rv(get_missile(self._missile_var.get()))
         name = rv.name if rv is not None else self._missile_var.get()
 
-        out = ["Vehicle:  %s" % name]
+        out = ["Booster:  %s" % name]
         if s["nose_q_MW"] is not None:
             out.append("Reentry:  peak %.1f MW/m² (nose stagnation),  "
                        "integrated load %.0f MJ/m²"
@@ -5300,7 +5300,7 @@ class MissileFlyoutApp(tk.Tk):
             )
 
         body = (
-            f"Vehicle:  {missile.name}  ({n_stages}-stage)\n"
+            f"Booster:  {missile.name}  ({n_stages}-stage)\n"
             f"Target:   {orbit_desc}\n"
             f"Launch:   {lat:.2f}° lat,  azimuth {az:.1f}°\n"
             "\n"
@@ -5460,7 +5460,7 @@ class MissileFlyoutApp(tk.Tk):
             pass   # logo absent or Pillow unavailable — silent skip
 
     # ------------------------------------------------------------------
-    # Missile Parameters tab
+    # Booster Parameters tab
     # ------------------------------------------------------------------
     def _build_params_tab(self, parent):
         """Scrollable structured display — rebuilt on each missile change."""
@@ -5672,11 +5672,11 @@ class MissileFlyoutApp(tk.Tk):
                 f"Terminal vehicle: {rv.name or 'RV'}  "
                 f"({sep_lbl}, L/D {rv.glider_LD:.2f}, "
                 f"g-lim {rv.glider_pullup_g_max:.0f})  "
-                f"— edit in Edit Terminal Vehicle…")
+                f"— edit in Edit Terminal Object…")
         else:
             self._glider_status_var.set(
                 "Terminal vehicle not configured for maneuvering"
-                " — set L/D in Edit Terminal Vehicle…")
+                " — set L/D in Edit Terminal Object…")
         # Reentry mode combobox is always visible regardless of glider config.
         self._glider_main_frame.grid(row=1, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
@@ -5782,7 +5782,7 @@ class MissileFlyoutApp(tk.Tk):
 
         For a NO-SEPARATION body the fins are part of the lifting vehicle and are
         included.  This is the value to use as a no-sep glider's L/D; for a
-        SEPARATING RV, set the RV's own designed L/D instead.  Hypersonic regime
+        SEPARATING REENTRY OBJECT, set the reentry object's own designed L/D instead.  Hypersonic regime
         (not Barrowman fin theory, which is for booster static margin)."""
         import glider_ld
         try:
@@ -5805,8 +5805,8 @@ class MissileFlyoutApp(tk.Tk):
             f"\n"
             f"Max L/D ≈ {r['ld_max']:.2f}   at α ≈ {r['alpha_deg']:.0f}°\n"
             f"\n"
-            f"Derived from geometry — the no-sep body L/D.  For a SEPARATING RV, "
-            f"use the RV's own designed L/D instead.",
+            f"Derived from geometry — the no-sep body L/D.  For a SEPARATING REENTRY OBJECT, "
+            f"use the reentry object's own designed L/D instead.",
         )
 
     def _rebuild_stage_rows(self):
@@ -6146,7 +6146,7 @@ class MissileFlyoutApp(tk.Tk):
         # Snapshot trajectory panel so saving the missile doesn't reset it.
         self._snapshot_traj_profile(name)
         self._refresh_missile_list(select_name=name)
-        self._status_var.set(f"Missile '{name}' saved.")
+        self._status_var.set(f"Booster '{name}' saved.")
 
     def _new_missile(self):
         MissileDialog(self, on_save=self._on_missile_saved)
@@ -6170,7 +6170,7 @@ class MissileFlyoutApp(tk.Tk):
             del profiles[name]
             _save_traj_profiles(profiles)
         self._refresh_missile_list()
-        self._status_var.set(f"Missile '{name}' deleted.")
+        self._status_var.set(f"Booster '{name}' deleted.")
 
     # ------------------------------------------------------------------
     # Reentry vehicle (payload) selection
@@ -6225,17 +6225,17 @@ class MissileFlyoutApp(tk.Tk):
         try:
             _save_rv_to_library(dlg.result)
         except Exception as exc:
-            messagebox.showerror("Save RV",
-                                 f"Could not write RV file:\n{exc}", parent=self)
+            messagebox.showerror("Save Reentry Object",
+                                 f"Could not write reentry-object file:\n{exc}", parent=self)
             return
         self._refresh_rv_list(select_name=dlg.result.name)
-        self._status_var.set(f"RV '{dlg.result.name}' saved to library.")
+        self._status_var.set(f"Reentry object '{dlg.result.name}' saved to library.")
 
     def _edit_rv_main(self):
         """Edit the currently selected RV in place; rewrite the library file."""
         sel = self._rv_main_var.get()
         if sel not in RV_DB:
-            messagebox.showinfo("Edit RV",
+            messagebox.showinfo("Edit Reentry Object",
                                 "Select an RV from the library to edit, "
                                 "or use 'New' to create one.", parent=self)
             return
@@ -6254,18 +6254,18 @@ class MissileFlyoutApp(tk.Tk):
         try:
             _save_rv_to_library(dlg.result)
         except Exception as exc:
-            messagebox.showerror("Save RV",
-                                 f"Could not write RV file:\n{exc}", parent=self)
+            messagebox.showerror("Save Reentry Object",
+                                 f"Could not write reentry-object file:\n{exc}", parent=self)
             return
         self._refresh_rv_list(select_name=dlg.result.name)
-        self._status_var.set(f"RV '{dlg.result.name}' updated.")
+        self._status_var.set(f"Reentry object '{dlg.result.name}' updated.")
 
     def _delete_rv_main(self):
         """Remove the selected RV from RV_DB and from rv_library/."""
         sel = self._rv_main_var.get()
         if sel not in RV_DB:
             return
-        if not messagebox.askyesno("Delete RV",
+        if not messagebox.askyesno("Delete Reentry Object",
                                    f"Permanently delete '{sel}' from the library?",
                                    parent=self):
             return
@@ -6273,12 +6273,12 @@ class MissileFlyoutApp(tk.Tk):
         try:
             fp.unlink(missing_ok=True)
         except Exception as exc:
-            messagebox.showerror("Delete RV",
-                                 f"Could not delete RV file:\n{exc}", parent=self)
+            messagebox.showerror("Delete Reentry Object",
+                                 f"Could not delete reentry-object file:\n{exc}", parent=self)
             return
         RV_DB.pop(sel, None)
         self._refresh_rv_list(select_name=self._RV_DEFAULT_SENTINEL)
-        self._status_var.set(f"RV '{sel}' deleted.")
+        self._status_var.set(f"Reentry object '{sel}' deleted.")
 
     def _snapshot_traj_profile(self, missile_name: str) -> None:
         """Save current trajectory panel fields as a profile for missile_name.
@@ -6287,7 +6287,7 @@ class MissileFlyoutApp(tk.Tk):
         global pitch / cutoff fields, the Advanced Pitch Program rows
         (per stage), and the Yaw / dogleg program — so the next time this
         missile is loaded the panel can be restored exactly.  This is
-        called after Save Missile so the editor dialog cannot wipe out
+        called after Save Booster so the editor dialog cannot wipe out
         the user's trajectory work just by re-saving the missile.
         """
         cutoff_str   = self._cutoff_var.get().strip()
@@ -6538,7 +6538,7 @@ class MissileFlyoutApp(tk.Tk):
         self._status_var.set(f"Scenario loaded: {os.path.basename(path)}")
 
     def _update_params_display(self, p=None):
-        """Rebuild the Missile Parameters tab with structured label rows."""
+        """Rebuild the Booster Parameters tab with structured label rows."""
         if p is None:
             p = get_missile(self._missile_var.get())
 
@@ -6709,15 +6709,15 @@ class MissileFlyoutApp(tk.Tk):
 
         if p.rv_separates:
             _row2(af, r, "No. of RVs:", str(p.num_rvs),
-                  "Per-RV mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
+                  "Per-object mass:", f"{p.rv_mass_kg:,.0f} kg"); r += 1
             _erv     = effective_rv(p)
             _rv_beta = _erv.beta_kg_m2 if _erv else p.rv_beta_kg_m2
             _pbv_m   = p.bus_mass_kg
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
-                      "RV β:", f"{_rv_beta:,.0f} kg/m²" if _rv_beta > 0 else "—"); r += 1
+                      "Object β:", f"{_rv_beta:,.0f} kg/m²" if _rv_beta > 0 else "—"); r += 1
             elif _rv_beta > 0:
-                _row2(af, r, "RV β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
+                _row2(af, r, "Object β:", f"{_rv_beta:,.0f} kg/m²"); r += 1
             if _erv:
                 _rv_shape_s = NOSE_SHAPE_LABELS.get(_erv.shape, NOSE_SHAPE_LABELS['cone'])
                 _rv_d = _erv.diameter_m
@@ -6728,9 +6728,9 @@ class MissileFlyoutApp(tk.Tk):
                 _rv_d = getattr(p, 'rv_diameter_m', 0.0)
                 _rv_l = getattr(p, 'rv_length_m', 0.0)
             _row2(af, r, "RV shape:", _rv_shape_s,
-                  "RV diameter:", f"{_rv_d:.2f} m" if _rv_d > 0 else "—"); r += 1
+                  "Object diameter:", f"{_rv_d:.2f} m" if _rv_d > 0 else "—"); r += 1
             if _rv_l > 0:
-                _row2(af, r, "RV length:", f"{_rv_l:.2f} m"); r += 1
+                _row2(af, r, "Object length:", f"{_rv_l:.2f} m"); r += 1
             if _erv and _erv.glider_enabled:
                 _guid_lbl = (
                     "Equilibrium glide (Tracy)"
@@ -7346,7 +7346,7 @@ class MissileFlyoutApp(tk.Tk):
                 missile.rv = _user_rv
             # Payload carried through boost = throw-weight minus the shroud (which
             # is jettisoned mid-boost and tracked separately): the PBV/bus mass
-            # plus the selected reentry vehicle's mass.  Derived here so payload
+            # plus the selected reentry object's mass.  Derived here so payload
             # follows the RV you pick rather than being a stale hand-entered number.
             missile.payload_kg = (getattr(missile, 'bus_mass_kg', 0.0) or 0.0) \
                 + _user_rv.mass_kg
@@ -9810,33 +9810,33 @@ class MissileFlyoutApp(tk.Tk):
             initialdir=str(_ensure_dir(_DIR_MISSILES)),
             initialfile=f"{safe}.missile.json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Export Missile",
+            title="Export Booster",
         )
         if not path:
             return
         data = missile_to_dict(MISSILE_DB[name]())
         Path(path).write_text(json.dumps(data, indent=2))
-        self._status_var.set(f"Missile exported: {path}")
+        self._status_var.set(f"Booster exported: {path}")
 
     def _load_rv(self):
-        """Import a .rv.json file into the RV library (parallel to Load Missile)."""
+        """Import a .rv.json file into the RV library (parallel to Load Booster)."""
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
-            filetypes=[("RV files", "*.rv.json"), ("JSON files", "*.json"),
+            filetypes=[("reentry-object files", "*.rv.json"), ("JSON files", "*.json"),
                        ("All files", "*.*")],
-            title="Load RV",
+            title="Load Reentry Object",
         )
         if not path:
             return
         try:
             rv = rv_from_dict(json.loads(Path(path).read_text()))
         except Exception as e:
-            messagebox.showerror("Load error", f"Could not parse RV file:\n{e}")
+            messagebox.showerror("Load error", f"Could not parse reentry-object file:\n{e}")
             return
         name = rv.name or Path(path).stem.replace('.rv', '')
         if not name:
-            messagebox.showerror("Load error", "RV file has no name field.")
+            messagebox.showerror("Load error", "reentry-object file has no name field.")
             return
         if name in RV_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
@@ -9844,17 +9844,17 @@ class MissileFlyoutApp(tk.Tk):
         try:
             _save_rv_to_library(rv)        # copy into the writable user library
         except Exception as exc:
-            messagebox.showerror("Load RV", f"Could not write RV file:\n{exc}")
+            messagebox.showerror("Load Reentry Object", f"Could not write reentry-object file:\n{exc}")
             return
         self._refresh_rv_list(select_name=name)
-        self._status_var.set(f"RV '{name}' loaded from {Path(path).name}")
+        self._status_var.set(f"Reentry object '{name}' loaded from {Path(path).name}")
 
     def _export_rv(self):
         """Export the selected RV (or the missile's RV) to a .rv.json file."""
         sel = self._rv_main_var.get()
         rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
         if rv is None or not getattr(rv, 'name', ''):
-            messagebox.showinfo("No RV", "Select an RV first.", parent=self)
+            messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
@@ -9862,26 +9862,26 @@ class MissileFlyoutApp(tk.Tk):
             defaultextension=".json",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile=f"{_safe_name(rv.name)}.rv.json",
-            filetypes=[("RV files", "*.rv.json"), ("JSON files", "*.json"),
+            filetypes=[("reentry-object files", "*.rv.json"), ("JSON files", "*.json"),
                        ("All files", "*.*")],
-            title="Export RV",
+            title="Export Reentry Object",
         )
         if not path:
             return
         try:
             Path(path).write_text(json.dumps(rv_to_dict(rv), indent=2))
         except Exception as exc:
-            messagebox.showerror("Save RV",
-                                 f"Could not write RV file:\n{exc}", parent=self)
+            messagebox.showerror("Save Reentry Object",
+                                 f"Could not write reentry-object file:\n{exc}", parent=self)
             return
-        self._status_var.set(f"RV exported: {path}")
+        self._status_var.set(f"Reentry object exported: {path}")
 
     def _export_rv_xlsx(self):
         """Export the selected RV to a fillable XLSX spreadsheet."""
         sel = self._rv_main_var.get()
         rv = RV_DB[sel]() if sel in RV_DB else getattr(self, '_rv', None)
         if rv is None or not getattr(rv, 'name', ''):
-            messagebox.showinfo("No RV", "Select an RV first.", parent=self)
+            messagebox.showinfo("No Reentry Object", "Select a reentry object first.", parent=self)
             return
         try:
             from rv_xlsx import export_rv_xlsx
@@ -9890,7 +9890,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
-            parent=self, title="Save RV to XLSX",
+            parent=self, title="Save Reentry Object to XLSX",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile=f"{_safe_name(rv.name)}.rv.xlsx",
@@ -9899,7 +9899,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             export_rv_xlsx(path, rv)
-            self._status_var.set(f"RV exported: {os.path.basename(path)}")
+            self._status_var.set(f"Reentry object exported: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
 
@@ -9912,7 +9912,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            parent=self, title="Load RV from XLSX",
+            parent=self, title="Load Reentry Object from XLSX",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")])
         if not path:
@@ -9931,11 +9931,11 @@ class MissileFlyoutApp(tk.Tk):
         try:
             _save_rv_to_library(rv)
         except Exception as exc:
-            messagebox.showerror("Save RV",
-                                 f"Could not write RV file:\n{exc}", parent=self)
+            messagebox.showerror("Save Reentry Object",
+                                 f"Could not write reentry-object file:\n{exc}", parent=self)
             return
         self._refresh_rv_list(select_name=rv.name)
-        self._status_var.set(f"RV imported: {rv.name}")
+        self._status_var.set(f"Reentry object imported: {rv.name}")
 
     def _new_rv_template(self):
         """Save a blank RV XLSX template the user fills in from scratch."""
@@ -9946,7 +9946,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
-            parent=self, title="Save Blank RV Template",
+            parent=self, title="Save Blank Reentry Object Template",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_RV_LIBRARY_PATH)),
             initialfile="new_rv.rv.xlsx",
@@ -9973,7 +9973,7 @@ class MissileFlyoutApp(tk.Tk):
         from tkinter.filedialog import asksaveasfilename
         safe = _safe_name(name)
         path = asksaveasfilename(
-            title="Export Missile to XLSX",
+            title="Export Booster to XLSX",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_DIR_MISSILES)),
             initialfile=f"{safe}.missile.xlsx",
@@ -9984,7 +9984,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         try:
             export_missile_xlsx(path, MISSILE_DB[name]())
-            self._status_var.set(f"Missile exported: {os.path.basename(path)}")
+            self._status_var.set(f"Booster exported: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
 
@@ -9997,7 +9997,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         from tkinter.filedialog import askopenfilename
         path = askopenfilename(
-            title="Import Missile from XLSX",
+            title="Import Booster from XLSX",
             initialdir=str(_ensure_dir(_DIR_MISSILES)),
             filetypes=[("Excel workbook", "*.xlsx"), ("All files", "*.*")],
             parent=self,
@@ -10011,7 +10011,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         if not params.name:
             messagebox.showwarning("Import warning",
-                                   "Missile name is blank — please fill in "
+                                   "Booster name is blank — please fill in "
                                    "the Name field in the XLSX and re-import.",
                                    parent=self)
             return
@@ -10022,7 +10022,7 @@ class MissileFlyoutApp(tk.Tk):
         MISSILE_DB[params.name] = lambda p=params: p
         _save_custom_missiles()
         self._refresh_missile_list(select_name=params.name)
-        self._status_var.set(f"Missile imported: {params.name}")
+        self._status_var.set(f"Booster imported: {params.name}")
 
     def _new_missile_template(self):
         """Save a blank XLSX template the user fills in from scratch."""
@@ -10033,7 +10033,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         from tkinter.filedialog import asksaveasfilename
         path = asksaveasfilename(
-            title="Save Blank Missile Template",
+            title="Save Blank Booster Template",
             defaultextension=".xlsx",
             initialdir=str(_ensure_dir(_DIR_MISSILES)),
             initialfile="missile_template.xlsx",
@@ -10054,7 +10054,7 @@ class MissileFlyoutApp(tk.Tk):
         path = askopenfilename(
             initialdir=str(_ensure_dir(_DIR_MISSILES)),
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Load Missile",
+            title="Load Booster",
         )
         if not path:
             return
@@ -10066,7 +10066,7 @@ class MissileFlyoutApp(tk.Tk):
             return
         name = data.get('name') or Path(path).stem.replace('.missile', '')
         if not name:
-            messagebox.showerror("Load error", "Missile file has no name field.")
+            messagebox.showerror("Load error", "Booster file has no name field.")
             return
         if name in MISSILE_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
@@ -10074,7 +10074,7 @@ class MissileFlyoutApp(tk.Tk):
         MISSILE_DB[name] = lambda p=p: p
         _save_custom_missiles()
         self._refresh_missile_list(select_name=name)
-        self._status_var.set(f"Missile '{name}' loaded from {Path(path).name}")
+        self._status_var.set(f"Booster '{name}' loaded from {Path(path).name}")
 
     def _export_site(self):
         """Export the current launch site to a .site.json file."""
