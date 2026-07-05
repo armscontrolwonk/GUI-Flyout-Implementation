@@ -7,7 +7,7 @@ attempt an XLSX operation.
 
 Sheet layout
 ------------
-  Sheet 1 "Missile"  — all parameters, fields-as-rows, stages-as-columns
+  Sheet 1 "Booster"  — all parameters, fields-as-rows, stages-as-columns
   Sheet 2 "Cd Table" — Mach/Cd lookup table (Forden defaults pre-filled)
   Sheet 3 "Reference"— read-only reference values (Isp, mass fractions, T/W)
 
@@ -55,8 +55,8 @@ _R: dict[str, int] = {
     'b_delay':     39,
     'b_jett':      40,
     # PAYLOAD — only the "carries a separating reentry object" flag.  Payload mass is derived
-    # at flyout (bus + selected RV); the reentry vehicle is chosen from the RV
-    # library, not described inline here.
+    # at flyout (bus + selected reentry object); the reentry object is chosen from
+    # the reentry-object library, not described inline here.
     'ro_sep':      48,
     # SHROUD / FAIRING
     'shr_mass':    60,
@@ -281,13 +281,13 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
 
     # Title
     ws.merge_cells('A1:I1')
-    c = ws.cell(row=1, column=1, value='Thrusty — Missile Parameter Template')
+    c = ws.cell(row=1, column=1, value='Thrusty — Booster Parameter Template')
     c.fill = _fill('1A1A2E'); c.font = _font(bold=True, color='FFFFFF', size=14)
     c.alignment = _align('center'); ws.row_dimensions[1].height = 24
 
     # ── IDENTITY ─────────────────────────────────────────────────────────────
     _section(ws, r['name'] - 1, 'IDENTITY')
-    _label(ws, r['name'], 'Missile Name', '', 'Short identifying name')
+    _label(ws, r['name'], 'Booster Name', '', 'Short identifying name')
     _inputs(ws, r['name'], [4], [top.get('name', '')])
     ws.merge_cells(start_row=r['name'], start_column=4,
                    end_row=r['name'],   end_column=7)
@@ -615,7 +615,7 @@ def export_missile_xlsx(path: str, params) -> None:
 
     wb = xl.Workbook()
     ws_m = wb.active
-    ws_m.title = 'Missile'
+    ws_m.title = 'Booster'
     ws_c = wb.create_sheet('Cd Table')
     ws_r = wb.create_sheet('Reference')
 
@@ -630,7 +630,7 @@ def import_missile_xlsx(path: str):
     from missile_models import missile_from_dict
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
-    ws = wb['Missile']
+    ws = wb['Booster'] if 'Booster' in wb.sheetnames else wb['Missile']
     r  = _R
 
     name = _rstr(ws, r['name'], 4, 'Unnamed')
