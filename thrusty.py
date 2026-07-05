@@ -7313,11 +7313,12 @@ class BoosterFlyoutApp(tk.Tk):
 
             booster  = get_booster(self._booster_var.get())
             guidance = self._guidance_var.get()
-            la           = float(self._loft_angle_var.get())
-            gt_start_str = self._gt_turn_start_var.get().strip()
-            gt_stop_str  = self._gt_turn_stop_var.get().strip()
-            gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
-            gt_stop_s    = float(gt_stop_str)  if gt_stop_str  else None
+            la           = self._field_float("Loft / burnout angle (°)",
+                                             self._loft_angle_var.get(), required=True)
+            gt_start_s   = self._field_float("Turn start (s)",
+                                             self._gt_turn_start_var.get(), default=5.0)
+            gt_stop_s    = self._field_float("Turn stop (s)",
+                                             self._gt_turn_stop_var.get())
             try:
                 booster.launch_elevation_deg = float(self._launch_el_var.get())
             except (ValueError, AttributeError):
@@ -7350,6 +7351,26 @@ class BoosterFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Run buttons
     # ------------------------------------------------------------------
+    def _field_float(self, label, s, default=None, required=False):
+        """Parse one sidebar numeric field, naming the field in any error.
+
+        Blank fields return `default` (or raise if required).  A bad value
+        produces "Turn start (s): '1-3' is not a number — enter a single
+        number, not a range" instead of the bare float() message, so the
+        user can tell WHICH field to fix."""
+        s = (s or "").strip()
+        if not s:
+            if required:
+                raise ValueError(f"{label} is required.")
+            return default
+        try:
+            return float(s)
+        except ValueError:
+            import re as _re
+            hint = (" — enter a single number, not a range"
+                    if _re.search(r'\d\s*[-–—:]\s*\d', s) else "")
+            raise ValueError(f"{label}: '{s}' is not a number{hint}") from None
+
     def _get_inputs(self):
         booster  = get_booster(self._booster_var.get())
 
@@ -7379,19 +7400,18 @@ class BoosterFlyoutApp(tk.Tk):
                 + _user_ro.mass_kg
 
         guidance = self._guidance_var.get()
-        lat      = float(self._launch_lat.get())
-        lon      = float(self._launch_lon.get())
-        az       = float(self._azimuth_var.get())
-        cutoff_str = self._cutoff_var.get().strip()
-        cutoff   = float(cutoff_str) if cutoff_str else None
-        la           = float(self._loft_angle_var.get())
-        gt_start_str = self._gt_turn_start_var.get().strip()
-        gt_stop_str  = self._gt_turn_stop_var.get().strip()
-        gt_start_s   = float(gt_start_str) if gt_start_str else 5.0
-        gt_stop_s    = float(gt_stop_str)  if gt_stop_str  else None
-        orb_alt_str  = self._orbit_alt_var.get().strip()
-        target_orbit_km = float(orb_alt_str) if (guidance == "orbital_insertion"
-                                                   and orb_alt_str) else None
+        lat      = self._field_float("Launch latitude (°)",  self._launch_lat.get(),  required=True)
+        lon      = self._field_float("Launch longitude (°)", self._launch_lon.get(),  required=True)
+        az       = self._field_float("Azimuth (°)",          self._azimuth_var.get(), required=True)
+        cutoff   = self._field_float("Engine cutoff (s)",    self._cutoff_var.get())
+        la       = self._field_float("Loft / burnout angle (°)",
+                                     self._loft_angle_var.get(), required=True)
+        gt_start_s = self._field_float("Turn start (s)", self._gt_turn_start_var.get(),
+                                       default=5.0)
+        gt_stop_s  = self._field_float("Turn stop (s)",  self._gt_turn_stop_var.get())
+        target_orbit_km = (self._field_float("Target orbit altitude (km)",
+                                             self._orbit_alt_var.get())
+                           if guidance == "orbital_insertion" else None)
 
         # Advanced per-stage pitch: deep-copy the booster and stamp each
         # stage object with the values from the inline rows.
