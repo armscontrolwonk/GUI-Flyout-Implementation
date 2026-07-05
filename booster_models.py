@@ -112,6 +112,13 @@ class BoosterParams:
     stage_turn_stop_s:       Optional[float] = None
     stage_burnout_angle_deg: Optional[float] = None
 
+    # Commanded engine cutoff for this stage: burn DURATION (s from this stage's
+    # ignition) after which thrust is cut.  None = burn to completion.  Liquid
+    # engines only — ignored on solid motors (they cannot be shut down).  The
+    # stage still occupies its full burn_time_s slot; the tail after cutoff is a
+    # dead coast with the unburned propellant riding as mass until jettison.
+    stage_cutoff_s:          Optional[float] = None
+
     # Per-stage yaw (dogleg) overrides.  Same priority as pitch overrides:
     # if stage_yaw_final_az_deg is not None the stage performs a linear
     # azimuth schedule from current az to final_az over [yaw_start, yaw_stop].
@@ -2672,6 +2679,8 @@ def booster_to_dict(p: BoosterParams) -> dict:
         d['stage_turn_stop_s'] = p.stage_turn_stop_s
     if p.stage_burnout_angle_deg is not None:
         d['stage_burnout_angle_deg'] = p.stage_burnout_angle_deg
+    if p.stage_cutoff_s is not None:
+        d['stage_cutoff_s'] = p.stage_cutoff_s
     if p.stage_yaw_start_s is not None:
         d['stage_yaw_start_s'] = p.stage_yaw_start_s
     if p.stage_yaw_stop_s is not None:
@@ -2767,6 +2776,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
                            if d.get('stage_turn_stop_s') is not None else None),
         stage_burnout_angle_deg=(float(d['stage_burnout_angle_deg'])
                                  if d.get('stage_burnout_angle_deg') is not None else None),
+        stage_cutoff_s=(float(d['stage_cutoff_s'])
+                        if d.get('stage_cutoff_s') is not None else None),
         stage_yaw_start_s=(float(d['stage_yaw_start_s'])
                            if d.get('stage_yaw_start_s') is not None else None),
         stage_yaw_stop_s=(float(d['stage_yaw_stop_s'])
@@ -2837,6 +2848,21 @@ def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
     if A_eff <= 0:
         return 0.0
     return mass_kg / (cd * A_eff)
+
+
+def _eff_burn(s: BoosterParams) -> float:
+    """Effective powered-burn duration for stage `s` (s).
+
+    Equals burn_time_s unless a commanded engine cutoff (stage_cutoff_s) shuts
+    the stage down early.  Cutoff applies to liquid engines only — a solid
+    motor burns to completion regardless.  The value is clamped to
+    [0, burn_time_s]; the stage's slot in the timeline is unchanged (only the
+    powered fraction shrinks), so this never moves staging or guidance timing.
+    """
+    c = s.stage_cutoff_s
+    if c is None or s.solid_motor or s.burn_time_s <= 0:
+        return s.burn_time_s
+    return max(0.0, min(float(c), s.burn_time_s))
 
 
 def total_burn_time(params: BoosterParams) -> float:
@@ -2927,7 +2953,9 @@ def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> fl
     while s is not None:
         if t_rem < s.burn_time_s:
             mdot = s.mass_propellant / s.burn_time_s
-            mass = s.mass_initial - mdot * t_rem
+            # Propellant is consumed only up to the commanded cutoff; after that
+            # the unburned propellant rides on as dead mass until jettison.
+            mass = s.mass_initial - mdot * min(t_rem, _eff_burn(s))
             if (params.shroud_mass_kg > 0
                     and alt_m / 1000.0 >= params.shroud_jettison_alt_km):
                 mass -= params.shroud_mass_kg
@@ -3146,6 +3174,8 @@ def _stage_chain_thrust(params: BoosterParams, t: float, altitude_m: float,
     t_rem, s = t, params
     while s is not None:
         if t_rem <= s.burn_time_s:
+            if t_rem > _eff_burn(s):
+                return np.zeros(3)   # engine cut early — dead-coasting the tail
             _, P_amb, _, _ = atmosphere(altitude_m)
             if s.grain_type or s.thrust_profile:
                 T_peak = s.thrust_peak_N if s.thrust_peak_N > 0.0 else s.thrust_N
