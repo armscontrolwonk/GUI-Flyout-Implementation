@@ -111,7 +111,9 @@ tabbed notebook**.
   azimuth is set manually (°, clockwise from North).
 - **Guidance** — three powered-flight modes (see below), with loft angle, pitch
   rate, turn start/stop, and optional advanced per-stage pitch and yaw programs.
-- **Engine Cutoff** — optional early cutoff time (s); blank = full burn.
+- Engine cutoff moved to **Analysis ▸ Engine Cutoff (liquid)…** — optional early
+  cutoff time (s), liquid engines only; blank = full burn. Aim-at-Target writes
+  its computed cutoff to the same setting.
 - **Target / Range** — optional target lat/lon or slant range for the
   *Aim at Target* function.
 - **Reentry Query Altitude** — altitude at which reentry speed and angle are

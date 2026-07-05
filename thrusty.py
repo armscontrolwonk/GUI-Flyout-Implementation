@@ -4433,6 +4433,7 @@ class BoosterFlyoutApp(tk.Tk):
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
+        analysis_menu.add_command(label="Engine Cutoff (liquid)…",  command=self._set_engine_cutoff)
         analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
 
         # Reference Data — swap the empirical source behind a model term.
@@ -5002,15 +5003,11 @@ class BoosterFlyoutApp(tk.Tk):
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
         # ── Engine cutoff ─────────────────────────────────────────────
-        cf = ttk.LabelFrame(parent, text="Engine Cutoff")
-        cf.pack(fill=tk.X, padx=6, pady=3)
-        cf_inner = ttk.Frame(cf)
-        cf_inner.pack(padx=6, pady=4)
-        ttk.Label(cf_inner, text="Cutoff time:").pack(side=tk.LEFT)
+        # Liquid-engines-only and rarely used, so it lives under
+        # Analysis ▸ Engine Cutoff… instead of taking left-panel space.
+        # The variable stays: Aim-at-Target writes its computed cutoff here,
+        # and scenarios/profiles save and restore it.
         self._cutoff_var = tk.StringVar(value="")
-        ttk.Entry(cf_inner, textvariable=self._cutoff_var, width=8).pack(
-            side=tk.LEFT, padx=4)
-        ttk.Label(cf_inner, text="s  (blank = full burn)").pack(side=tk.LEFT)
 
         # ── Re-entry query altitude ────────────────────────────────────
         rq = ttk.LabelFrame(parent, text="Re-entry Query")
@@ -7351,6 +7348,33 @@ class BoosterFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Run buttons
     # ------------------------------------------------------------------
+    def _set_engine_cutoff(self):
+        """Analysis ▸ Engine Cutoff… — view/set the early-cutoff time.
+
+        Liquid engines only: solid motors burn to completion regardless
+        (the integrator enforces this).  Blank = full burn.  Aim-at-Target
+        writes its computed cutoff into the same setting."""
+        from tkinter import simpledialog
+        cur = self._cutoff_var.get().strip()
+        s = simpledialog.askstring(
+            "Engine Cutoff (liquid)",
+            "Command engine cutoff at time t after launch (s).\n"
+            "Liquid engines only — solid motors burn to completion.\n"
+            "Leave blank for full burn.",
+            initialvalue=cur, parent=self)
+        if s is None:
+            return                              # cancelled
+        s = s.strip()
+        if s:
+            try:
+                self._field_float("Engine cutoff (s)", s, required=True)
+            except ValueError as e:
+                messagebox.showerror("Engine Cutoff", str(e), parent=self)
+                return
+        self._cutoff_var.set(s)
+        self._status_var.set(f"Engine cutoff: {s} s" if s
+                             else "Engine cutoff cleared — full burn.")
+
     def _field_float(self, label, s, default=None, required=False):
         """Parse one sidebar numeric field, naming the field in any error.
 
