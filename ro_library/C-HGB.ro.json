@@ -8,7 +8,7 @@
   "nose_radius_m": 0.02,
   "glider_enabled": true,
   "glider_LD": 2.0,
-  "glider_guidance": "damped_glide",
+  "glider_guidance": "equilibrium_glide",
   "glider_aero_model": "polar",
   "glider_damping_zeta": 0.7,
   "glider_pullup_g_max": 10,
@@ -18,5 +18,6 @@
   "tps_material": "uhtc",
   "nose_tps_material": "uhtc",
   "body_tps_material": "carbon_phenolic",
-  "material_notes": "Nose = UHTC (per user direction). Body = carbon_phenolic is an ESTIMATE - no public C-HGB acreage-material source; a conical glide body of the SWERVE/AHW (Sandia) lineage with an ablative aeroshell is the screening assumption."
+  "material_notes": "Nose = UHTC (per user direction). Body = carbon_phenolic is an ESTIMATE - no public C-HGB acreage-material source; a conical glide body of the SWERVE/AHW (Sandia) lineage with an ablative aeroshell is the screening assumption.",
+  "notes": "Reentry mode: this object was characterised flying damped_glide; the shipped default is the neutral equilibrium_glide. Select the intended reentry mode in the Reentry-mode dropdown (the glide law is a flight-plan choice, not object hardware)."
 }
