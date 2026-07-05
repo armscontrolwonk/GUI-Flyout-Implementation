@@ -65,9 +65,9 @@ sensible default, override is an expert knob · **Derived** = computed from othe
 
 | Input | Field / source | Required? | Role | Status |
 |---|---|---|---|---|
-| Nose radius | `RVParams.nose_radius_m` (default 0.0) → else `effective_nose_radius_m()` from geometry | **Derived** — needs geometry *or* explicit value | sets stagnation flux (`q̇ ∝ 1/√R_n`) | ● |
-| TPS material | `RVParams.tps_material` (default `""`) → `TPS_MATERIALS` key | **Req for a verdict** — empty ⇒ physical numbers only | sets the temperature/load limits | ● |
-| Emissivity | `RVParams.emissivity` (**default 0.85**, Anderson §18.8 / Hirschel; typical TPS range **0.75–0.90**, NASA RP-1289 RCC) | **Opt(default)** | sets radiative-equilibrium wall temp | ● |
+| Nose radius | `ROParams.nose_radius_m` (default 0.0) → else `effective_nose_radius_m()` from geometry | **Derived** — needs geometry *or* explicit value | sets stagnation flux (`q̇ ∝ 1/√R_n`) | ● |
+| TPS material | `ROParams.tps_material` (default `""`) → `TPS_MATERIALS` key | **Req for a verdict** — empty ⇒ physical numbers only | sets the temperature/load limits | ● |
+| Emissivity | `ROParams.emissivity` (**default 0.85**, Anderson §18.8 / Hirschel; typical TPS range **0.75–0.90**, NASA RP-1289 RCC) | **Opt(default)** | sets radiative-equilibrium wall temp | ● |
 | Mass / β | `mass_kg`, `beta_kg_m2` (no default) | **Req** | heat-sink criterion; drives trajectory | ● |
 | Frontal area | frontal area | **Derived** (from geometry/β) | heat-sink criterion | ● |
 | Glider params | `glider_enabled` (default `False`), `glider_LD`, `glider_guidance` (default `equilibrium_glide`), pull-up g, terminal dive | **Opt(default)** — off ⇒ ballistic | selects ballistic vs glide trajectory (→ load) | ● |

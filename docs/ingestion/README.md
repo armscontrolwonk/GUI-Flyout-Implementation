@@ -22,7 +22,7 @@ missile models. **Design only — none of this is wired into the app yet.**
 | File | What it covers |
 |------|----------------|
 | `missile.schema.json` | Canonical model format (JSON Schema 2020-12). Required vs optional fields, `stages` array, payload (`terminal_mode`: reentry/orbital/suborbital) / rv / booster / shroud blocks, `source`, `provenance`, `completeness`. |
-| `rv.schema.json` | Independently-loadable reentry-vehicle / glide-body format (`rv_library/*.rv.json`). `rv_kind` discriminator (ballistic / marv_body / glider / decoy) drives required-vs-inherited fields. Satellites are NOT here — they're an orbital payload on the missile. |
+| `rv.schema.json` | Independently-loadable reentry-vehicle / glide-body format (`ro_library/*.ro.json`). `rv_kind` discriminator (ballistic / marv_body / glider / decoy) drives required-vs-inherited fields. Satellites are NOT here — they're an orbital payload on the missile. |
 | `estimators.md` | The resolution ladder data: derivations, Isp-by-propellant, class defaults, aero/β fallbacks, RV pass (§6b), orbital-payload handling (§6c), sanity checks, confidence scoring, worked example. This is how "fix during ingest" actually works. |
 | `spreadsheet-and-sheets.md` | Spreadsheet redesign (keep the detailed workbook, add a long-format catalog sheet) + three-level Google Sheets integration plan. |
 
@@ -51,7 +51,7 @@ All design decisions are settled; the docs above reflect them.
 5. **Google Sheets** → build Level 2 first (published-CSV "Refresh from Sheet").
 6. **Orbital lint** → single global constant `STABLE_ORBIT_PERIGEE_KM` (200 km),
    QA-only, no per-model override.
-7. **Isp/mass-fraction table** → `missile_xlsx.py` Reference sheet is canonical;
+7. **Isp/mass-fraction table** → `booster_xlsx.py` Reference sheet is canonical;
    `estimators.md` copies from it.
 8. **Schema version** → `1.0`.
 
@@ -59,7 +59,7 @@ All design decisions are settled; the docs above reflect them.
 1. Lock the schema (this file set) — done.
 2. Build the resolver + reporter module (pure functions; golden-test against the
    existing built-ins: Scud, AUR, Minotaur).
-3. Wire the front-ends: extend `missile_xlsx.py`, add `import_catalog_csv()`
+3. Wire the front-ends: extend `booster_xlsx.py`, add `import_catalog_csv()`
    (Level 2 published-CSV pull).
 4. Seed the first batch in-repo `models/` (Forden's validated set is the natural
    start), then split to `thrusty-models`.

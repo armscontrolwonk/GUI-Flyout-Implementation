@@ -165,7 +165,7 @@ rationale, and the when‑to‑use comparison.
 ## Validation
 
 `damped_glide_smoke_test.py` flies the repo's **C‑HGB** glide body
-(`rv_library/C-HGB.rv.json`, SWERVe/AHW‑descendant; Gulan, Georgia Tech 2024) on
+(`ro_library/C-HGB.ro.json`, SWERVe/AHW‑descendant; Gulan, Georgia Tech 2024) on
 a **lofted** sub‑circular boost, and the **AUR** on a **depressed (shallow)
 insertion**; it pins the behaviour of both dynamic modes (7/7 checks):
 

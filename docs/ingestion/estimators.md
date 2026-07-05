@@ -53,7 +53,7 @@ derived field inherits `min(input confidences)` when any input was estimated).
 Keyed off `stage.propellant_type`. Midpoint used as the fill value; band recorded
 in the provenance note so reviewers see the uncertainty.
 
-> **Canonical source.** The `Reference` sheet in `missile_xlsx.py` is the single
+> **Canonical source.** The `Reference` sheet in `booster_xlsx.py` is the single
 > source of truth for these Isp/mass-fraction bands. The table below is a copy
 > for readability and MUST be regenerated from that sheet rather than edited
 > independently, so the two cannot drift.
@@ -132,7 +132,7 @@ and emit warnings/errors into the report.
 | T/W at ignition | warn | stage 1 (+boosters) liftoff T/W < 1.1 or > 4 |
 | upper-stage T/W | info | upper-stage T/W < 0.5 (often fine in vacuum, but flag) |
 | ΔV plausibility | info | total Tsiolkovsky ΔV wildly off for the class (ICBM ≈ 6–7.5 km/s) |
-| payload balance | warn | `bus_mass + num_rvs·rv_mass` differs from `payload_kg` by > 10% |
+| payload balance | warn | `bus_mass + num_ros·rv_mass` differs from `payload_kg` by > 10% |
 | stage ordering | warn | upper stage heavier than the stage below it |
 
 Errors block catalog inclusion; warnings lower `completeness` and surface in the
@@ -142,7 +142,7 @@ report with a VERIFY flag; info is logged only.
 
 ## 6b. Reentry vehicles (separate resolver pass)
 
-RVs are resolved independently (they're shared via `rv_library`). Required: `name`,
+RVs are resolved independently (they're shared via `ro_library`). Required: `name`,
 `rv_kind`, `beta_kg_m2`. The `rv_kind` discriminator controls which fields are
 required vs. inherited — getting this right is what prevents false "missing data"
 flags.
@@ -150,7 +150,7 @@ flags.
 | `rv_kind` | also required | inherited (DO NOT flag/estimate) |
 |-----------|---------------|----------------------------------|
 | `ballistic` | `mass_kg` | — |
-| `marv_body` | maneuver props | `mass_kg`, `diameter_m`, `length_m` (from missile last-stage burnout via `effective_rv()`) |
+| `marv_body` | maneuver props | `mass_kg`, `diameter_m`, `length_m` (from missile last-stage burnout via `effective_ro()`) |
 | `glider` | `glider_LD`, `glider_guidance` (+`glider_beta_entry_kg_m2` if Acton) | — |
 | `decoy` | `mass_kg` | — |
 
@@ -169,7 +169,7 @@ Heating defaults (`nose_radius_m`=0.05, `emissivity`=0.85) and `glider_*` defaul
 ## 6c. Satellites / orbital payloads (NOT RVs)
 
 A payload with `terminal_mode: orbital` does not reenter and has **no RV**.
-`effective_rv()` returns `None` by design. The resolver behaves asymmetrically:
+`effective_ro()` returns `None` by design. The resolver behaves asymmetrically:
 
 - **Skip the entire RV pass.** Absence of `beta_kg_m2`, `rv`, heating fields is
   *correct, not a gap* — never flag it, never estimate it, never let it lower

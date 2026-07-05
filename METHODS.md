@@ -72,6 +72,20 @@ The single ODE integrated by `integrate_trajectory` (`trajectory.py`) is
 
 with each term derived in the sections below.
 
+**Operating concept — three phases.** A flight separates into three regimes,
+each governed by a distinct set of inputs. (1) **Boost (up):** powered ascent,
+set by the booster's *shape* (drag — Section 8), its *motor* (thrust / `I_sp` /
+burn — Section 7), and its *trajectory* (the guidance flight plan — Section 9).
+(2) **Free-fall (coast):** the exo-atmospheric ballistic arc after burnout —
+pure gravitational dynamics fixed by the burnout state (speed, flight-path angle,
+position), with drag zeroed above 120 km — which either closes into an orbit
+(Section 11) or falls back toward the surface. (3) **Reentry (down):**
+atmospheric descent of the reentry object, governed by its ballistic coefficient
+β (and, when maneuvering, its L/D — Section 8.10) and the aerothermal load. The
+same drag term is evaluated *shape-resolved* (`C_d·A`) during boost and *lumped*
+(`β = m/(C_d·A)`) during reentry (Section 8.8) — matching what is known about the
+object in each phase.
+
 The 3-DOF formulation captures translational dynamics only — attitude is not a
 state variable but is *prescribed* by the guidance law (Section 9). This is
 the standard approximation for preliminary missile and launch-vehicle analysis,
@@ -107,9 +121,9 @@ flagging up front:
   users replicate documented pitch programs without disturbing the
   simple case. The `glider_guidance` dropdown (Section 12) exposes
   four glide laws of increasing physical fidelity. The RV library
-  (`rv_library/*.json`) provides a clean extension point for adding
+  (`ro_library/*.json`) provides a clean extension point for adding
   user-defined reentry vehicles, and the JSON missile-save format
-  (`missile_to_dict` / `missile_from_dict`) gives users a way to
+  (`booster_to_dict` / `booster_from_dict`) gives users a way to
   share, version, and refine their own missile definitions. The
   pattern is consistent: keep the out-of-box case simple and
   reproducible, but never bake in an assumption that prevents a more
@@ -297,7 +311,7 @@ import time from a single `pymsis.calculate()` call
 `pymsis` is not installed and as an explicit user choice via
 `configure_atmosphere(model='std1976')`. The `atmosphere(altitude_m)`
 function signature is identical in both modes, so no caller in
-`trajectory.py`, `missile_models.py`, or `thrusty.py` needs to know
+`trajectory.py`, `booster_models.py`, or `thrusty.py` needs to know
 which model is active.
 
 The lower atmosphere (0–86 km) is well-mixed and well-measured; US Std
@@ -546,8 +560,8 @@ output (Section 14).
 
 ## 6. Mass and staging
 
-A missile is represented by a linked-chain `MissileParams` dataclass
-(`missile_models.py`). Each stage carries its own propulsive and
+A missile is represented by a linked-chain `BoosterParams` dataclass
+(`booster_models.py`). Each stage carries its own propulsive and
 geometric parameters; the `.stage2` attribute points to the next stage.
 Top-level fields (payload, shroud, RV) apply to the whole vehicle.
 
@@ -562,7 +576,7 @@ m(τ) = m₀ − (m_p / t_b) · τ              0 ≤ τ ≤ t_b
 
 where `τ` is local stage burn time. The burnout mass is `m_f = m₀ − m_p`.
 
-The full-vehicle mass `missile_mass(params, t)` (`missile_models.py`)
+The full-vehicle mass `booster_mass(params, t)` (`booster_models.py`)
 walks the stage chain to determine which stage is active and adds the mass
 of all subsequent stages plus payload. After a stage burns out the spent
 casing is jettisoned and its dry mass is removed from the chain.
@@ -587,7 +601,7 @@ re-entry vehicle (Section 8.2).
 
 ### 6.4 Reentry vehicle separation
 
-If `rv_separates = True` on the top-level node, the RV separates from the
+If `ro_separates = True` on the top-level node, the RV separates from the
 final stage body at burnout. Post-burnout drag is then computed from the
 RV's geometry and ballistic coefficient rather than from the spent final
 stage. This matters for ICBMs and SLVs where the spent upper stage has
@@ -600,7 +614,7 @@ with stage 1 from t = 0, then separate at a configurable burn time.
 These appear in operational launch vehicles (e.g. Delta-IV Heavy,
 Ariane 5, H-IIA, ISRO PSLV) and in some ballistic-missile derivatives.
 
-Booster parameters live on the *top-level* `MissileParams` node as 11
+Booster parameters live on the *top-level* `BoosterParams` node as 11
 fields (defaults zero, so existing missile definitions are unaffected):
 
 | Field | Meaning |
@@ -627,7 +641,7 @@ m(t) = m_core(t) + n_boosters · (booster_inert + booster_prop · (1 − t/t_boo
 At separation (`t > booster_burn_time_s`) the booster contribution to
 vehicle mass drops to zero — the casings (now with empty propellant
 tanks) detach from the vehicle (`_booster_mass_addend`,
-`missile_models.py`). The spent casings then follow tumbling-cylinder
+`booster_models.py`). The spent casings then follow tumbling-cylinder
 debris arcs separately (Section 14.3).
 
 **Thrust addition.** During the booster burn window `t ∈ [0, t_booster]`,
@@ -644,7 +658,7 @@ the boosters lift the stack off the pad.
 
 **Drag addition.** Booster aerodynamic drag is computed as a parallel
 cluster of cylinders independent of the core (`booster_drag_vector`,
-`missile_models.py`):
+`booster_models.py`):
 
 ```
 D_booster = n_boosters · C_D,booster · q · π · (d_booster / 2)²
@@ -802,7 +816,7 @@ T_vac = I_sp · g₀ · ṁ                     (definition of I_sp, rearranged)
 so any two of `T_vac`, `I_sp`, `t_b` determine the third given `m_p`.
 (This is not the Tsiolkovsky rocket equation — that is the integrated
 `Δv = I_sp · g₀ · ln(m₀ / m_f)` form used for stack-ΔV estimation in
-Section 10.1.) `missile_models.py:_thrust_from_isp` is used by the GUI's
+Section 10.1.) `booster_models.py:_thrust_from_isp` is used by the GUI's
 "Suggest" thrust estimator (Section 14 of the user guide) and by the
 built-in missile definitions that specify `I_sp` and burn time rather
 than thrust directly.
@@ -914,7 +928,7 @@ C_D,total = C_D,wave(shape, M, l/d)
           [+ aerospike correction]                  (if spike present)
 ```
 
-(`_cd_nose_shape`, `missile_models.py`). Each component has a
+(`_cd_nose_shape`, `booster_models.py`). Each component has a
 distinct, citable source: nose wave drag from
 [Chin (1961)](#16-references) and the [NACA TN 4201](#16-references)
 comparison report; friction from Chin's combination of Blasius
@@ -930,7 +944,7 @@ ballistic-coefficient parameterisation (Section 8.8).
 ### 8.1 Nose shapes supported
 
 The implemented nose-shape library is documented in
-[`missile_models.py`](missile_models.py) under `NOSE_SHAPES` and
+[`booster_models.py`](booster_models.py) under `NOSE_SHAPES` and
 `NOSE_SHAPE_LABELS`:
 
 | Key | Display name | Mathematical form | Wave-drag character |
@@ -955,7 +969,7 @@ standard as the NACA reports.
 
 For a sharp cone with semi-vertex angle σ in *degrees*, valid for
 attached flow (`M ≳ 1.2` for typical missile half-angles, `σ ≲ 50°`)
-(`_chin_pressure_coeff`, `missile_models.py`):
+(`_chin_pressure_coeff`, `booster_models.py`):
 
 ```
 Δp/q          = (0.083 + 0.096 / M²) · (σ° / 10)^1.69
@@ -968,7 +982,7 @@ The half-angle is derived from the user-specified fineness ratio
 
 The code applies a transonic linear ramp to avoid the formula's
 behaviour near the shock-attachment limit
-(`_cd_wave_cone`, `missile_models.py`):
+(`_cd_wave_cone`, `booster_models.py`):
 
 ```
 M ≤ 0.8:    C_D,wave,cone = 0
@@ -988,7 +1002,7 @@ role this simulator fills.
 
 For a tangent-ogive nose with fineness ratio `l/d`, Chin's adaptation of the
 Miles slender-body formula is implemented as
-(`_cd_wave_ogive`, `missile_models.py`):
+(`_cd_wave_ogive`, `booster_models.py`):
 
 ```
 σ              = arctan(1 / (2 · l/d))                  [radians; converted to ° for P]
@@ -1014,7 +1028,7 @@ For the Von Kármán (LD-Haack, C = 0), LV-Haack / Sears-Haack (C = 1/3),
 and parabola (K' = 1) shapes Chin provides no closed-form formula; the
 wave-drag coefficient is obtained from **NACA TN 4201**, which compares
 these shapes side-by-side at a reference fineness ratio
-`l/d_nose = 3` (`_cd_wave_table`, `missile_models.py`).
+`l/d_nose = 3` (`_cd_wave_table`, `booster_models.py`).
 
 For other fineness ratios the table is scaled by
 
@@ -1096,7 +1110,7 @@ shape.
 
 The skin-friction coefficient is computed as the Reynolds-number-weighted
 sum of laminar and turbulent contributions, modified by compressibility
-and a roughness allowance (`_cd_friction`, `missile_models.py`):
+and a roughness allowance (`_cd_friction`, `booster_models.py`):
 
 ```
 C_D,friction = (S_wet / S_ref) · C_f,mixed · C_compress(M) · 1.10
@@ -1151,7 +1165,7 @@ formula is fit to adiabatic-wall flat-plate data over 0 ≲ M ≲ 5.
 ```
 
 with `μ_ref = 1.716×10⁻⁵ Pa·s`, `T_ref = 273.15 K`, `S = 110.4 K`
-(`_mu_air`, `missile_models.py`). Sutherland's law provides
+(`_mu_air`, `booster_models.py`). Sutherland's law provides
 viscosity over the temperature range encountered in atmospheric flight
 to within 1 % accuracy. Combined with `ρ` and `T` from the atmosphere
 model (Section 4) and the missile's instantaneous speed and length,
@@ -1172,7 +1186,7 @@ The friction integral requires the wetted area `S_wet` of each body
 component, taken as the area-weighted sum of nose wetted area and
 cylindrical-body wetted area. The nose contribution is computed by
 numerical integration of the appropriate generator profile
-(`_s_wet_ratio`, `missile_models.py`, after [Crowell 1996](#16-references)):
+(`_s_wet_ratio`, `booster_models.py`, after [Crowell 1996](#16-references)):
 
 | Component | Treatment |
 |---|---|
@@ -1213,7 +1227,7 @@ C_D,base = −C_pb · (S_base / S_ref)
 ```
 
 with `C_pb` (the base pressure coefficient, negative — i.e. suction)
-from `_BASE_CPB` (`missile_models.py`):
+from `_BASE_CPB` (`booster_models.py`):
 
 | M | C_pb |
 |---|---:|
@@ -1250,7 +1264,7 @@ pressurises the region behind the nozzle and reduces the base suction;
 power-on base drag is therefore *lower* in magnitude than power-off.
 Thrusty does **not** make this distinction — `_cd_base(mach)` is called
 unconditionally in every boost-phase drag evaluation
-(`missile_models.py`), so powered flight sees the same `C_pb(M)` as
+(`booster_models.py`), so powered flight sees the same `C_pb(M)` as
 coast. The result is a small but consistent over-estimate of drag
 (under-estimate of range) during boost. Modelling the power-on
 correction properly would require nozzle exit conditions and plume CFD,
@@ -1270,7 +1284,7 @@ reducing the core's `C_D,base`. This interaction is not modelled.
 For finned vehicles (e.g. SCUD-B and other early ballistic missiles)
 two contributions are added:
 
-**Fin lift slope** (`_cl_alpha_fins`, `missile_models.py`) — the fin
+**Fin lift slope** (`_cl_alpha_fins`, `booster_models.py`) — the fin
 normal-force-curve slope from **Barrowman's 1967 thesis, Eq 3-12** (the
 canonical slender-finned-vehicle method; the thesis itself is in
 `data/`), referenced to the body base area `A_ref = π(d/2)²`:
@@ -1294,11 +1308,11 @@ small-angle-of-attack, linear, fin-stabilised slender-vehicle theory (valid to
 ~7° AoA, subsonic through supersonic). It is used for a **booster's static
 margin** (Section 8.9). It is deliberately **not** applied to a gliding RV: a
 glide vehicle is a high-AoA hypersonic *lifting body* whose L/D is a Newtonian
-property, supplied directly as `rv.glider_LD` and used by the glide trajectory
+property, supplied directly as `ro.glider_LD` and used by the glide trajectory
 (Section 12). Earlier code mis-applied a (buggy) fin lift slope to the glider
 L/D estimate; that has been removed.
 
-**Fin drag** (`_cd_fins`, `missile_models.py`) — flat-plate skin friction
+**Fin drag** (`_cd_fins`, `booster_models.py`) — flat-plate skin friction
 on the fin wetted area plus a thickness/wave term:
 
 ```
@@ -1332,7 +1346,7 @@ scales with (t/c)² in the wave-drag term, so it is sensitive to the fin
 thickness when that is estimated.)
 
 **Grid (lattice) fins** (`_cd_gridfins`, `_cl_alpha_gridfins`,
-`missile_models.py`) — a grid fin is a box-frame lattice of thin cells, not
+`booster_models.py`) — a grid fin is a box-frame lattice of thin cells, not
 a planar airfoil, so the flat-plate/Ackeret model above does not apply. The
 drag model is **calibrated to Washington & Miller, AIAA 93-0035** (the S1
 fine-mesh configuration: their Fig. 2 geometry and Fig. 14 drag data). The
@@ -1604,7 +1618,7 @@ they cost it ~200 km of range from ascent drag.
 An aerospike is a forward-projecting spike (sometimes terminated in a
 small aerodisk) that creates a slender bow shock to replace the strong
 detached shock of a blunt body, reducing wave drag at supersonic Mach
-(`_aerospike_effective_LD`, `missile_models.py`).
+(`_aerospike_effective_LD`, `booster_models.py`).
 
 The implementation replaces the actual nose's wave drag with the
 *minimum* of (actual nose drag) and (effective-body cone drag), where the
@@ -1641,12 +1655,12 @@ flight phase:
 |---|---|---|
 | Boost with shroud attached | Shroud envelope | `shroud_nose_shape`, `shroud_diameter_m`, `shroud_length_m` |
 | Boost after shroud jettison, RV stays with stage | Payload geometry | `nose_shape`, `diameter_m`, `length_m` from active stage |
-| Boost after shroud jettison, RV separates (`rv_separates = True`) | RV geometry | `rv_shape`, `rv_diameter_m`, `rv_length_m` |
-| Coast / re-entry with `rv_beta > 0` | β-based — no `S_ref` needed | n/a (see 8.8) |
-| Coast / re-entry with `rv_beta = 0` | Final stage Mach-table fallback | Final stage |
+| Boost after shroud jettison, RV separates (`ro_separates = True`) | RV geometry | `ro_shape`, `ro_diameter_m`, `ro_length_m` |
+| Coast / re-entry with `ro_beta > 0` | β-based — no `S_ref` needed | n/a (see 8.8) |
+| Coast / re-entry with `ro_beta = 0` | Final stage Mach-table fallback | Final stage |
 
 The shroud-jettison event (Section 6.3) handles the first transition. The
-`rv_separates` flag handles the second. The fall-through cases use
+`ro_separates` flag handles the second. The fall-through cases use
 sensible defaults; if a missile has neither a configured RV β nor a
 specified RV geometry the original Forden Mach-table model applies.
 
@@ -1791,7 +1805,7 @@ incl. transitions + fins) and the `glider_ld` L/D curve, with a mass-stack CG
 and aft fin station (both overridable). It is a preliminary gate, not a 6-DOF
 trim solution.
 
-**Wiring.** The GUI L/D estimator calls `whole_missile_LD` directly. In the
+**Wiring.** The GUI L/D estimator calls `whole_booster_LD` directly. In the
 trajectory, a no-separation body glider left at the sentinel `glider_LD = 0` has
 its value auto-derived once at integration setup (`derive_glider_LD`, at
 `GLIDE_MACH_REF = 5`); a separating RV, or any body with an explicit
@@ -2049,7 +2063,7 @@ evaluations.
 
 ### 10.4 Aim at target
 
-`aim_missile` (`trajectory.py`) finds the engine cutoff time that
+`aim_booster` (`trajectory.py`) finds the engine cutoff time that
 produces a specified range. With burnout angle held fixed, range is a
 monotonic function of cutoff time (more burn ↔ more range), so Brent's
 method on the scalar `cutoff_time` is well-behaved:
@@ -2204,7 +2218,7 @@ derivation.
 Glide-mode aero forces are *not* active throughout the flight; they
 activate only when a specific re-entry condition is met. The latch is the
 `_gl_above_pierce` flag and the `_glider_active` gate, both evaluated each
-step inside the EOM (`trajectory.py`); `effective_rv()` (`missile_models.py`)
+step inside the EOM (`trajectory.py`); `effective_ro()` (`booster_models.py`)
 separately selects *which* RV is the terminal vehicle (glider, separating
 warhead, or maneuvering body):
 
@@ -2623,7 +2637,7 @@ A bank-angle schedule (lat, lon, time tuples) can be set directly on the
 RV; alternatively, the GUI's "Aim at target" dialog computes the bank
 trajectory that delivers the glider to a specified terminal lat/lon.
 The dialog uses Brent's method on bank angle σ with the trajectory
-integrator as the inner cost function — analogous to the `aim_missile`
+integrator as the inner cost function — analogous to the `aim_booster`
 function for ballistic flight (Section 10.4).
 
 ### 12.5 Terminal dive (inverted)
@@ -2656,28 +2670,28 @@ atmosphere in a few seconds.
 ### 12.6 RV library
 
 The reentry-vehicle library is a directory of JSON files
-(`rv_library/*.rv.json`), each fully specifying one RV's mass, geometry,
+(`ro_library/*.ro.json`), each fully specifying one RV's mass, geometry,
 ballistic coefficient, L/D, drag polar, nose-tip radius, emissivity, and
 default guidance mode. The shipped library covers a spectrum of
 public-domain reference vehicles:
 
 | File | Class | L/D | β (kg/m²) |
 |---|---|---:|---:|
-| `C-HGB.rv.json` | Common-Hypersonic-Glide-Body | 2.0 | 15 000 |
-| `HGB.rv.json` | Generic hypersonic glider (HTV-2-class) | 1.8 | 15 000 |
-| `HGB-LD3.rv.json` | Hypothetical high-L/D glider | 3.0 | 10 000 |
-| `Generic-RV.rv.json` | Generic ballistic RV (no glide) | 0.0 | 10 000 |
-| `Mk21.rv.json` | Mk-21 RV (LGM-30 / LGM-118) | 0.0 | 75 000 |
+| `C-HGB.ro.json` | Common-Hypersonic-Glide-Body | 2.0 | 15 000 |
+| `HGB.ro.json` | Generic hypersonic glider (HTV-2-class) | 1.8 | 15 000 |
+| `HGB-LD3.ro.json` | Hypothetical high-L/D glider | 3.0 | 10 000 |
+| `Generic-RV.ro.json` | Generic ballistic RV (no glide) | 0.0 | 10 000 |
+| `Mk21.ro.json` | Mk-21 RV (LGM-30 / LGM-118) | 0.0 | 75 000 |
 
 A user can copy any of these as a starting template, edit the JSON
-fields, and drop the file into `rv_library/`; the GUI's RV dropdown
+fields, and drop the file into `ro_library/`; the GUI's RV dropdown
 re-scans the directory on startup. This is one of the extension hooks
 named in §1.1: the shipped vehicles are a starting set, not a closed
 inventory.
 
 The JSON file for an RV contains only the fields the author wanted to
-set; anything omitted inherits the `RVParams` default. The shipped
-`HGB.rv.json` is representative — twelve fields, no glider-polar
+set; anything omitted inherits the `ROParams` default. The shipped
+`HGB.ro.json` is representative — twelve fields, no glider-polar
 parameters and no Acton-mode β_S:
 
 ```json
@@ -2721,8 +2735,8 @@ defaults:
 | `glider_terminal_dive` | `false` | Enable inverted terminal dive |
 | `glider_terminal_alt_km` | 30.0 | Altitude trigger for terminal dive |
 
-The full schema lives in the module-level loader `rv_from_dict`
-(`missile_models.py`).
+The full schema lives in the module-level loader `ro_from_dict`
+(`booster_models.py`).
 
 **Acton mode and β_S.** The shipped JSON RVs leave `glider_beta_entry_kg_m2`
 at zero, since β_S (the high-α drag direct-re-entry ballistic coefficient)
@@ -2731,13 +2745,13 @@ RV with β_S = 0 falls back to Tracy mode (Section 12.3.2). For the
 HTV-2-class built-in missiles defined programmatically rather than via the
 RV library — `Forden_HTV2` and its variants — the code sets
 `glider_beta_entry_kg_m2 = 7.0` based on Acton 2015 Table 3
-(`missile_models.py, 1635`). A user wanting to run Acton mode on a
+(`booster_models.py, 1635`). A user wanting to run Acton mode on a
 custom RV will need to research and set β_S themselves; this is by design,
 since silently fabricating β_S for arbitrary vehicles would be misleading.
 
 The values shipped in the library are starting points calibrated against
-public literature (e.g. `C-HGB.rv.json`'s L/D = 2.0 follows the open-source
-DoD common-glide-body briefings, and `HGB.rv.json`'s L/D = 1.8 / β =
+public literature (e.g. `C-HGB.ro.json`'s L/D = 2.0 follows the open-source
+DoD common-glide-body briefings, and `HGB.ro.json`'s L/D = 1.8 / β =
 15 000 kg/m² approximates the HTV-2 class without claiming to be HTV-2);
 users should re-verify them against the specific scenario being modelled
 rather than treating them as endorsed estimates.
@@ -2791,11 +2805,11 @@ Three implementation conventions:
    `trajectory.py`.
 
 2. **Per-RV nose-tip radius.** `R_N` is the active RV's effective
-   stagnation radius (`RVParams.effective_nose_radius_m`, used in
+   stagnation radius (`ROParams.effective_nose_radius_m`, used in
    `trajectory.py`), making the stagnation-point formula geometry-aware.
    An explicit `nose_radius_m` is authoritative; when it is 0/absent the
    value is a screening default derived from the nose shape and base
-   diameter (`nose_tip_radius`, `missile_models.py`): `R_N ≈ 0.10·R_body`
+   diameter (`nose_tip_radius`, `booster_models.py`): `R_N ≈ 0.10·R_body`
    for a sharp cone, scaled up for blunter profiles (von Kármán, LV-Haack),
    clamped to [5 mm, R_body]. This is a transparent bluntness heuristic,
    not a geometric tip-curvature — the idealised profiles are all
@@ -2830,7 +2844,7 @@ all incoming convective flux is balanced by surface re-radiation:
 
 with `σ = 5.670374419×10⁻⁸ W/(m²·K⁴)` (CODATA 2019, Stefan-Boltzmann
 constant) and `ε` from the RV's `emissivity` field (default 0.85; set
-at `RVParams`, `missile_models.py`). The default is consistent with
+at `ROParams`, `booster_models.py`). The default is consistent with
 [Anderson 2006](#16-references) §18.8 (HERMES emissivity example) and
 the upper end of the operational range for reinforced carbon-carbon
 (RCC) materials reported by [Williams & Curry 1992](#16-references) in
@@ -2979,7 +2993,7 @@ velocity" or "30 km terminal velocity" claims.
 
 After staging or shroud jettison, each spent body continues on a
 ballistic arc until impact, computed with a tumbling-cylinder ballistic
-coefficient (`tumbling_cylinder_beta`, `missile_models.py`). This
+coefficient (`tumbling_cylinder_beta`, `booster_models.py`). This
 gives a more realistic descent than treating the spent body as a point
 mass:
 
@@ -3026,19 +3040,19 @@ labelled with the event string from Section 14.2.
 
 ### 14.5 Excel missile import/export
 
-`missile_xlsx.py` provides a 2-way bridge between the in-memory
-`MissileParams` tree and an Excel workbook. Each stage gets its own
+`booster_xlsx.py` provides a 2-way bridge between the in-memory
+`BoosterParams` tree and an Excel workbook. Each stage gets its own
 worksheet with parameters labelled in the first column and values in
 the second; the top sheet holds vehicle-level parameters (name, base
 diameter, total stages, glider settings, RV selection). The
-`export_missile_xlsx(path, params)` and `import_missile_xlsx(path)`
+`export_booster_xlsx(path, params)` and `import_booster_xlsx(path)`
 functions round-trip cleanly — a parameter set exported to XLSX and
-re-imported produces an identical `MissileParams` object.
+re-imported produces an identical `BoosterParams` object.
 
 This is the *recommended* mechanism for sharing missile definitions with
 collaborators who don't run Python: an analyst can edit cells in Excel
 and re-import without touching the codebase. The JSON save format
-(`missile_to_dict` / `missile_from_dict`) is the lower-level alternative,
+(`booster_to_dict` / `booster_from_dict`) is the lower-level alternative,
 preferred for version control because text diffs are readable.
 
 ### 14.6 Auxiliary GUI dialogs
@@ -3072,19 +3086,19 @@ published trajectory parameters from the open arms-control literature
 and confirming that the simulator's output matches the published flight
 profiles within the modelling fidelity of a 3-DOF point-mass code.
 
-The twelve builder functions in `missile_models.py` represent the
+The twelve builder functions in `booster_models.py` represent the
 qualitative validation set. Each is documented in code comments with
 its source citation, parameter table, and any reproduction-specific
-notes. Only two are registered in the runtime `MISSILE_DB` and exposed
+notes. Only two are registered in the runtime `BOOSTER_DB` and exposed
 in the GUI's "Missile" dropdown at startup; the others are available
-as builder functions and can be added to `custom_missiles.json` for
+as builder functions and can be added to `custom_boosters.json` for
 runtime registration by users who want them visible.
 
 ### 15.1 Forden Table 1 — the four reference vehicles
 
 The four missiles from [Forden 2007](#16-references) Table 1 are
 implemented as builder functions `_scud_b`, `_al_hussein`, `_nodong`,
-`_taepodong_i` (`missile_models.py–1071`). Each carries the exact
+`_taepodong_i` (`booster_models.py–1071`). Each carries the exact
 mass, Isp, burn time, diameter, and payload values from Forden Table 1
 in its source comment:
 
@@ -3138,8 +3152,8 @@ not original work by Thrusty's authors.
 
 ### 15.3 AUR — Lewis original
 
-The `_aur` builder (`missile_models.py`) and its variant
-`_aur_hgb` (`missile_models.py`) are an original Thrusty
+The `_aur` builder (`booster_models.py`) and its variant
+`_aur_hgb` (`booster_models.py`) are an original Thrusty
 contribution by the author of this document. AUR is a hypothetical
 two-stage solid-propellant ballistic missile assembled from
 open-source body-dimension and propulsion-class data; it is *not* a
@@ -3148,7 +3162,7 @@ HGB variant (`_aur_hgb`) carries a hypersonic glide body in place of a
 conventional warhead and uses the constant-L/D guidance modes of
 Section 12.
 
-The AUR/HGB combination is registered in the runtime `MISSILE_DB` as
+The AUR/HGB combination is registered in the runtime `BOOSTER_DB` as
 `"AUR+HGB"`, alongside the Minotaur-IV + HTV-2 reproduction. These
 two are the GUI's default "Missile" dropdown entries.
 
