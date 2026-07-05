@@ -75,14 +75,11 @@ class BoosterParams:
     # Stored on the top-level stage only so _prefill can round-trip correctly.
     payload_kg: float = 0.0
 
-    # DEPRECATED — superseded by params.ro (ROParams).  Kept only so old JSON
-    # files without an "ro" key can still be loaded by effective_ro().
-    # New code must NOT set these directly; use params.ro instead.
-    ro_beta_kg_m2: float = 0.0   # → ro.beta_kg_m2
-    ro_mass_kg:    float = 0.0   # → ro.mass_kg
-
-    # Payload decomposition: bus (post-boost vehicle) + N reentry vehicles.
-    # bus_mass_kg + num_ros * ro_mass_kg should equal payload_kg.
+    # Payload decomposition (throw-weight): bus (post-boost vehicle) + N reentry
+    # objects.  bus_mass_kg + num_ros * ro_mass_kg should equal payload_kg.
+    # These are booster-level payload bookkeeping — NOT reentry-object hardware
+    # (beta, L/D, TPS, glide law all live on params.ro).
+    ro_mass_kg:    float = 0.0   # per-object mass, for the throw-weight breakdown
     bus_mass_kg:   float = 0.0
     num_ros:       int   = 1
 
@@ -195,19 +192,10 @@ class BoosterParams:
     # shroud is fitted).  Falls back to the stage body diameter_m when 0.
     payload_diameter_m:     float = 0.0
 
-    # DEPRECATED — superseded by params.ro (ROParams).  All of the fields
-    # below are kept only to load old booster JSON files.  New code reads
-    # and writes only params.ro; effective_ro() falls back to these when
-    # params.ro is None.
-    glider_enabled:         bool  = False   # → ro.glider_enabled
-    glider_LD:              float = 0.0     # → ro.glider_LD
-    glider_pullup_g_max:    float = 10.0    # → ro.glider_pullup_g_max
-    glider_terminal_dive:   bool  = False   # → ro.glider_terminal_dive
-    glider_terminal_alt_km: float = 30.0    # → ro.glider_terminal_alt_km
-    glider_guidance:        str   = "equilibrium_glide"  # → ro.glider_guidance
-    ro_shape:               str   = ""      # → ro.shape
-    ro_diameter_m:          float = 0.0     # → ro.diameter_m
-    ro_length_m:            float = 0.0     # → ro.length_m
+    # Reentry-object hardware (beta, mass, geometry, L/D, glide law, TPS) lives
+    # ONLY on params.ro (ROParams) — the booster no longer carries any reentry
+    # fields.  Old JSON that stored them inline is migrated to a synthesised
+    # params.ro at load time (see booster_from_dict).
 
     # Post-boost vehicle (PBV) geometry — mass is already carried in bus_mass_kg.
     pbv_diameter_m: float = 0.0
@@ -564,14 +552,14 @@ def ro_from_dict(d: dict) -> ROParams:
 
 
 def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
-    """Return the active ROParams (the "terminal vehicle").
+    """Return the active reentry object (ROParams), or None if none is set.
 
-    Priority: explicit params.ro → synthesise from deprecated inline fields.
-    Returns None when no RV configuration is present.
+    The reentry object is params.ro; the booster carries no reentry hardware.
 
-    When params.ro has separation_mode == "body" the terminal vehicle IS the
-    booster body itself (KN-23 / Iskander, Pershing II MaRV class), not a
-    separating warhead.  In that case mass_kg / beta_kg_m2 / diameter_m are
+    When params.ro has separation_mode == "body" the reentering body IS the
+    booster's own last stage (KN-23 / Iskander, Pershing II MaRV class, or an
+    SSTO where that stage is the whole vehicle) — not a separating object.
+    In that case mass_kg / diameter_m / length_m are
     inherited from the booster's last-stage burnout state (mass_final,
     beta_kg_m2, diameter_m) instead of being independent payload fields.
     The user only has to set the maneuvering properties (L/D, g-limit,
@@ -597,27 +585,9 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
                 length_m=(float(_last.length_m)
                           if _last.length_m > 0 else ro.length_m))
         return ro
-    # Legacy inline fields (deprecated; kept for reading old JSON files).
-    if getattr(params, 'ro_beta_kg_m2', 0.0) > 0:
-        mass = (getattr(params, 'ro_mass_kg', 0.0) or
-                getattr(params, 'payload_kg', 0.0))
-        return ROParams(
-            name='(legacy)',
-            mass_kg=float(mass),
-            beta_kg_m2=float(params.ro_beta_kg_m2),
-            shape=str(getattr(params, 'ro_shape', '')),
-            diameter_m=float(getattr(params, 'ro_diameter_m', 0.0)),
-            length_m=float(getattr(params, 'ro_length_m', 0.0)),
-            glider_enabled=bool(getattr(params, 'glider_enabled', False)),
-            glider_LD=float(getattr(params, 'glider_LD', 0.0)),
-            glider_guidance=('skip_glide'
-                             if getattr(params, 'glider_guidance', 'equilibrium_glide')
-                                == 'constant_bank'
-                             else str(getattr(params, 'glider_guidance', 'equilibrium_glide'))),
-            glider_pullup_g_max=float(getattr(params, 'glider_pullup_g_max', 10.0)),
-            glider_terminal_dive=bool(getattr(params, 'glider_terminal_dive', False)),
-            glider_terminal_alt_km=float(getattr(params, 'glider_terminal_alt_km', 30.0)),
-        )
+    # No reentry object configured.  (Old JSON that stored reentry fields inline
+    # is migrated to a synthesised params.ro in booster_from_dict, so by the time
+    # we get here params.ro is the single source of truth.)
     return None
 
 
@@ -1866,8 +1836,8 @@ def _zoljanah():
         cd_table=_FORDEN_CD,
         stage2=stage2,
         payload_kg=float(payload),
-        ro_beta_kg_m2=ro_beta,
-        ro_separates=True,   # RV separates from stage-2 body at burnout
+        ro=ROParams(name="Zoljanah RV", mass_kg=float(payload), beta_kg_m2=ro_beta),
+        ro_separates=True,   # reentry object separates from stage-2 body at burnout
     )
     return p
 
@@ -2036,7 +2006,7 @@ def _aur():
         stage_turn_stop_s=21.7,
         coast_time_s=0.0,
         payload_kg=450.0,
-        ro_beta_kg_m2=1500.0,
+        ro=ROParams(name="AUR RV", mass_kg=450.0, beta_kg_m2=1500.0),
         ro_separates=True,
         stage2=stage2,
         # Empty tables → legacy 2 % sea-level back-pressure approximation used.
@@ -2691,24 +2661,10 @@ def booster_to_dict(p: BoosterParams) -> dict:
         'booster_core_delay_s':   p.booster_core_delay_s,
         'booster_jettison_s':     p.booster_jettison_s,
     }
-    # RV: write the new ro object when present; otherwise write legacy inline
-    # fields so that older software can still load this booster file.
+    # Reentry object: written as the embedded 'ro' dict when present.  The
+    # booster carries no reentry hardware, so there is nothing else to write.
     if p.ro is not None:
         d['ro'] = ro_to_dict(p.ro)
-    elif getattr(p, 'ro_beta_kg_m2', 0.0) > 0:
-        d.update({
-            'ro_beta_kg_m2':          p.ro_beta_kg_m2,
-            'ro_mass_kg':             p.ro_mass_kg,
-            'ro_shape':               p.ro_shape,
-            'ro_diameter_m':          p.ro_diameter_m,
-            'ro_length_m':            p.ro_length_m,
-            'glider_enabled':         p.glider_enabled,
-            'glider_LD':              p.glider_LD,
-            'glider_pullup_g_max':    p.glider_pullup_g_max,
-            'glider_terminal_dive':   p.glider_terminal_dive,
-            'glider_terminal_alt_km': p.glider_terminal_alt_km,
-            'glider_guidance':        p.glider_guidance,
-        })
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
     if p.stage_turn_start_s is not None:
         d['stage_turn_start_s'] = p.stage_turn_start_s
@@ -2755,9 +2711,6 @@ def booster_from_dict(d: dict) -> BoosterParams:
         ro_separates=bool(d.get('ro_separates', d.get('rv_separates', False))),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
         num_ros=int(d.get('num_ros', d.get('num_rvs', 1))),
-        # Legacy inline fields — populated only for old files lacking "ro" key;
-        # effective_ro() synthesises an ROParams from these when params.ro is None.
-        ro_beta_kg_m2=float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0))),
         ro_mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))),
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
@@ -2793,19 +2746,7 @@ def booster_from_dict(d: dict) -> BoosterParams:
         grid_fin_solidity=float(d.get('grid_fin_solidity', 0.0)),
         grid_fin_edge_factor=float(d.get('grid_fin_edge_factor', 1.0)),
         grid_fin_deploy_schedule=list(d.get('grid_fin_deploy_schedule', []) or []),
-        glider_enabled=bool(d.get('glider_enabled', False)),
-        glider_LD=float(d.get('glider_LD', 0.0)),
-        glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
-        glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
-        glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
-        glider_guidance=('skip_glide'
-                         if d.get('glider_guidance', 'equilibrium_glide')
-                            == 'constant_bank'
-                         else str(d.get('glider_guidance', 'equilibrium_glide'))),
         payload_diameter_m=float(d.get('payload_diameter_m', 0.0)),
-        ro_shape=d.get('ro_shape', d.get('rv_shape', '')),
-        ro_diameter_m=float(d.get('ro_diameter_m', d.get('rv_diameter_m', 0.0))),
-        ro_length_m=float(d.get('ro_length_m', d.get('rv_length_m', 0.0))),
         pbv_diameter_m=float(d.get('pbv_diameter_m', 0.0)),
         pbv_length_m=float(d.get('pbv_length_m', 0.0)),
         n_boosters=int(d.get('n_boosters', 0)),
@@ -2837,6 +2778,33 @@ def booster_from_dict(d: dict) -> BoosterParams:
     # _p for effective_ro() to find when _p.ro is None (old format).
     if 'ro' in d or 'rv' in d:          # 'rv' = legacy embedded-object key
         _p.ro = ro_from_dict(d.get('ro') or d['rv'])
+    else:
+        # Migrate genuinely-old JSON that stored reentry hardware inline on the
+        # booster (no embedded 'ro'/'rv' key) into a synthesised ROParams, so the
+        # booster itself carries no reentry fields.  Gated on an inline β.
+        _rb = float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0)) or 0.0)
+        if _rb > 0:
+            _g = str(d.get('glider_guidance', 'equilibrium_glide'))
+            if _g == 'constant_bank':
+                _g = 'skip_glide'
+            _p.ro = ROParams(
+                name='(migrated)',
+                mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))
+                              or d.get('payload_kg', 0.0)),
+                beta_kg_m2=_rb,
+                shape=str(d.get('ro_shape', d.get('rv_shape', ''))),
+                diameter_m=float(d.get('ro_diameter_m', d.get('rv_diameter_m', 0.0))),
+                length_m=float(d.get('ro_length_m', d.get('rv_length_m', 0.0))),
+                glider_enabled=bool(d.get('glider_enabled', False)),
+                glider_LD=float(d.get('glider_LD', 0.0)),
+                glider_guidance=_g,
+                glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
+                glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
+                glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
+                separation_mode=('separating_ro'
+                                 if bool(d.get('ro_separates', d.get('rv_separates', False)))
+                                 else 'body'),
+            )
     # Backwards compatibility: old saved boosters with guidance="loft" are
     # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
     if d.get('guidance', '') == 'loft':
