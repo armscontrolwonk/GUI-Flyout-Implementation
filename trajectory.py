@@ -10,7 +10,7 @@ OMEGA_EARTH = 7.2921150e-5 rad/s.  Consequently:
 
   * Velocities (and the "ground speed" output) are *relative to Earth's
     surface*, not relative to inertial space.
-  * A missile sitting on the launch pad has ECEF velocity ≈ 0, which is
+  * A booster sitting on the launch pad has ECEF velocity ≈ 0, which is
     the correct initial condition for this frame — no explicit Earth-
     rotation term needs to be added to v0.
   * Earth's rotation is fully accounted for during flight through the
@@ -41,7 +41,7 @@ Physics included
 
 Guidance law — user-directed gravity turn
 -----------------------------------------
-The missile launches at launch_elevation_deg (default 90° vertical) and
+The booster launches at launch_elevation_deg (default 90° vertical) and
 linearly pitches from that angle to burnout_angle_deg between turn_start_s
 and turn_stop_s, then holds the burnout angle for the remainder of powered
 flight.  Per-stage overrides (stage_turn_start_s, stage_turn_stop_s,
@@ -49,10 +49,10 @@ stage_burnout_angle_deg) take priority over the global pitch program.
 
 Azimuth is constant by default; optional yaw maneuvers provide dogleg
 corrections.  The ENU frame is re-evaluated at each step so that "local
-vertical" tracks the missile as it moves downrange.
+vertical" tracks the booster as it moves downrange.
 
 Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
-  Missile         Our model   Forden    Notes
+  Booster         Our model   Forden    Notes
   Scud-B          ~288 km     288 km    matches with correct params + guidance
   Al Hussein      ~693 km     693 km    matches with correct params + guidance
   No-dong         ~973 km     973 km    matches with correct params + guidance
@@ -74,8 +74,8 @@ from coordinates import (
     coriolis_acceleration, centrifugal_acceleration,
     range_between, OMEGA_EARTH,
 )
-from missile_models import (
-    MissileParams, missile_mass, drag_force_vector, thrust_force,
+from booster_models import (
+    BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_ro, booster_separation_time,
 )
@@ -224,7 +224,7 @@ def orbital_lifetime_estimate(perigee_km: float, apogee_km: float,
 # Flight-event helpers
 # ---------------------------------------------------------------------------
 
-def _stage_event_times(params: MissileParams):
+def _stage_event_times(params: BoosterParams):
     """
     Walk the stage linked list and return a list of
     (event_label, mission_elapsed_time_s) pairs for every stage
@@ -1022,7 +1022,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         f_thrust = np.zeros(3)
 
     # --- Mass ---
-    m = missile_mass(params, t, alt)
+    m = booster_mass(params, t, alt)
 
     # --- Non-inertial frame corrections ---
     a_coriolis    = coriolis_acceleration(vel)
@@ -1037,7 +1037,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
                 yaw_maneuvers=None):
-    """Event: missile hits the ground (altitude = 0)."""
+    """Event: booster hits the ground (altitude = 0)."""
     _, _, alt = ecef_to_geodetic(state[:3])
     return alt
 
@@ -1141,7 +1141,7 @@ def _acton_pullup_arc(pos: np.ndarray, vel: np.ndarray,
     # For very shallow entry angles the denominator (1 − cos θ₂) → 0, making
     # R = (h₃ − h_eq)/(1 − cos θ₂) unphysically large (> Earth's radius at
     # θ₂ < ~8°; > Earth-Moon distance at θ₂ ≈ 1°).  This happens when a
-    # missile burns nearly horizontally so apogee barely exceeds 100 km and
+    # booster burns nearly horizontally so apogee barely exceeds 100 km and
     # the pierce angle is ~1°.  Below 3° the vehicle is already in near-
     # equilibrium glide and needs no pull-up arc; return the fallback so the
     # caller starts the analytical glide immediately from the pierce state.
@@ -1437,7 +1437,7 @@ def integrate_debris(pos_ecef: np.ndarray, vel_ecef: np.ndarray,
 # Public integration interface
 # ---------------------------------------------------------------------------
 
-def integrate_trajectory(params: MissileParams,
+def integrate_trajectory(params: BoosterParams,
                          launch_lat_deg: float,
                          launch_lon_deg: float,
                          launch_azimuth_deg: float,
@@ -1454,11 +1454,11 @@ def integrate_trajectory(params: MissileParams,
                          launch_elevation_deg: float = None,
                          _search_mode: bool = False):
     """
-    Integrate a missile trajectory from launch to impact.
+    Integrate a booster trajectory from launch to impact.
 
     Parameters
     ----------
-    params                : MissileParams
+    params                : BoosterParams
     launch_lat_deg        : geodetic launch latitude (degrees)
     launch_lon_deg        : launch longitude (degrees)
     launch_azimuth_deg    : launch azimuth clockwise from North (degrees)
@@ -1487,7 +1487,7 @@ def integrate_trajectory(params: MissileParams,
     import copy
     # Apply session-level overrides non-destructively.  guidance and
     # burnout_angle_deg are flight parameters (like launch site) that the caller
-    # may override independently of the stored missile definition.
+    # may override independently of the stored booster definition.
     if guidance is not None or burnout_angle_deg is not None or launch_elevation_deg is not None:
         params = copy.copy(params)
         if guidance is not None:
@@ -1499,7 +1499,7 @@ def integrate_trajectory(params: MissileParams,
 
     # Auto-derive the no-separation (body) glider L/D from geometry when it was
     # left at the sentinel 0.  For a no-sep body the airframe IS the glider, so
-    # its (L/D)_max follows from the whole-missile build-up (glider_ld.py:
+    # its (L/D)_max follows from the whole-booster build-up (glider_ld.py:
     # Jorgensen + Allen-Perkins + N-K-P).  A SEPARATING RV keeps its own
     # designed glider_LD; any body whose glider_LD was set >0 is untouched.
     _ro = params.ro
@@ -1909,7 +1909,7 @@ def integrate_trajectory(params: MissileParams,
 
                 # _analytical_equil_glide returns a single point when the
                 # pierce speed is below the equilibrium-glide terminal speed
-                # — e.g. a quasi-ballistic missile (KN-23 class) that just
+                # — e.g. a quasi-ballistic booster (KN-23 class) that just
                 # clipped 100 km rather than arriving at hypersonic glide
                 # conditions.  Fall back to the full EOM with lift so we get
                 # a physically correct skip-glide trajectory rather than a
@@ -2365,7 +2365,7 @@ def integrate_trajectory(params: MissileParams,
     apo_idx = int(np.argmax(alts))
 
     # --- Mass array -------------------------------------------------------
-    masses = np.array([missile_mass(params, t_arr[i], alts[i])
+    masses = np.array([booster_mass(params, t_arr[i], alts[i])
                        for i in range(len(t_arr))])
 
     # --- Inertial (ECI-frame) speed ---------------------------------------
@@ -3048,7 +3048,7 @@ def integrate_trajectory(params: MissileParams,
     }
 
 
-def aim_missile(params: MissileParams,
+def aim_booster(params: BoosterParams,
                 launch_lat_deg: float,
                 launch_lon_deg: float,
                 launch_azimuth_deg: float,
@@ -3085,7 +3085,7 @@ def aim_missile(params: MissileParams,
     return cutoff
 
 
-def find_range(params: MissileParams,
+def find_range(params: BoosterParams,
                launch_lat_deg: float,
                launch_lon_deg: float,
                launch_azimuth_deg: float,
@@ -3104,7 +3104,7 @@ def find_range(params: MissileParams,
 # Orbital insertion planner
 # ---------------------------------------------------------------------------
 
-def plan_orbital_insertion(params: MissileParams,
+def plan_orbital_insertion(params: BoosterParams,
                            launch_lat_deg: float,
                            launch_lon_deg: float,
                            launch_azimuth_deg: float,
@@ -3125,7 +3125,7 @@ def plan_orbital_insertion(params: MissileParams,
 
     Parameters
     ----------
-    params               : MissileParams (top-level stage)
+    params               : BoosterParams (top-level stage)
     launch_lat/lon_deg   : geodetic launch coordinates
     launch_azimuth_deg   : launch azimuth clockwise from North
     target_orbit_alt_km  : desired circular orbit altitude (km)
@@ -3185,7 +3185,7 @@ def plan_orbital_insertion(params: MissileParams,
         return {
             'success': False,
             'message': ('No orbital solution found across boost angles 5°–80°.  '
-                        'Check that the missile has sufficient delta-V for the '
+                        'Check that the booster has sufficient delta-V for the '
                         f'target orbit ({target_orbit_alt_km:.0f} km).'),
         }
 
@@ -3258,7 +3258,7 @@ def _search_one(args):
         return -1.0
 
 
-def _tsiolkovsky_dv(params: MissileParams) -> float:
+def _tsiolkovsky_dv(params: BoosterParams) -> float:
     """Ideal (vacuum) delta-V: sum Tsiolkovsky rocket equation over all stages."""
     G0 = 9.80665
     dv, node = 0.0, params
@@ -3283,7 +3283,7 @@ def _wheelon_gamma_opt(v_bo: float, burnout_alt_m: float = 150_000.0) -> float:
     return 0.5 * np.degrees(np.arccos(cos_2g))
 
 
-def maximize_range(params: MissileParams,
+def maximize_range(params: BoosterParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,
                    launch_azimuth_deg: float = 0.0,

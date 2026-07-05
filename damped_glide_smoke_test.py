@@ -20,7 +20,7 @@ import json
 
 import numpy as np
 
-from missile_models import get_missile, ro_from_dict, ro_to_dict, effective_ro
+from booster_models import get_booster, ro_from_dict, ro_to_dict, effective_ro
 from trajectory import integrate_trajectory
 from glide_regime import regime_from_result
 
@@ -31,7 +31,7 @@ _CUTOFF = 170.0
 
 def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
     """Lofted sub-circular C-HGB entry (steep → uncapturable)."""
-    p = get_missile(_BOOSTER)
+    p = get_booster(_BOOSTER)
     ro = copy.deepcopy(_CHGB)
     ro.glider_guidance, ro.glider_aero_model = mode, aero
     if zeta is not None:
@@ -45,7 +45,7 @@ def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
 def _fly_aur_shallow(mode, zeta=None, aero="polar"):
     """AUR on a depressed (shallow) insertion — capturable (adv-pitch program:
     stage 1 → 27°, stage 2 → 0° flat, launch elev 80°, az 103°, cutoff 117 s)."""
-    p = copy.deepcopy(get_missile("AUR+HGB"))
+    p = copy.deepcopy(get_booster("AUR+HGB"))
     p.stage_turn_start_s, p.stage_turn_stop_s, p.stage_burnout_angle_deg = 1.0, 30.0, 27.0
     if getattr(p, "stage2", None) is not None:
         p.stage2.stage_turn_start_s = 54.0

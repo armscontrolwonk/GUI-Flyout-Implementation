@@ -1,9 +1,9 @@
 """
-Missile parameter models matching Forden's:
+Booster parameter models matching Forden's:
   missileMass.m, missileRadius.m, thrust.m, thrustAngle.m,
   dragForce.m, Drag.m, calcCm_delta.m, aeroQ.m, calcMissileParameters.m
 
-Built-in missile definitions follow Forden (2007) Table 1 parameters for the
+Built-in booster definitions follow Forden (2007) Table 1 parameters for the
 four packaged models: Scud-B, Al Hussein, No-dong, and Taepodong-I.
 Loft angle / loft angle rate for Scud-B taken from Figure 3 of the same paper.
 """
@@ -23,8 +23,8 @@ def _thrust_from_isp(isp_s: float, propellant_kg: float, burn_s: float) -> float
 
 
 @dataclass
-class MissileParams:
-    """All parameters needed to simulate one missile type."""
+class BoosterParams:
+    """All parameters needed to simulate one booster type."""
     name: str
 
     # Mass (kg)
@@ -65,7 +65,7 @@ class MissileParams:
     cd_table:   list = field(default_factory=list)
 
     # Staging (optional next stage)
-    stage2: Optional['MissileParams'] = None
+    stage2: Optional['BoosterParams'] = None
 
     # Coast time (s) between this stage's burnout and the next stage's ignition.
     # Ignored (irrelevant) for the last / only stage.
@@ -124,7 +124,7 @@ class MissileParams:
 
     # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
-    # the missile crosses shroud_jettison_alt_km.  0 = no shroud.
+    # the booster crosses shroud_jettison_alt_km.  0 = no shroud.
     shroud_mass_kg:         float = 0.0
     shroud_jettison_alt_km: float = 80.0
     # Physical dimensions of the shroud — used for drag (pre-jettison reference
@@ -196,7 +196,7 @@ class MissileParams:
     payload_diameter_m:     float = 0.0
 
     # DEPRECATED — superseded by params.ro (ROParams).  All of the fields
-    # below are kept only to load old missile JSON files.  New code reads
+    # below are kept only to load old booster JSON files.  New code reads
     # and writes only params.ro; effective_ro() falls back to these when
     # params.ro is None.
     glider_enabled:         bool  = False   # → ro.glider_enabled
@@ -238,14 +238,14 @@ class MissileParams:
     # ── RV reference (new architecture) ─────────────────────────────────────
     # When set, all RV flight properties (β, shape, glider params) are read
     # from this object rather than from the deprecated inline fields below.
-    # Populated by the missile editor when "RV separates" is checked.
+    # Populated by the booster editor when "RV separates" is checked.
     ro: Optional['ROParams'] = None
 
 
 # ---------------------------------------------------------------------------
 # ROParams — independently loadable reentry-vehicle / glide-body definition.
-# All fields that were previously scattered across MissileParams as rv_* and
-# glider_* inline fields now live here.  The inline fields on MissileParams
+# All fields that were previously scattered across BoosterParams as rv_* and
+# glider_* inline fields now live here.  The inline fields on BoosterParams
 # are kept for backward-compatible reading of old JSON files but are no
 # longer written by the editor or read by the integrator when params.ro is set.
 # ---------------------------------------------------------------------------
@@ -268,13 +268,13 @@ class ROParams:
     # and overrides the derived default.
     nose_radius_m: float = 0.0
 
-    # Separation mode — does the terminal vehicle separate from the missile
-    # body, or IS the missile body the terminal vehicle?
+    # Separation mode — does the terminal vehicle separate from the booster
+    # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
     #                     (ICBM with MIRV, Scud-style separated warhead, …)
-    #   "body"          — vehicle IS the missile body (KN-23 / Iskander,
+    #   "body"          — vehicle IS the booster body (KN-23 / Iskander,
     #                     Pershing II MaRV, single-stage maneuvering body).
-    #                     mass/beta/diameter are inherited from the missile's
+    #                     mass/beta/diameter are inherited from the booster's
     #                     last stage (mass_final, beta_kg_m2, diameter_m)
     #                     by effective_ro() at runtime.
     separation_mode: str = "separating_ro"
@@ -518,7 +518,7 @@ def ro_from_dict(d: dict) -> ROParams:
     # Legacy mode aliases:
     #   "constant_bank"   → "skip_glide"   (old bank-angle knob is gone)
     #   "azimuth_command" → "skip_glide"   (proportional heading hold removed
-    #                                       — saved missiles fall back to a
+    #                                       — saved boosters fall back to a
     #                                       wings-level skip-glide)
     _g = str(d.get('glider_guidance', 'equilibrium_glide'))
     if _g in ('constant_bank', 'azimuth_command'):
@@ -563,24 +563,24 @@ def ro_from_dict(d: dict) -> ROParams:
     )
 
 
-def effective_ro(params: 'MissileParams') -> Optional[ROParams]:
+def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     """Return the active ROParams (the "terminal vehicle").
 
     Priority: explicit params.ro → synthesise from deprecated inline fields.
     Returns None when no RV configuration is present.
 
     When params.ro has separation_mode == "body" the terminal vehicle IS the
-    missile body itself (KN-23 / Iskander, Pershing II MaRV class), not a
+    booster body itself (KN-23 / Iskander, Pershing II MaRV class), not a
     separating warhead.  In that case mass_kg / beta_kg_m2 / diameter_m are
-    inherited from the missile's last-stage burnout state (mass_final,
+    inherited from the booster's last-stage burnout state (mass_final,
     beta_kg_m2, diameter_m) instead of being independent payload fields.
     The user only has to set the maneuvering properties (L/D, g-limit,
-    βₛ) — the body's mass and shape come from the missile params.
+    βₛ) — the body's mass and shape come from the booster params.
     """
     if params.ro is not None:
         ro = params.ro
         if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
-            # The vehicle IS the missile body — inherit mass and geometry
+            # The vehicle IS the booster body — inherit mass and geometry
             # from the last stage's burnout state.  β remains user-specified
             # on the RV itself because there's no clean way to derive a
             # single scalar β from a Mach-dependent body Cd table.
@@ -623,7 +623,7 @@ def effective_ro(params: 'MissileParams') -> Optional[ROParams]:
 
 # ---------------------------------------------------------------------------
 # Shared Cd vs Mach table — Forden Figure 1 piecewise-linear approximation.
-# All packaged missiles use this same curve (Forden note 6).
+# All packaged boosters use this same curve (Forden note 6).
 # ---------------------------------------------------------------------------
 _FORDEN_MACH = [0.0, 0.85, 1.0,  1.2,  2.0,  4.5]
 _FORDEN_CD   = [0.2, 0.20, 0.27, 0.27, 0.20, 0.20]
@@ -666,7 +666,7 @@ _WAVE_LD_REF = 3.0
 
 # Base-drag coefficient (referenced to base area) vs Mach, power-off.
 # Two selectable empirical sources (see MODEL_OPTIONS below):
-#   'datcom' — Missile DATCOM 2014, Fig 4.2.3.1-60 (verbatim DATA D4360) for the
+#   'datcom' — Booster DATCOM 2014, Fig 4.2.3.1-60 (verbatim DATA D4360) for the
 #              supersonic table; the subsonic (M<1) portion is retained from
 #              Chin because DATCOM's subsonic body base drag is a shape-dependent
 #              correlation, not a Mach-only table.
@@ -1010,7 +1010,7 @@ def _cd_base(mach: float, base_area_ratio: float = 1.0) -> float:
     """Base drag coefficient (ref. base area), power-off.
 
     Source selectable via MODEL_OPTIONS['base_drag']:
-      'datcom' (default) — Missile DATCOM 2014 Fig 4.2.3.1-60
+      'datcom' (default) — Booster DATCOM 2014 Fig 4.2.3.1-60
       'chin'             — Chin (1961) Fig 3-15
     """
     if get_model_option("base_drag") == "chin":
@@ -1150,7 +1150,7 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 
 # ---------------------------------------------------------------------------
 # Grid (lattice) fins.  CALIBRATED to Washington & Miller, "Grid Fins - A New
-# Concept for Missile Stability and Control," AIAA 93-0035 (the S1 fine-mesh
+# Concept for Booster Stability and Control," AIAA 93-0035 (the S1 fine-mesh
 # configuration, their Fig. 2 geometry and Fig. 14 drag data).  Corroborated by
 # three further papers (all read):
 #   * Miller & Washington, "An Experimental Investigation of Grid Fin Drag
@@ -1160,7 +1160,7 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 #     (subsonic) / ~8-27% (supersonic; half-diamond best) vs the blunt baseline
 #     F1, and that thick webs add ~13-19%.  This motivates the edge-shape factor
 #     below; the model's default (blunt) matches W&M S1 ≈ Miller F1.
-#   * DeSpirito & Sahu, ARL-RP-19 / AIAA 2001-0257 — total-missile Cx ≈ 0.43
+#   * DeSpirito & Sahu, ARL-RP-19 / AIAA 2001-0257 — total-booster Cx ≈ 0.43
 #     (M2) → 0.45 (M3), roughly flat: corroborates the flat supersonic baseline.
 #   * Abate, Duckerschein & Hathaway, AIAA 2000-0937 — free-flight GTCM;
 #     total Cx flat below M≈0.77 then a steep transonic rise to a peak ~M1.05,
@@ -1193,8 +1193,8 @@ def _cd_fins(n_fins: int, span_m: float, c_root_m: float, c_tip_m: float,
 # Constants are exposed for tuning.
 #
 # Supersonic corroboration (qualitative only): DeSpirito & Sahu, "Viscous CFD
-# Calculations of Grid Fin Missile Aerodynamics in the Supersonic Flow Regime,"
-# ARL-RP-19 / AIAA 2001-0257, measure a TOTAL-missile axial force Cx ≈ 0.43 at
+# Calculations of Grid Fin Booster Aerodynamics in the Supersonic Flow Regime,"
+# ARL-RP-19 / AIAA 2001-0257, measure a TOTAL-booster axial force Cx ≈ 0.43 at
 # M2 and ≈ 0.45 at M3 (roughly flat / slightly rising) on a grid-finned TCAAM.
 # That flat supersonic trend is consistent with this model's flat baseline and
 # rules out a decaying-with-Mach form, but DeSpirito does NOT isolate the fin
@@ -1462,7 +1462,7 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
                    aerospike_dD: float = 0.0) -> float:
     """
     Total zero-lift drag coefficient (Cd_wave + Cd_friction + Cd_base).
-    Source: Chin (1961) *Missile Configuration Design*; NACA TN 4201; Crowell (1996).
+    Source: Chin (1961) *Booster Configuration Design*; NACA TN 4201; Crowell (1996).
 
     nose_shape   : key from NOSE_SHAPES
     ld           : nose fineness ratio = nose_length / body_diameter (clamped 0.5–10)
@@ -1531,7 +1531,7 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
 
 
 # ---------------------------------------------------------------------------
-# Built-in missile database
+# Built-in booster database
 # Parameters from Forden (2007) Table 1.  Thrust = Isp * g0 * m_dot.
 # mass_initial  = Fueled Weight + Payload
 # mass_propellant = Fueled Weight − Dry Weight
@@ -1541,7 +1541,7 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
 def _scud_b():
     # Forden Table 1: Dry=1198, Fueled=4897, Isp=230, Burn=75, Dia=0.84, Payload=1000
     prop = 4897 - 1198   # = 3699 kg
-    return MissileParams(
+    return BoosterParams(
         name="Scud-B (R-17)",
         mass_initial=4897 + 1000,   # 5897 kg
         mass_propellant=prop,        # 3699 kg
@@ -1566,7 +1566,7 @@ def _scud_b():
 def _al_hussein():
     # Forden Table 1: Dry=1334, Fueled=6073, Isp=230, Burn=90, Dia=0.84, Payload=191
     prop = 6073 - 1334   # = 4739 kg
-    return MissileParams(
+    return BoosterParams(
         name="Al Hussein",
         mass_initial=6073 + 191,    # 6264 kg
         mass_propellant=prop,        # 4739 kg
@@ -1590,7 +1590,7 @@ def _al_hussein():
 def _nodong():
     # Forden Table 1: Dry=3900, Fueled=19900, Isp=240, Burn=70, Dia=0.88, Payload=1000
     prop = 19900 - 3900  # = 16 000 kg
-    return MissileParams(
+    return BoosterParams(
         name="No-dong",
         mass_initial=19900 + 1000,  # 20 900 kg
         mass_propellant=prop,        # 16 000 kg
@@ -1617,7 +1617,7 @@ def _taepodong_i():
     # Stage 2 (ignites after stage-1 separation):
     #   Fueled=4897, Dry=1198, Isp=230, Burn=75, Dia=0.84
     prop2 = 4897 - 1198  # = 3699 kg
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Taepodong-I Stage 2",
         mass_initial=4897 + 454,    # 5 351 kg  (stage-2 wet + payload)
         mass_propellant=prop2,       # 3 699 kg
@@ -1637,7 +1637,7 @@ def _taepodong_i():
     # Stage 1 (launched with stage-2 and payload riding on top):
     #   Fueled=19900, Dry=3800, Isp=240, Burn=70, Dia=0.88
     prop1 = 19900 - 3800  # = 16 100 kg
-    return MissileParams(
+    return BoosterParams(
         name="Taepodong-I",
         # Total stack at launch = stage-1 propellant+structure + stage-2 wet + payload
         mass_initial=19900 + 4897 + 454,   # 25 251 kg
@@ -1666,7 +1666,7 @@ def _shahab3():
     mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5]
     cd   = [0.20, 0.20, 0.27, 0.27, 0.20, 0.20]
     prop = 11200
-    return MissileParams(
+    return BoosterParams(
         name="Shahab-3",
         mass_initial=16000.0,
         mass_propellant=prop,
@@ -1690,7 +1690,7 @@ def _generic_icbm():
     mach = [0.0, 0.85, 1.0, 1.2, 2.0, 4.5, 8.0]
     cd   = [0.18, 0.18, 0.25, 0.25, 0.18, 0.18, 0.14]
     prop2 = 16000
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Generic ICBM Stage 2",
         mass_initial=20000.0,
         mass_propellant=prop2,
@@ -1707,7 +1707,7 @@ def _generic_icbm():
         cd_table=cd,
     )
     prop1 = 55000
-    return MissileParams(
+    return BoosterParams(
         name="Generic ICBM",
         mass_initial=80000.0,
         mass_propellant=prop1,
@@ -1730,12 +1730,12 @@ def _generic_icbm():
 
 def _taepodong_ii():
     # Forden (2007) discussion / Table 1 extension.
-    # 3-stage missile: No-dong first stage, Scud-B second stage,
+    # 3-stage booster: No-dong first stage, Scud-B second stage,
     # small solid-fuel third stage.  Payload ≈ 500 kg.
     #
     # Stage 3 (solid-fuel upper stage):
     prop3 = 1400  # fueled 1600 - dry 200
-    stage3 = MissileParams(
+    stage3 = BoosterParams(
         name="Taepodong-II Stage 3",
         mass_initial=1600 + 500,    # 2 100 kg (wet + payload)
         mass_propellant=prop3,       # 1 400 kg
@@ -1754,7 +1754,7 @@ def _taepodong_ii():
 
     # Stage 2 (Scud-B derived):
     prop2 = 4897 - 1198  # = 3 699 kg
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Taepodong-II Stage 2",
         mass_initial=4897 + stage3.mass_initial,   # 6 997 kg
         mass_propellant=prop2,                      # 3 699 kg
@@ -1774,7 +1774,7 @@ def _taepodong_ii():
 
     # Stage 1 (No-dong derived):
     prop1 = 19900 - 3800  # = 16 100 kg
-    return MissileParams(
+    return BoosterParams(
         name="Taepodong-II",
         mass_initial=19900 + stage2.mass_initial,   # 26 797 kg
         mass_propellant=prop1,                       # 16 100 kg
@@ -1797,7 +1797,7 @@ def _taepodong_ii():
 
 
 def _zoljanah():
-    # Iranian Zoljanah (Zuljanah) space launch vehicle / ballistic missile.
+    # Iranian Zoljanah (Zuljanah) space launch vehicle / ballistic booster.
     # 2-stage liquid-propellant vehicle with 100 kg RV payload.
     #
     # Mass model: total launch mass = 48 000 kg, payload = 100 kg.
@@ -1825,7 +1825,7 @@ def _zoljanah():
     # is also 15 % higher than stage 1 for no extra cost.
 
     # ── Stage 2 (liquid, last stage — carries RV payload) ────────────────────
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Zoljanah (IRBM) Stage 2",
         mass_initial=prop + dry + payload,   # 24 050 kg
         mass_propellant=prop,                # 21 076 kg
@@ -1847,7 +1847,7 @@ def _zoljanah():
     #   β = m / (Cd·A) = 100 / (0.25 · π·0.09) ≈ 1 415 kg/m²
     ro_beta = 1400.0   # kg/m²  (round estimate)
 
-    p = MissileParams(
+    p = BoosterParams(
         name="Zoljanah (IRBM)",
         mass_initial=prop + dry + stage2.mass_initial,   # 48 000 kg
         mass_propellant=prop,                            # 21 076 kg
@@ -1905,7 +1905,7 @@ def _zoljanah_slv():
     isp3   = 293.0
     burn3  = 300.0   # s  (mass flow = 3050/300 ≈ 10.2 kg/s)
 
-    stage3 = MissileParams(
+    stage3 = BoosterParams(
         name="Zoljanah (SLV) Stage 3",
         mass_initial=dry3 + prop3 + satellite,    # 3 657 kg
         mass_propellant=prop3,                     # 3 050 kg
@@ -1930,7 +1930,7 @@ def _zoljanah_slv():
     prop2 = 20_517
     isp2  = 265.0
 
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Zoljanah (SLV) Stage 2",
         mass_initial=dry2 + prop2 + stage3.mass_initial,   # 27 774 kg
         mass_propellant=prop2,                                        # 20 517 kg
@@ -1955,7 +1955,7 @@ def _zoljanah_slv():
     prop1 = 20_517
     isp1  = 255.837
 
-    return MissileParams(
+    return BoosterParams(
         name="Zoljanah (SLV)",
         mass_initial=dry1 + prop1 + stage2.mass_initial + shroud,   # 51 935 kg
         mass_propellant=prop1,                               # 20 517 kg
@@ -1982,7 +1982,7 @@ def _zoljanah_slv():
 
 
 def _aur():
-    # AUR — two-stage ballistic missile, depressed trajectory.
+    # AUR — two-stage ballistic booster, depressed trajectory.
     #
     # Physical parameters from open-source data:
     #   Body diameter: 34.5 in = 0.8763 m
@@ -1992,7 +1992,7 @@ def _aur():
     #   Propellant: 1 842 kg  Dry: 186 kg  Fueled: 2 028 kg
     #   Thrust: 80 kN  Isp: 280 s  Burn: 63 s  Nozzle exit area: 0.30 m²
     #   mass_final = stage-2 dry only (jettisoned at payload separation)
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="AUR Stage 2",
         mass_initial=2028 + 450,      # 2 478 kg (stage-2 wet + payload)
         mass_propellant=1842,
@@ -2017,7 +2017,7 @@ def _aur():
     #   Propellant: 4 509 kg  Dry: 454 kg  Fueled: 4 963 kg
     #   Thrust: 230 kN  Isp: 280 s  Burn: 54 s  Nozzle exit area: 0.30 m²
     #   mass_final = stage-1 dry only (jettisoned after burnout, no coast)
-    return MissileParams(
+    return BoosterParams(
         name="AUR",
         mass_initial=4963 + stage2.mass_initial,   # 7 441 kg total at launch
         mass_propellant=4509,
@@ -2111,7 +2111,7 @@ def _minotaur_4_htv2():
     # interpreted as (η_kick_start, η_kick_stop, η_deg).  η = 0 outside any
     # window means thrust is exactly along velocity (textbook gravity turn,
     # gravity does the trajectory rotation).
-    stage3 = MissileParams(
+    stage3 = BoosterParams(
         name="SR-120 (Stage 3)",
         mass_initial=7710 + 800 + 1000,    # wet S3 + structural + HTV-2
         mass_propellant=7070,
@@ -2139,7 +2139,7 @@ def _minotaur_4_htv2():
     # trajectory (Wright comments this is for "DT", depressed trajectory).
     # Without this kick the rocket flies near-vertical because gravity
     # alone can't rotate γ down fast enough during the short S2 burn.
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="SR-119 (Stage 2)",
         mass_initial=27670 + stage3.mass_initial,   # wet S2 + everything above
         mass_propellant=24490,
@@ -2170,7 +2170,7 @@ def _minotaur_4_htv2():
     # Wright (imod=100) uses η₁ = 2° during 10–16 s — a small kick to start
     # gravity rotating the velocity vector off vertical.  After 16 s gravity
     # alone tilts γ down for the rest of the boost.
-    return MissileParams(
+    return BoosterParams(
         name="Minotaur-IV + HTV-2",
         mass_initial=48990 + stage2.mass_initial + 450,  # +450 kg fairing
         mass_propellant=45370,
@@ -2243,7 +2243,7 @@ def _strypi_viii_r(castor2: bool = False):
         _os.path.join(_os.path.dirname(__file__), 'ro_library', 'SWERVE.ro.json'))))
 
     # Stage 2 — Aerojet Alcor IB: 257,900 lb-sec vac, ~26.5 s, ~9,634 lbf, Isp ~283.
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Alcor IB (Strypi 2nd stage)",
         mass_initial=501.4 + _swerve.mass_kg,    # Alcor loaded 1105.4 lbm + SWERVE RV
         mass_propellant=413.8,                   # 912.3 lbm
@@ -2296,7 +2296,7 @@ def _strypi_viii_r(castor2: bool = False):
     # track 113.9 lbm.  (Recruit motor inert/prop handled by the booster_* fields.)
     core_dry_kg = (castor_empty_lbm + 605.3 + 101.5 + 113.9) * 0.453592
     _shroud_kg = 29.1 * 0.453592                 # ascent heat shield (Wente), 13.2 kg
-    return MissileParams(
+    return BoosterParams(
         name="Strypi VIII R (Castor II)" if castor2 else "Strypi VIII R",
         # core wet + shield + (S2+RV); strap-on Recruits added via booster_* fields.
         mass_initial=(castor_prop_kg + core_dry_kg + _shroud_kg) + stage2.mass_initial,
@@ -2374,7 +2374,7 @@ def _stars_1():
         _os.path.join(_os.path.dirname(__file__), 'ro_library', 'AHW.ro.json'))))
 
     # Stage 3 — Orbus 1a (Thiokol): ~88 kN, Isp ~290 s, ~450 kg propellant.
-    stage3 = MissileParams(
+    stage3 = BoosterParams(
         name="Orbus 1a (STARS 3rd stage)",
         mass_initial=500.0 + _hgb.mass_kg,       # Orbus loaded (500 kg) + HGB
         mass_propellant=450.0,
@@ -2389,7 +2389,7 @@ def _stars_1():
         mach_table=[], cd_table=[],
     )
     # Stage 2 — Polaris A3 2nd (Hercules X-260): 9,000 lb prop, Isp 280 s.
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Polaris A3 2nd (STARS 2nd stage)",
         mass_initial=(4082.0 + 816.0) + stage3.mass_initial,  # S2 loaded + (S3+HGB)
         mass_propellant=4082.0,                  # 9,000 lb
@@ -2406,7 +2406,7 @@ def _stars_1():
     )
     # Stage 1 — Polaris A3 1st (Aerojet): prop set to close the EA total
     # (30,541 lb - 9,000 - 992 = 20,549 lb); ~75,000 lbf liftoff thrust.
-    return MissileParams(
+    return BoosterParams(
         name="STARS-1",
         mass_initial=(9322.0 + 1270.0) + stage2.mass_initial,  # S1 loaded + (S2+S3+HGB)
         mass_propellant=9322.0,                  # 20,549 lb
@@ -2479,7 +2479,7 @@ def _strypi_vii_r():
     )
 
     # Stage 3 — Hercules BE-3B-1: 60,514 lb-sec vac, ~7.8 s, 7,700 lbf, Isp ~276.
-    stage3 = MissileParams(
+    stage3 = BoosterParams(
         name="BE-3B-1 (Strypi 3rd stage)",
         mass_initial=317.4 * _LB + ro.mass_kg,   # 3rd-stage loaded 317.4 lbm + RV
         mass_propellant=219.1 * _LB,             # BE-3B prop
@@ -2495,7 +2495,7 @@ def _strypi_vii_r():
     )
 
     # Stage 2 — Aerojet Alcor IB: 257,900 lb-sec vac, ~26.5 s, 9,634 lbf, Isp 283.
-    stage2 = MissileParams(
+    stage2 = BoosterParams(
         name="Alcor IB (Strypi 2nd stage)",
         mass_initial=1105.0 * _LB + stage3.mass_initial,  # Alcor loaded 1105 lbm + (S3+RV)
         mass_propellant=912.3 * _LB,
@@ -2517,7 +2517,7 @@ def _strypi_vii_r():
     core_dry_kg = (1427.0 + 605.3 + 101.5 + 113.9) * _LB   # ~1019 kg
     acs_kg = 217.0 * _LB                                    # ~98.4 kg, jettisoned before S2
     shroud_kg = 29.1 * _LB                                  # ascent heat shield (Wente), 13.2 kg
-    return MissileParams(
+    return BoosterParams(
         name="Strypi VII R",
         mass_initial=(7328.0 * _LB + core_dry_kg + acs_kg + shroud_kg) + stage2.mass_initial,
         mass_propellant=7328.0 * _LB,            # 7328 lbm Castor I -> 3324 kg
@@ -2564,10 +2564,10 @@ def _strypi_vii_r():
     )
 
 
-MISSILE_DB = {
+BOOSTER_DB = {
     # Packaged defaults — always available.
-    # Additional missiles are loaded at runtime from custom_missiles.json
-    # via _load_custom_missiles() and overlay any same-name entries.
+    # Additional boosters are loaded at runtime from custom_boosters.json
+    # via _load_custom_boosters() and overlay any same-name entries.
     "AUR+HGB":           _aur_hgb,
     "Minotaur-IV + HTV-2": _minotaur_4_htv2,
     "Strypi VIII R":     _strypi_viii_r,
@@ -2577,10 +2577,10 @@ MISSILE_DB = {
 }
 
 
-def get_missile(name: str) -> MissileParams:
-    if name not in MISSILE_DB:
-        raise ValueError(f"Unknown missile '{name}'. Available: {list(MISSILE_DB)}")
-    return MISSILE_DB[name]()
+def get_booster(name: str) -> BoosterParams:
+    if name not in BOOSTER_DB:
+        raise ValueError(f"Unknown booster '{name}'. Available: {list(BOOSTER_DB)}")
+    return BOOSTER_DB[name]()
 
 
 def _migrate_guidance(g: str) -> str:
@@ -2597,8 +2597,8 @@ def _migrate_guidance(g: str) -> str:
     return g
 
 
-def _convert_loft_to_gravity_turn(p: MissileParams) -> None:
-    """In-place conversion of a 'loft' missile to equivalent gravity_turn pitch overrides.
+def _convert_loft_to_gravity_turn(p: BoosterParams) -> None:
+    """In-place conversion of a 'loft' booster to equivalent gravity_turn pitch overrides.
 
     The Forden formula el(t)=max(la, 90−rate·t) is mathematically identical to
     a linear gravity_turn with turn_start=0 and turn_stop=(90−la)/rate.
@@ -2622,8 +2622,8 @@ def _convert_loft_to_gravity_turn(p: MissileParams) -> None:
         s = s.stage2
 
 
-def missile_to_dict(p: MissileParams) -> dict:
-    """Serialise a MissileParams to a JSON-compatible dict."""
+def booster_to_dict(p: BoosterParams) -> dict:
+    """Serialise a BoosterParams to a JSON-compatible dict."""
     d = {
         'name':                  p.name,
         'mass_initial':          p.mass_initial,
@@ -2692,7 +2692,7 @@ def missile_to_dict(p: MissileParams) -> dict:
         'booster_jettison_s':     p.booster_jettison_s,
     }
     # RV: write the new ro object when present; otherwise write legacy inline
-    # fields so that older software can still load this missile file.
+    # fields so that older software can still load this booster file.
     if p.ro is not None:
         d['ro'] = ro_to_dict(p.ro)
     elif getattr(p, 'ro_beta_kg_m2', 0.0) > 0:
@@ -2723,18 +2723,18 @@ def missile_to_dict(p: MissileParams) -> dict:
     if p.stage_yaw_final_az_deg is not None:
         d['stage_yaw_final_az_deg'] = p.stage_yaw_final_az_deg
     if p.stage2 is not None:
-        d['stage2'] = missile_to_dict(p.stage2)
+        d['stage2'] = booster_to_dict(p.stage2)
     return d
 
 
-def missile_from_dict(d: dict) -> MissileParams:
-    """Reconstruct a MissileParams from a dict produced by missile_to_dict."""
+def booster_from_dict(d: dict) -> BoosterParams:
+    """Reconstruct a BoosterParams from a dict produced by booster_to_dict."""
     prop  = float(d['mass_propellant'])
     burn  = float(d['burn_time_s'])
     isp   = float(d['isp_s'])
     m0    = float(d['mass_initial'])
-    stage2 = missile_from_dict(d['stage2']) if d.get('stage2') else None
-    _p = MissileParams(
+    stage2 = booster_from_dict(d['stage2']) if d.get('stage2') else None
+    _p = BoosterParams(
         name=d['name'],
         mass_initial=m0,
         mass_propellant=prop,
@@ -2837,7 +2837,7 @@ def missile_from_dict(d: dict) -> MissileParams:
     # _p for effective_ro() to find when _p.ro is None (old format).
     if 'ro' in d or 'rv' in d:          # 'rv' = legacy embedded-object key
         _p.ro = ro_from_dict(d.get('ro') or d['rv'])
-    # Backwards compatibility: old saved missiles with guidance="loft" are
+    # Backwards compatibility: old saved boosters with guidance="loft" are
     # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
     if d.get('guidance', '') == 'loft':
         _convert_loft_to_gravity_turn(_p)
@@ -2871,7 +2871,7 @@ def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
     return mass_kg / (cd * A_eff)
 
 
-def total_burn_time(params: MissileParams) -> float:
+def total_burn_time(params: BoosterParams) -> float:
     """Total time from launch (T=0) to end of last stage's burn.
 
     Includes booster_core_delay_s when strap-ons ignite before the core.
@@ -2885,8 +2885,8 @@ def total_burn_time(params: MissileParams) -> float:
     return t
 
 
-def active_stage(params: MissileParams, t: float) -> MissileParams:
-    """Return the MissileParams for the stage (or vehicle) active at time t.
+def active_stage(params: BoosterParams, t: float) -> BoosterParams:
+    """Return the BoosterParams for the stage (or vehicle) active at time t.
 
     During powered flight this is the burning stage.  During a coast phase
     it is the next (upper) stage — stage N has been jettisoned and the
@@ -2905,7 +2905,7 @@ def active_stage(params: MissileParams, t: float) -> MissileParams:
     return s   # last stage (or only stage)
 
 
-def active_stage_and_t(params: MissileParams, t: float):
+def active_stage_and_t(params: BoosterParams, t: float):
     """Return (active_stage, t_since_ignition) for time t.
 
     t_since_ignition is the time elapsed since the returned stage ignited,
@@ -2924,7 +2924,7 @@ def active_stage_and_t(params: MissileParams, t: float):
     return s, t_rem   # last stage
 
 
-def booster_separation_time(params: MissileParams) -> float:
+def booster_separation_time(params: BoosterParams) -> float:
     """Time (s after T=0) the spent strap-on boosters physically leave.
 
     booster_jettison_s if set later than burnout, else burnout.  A jettison
@@ -2935,7 +2935,7 @@ def booster_separation_time(params: MissileParams) -> float:
     return params.booster_jettison_s if params.booster_jettison_s > t_b else t_b
 
 
-def _booster_mass_addend(params: MissileParams, t: float) -> float:
+def _booster_mass_addend(params: BoosterParams, t: float) -> float:
     """Mass (kg) contributed by attached strap-on boosters; 0 after separation.
 
     Between burnout and jettison (when booster_jettison_s > burn time) the
@@ -2951,7 +2951,7 @@ def _booster_mass_addend(params: MissileParams, t: float) -> float:
             - n * params.booster_prop_kg / t_b * t)
 
 
-def _stage_chain_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
+def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> float:
     """Mass of the stage chain only (excludes strap-on boosters)."""
     if t <= 0:
         return params.mass_initial
@@ -2974,7 +2974,7 @@ def _stage_chain_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> fl
     return params.mass_final
 
 
-def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
+def booster_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> float:
     """Current mass (kg) at time t seconds after launch.  Handles N stages and
     strap-on boosters.
 
@@ -2987,7 +2987,7 @@ def missile_mass(params: MissileParams, t: float, alt_m: float = 0.0) -> float:
             + _booster_mass_addend(params, max(0.0, t)))
 
 
-def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
+def _boost_front_geometry(top_params: 'BoosterParams', params: BoosterParams,
                           altitude_m: float = None):
     """Front-end geometry exposed to the airstream during powered flight.
 
@@ -3043,8 +3043,8 @@ def _boost_front_geometry(top_params: 'MissileParams', params: MissileParams,
             params.nose_length_m, params.length_m, False)
 
 
-def missile_area(params: MissileParams, altitude_m: float = None,
-                 top_params: 'MissileParams' = None) -> float:
+def booster_area(params: BoosterParams, altitude_m: float = None,
+                 top_params: 'BoosterParams' = None) -> float:
     """Reference cross-sectional area (m^2) of the exposed front end.
 
     Tracks the same front-end body as the nose-shape drag model: the shroud
@@ -3056,41 +3056,41 @@ def missile_area(params: MissileParams, altitude_m: float = None,
     return np.pi * (d / 2) ** 2
 
 
-def drag_coefficient(params: MissileParams, mach: float) -> float:
+def drag_coefficient(params: BoosterParams, mach: float) -> float:
     """Cd interpolated from Mach table; falls back to Forden table if empty."""
     if params.mach_table:
         return float(np.interp(mach, params.mach_table, params.cd_table))
     return float(_lin_interp(mach, _FORDEN_MACH, _FORDEN_CD))
 
 
-def _ro_nose_shape(p: MissileParams) -> str:
+def _ro_nose_shape(p: BoosterParams) -> str:
     """RV nose shape: from params.ro when available, else deprecated inline field."""
     ro = effective_ro(p)
     return ro.shape if ro is not None else getattr(p, 'ro_shape', '')
 
 
-def _ro_diameter(p: MissileParams) -> float:
+def _ro_diameter(p: BoosterParams) -> float:
     ro = effective_ro(p)
     return ro.diameter_m if ro is not None else getattr(p, 'ro_diameter_m', 0.0)
 
 
-def _ro_length(p: MissileParams) -> float:
+def _ro_length(p: BoosterParams) -> float:
     ro = effective_ro(p)
     return ro.length_m if ro is not None else getattr(p, 'ro_length_m', 0.0)
 
 
-def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
-                      top_params: 'MissileParams' = None,
+def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
+                      top_params: 'BoosterParams' = None,
                       t_s: float = None) -> np.ndarray:
     """
     Aerodynamic drag force vector (N) opposing velocity.
 
     Parameters
     ----------
-    params     : MissileParams (current stage)
+    params     : BoosterParams (current stage)
     vel_ecef   : velocity vector in ECEF (m/s), shape (3,)
     altitude_m : scalar altitude (m)
-    top_params : top-level MissileParams (for shroud diameter lookup); optional
+    top_params : top-level BoosterParams (for shroud diameter lookup); optional
     t_s        : mission time (s); used for the grid-fin deployment schedule.
                  If None, all grid fins are treated as deployed.
 
@@ -3110,7 +3110,7 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     # Choose Cd source: decomposed nose-shape model or Forden mach_table.
     # The front-end body (shroud while attached, else RV/payload nose) sets
     # both the nose shape and the reference diameter — the same selector used
-    # by missile_area() — so Cd and reference area always agree.
+    # by booster_area() — so Cd and reference area always agree.
     _shape, _diam, _nose_len, _body_len, _is_shroud = _boost_front_geometry(
         top_params, params, altitude_m)
     if top_params is not None and _shape not in ('', 'forden') and _diam > 0:
@@ -3127,7 +3127,7 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     else:
         cd = drag_coefficient(params, mach)
 
-    area = missile_area(params, altitude_m=altitude_m, top_params=top_params)
+    area = booster_area(params, altitude_m=altitude_m, top_params=top_params)
     q    = 0.5 * rho * speed**2
     drag_mag = cd * q * area
 
@@ -3170,7 +3170,7 @@ def drag_force_vector(params: MissileParams, vel_ecef, altitude_m,
     return -drag_mag * (vel_ecef / speed)
 
 
-def _stage_chain_thrust(params: MissileParams, t: float, altitude_m: float,
+def _stage_chain_thrust(params: BoosterParams, t: float, altitude_m: float,
                         thrust_dir: np.ndarray) -> np.ndarray:
     """Thrust from the stage chain only (excludes strap-on boosters)."""
     if t < 0:
@@ -3203,14 +3203,14 @@ def _stage_chain_thrust(params: MissileParams, t: float, altitude_m: float,
     return np.zeros(3)
 
 
-def thrust_force(params: MissileParams, t: float, altitude_m: float,
+def thrust_force(params: BoosterParams, t: float, altitude_m: float,
                  thrust_dir: np.ndarray) -> np.ndarray:
     """
     Thrust force vector (N).  Handles N stages and strap-on boosters.
 
     Parameters
     ----------
-    params     : MissileParams (stage-1 node of the linked list)
+    params     : BoosterParams (stage-1 node of the linked list)
     t          : time since launch (s)
     altitude_m : current altitude for ambient pressure correction
     thrust_dir : unit vector in direction of thrust (ECEF)
@@ -3238,7 +3238,7 @@ def thrust_force(params: MissileParams, t: float, altitude_m: float,
     return f
 
 
-def booster_drag_vector(top_params: MissileParams, vel_ecef: np.ndarray,
+def booster_drag_vector(top_params: BoosterParams, vel_ecef: np.ndarray,
                         altitude_m: float) -> np.ndarray:
     """
     Aerodynamic drag force (N) from the strap-on booster pack.

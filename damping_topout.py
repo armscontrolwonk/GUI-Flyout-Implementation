@@ -14,7 +14,7 @@ zeta_max is highly leveraged in M.
 """
 import copy, json
 import numpy as np
-from missile_models import get_missile, ro_from_dict
+from booster_models import get_booster, ro_from_dict
 from trajectory import integrate_trajectory
 from atmosphere import atmosphere
 
@@ -25,7 +25,7 @@ BETA, LD = CHGB.beta_kg_m2, CHGB.glider_LD
 
 
 def glide_states():
-    p = get_missile("AUR+HGB")
+    p = get_booster("AUR+HGB")
     p.burnout_angle_deg = KICK; p.stage_burnout_angle_deg = KICK
     if p.stage2: p.stage2.stage_burnout_angle_deg = KICK
     ro = copy.deepcopy(CHGB)

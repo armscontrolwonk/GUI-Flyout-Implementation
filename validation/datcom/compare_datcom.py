@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, '..', '..')))
 
 import glider_ld                       # noqa: E402
-from missile_models import MissileParams as MP   # noqa: E402
+from booster_models import BoosterParams as MP   # noqa: E402
 
 # The reference body — must match finless_body.inp.
 BODY = MP(name='finless ref', diameter_m=0.5, length_m=4.0,

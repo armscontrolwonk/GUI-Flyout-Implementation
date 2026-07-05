@@ -60,7 +60,7 @@ def trim_gate(params, mach: float = 3.0, delta_max_deg: float = 25.0,
         return dict(error="body diameter not set")
 
     # 1. L/D curve + peak (glider_ld) — also gives the body/fin slope split.
-    ld = glider_ld.whole_missile_LD(params, mach=mach, return_curve=True)
+    ld = glider_ld.whole_booster_LD(params, mach=mach, return_curve=True)
     alpha_ldmax = ld["alpha_deg"]
     ld_max = ld["ld_max"]
     c_na_total = ld["c_na_pot"]
@@ -130,7 +130,7 @@ def trim_gate(params, mach: float = 3.0, delta_max_deg: float = 25.0,
 
 
 if __name__ == "__main__":
-    from missile_models import MissileParams as MP
+    from booster_models import BoosterParams as MP
 
     def show(p, label, **kw):
         r = trim_gate(p, **kw)

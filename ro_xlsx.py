@@ -1,7 +1,7 @@
 """
 ro_xlsx.py — XLSX import/export for Thrusty reentry objects (ROParams).
 
-The reentry-object counterpart to missile_xlsx.py: edit a reentry object in a
+The reentry-object counterpart to booster_xlsx.py: edit a reentry object in a
 familiar spreadsheet grid instead of hand-editing ro.json.  Reuses that
 module's low-level cell writers/readers so the two stay visually consistent.
 
@@ -23,7 +23,7 @@ Sheets read/write is a possible future enhancement.
 
 from __future__ import annotations
 
-from missile_xlsx import (
+from booster_xlsx import (
     _xl, _section, _label, _inputs, _dropdown, _yn,
     _rnum, _rint, _rstr, _rbool,
     _NOSE_OPTS, _NOSE_LABEL, _NOSE_KEY,
@@ -258,7 +258,7 @@ def _read_material(ws, rk, prefix, sentinel):
 def import_ro_xlsx(path: str):
     """Read a reentry-object XLSX and return an ROParams."""
     import heating
-    from missile_models import ROParams, _norm_sep_mode
+    from booster_models import ROParams, _norm_sep_mode
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
     # New workbooks use sheet "RO"; accept the legacy "RV" name too.
@@ -318,5 +318,5 @@ def export_ro_xlsx(path: str, ro) -> None:
 
 def make_blank_ro_template(path: str) -> None:
     """Write a blank RV template for the user to fill in from scratch."""
-    from missile_models import ROParams
+    from booster_models import ROParams
     export_ro_xlsx(path, ROParams(name='', mass_kg=0, beta_kg_m2=0))

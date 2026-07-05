@@ -48,7 +48,7 @@ Mach-resolved wind-tunnel/CFD stability data.
 
 from __future__ import annotations
 import math
-from missile_models import (MissileParams, _cl_alpha_gridfins, effective_ro,
+from booster_models import (BoosterParams, _cl_alpha_gridfins, effective_ro,
                              _SHAPE_ALIAS)
 
 # Barrowman nose centre-of-pressure, as a fraction of nose length from the tip.
@@ -71,7 +71,7 @@ def _nose_cp_fraction(shape: str) -> float:
     return _NOSE_CP_FRACTION.get(s, 0.5)
 
 
-def _front_nose(params: MissileParams):
+def _front_nose(params: BoosterParams):
     """(nose_shape, nose_length_m, body_diameter_m) for the as-flown front end.
 
     Prefers an attached shroud/fairing nose, then the stage nose, then the
@@ -90,7 +90,7 @@ def _front_nose(params: MissileParams):
     return "tangent_ogive", 3.0 * d, d      # generic fallback
 
 
-def estimate_cg(params: MissileParams):
+def estimate_cg(params: BoosterParams):
     """Estimate (x_cg_m, total_length_m) from the stage stack at liftoff/full.
 
     x is measured aft from the nose tip.  The top-level ``length_m`` is taken as
@@ -152,7 +152,7 @@ def estimate_cg(params: MissileParams):
     return x_cg, L_total
 
 
-def _stack_layout(params: MissileParams):
+def _stack_layout(params: BoosterParams):
     """Front->aft diameter profile for the body normal-force model.
 
     Returns (nose_base_d, nose_x_cp, sections, L_total) where `sections` is a
@@ -195,7 +195,7 @@ def _stack_layout(params: MissileParams):
     return nd, nose_x_cp, sections, L_total
 
 
-def body_normal_force(params: MissileParams):
+def body_normal_force(params: BoosterParams):
     """(C_Na_body, x_cp_body_m) — the Barrowman body normal force summed over the
     nose AND every cross-sectional-area change along the stack (thesis Eq 3-65):
 
@@ -233,14 +233,14 @@ def body_normal_force(params: MissileParams):
     return c_na, x_cp
 
 
-def grid_fin_static_margin(params: MissileParams, mach: float = 1.5,
+def grid_fin_static_margin(params: BoosterParams, mach: float = 1.5,
                            x_cg_m: float = None, fin_station_m: float = None,
                            solidity: float = None) -> dict:
     """Static margin (calibers) of the vehicle with its grid fins.
 
     Parameters
     ----------
-    params        : MissileParams with has_grid_fins (on the finned stage)
+    params        : BoosterParams with has_grid_fins (on the finned stage)
     mach          : representative ascent Mach for the fin C_Na (default 1.5)
     x_cg_m        : override CG location (m aft of nose); else estimated
     fin_station_m : override fin longitudinal station (m aft of nose); else
@@ -294,7 +294,7 @@ def grid_fin_static_margin(params: MissileParams, mach: float = 1.5,
     )
 
 
-def grid_fin_area_for_margin(params: MissileParams, target_sm_cal: float = 1.5,
+def grid_fin_area_for_margin(params: BoosterParams, target_sm_cal: float = 1.5,
                              mach: float = 1.5, x_cg_m: float = None,
                              fin_station_m: float = None) -> dict:
     """Inverse: grid-fin frame area per fin needed to hit target_sm_cal.
@@ -335,8 +335,8 @@ def grid_fin_area_for_margin(params: MissileParams, target_sm_cal: float = 1.5,
 
 
 if __name__ == "__main__":
-    from missile_models import get_missile
-    m = get_missile("STARS-1")
+    from booster_models import get_booster
+    m = get_booster("STARS-1")
     print("=== STARS-1 grid-fin static-margin check (M=1.5, full/liftoff) ===")
     r = grid_fin_static_margin(m, mach=1.5)
     for k in ("static_margin_cal", "verdict", "x_cp_m", "x_cg_m", "x_body_m",
