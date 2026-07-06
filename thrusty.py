@@ -7508,12 +7508,22 @@ class BoosterFlyoutApp(tk.Tk):
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
                 booster.ro = _user_ro
-            # Payload carried through boost = throw-weight minus the shroud (which
-            # is jettisoned mid-boost and tracked separately): the PBV/bus mass
-            # plus the selected reentry object's mass.  Derived here so payload
-            # follows the RV you pick rather than being a stale hand-entered number.
-            booster.payload_kg = (getattr(booster, 'bus_mass_kg', 0.0) or 0.0) \
-                + _user_ro.mass_kg
+            # The reentry plan owns the separation decision: the injected
+            # object's separation_mode is the single source of truth, and the
+            # booster's mass bookkeeping follows it so the two can't disagree.
+            # A separating object sheds its payload at burnout; a body-mode
+            # object reenters attached (effective_ro inherits the last stage's
+            # mass and geometry).
+            booster.ro_separates = (
+                getattr(_user_ro, 'separation_mode', 'separating_ro') == 'separating_ro')
+            if booster.ro_separates:
+                # Payload carried through boost = throw-weight minus the shroud
+                # (jettisoned mid-boost, tracked separately): the PBV/bus mass
+                # plus the selected object's mass.  Derived here so payload
+                # follows the object you pick rather than a stale hand-entered
+                # number.
+                booster.payload_kg = (getattr(booster, 'bus_mass_kg', 0.0) or 0.0) \
+                    + _user_ro.mass_kg
 
         guidance = self._guidance_var.get()
         lat      = self._field_float("Launch latitude (°)",  self._launch_lat.get(),  required=True)
