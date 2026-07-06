@@ -473,8 +473,17 @@ def _norm_sep_mode(v) -> str:
     return 'separating_ro' if s == 'separating_rv' else s
 
 
-def ro_to_dict(ro: ROParams) -> dict:
-    return {
+def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
+    """Serialise an ROParams to a JSON-compatible dict.
+
+    With ``include_reentry_plan=False`` the reentry-plan fields (everything in
+    ``_REENTRY_PLAN_KEYS`` -- glide mode, turns, dives, separation) are omitted,
+    yielding a hardware-only reentry object; that is the form ro_library stores,
+    with the plan travelling separately in a ``.reentryplan.json`` file.  The
+    ``glider_LD`` capability stays: it is what the airframe *can* do.  The
+    default (``True``) keeps the full serialisation for internal round-trips.
+    """
+    d = {
         'name':                  ro.name,
         'mass_kg':               ro.mass_kg,
         'beta_kg_m2':            ro.beta_kg_m2,
@@ -512,6 +521,10 @@ def ro_to_dict(ro: ROParams) -> dict:
         'source':                ro.source,
         'notes':                 ro.notes,
     }
+    if not include_reentry_plan:
+        for _k in _REENTRY_PLAN_KEYS:
+            d.pop(_k, None)
+    return d
 
 
 def ro_from_dict(d: dict) -> ROParams:
@@ -2460,8 +2473,12 @@ def _re_safe(s: str, maxlen: int = 60) -> str:
 # and applied onto a reentry object at run time; reentry-object files stay
 # hardware-only.  The schema is deliberately open (schedules are list-valued) so
 # cross-range S-turns, multi-phase pull-ups, and waypoints can be added as new
-# keys without a format change.
-# ---------------------------------------------------------------------------
+# keys without a format change; apply_reentry_plan ignores keys it does not
+# know.  Reserved for later (no format change needed when they land):
+#   'deployment' — post-boost bus/PBV dispense: a separation *time* (today
+#                  separation is pinned to last-stage burnout) and, eventually,
+#                  per-object aimpoints so the bus can deploy multiple reentry
+#                  objects rather than carry one as dead mass.
 _REENTRY_PLAN_KEYS = (
     'glider_enabled', 'glider_guidance', 'glider_pullup_g_max',
     'glider_terminal_dive', 'glider_terminal_alt_km', 'glider_bank_schedule',

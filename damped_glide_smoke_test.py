@@ -26,6 +26,11 @@ from glide_regime import regime_from_result
 
 _BOOSTER = "Minotaur-IV + HTV-2"
 _CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+# Reentry-object files are hardware-only; apply the shipped reentry plan.
+from booster_models import apply_reentry_plan as _arp, load_reentry_plan as _lrp
+_rp = _lrp("C-HGB")
+if _rp is not None:
+    _CHGB = _arp(_CHGB, _rp)
 _CUTOFF = 170.0
 
 

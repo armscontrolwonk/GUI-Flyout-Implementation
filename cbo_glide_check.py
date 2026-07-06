@@ -12,6 +12,11 @@ from booster_models import get_booster, ro_from_dict
 from trajectory import integrate_trajectory
 
 CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+# Reentry-object files are hardware-only; apply the shipped reentry plan.
+from booster_models import apply_reentry_plan as _arp, load_reentry_plan as _lrp
+_rp = _lrp("C-HGB")
+if _rp is not None:
+    CHGB = _arp(CHGB, _rp)
 
 
 def fly(zeta, burnout_deg, mode="damped_glide", aero="constant_LD"):

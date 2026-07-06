@@ -92,9 +92,15 @@ def test_synthetic_no_entry():
 # Integrator-backed tests — real Thrusty trajectories, stable fixtures.
 # --------------------------------------------------------------------------
 def _fly(mode, cutoff, aero="polar", zeta=None, boost="Minotaur-IV + HTV-2"):
-    from booster_models import get_booster, ro_from_dict
+    from booster_models import (get_booster, ro_from_dict,
+                                 apply_reentry_plan, load_reentry_plan)
     from trajectory import integrate_trajectory
+    # Reentry-object files are hardware-only; apply the shipped reentry plan to
+    # get the ready-to-fly object (glide mode, L/D, beta, separation).
     chgb = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    _rp = load_reentry_plan("C-HGB")
+    if _rp is not None:
+        chgb = apply_reentry_plan(chgb, _rp)
     p = get_booster(boost)
     ro = copy.deepcopy(chgb)
     ro.glider_guidance = mode
