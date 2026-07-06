@@ -1,5 +1,5 @@
 {
-  "name": "KN-23",
+  "name": "Hwasong-11",
   "mass_kg": 500.0,
   "beta_kg_m2": 6000.0,
   "shape": "cone",
@@ -19,6 +19,6 @@
   "structure_limit_K": 0.0,
   "nose_tps_custom": null,
   "body_tps_custom": null,
-  "source": "Screening estimate. DPRK KN-23 short-range ballistic missile, Iskander-M (9K720) analog: depressed/quasi-ballistic ~50 km apogee, ~450-690 km range, terminal pull-up maneuver, Mach ~6-7. Non-separating unitary airframe. No published aero/thermal fit - values are open-source order-of-magnitude estimates.",
+  "source": "Screening estimate. DPRK Hwasong-11 (US designator KN-23) short-range ballistic missile, Iskander-M (9K720) analog: depressed/quasi-ballistic ~50 km apogee, ~450-690 km range, terminal pull-up maneuver, Mach ~6-7. Non-separating unitary airframe. No published aero/thermal fit - values are open-source order-of-magnitude estimates.",
   "notes": "Reentry mode: this object was characterised flying damped_glide; the shipped default is the neutral equilibrium_glide. Select the intended reentry mode in the Reentry-mode dropdown (the glide law is a flight-plan choice, not object hardware)."
 }

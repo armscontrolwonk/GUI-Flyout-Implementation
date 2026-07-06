@@ -272,7 +272,7 @@ class ROParams:
     # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
     #                     (ICBM with MIRV, Scud-style separated warhead, …)
-    #   "body"          — vehicle IS the booster body (KN-23 / Iskander,
+    #   "body"          — vehicle IS the booster body (Hwasong-11 / Iskander,
     #                     Pershing II MaRV, single-stage maneuvering body).
     #                     mass/beta/diameter are inherited from the booster's
     #                     last stage (mass_final, beta_kg_m2, diameter_m)
@@ -467,10 +467,14 @@ class ROParams:
 
 
 def _norm_sep_mode(v) -> str:
-    """Normalise a separation_mode value, mapping the legacy 'separating_rv'
-    token (pre-Phase-2 saved files) to the current 'separating_ro'."""
+    """Normalise a separation_mode value to the current two-token vocabulary
+    ('separating_ro' | 'body').  Legacy aliases from older saved files:
+    'separating_rv' -> 'separating_ro' (pre-Phase-2 rename) and
+    'non_separating' -> 'body' (the run path only branches on 'body', so the
+    old token silently missed the body-mode mass/geometry inheritance)."""
     s = str(v or 'separating_ro')
-    return 'separating_ro' if s == 'separating_rv' else s
+    return {'separating_rv': 'separating_ro',
+            'non_separating': 'body'}.get(s, s)
 
 
 def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
@@ -582,7 +586,7 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     The reentry object is params.ro; the booster carries no reentry hardware.
 
     When params.ro has separation_mode == "body" the reentering body IS the
-    booster's own last stage (KN-23 / Iskander, Pershing II MaRV class, or an
+    booster's own last stage (Hwasong-11 / Iskander, Pershing II MaRV class, or an
     SSTO where that stage is the whole vehicle) — not a separating object.
     In that case mass_kg / diameter_m / length_m are
     inherited from the booster's last-stage burnout state (mass_final,
@@ -2513,6 +2517,9 @@ def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
     for k in _REENTRY_PLAN_KEYS:
         if k in rp:
             setattr(q, k, rp[k])
+    # Plan files bypass ro_from_dict, so legacy separation tokens are
+    # normalised here too ('non_separating' -> 'body', etc.).
+    q.separation_mode = _norm_sep_mode(q.separation_mode)
     cmd = rp.get('commanded_LD')
     if cmd is not None:
         q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better
