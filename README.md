@@ -353,7 +353,7 @@ lifting-body property; see below).  CG is estimated from the stage mass stack
 ### No-separation glider: L/D derived from geometry
 
 A **separating** reentry object carries its own designed `glider_LD`.  But when the
-object does **not** separate (KN-23 / Pershing II MaRV class), the gliding body
+object does **not** separate (Hwasong-11 / Pershing II MaRV class), the gliding body
 *is* the whole airframe, so its L/D is an emergent geometric property, not an
 input. `glider_ld.py` derives it from the semi-empirical body+fin force build-up
 at angle of attack — the analytic core of Missile DATCOM — assembled from primary

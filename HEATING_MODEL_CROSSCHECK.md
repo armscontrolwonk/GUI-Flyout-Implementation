@@ -41,14 +41,14 @@ pass survival and fail accuracy; accuracy degrades first (`δ/R_n ≈ 0.1` vs ~0
 |---|---|---|---|---|---|---|
 | **Ballistic RV** | ICBM RV | velocity-locked peak then done; ~6 km/s | **peak flux + integrated load** (they trade off across loft/depress) | nose stagnation | **nose** ablator (carbon-phenolic); **body** = same/thinner ablator | margin-rank trajectories (loft / depress / MET), fixed RV |
 | **Glider / HGV** | AHW, HTV-2 | near-constant flux, long duration | **duration**: soak / oxidation-dwell / recession (the stopwatch) | nose, then acreage/bondline as it lengthens | **nose** UHTC/RCC; **body** silica-phenolic / SIRCA / tile (≠ nose) | survival-time vs glide-time, capped by **min(aero range, thermal range)** |
-| **Maneuvering quasi-ballistic** | **KN-23** | low-altitude high-q̄ **pull-up spike**, short glide; ~2 km/s | **transient peak flux** (heat-sink, not equilibrium); load/soak don't bind | **fin LE / windward flank** (AoA-shifted, *not* the nose) | **body + control-surface** airframe / hot structure (**nose material ~irrelevant**) | **maneuver envelope**: how aggressive a pull-up before a hot spot exceeds the airframe limit |
+| **Maneuvering quasi-ballistic** | **Hwasong-11** | low-altitude high-q̄ **pull-up spike**, short glide; ~2 km/s | **transient peak flux** (heat-sink, not equilibrium); load/soak don't bind | **fin LE / windward flank** (AoA-shifted, *not* the nose) | **body + control-surface** airframe / hot structure (**nose material ~irrelevant**) | **maneuver envelope**: how aggressive a pull-up before a hot spot exceeds the airframe limit |
 
 **Material is a per-location input, not one value.** The catalog (§10.1/§10.4) takes **`nose_tps_material`,
 `body_tps_material` (+ `body_tps_thickness_m`), and an optional `structure_material`** — and *which
 location's material binds tracks the hot-spot column above*: nose for the ballistic RV; nose-then-body
-for a lengthening glide; and **body + control-surface for the KN-23**, where the nose material barely
+for a lengthening glide; and **body + control-surface for the Hwasong-11**, where the nose material barely
 enters and the fin/airframe material *is* the answer. (Today's `heating.py` applies a **single**
-`tps_material` everywhere — the per-location split is the §10.1 upgrade; the KN-23 case is the sharpest
+`tps_material` everywhere — the per-location split is the §10.1 upgrade; the Hwasong-11 case is the sharpest
 reason it's needed, since evaluating it on the nose material would test the wrong part entirely.)
 
 **Reading the table.** The full ~7-measure space (§3a of `HEATING_DATAFLOW.md`) collapses per class to
@@ -59,14 +59,14 @@ reason it's needed, since evaluating it on the nose material would test the wron
 - **Glider** needs the **two range ceilings** — aerodynamic (can L/D, β reach the range?) and thermal
   (can the material survive the time?); achievable range = the **min** (AHW: aero ~6000 km, thermal
   ~1500 km).
-- **Maneuvering (KN-23)** needs **(a) off-nose + AoA heating** (the hot spot is a fin LE / windward
+- **Maneuvering (Hwasong-11)** needs **(a) off-nose + AoA heating** (the hot spot is a fin LE / windward
   flank, not the nose) and **(b) the transient, non-equilibrium heat-sink** (the pull-up spike is too
   short to reach radiative-equilibrium `T_w`, which therefore *over-predicts* — IXV flight, §3/#6).
   Plus it is a **hot structure under maneuver load** (strength-at-temperature, not just melt).
 
 **Scope consequence.** Build the **two-number engine** (`q̇`/`T_w` peak and `Q`/dwell) with
 **per-location material limits** (nose / body / control-surface — §10.1), plus the three **comparison
-modes** above. Per-location + AoA heating and the transient heat-sink are the only additions the KN-23
+modes** above. Per-location + AoA heating and the transient heat-sink are the only additions the Hwasong-11
 forces — and the per-location split is *also* what lets a glider carry a different nose and body
 material at all. Bondline, thermo-structural, and accuracy are **second-order overlays** added once the
 three modes work — they refine the verdict, they don't change the architecture.
@@ -539,7 +539,7 @@ outer surface material of the body"** and `structure_material` as **"what is beh
 | Vehicle | `body_tps_material` (surface) | `structure_material` (behind) | Bondline check |
 |---|---|---|---|
 | Separating RV (heat shield) | sacrificial (silica-phenolic / SIRCA / tile) | airframe metal | real — TPS protects structure |
-| **Non-separating, bare hot structure** (KN-23) | **the airframe material** (Al/steel/C-C/C-SiC) | **= `body_tps_material`** | **collapses** — surface limit *is* the structure limit |
+| **Non-separating, bare hot structure** (Hwasong-11) | **the airframe material** (Al/steel/C-C/C-SiC) | **= `body_tps_material`** | **collapses** — surface limit *is* the structure limit |
 | Non-separating, coated airframe | ablative coating | airframe metal | real — coating protects the airframe |
 
 - **The dropdown is grouped** — *sacrificial TPS* (ablators/tiles) vs *hot structure / airframe*
@@ -552,8 +552,8 @@ outer surface material of the body"** and `structure_material` as **"what is beh
   defaults/ordering differ by location.
 - **`body_tps_thickness_m` reinterprets by group:** sacrificial → TPS-layer thickness (recession +
   bondline protection); hot structure → **skin/wall thickness**, feeding the *transient heat-sink*
-  (does the skin absorb the KN-23 pull-up spike before exceeding its limit — §0).
-- **Control surfaces/fins ride the body material for v1.** The KN-23 hot spot (fin LE / windward) is
+  (does the skin absorb the Hwasong-11 pull-up spike before exceeding its limit — §0).
+- **Control surfaces/fins ride the body material for v1.** The Hwasong-11 hot spot (fin LE / windward) is
   evaluated *at that location* with the body material's limit, so choosing the airframe material as
   `body_tps_material` already governs the binding spot. A dedicated control-surface slot is a later
   refinement, not needed for the first build.
@@ -820,7 +820,7 @@ SAND2006 ~1600 °C oxidation-protected limit, bounding the UHTC-life spread.
 > split-fields check, so legacy single-material RVs keep the old call byte-identical.
 > **Phases 3–5 are cancelled**: the three §0 questions are answered by *running trajectories and
 > reading the existing output* (loft-vs-depress = run both and compare; longer-glide = compromise
-> time vs glide time; KN-23 = fly the pull-up, the body location catches the spike). Bands,
+> time vs glide time; Hwasong-11 = fly the pull-up, the body location catches the spike). Bands,
 > recession, bondline, maneuver-envelope sweeps stay in this memo as research record, surfaced
 > only as fixed `warnings[]` text. The original five-phase plan is retained below as the record
 > of what was considered and consciously not built.
@@ -866,18 +866,18 @@ the same evaluator. Screening tier throughout (not FIAT; see §3 for the tier ab
 - **Ballistic:** fly the fixed RV over loft / depress / MET; min-margin per trajectory; rank.
 - **Glider:** thermal-survival-time (evaluator) vs glide-time (trajectory); achievable range =
   **min(aero range, thermal range)**.
-- **Maneuver (KN-23):** sweep pull-up severity (g, altitude); find where a hot-spot margin → 1 → the
+- **Maneuver (Hwasong-11):** sweep pull-up severity (g, altitude); find where a hot-spot margin → 1 → the
   **envelope**.
 - **Verify:** reproduce this session's numbers — SWERVE ~100 s; AHW ~500 s @ 1,500 km, nose-limited @
   6,000 km.
 
-### Phase 4 — KN-23 specifics (the two additions §0 named)
+### Phase 4 — Hwasong-11 specifics (the two additions §0 named)
 **Files:** `heating.py`.
 - **AoA / off-nose heating:** windward/fin amplification so the binding location can be the fin LE /
   windward flank, not the nose.
 - **Transient heat-sink:** short spikes use the non-equilibrium skin response (`ρ·c·δ_skin`) instead of
   equilibrium `T_w` (which over-predicts — IXV flight, §3/#6); `body_tps_thickness_m` as skin thickness.
-- **Verify:** a KN-23-class case binds on the fin/windward, not the nose; transient `T_w` < equilibrium.
+- **Verify:** a Hwasong-11-class case binds on the fin/windward, not the nose; transient `T_w` < equilibrium.
 
 ### Phase 5 — Bands + reporting (honesty layer)
 - Run every flux-dependent measure **laminar and turbulent**; report the **band + binding measure +

@@ -1933,7 +1933,7 @@ def integrate_trajectory(params: BoosterParams,
 
                 # _analytical_equil_glide returns a single point when the
                 # pierce speed is below the equilibrium-glide terminal speed
-                # — e.g. a quasi-ballistic booster (KN-23 class) that just
+                # — e.g. a quasi-ballistic booster (Hwasong-11 class) that just
                 # clipped 100 km rather than arriving at hypersonic glide
                 # conditions.  Fall back to the full EOM with lift so we get
                 # a physically correct skip-glide trajectory rather than a
