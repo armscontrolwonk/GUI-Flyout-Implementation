@@ -3,6 +3,8 @@
   "burnout_angle_deg": 40.0,
   "loft_angle_rate_deg_s": 0.8,
   "launch_elevation_deg": 90.0,
+  "shroud_jettison_alt_km": 80.0,
+  "booster_jettison_s": 0.0,
   "stages": [
     {
       "stage_turn_start_s": 0.0,
@@ -12,7 +14,8 @@
       "stage_cutoff_s": null,
       "stage_yaw_start_s": null,
       "stage_yaw_stop_s": null,
-      "stage_yaw_final_az_deg": null
+      "stage_yaw_final_az_deg": null,
+      "grid_fin_deploy_schedule": []
     },
     {
       "stage_turn_start_s": null,
@@ -22,7 +25,8 @@
       "stage_cutoff_s": null,
       "stage_yaw_start_s": null,
       "stage_yaw_stop_s": null,
-      "stage_yaw_final_az_deg": null
+      "stage_yaw_final_az_deg": null,
+      "grid_fin_deploy_schedule": []
     },
     {
       "stage_turn_start_s": null,
@@ -32,7 +36,8 @@
       "stage_cutoff_s": null,
       "stage_yaw_start_s": null,
       "stage_yaw_stop_s": null,
-      "stage_yaw_final_az_deg": null
+      "stage_yaw_final_az_deg": null,
+      "grid_fin_deploy_schedule": []
     }
   ]
 }
