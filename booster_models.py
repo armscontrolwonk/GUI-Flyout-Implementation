@@ -1919,6 +1919,33 @@ def _booster_mass_addend(params: BoosterParams, t: float) -> float:
             - n * params.booster_prop_kg / t_b * t)
 
 
+# Free-molecular heating flux at which a payload shroud/fairing is jettisoned.
+# 1135 W/m^2 = 0.1 BTU/ft^2-s, the standard launch-vehicle fairing-jettison
+# thermal criterion (ULA Atlas V / Delta IV and SpaceX Falcon user's guides;
+# collated in Isakowitz, International Reference Guide to Space Launch Systems).
+# q_dot = 1/2 rho V^3 is the free-molecular convective flux (accommodation ~1).
+SHROUD_Q_FAIRING = 1135.0   # W/m^2
+
+
+def _shroud_jettisoned(params: 'BoosterParams', alt_m: float) -> bool:
+    """Has the payload shroud been jettisoned by this point in the flight?
+
+    Two modes, selected by shroud_jettison_alt_km:
+      * > 0  — explicit altitude override: jettison at that altitude (altitude
+               is monotonic during boost, so this is self-latching).
+      * <= 0 — heating default ("exoatmospheric"): jettison once the
+               free-molecular flux 1/2 rho V^3 falls below SHROUD_Q_FAIRING
+               after max-q.  The EOM maintains the latch
+               params._shroud_latch = [armed, jettisoned, t_jettison]; this
+               reads the jettisoned flag.  Before integration (no latch set),
+               the shroud is treated as still attached.
+    """
+    if params.shroud_jettison_alt_km > 0:
+        return alt_m / 1000.0 >= params.shroud_jettison_alt_km
+    lat = getattr(params, '_shroud_latch', None)
+    return bool(lat[1]) if lat is not None else False
+
+
 def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> float:
     """Mass of the stage chain only (excludes strap-on boosters)."""
     if t <= 0:
@@ -1930,8 +1957,7 @@ def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> fl
             # Propellant is consumed only up to the commanded cutoff; after that
             # the unburned propellant rides on as dead mass until jettison.
             mass = s.mass_initial - mdot * min(t_rem, _eff_burn(s))
-            if (params.shroud_mass_kg > 0
-                    and alt_m / 1000.0 >= params.shroud_jettison_alt_km):
+            if params.shroud_mass_kg > 0 and _shroud_jettisoned(params, alt_m):
                 mass -= params.shroud_mass_kg
             return mass
         t_rem -= s.burn_time_s
@@ -1998,7 +2024,7 @@ def _boost_front_geometry(top_params: 'BoosterParams', params: BoosterParams,
     if (top_params is not None
             and top_params.shroud_diameter_m > 0
             and altitude_m is not None
-            and altitude_m < top_params.shroud_jettison_alt_km * 1000.0):
+            and not _shroud_jettisoned(top_params, altitude_m)):
         return (top_params.shroud_nose_shape, top_params.shroud_diameter_m,
                 top_params.shroud_nose_length_m, top_params.shroud_length_m, True)
     ro = effective_ro(top_params) if top_params is not None else None

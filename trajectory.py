@@ -78,6 +78,7 @@ from booster_models import (
     BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_ro, booster_separation_time,
+    SHROUD_Q_FAIRING,
 )
 
 
@@ -698,6 +699,24 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     _gl_above = getattr(params, '_gl_above_pierce', None)
     if _gl_above is not None and not _gl_above[0] and alt > ACTON_PIERCE_ALT_M:
         _gl_above[0] = True
+
+    # Shroud heating-jettison latch (heating mode only: shroud_jettison_alt_km<=0).
+    # Free-molecular flux q_dot = 1/2 rho V^3 arms above SHROUD_Q_FAIRING (past
+    # max-q) then jettisons on the first drop below it; latched thereafter.
+    _sh = getattr(params, '_shroud_latch', None)
+    if (_sh is not None and not _sh[1] and params.shroud_mass_kg > 0
+            and params.shroud_jettison_alt_km <= 0):
+        _spd = float(np.linalg.norm(vel))
+        _, _, _rho_sh, _ = atmosphere(alt)
+        _qdot = 0.5 * _rho_sh * _spd ** 3
+        if not _sh[0]:
+            if _qdot > SHROUD_Q_FAIRING:
+                _sh[0] = True                    # armed: through max-q
+        elif _qdot < SHROUD_Q_FAIRING and alt > 40_000.0:
+            # alt guard: the real fairing-flux crossing is high (~110 km); this
+            # stops a fresh integration pass (t=0, alt=0, armed already latched
+            # on params from an earlier pass) from jettisoning at liftoff.
+            _sh[1] = True; _sh[2] = t            # jettison, latched
 
     # --- Drag ---
     # Density comes from NRLMSISE-00 (or US Std Atm 1976 fallback), both
@@ -1535,6 +1554,11 @@ def integrate_trajectory(params: BoosterParams,
     if not hasattr(params, '__dict__'):
         params = copy.copy(params)
     params._gl_above_pierce = [False]   # set once alt > 100 km
+    # Shroud heating-jettison latch [armed, jettisoned, t_jettison], used only
+    # when shroud_jettison_alt_km <= 0 (heating default).  armed once q_dot has
+    # risen above the fairing flux (past max-q); jettisoned on the first drop
+    # back below it.  Latched — never re-attaches on reentry.
+    params._shroud_latch = [False, False, None]
     params._glider_phase1   = False     # True during pre-apogee Phase 1
 
     # Compute the mission-elapsed time at which the final stage ignites.
@@ -2420,10 +2444,13 @@ def integrate_trajectory(params: BoosterParams,
         row['event'] = label
         milestones.append(row)
 
-    # Shroud jettison — first upward crossing of jettison altitude
+    # Shroud jettison — altitude crossing (override) or heating-latch time.
     if params.shroud_mass_kg > 0:
-        t_ev = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
-                             ascending=True)
+        if params.shroud_jettison_alt_km > 0:
+            t_ev = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
+                                 ascending=True)
+        else:
+            t_ev = getattr(params, '_shroud_latch', [None, None, None])[2]
         if t_ev is not None:
             row = _milestone(t_ev)
             row['event'] = "Shroud jettison"
@@ -2509,8 +2536,11 @@ def integrate_trajectory(params: BoosterParams,
     # Shroud debris arc.  If length is given use tumbling-cylinder β; otherwise
     # fall back to end-on disc area so the impact row is always shown.
     if params.shroud_mass_kg > 0:
-        _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
-                                ascending=True)
+        if params.shroud_jettison_alt_km > 0:
+            _t_fair = _alt_crossing(params.shroud_jettison_alt_km * 1000.0,
+                                    ascending=True)
+        else:
+            _t_fair = getattr(params, '_shroud_latch', [None, None, None])[2]
         if _t_fair is not None and _t_fair <= t_arr[-1]:
             _sd = params.shroud_diameter_m if params.shroud_diameter_m > 0 else params.diameter_m
             if params.shroud_length_m > 0:
