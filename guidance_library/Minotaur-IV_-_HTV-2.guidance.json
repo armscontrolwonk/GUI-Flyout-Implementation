@@ -1,0 +1,38 @@
+{
+  "guidance": "true_gravity_turn",
+  "burnout_angle_deg": 2.0,
+  "loft_angle_rate_deg_s": 2.0,
+  "launch_elevation_deg": 90.0,
+  "stages": [
+    {
+      "stage_turn_start_s": 10.0,
+      "stage_turn_stop_s": 16.0,
+      "stage_burnout_angle_deg": 2.0,
+      "coast_time_s": 0.0,
+      "stage_cutoff_s": null,
+      "stage_yaw_start_s": null,
+      "stage_yaw_stop_s": null,
+      "stage_yaw_final_az_deg": null
+    },
+    {
+      "stage_turn_start_s": 57.0,
+      "stage_turn_stop_s": 107.0,
+      "stage_burnout_angle_deg": 60.0,
+      "coast_time_s": 0.0,
+      "stage_cutoff_s": null,
+      "stage_yaw_start_s": null,
+      "stage_yaw_stop_s": null,
+      "stage_yaw_final_az_deg": null
+    },
+    {
+      "stage_turn_start_s": null,
+      "stage_turn_stop_s": null,
+      "stage_burnout_angle_deg": null,
+      "coast_time_s": 0.0,
+      "stage_cutoff_s": null,
+      "stage_yaw_start_s": null,
+      "stage_yaw_stop_s": null,
+      "stage_yaw_final_az_deg": null
+    }
+  ]
+}
