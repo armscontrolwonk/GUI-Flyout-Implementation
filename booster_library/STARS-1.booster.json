@@ -14,7 +14,6 @@
   "bus_mass_kg": 0.0,
   "num_ros": 1,
   "shroud_mass_kg": 0.0,
-  "shroud_jettison_alt_km": 80.0,
   "shroud_length_m": 0.0,
   "shroud_diameter_m": 0.0,
   "nozzle_exit_area_m2": 0.0,
@@ -44,16 +43,6 @@
   "grid_fin_cell_pitch_m": 0.032,
   "grid_fin_solidity": 0.0,
   "grid_fin_edge_factor": 1.0,
-  "grid_fin_deploy_schedule": [
-    [
-      3.0,
-      4
-    ],
-    [
-      63.0,
-      4
-    ]
-  ],
   "payload_diameter_m": 0.0,
   "pbv_diameter_m": 0.0,
   "pbv_length_m": 0.0,
@@ -70,7 +59,6 @@
   "booster_length_m": 0.0,
   "booster_cd": 0.2,
   "booster_core_delay_s": 0.0,
-  "booster_jettison_s": 0.0,
   "ro": {
     "name": "AHW",
     "mass_kg": 450.0,
@@ -125,7 +113,6 @@
     "bus_mass_kg": 0.0,
     "num_ros": 1,
     "shroud_mass_kg": 0.0,
-    "shroud_jettison_alt_km": 80.0,
     "shroud_length_m": 0.0,
     "shroud_diameter_m": 0.0,
     "nozzle_exit_area_m2": 0.0,
@@ -155,7 +142,6 @@
     "grid_fin_cell_pitch_m": 0.0,
     "grid_fin_solidity": 0.0,
     "grid_fin_edge_factor": 1.0,
-    "grid_fin_deploy_schedule": [],
     "payload_diameter_m": 0.0,
     "pbv_diameter_m": 0.0,
     "pbv_length_m": 0.0,
@@ -172,7 +158,6 @@
     "booster_length_m": 0.0,
     "booster_cd": 0.2,
     "booster_core_delay_s": 0.0,
-    "booster_jettison_s": 0.0,
     "stage2": {
       "name": "Orbus 1a (STARS 3rd stage)",
       "mass_initial": 950.0,
@@ -189,7 +174,6 @@
       "bus_mass_kg": 0.0,
       "num_ros": 1,
       "shroud_mass_kg": 0.0,
-      "shroud_jettison_alt_km": 80.0,
       "shroud_length_m": 0.0,
       "shroud_diameter_m": 0.0,
       "nozzle_exit_area_m2": 0.0,
@@ -219,7 +203,6 @@
       "grid_fin_cell_pitch_m": 0.0,
       "grid_fin_solidity": 0.0,
       "grid_fin_edge_factor": 1.0,
-      "grid_fin_deploy_schedule": [],
       "payload_diameter_m": 0.0,
       "pbv_diameter_m": 0.0,
       "pbv_length_m": 0.0,
@@ -235,8 +218,7 @@
       "booster_diam_m": 0.0,
       "booster_length_m": 0.0,
       "booster_cd": 0.2,
-      "booster_core_delay_s": 0.0,
-      "booster_jettison_s": 0.0
+      "booster_core_delay_s": 0.0
     }
   }
 }

@@ -2326,10 +2326,20 @@ load_booster_library()
 # booster at run time.  Booster files stay hardware-only.
 # ---------------------------------------------------------------------------
 _FLIGHT_PLAN_TOP_KEYS = ('guidance', 'burnout_angle_deg', 'loft_angle_rate_deg_s',
-                      'launch_elevation_deg')
+                      'launch_elevation_deg',
+                      # Subsystem-deployment timing read from the root booster:
+                      # when the payload shroud is jettisoned (altitude, or <=0
+                      # for the heating-flux default) and when spent strap-on
+                      # boosters separate.  Both are flight decisions, not
+                      # hardware, so they live in the flight plan.
+                      'shroud_jettison_alt_km', 'booster_jettison_s')
 _FLIGHT_PLAN_STAGE_KEYS = ('stage_turn_start_s', 'stage_turn_stop_s',
                         'stage_burnout_angle_deg', 'coast_time_s', 'stage_cutoff_s',
-                        'stage_yaw_start_s', 'stage_yaw_stop_s', 'stage_yaw_final_az_deg')
+                        'stage_yaw_start_s', 'stage_yaw_stop_s', 'stage_yaw_final_az_deg',
+                        # Grid-fin deployment schedule is read per active stage
+                        # (drag_force_vector receives the current stage), so it is
+                        # a per-stage flight-plan field.
+                        'grid_fin_deploy_schedule')
 
 
 def extract_flight_plan(p: BoosterParams) -> dict:
