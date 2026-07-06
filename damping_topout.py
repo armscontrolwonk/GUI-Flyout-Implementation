@@ -19,6 +19,11 @@ from trajectory import integrate_trajectory
 from atmosphere import atmosphere
 
 CHGB = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+# Reentry-object files are hardware-only; apply the shipped reentry plan.
+from booster_models import apply_reentry_plan as _arp, load_reentry_plan as _lrp
+_rp = _lrp("C-HGB")
+if _rp is not None:
+    CHGB = _arp(CHGB, _rp)
 KICK = 17.0
 G0, RE, HR = 9.80665, 6.378137e6, 7000.0
 BETA, LD = CHGB.beta_kg_m2, CHGB.glider_LD

@@ -35,7 +35,9 @@ from booster_models import (BOOSTER_DB, get_booster,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
-                           ROParams, ro_from_dict, ro_to_dict, effective_ro)
+                           ROParams, ro_from_dict, ro_to_dict, effective_ro,
+                           extract_reentry_plan, apply_reentry_plan,
+                           load_reentry_plan, save_reentry_plan)
 from trajectory import (integrate_trajectory, maximize_range, aim_booster,
                         plan_orbital_insertion, MaxRangeCancelled)
 from coordinates import range_between
@@ -202,6 +204,10 @@ _RO_LIBRARY_PATH  = _THRUSTY_ROOT / "ro_library"
 # bundled plan.  (Separate from the bundled flight_plans/ next to the module.)
 _FLIGHT_PLAN_LIBRARY_PATH = _THRUSTY_ROOT / "flight_plans"
 mm.USER_FLIGHT_PLAN_DIRS = [str(_FLIGHT_PLAN_LIBRARY_PATH)]
+# Reentry objects are the down-leg equivalent: hardware-only files plus a
+# separate reentry plan.  User plans live here and override the bundled ones.
+_REENTRY_PLAN_LIBRARY_PATH = _THRUSTY_ROOT / "reentry_plans"
+mm.USER_REENTRY_PLAN_DIRS = [str(_REENTRY_PLAN_LIBRARY_PATH)]
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
 _BUNDLED_RO_LIBRARY_PATH = Path(__file__).resolve().parent / "ro_library"
@@ -352,6 +358,12 @@ def _load_ro_library():
         for fp in files:
             try:
                 ro = ro_from_dict(json.loads(fp.read_text()))
+                # Reentry-object files are hardware-only; merge the reentry plan
+                # (glide mode, turns, dives, separation) on top so RO_DB holds
+                # ready-to-fly objects, exactly as get_booster does for boosters.
+                _rp = load_reentry_plan(ro.name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
+                if _rp is not None:
+                    ro = apply_reentry_plan(ro, _rp)
                 key = ro.name or fp.stem.replace(".ro", "").replace(".ro", "")
                 RO_DB[key] = lambda _r=ro: _r
             except Exception as exc:
