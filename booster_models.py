@@ -2449,3 +2449,95 @@ def _re_safe(s: str, maxlen: int = 60) -> str:
     s = _re.sub(r'\s+', '_', (s or '').strip())
     s = _re.sub(r'[^\w\-]', '-', s)
     return s[:maxlen] or 'booster'
+
+
+# ---------------------------------------------------------------------------
+# Reentry plans — the "how it's flown" half of a reentry object, the down-leg
+# analogue of the flight plan.  A reentry object owns *what it is* (shape, beta,
+# mass, TPS, and its max L/D capability); the reentry plan owns *how it flies the
+# reentry* — glide mode, commanded L/D (capped at capability), turns, pull-ups,
+# dives, and whether it separates.  Shipped as reentry_plans/*.reentryplan.json
+# and applied onto a reentry object at run time; reentry-object files stay
+# hardware-only.  The schema is deliberately open (schedules are list-valued) so
+# cross-range S-turns, multi-phase pull-ups, and waypoints can be added as new
+# keys without a format change.
+# ---------------------------------------------------------------------------
+_REENTRY_PLAN_KEYS = (
+    'glider_enabled', 'glider_guidance', 'glider_pullup_g_max',
+    'glider_terminal_dive', 'glider_terminal_alt_km', 'glider_bank_schedule',
+    'glider_dive_target_lat_deg', 'glider_dive_target_lon_deg',
+    'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
+    'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
+    'separation_mode',
+)
+
+
+def extract_reentry_plan(ro: ROParams) -> dict:
+    """Pull the reentry plan out of a reentry object into a plain dict.
+
+    ``commanded_LD`` defaults to the vehicle's full L/D capability, so applying
+    the extracted plan is a no-op; lowering it later flies the vehicle worse.
+    """
+    rp = {k: getattr(ro, k) for k in _REENTRY_PLAN_KEYS}
+    rp['commanded_LD'] = ro.glider_LD
+    return rp
+
+
+def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
+    """Return a copy of reentry object ``ro`` with reentry plan ``rp`` applied.
+
+    Plan fields are stamped onto the copy; hardware (shape/beta/mass/TPS and the
+    ``glider_LD`` capability) is untouched.  The commanded L/D is clamped to the
+    vehicle's capability so a plan can only fly it worse, never beyond its
+    aerodynamic limit.  Missing keys leave the object's own value in place.
+    """
+    import copy as _copy
+    q = _copy.deepcopy(ro)
+    for k in _REENTRY_PLAN_KEYS:
+        if k in rp:
+            setattr(q, k, rp[k])
+    cmd = rp.get('commanded_LD')
+    if cmd is not None:
+        q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better
+    return q
+
+
+_BUNDLED_REENTRY_PLANS = _Path(__file__).resolve().parent / "reentry_plans"
+# Extra dirs (highest precedence last) for user reentry plans; merged over the
+# bundled plan per key, mirroring USER_FLIGHT_PLAN_DIRS.
+USER_REENTRY_PLAN_DIRS: list = []
+
+
+def reentry_plan_filename(name: str) -> str:
+    """Canonical reentry-plan filename for a reentry-object name."""
+    return f"{_re_safe(name)}.reentryplan.json"
+
+
+def load_reentry_plan(name: str, extra_dirs=()):
+    """Load a reentry object's plan by name; None if none found.
+
+    Bundled dir first, then each of ``extra_dirs`` merged over it (later wins),
+    so a user plan need only carry the fields it overrides.
+    """
+    from pathlib import Path as _P
+    safe = _re_safe(name)
+    result = None
+    for d in [_BUNDLED_REENTRY_PLANS, *[_P(x) for x in extra_dirs]]:
+        fp = d / f"{safe}.reentryplan.json"
+        if fp.exists():
+            try:
+                data = _json.loads(fp.read_text())
+            except Exception:
+                continue
+            result = data if result is None else {**result, **data}
+    return result
+
+
+def save_reentry_plan(name: str, rp: dict, out_dir) -> str:
+    """Write reentry plan ``rp`` for ``name`` into ``out_dir``; return the path."""
+    from pathlib import Path as _P
+    d = _P(out_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / reentry_plan_filename(name)
+    path.write_text(_json.dumps(rp, indent=2) + "\n")
+    return str(path)

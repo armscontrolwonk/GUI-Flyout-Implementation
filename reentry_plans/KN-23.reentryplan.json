@@ -1,0 +1,17 @@
+{
+  "glider_enabled": true,
+  "glider_guidance": "equilibrium_glide",
+  "glider_pullup_g_max": 15.0,
+  "glider_terminal_dive": true,
+  "glider_terminal_alt_km": 30.0,
+  "glider_bank_schedule": [],
+  "glider_dive_target_lat_deg": 0.0,
+  "glider_dive_target_lon_deg": 0.0,
+  "glider_dive_target_radius_km": 0.0,
+  "glider_beta_entry_kg_m2": 0.0,
+  "glider_skip_count": 1,
+  "glider_damping_zeta": 0.7,
+  "glider_flap_deflection_deg": 0.0,
+  "separation_mode": "non_separating",
+  "commanded_LD": 1.0
+}
