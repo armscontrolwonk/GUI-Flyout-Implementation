@@ -195,6 +195,13 @@ def _boosters_dir():
         return _DIR_BOOSTERS_LEGACY
     return _ensure_dir(_DIR_BOOSTERS)
 _RO_LIBRARY_PATH  = _THRUSTY_ROOT / "ro_library"
+# Writable user flight-plan library.  Booster hardware is stored without a
+# flight plan; when the user saves a booster we drop a timing-only flight plan
+# here so subsystem-deployment timing (shroud/strap-on/grid-fin) survives a
+# reload.  Registered with booster_models so get_booster merges it over the
+# bundled plan.  (Separate from the bundled flight_plans/ next to the module.)
+_FLIGHT_PLAN_LIBRARY_PATH = _THRUSTY_ROOT / "flight_plans"
+mm.USER_FLIGHT_PLAN_DIRS = [str(_FLIGHT_PLAN_LIBRARY_PATH)]
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
 _BUNDLED_RO_LIBRARY_PATH = Path(__file__).resolve().parent / "ro_library"
@@ -1916,7 +1923,10 @@ class BoosterDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _prefill(self, name):
         """Populate all fields from an existing booster (custom or packaged)."""
-        p = BOOSTER_DB[name]()
+        # get_booster (not the raw hardware) so the dialog shows the booster's
+        # real deployment timing, which lives in the flight plan; otherwise a
+        # re-edit would display defaults and clobber the saved timing on save.
+        p = get_booster(name)
 
         payload      = p.payload_kg
         shroud_mass  = p.shroud_mass_kg
@@ -6184,10 +6194,37 @@ class BoosterFlyoutApp(tk.Tk):
         name = p.name
         BOOSTER_DB[name] = lambda _p=p: _p
         _save_custom_boosters()
+        # Booster files are hardware-only, so the subsystem-deployment timing
+        # the dialog owns (shroud jettison alt, strap-on jettison time, grid-fin
+        # deploy schedule) would be lost on reload.  Persist it as a timing-only
+        # user flight plan; get_booster merges it over the bundled plan.
+        self._save_timing_flight_plan(p)
         # Snapshot trajectory panel so saving the booster doesn't reset it.
         self._snapshot_traj_profile(name)
         self._refresh_booster_list(select_name=name)
         self._status_var.set(f"Booster '{name}' saved.")
+
+    def _save_timing_flight_plan(self, p):
+        """Write a timing-only flight plan for booster ``p`` to the user library.
+
+        Carries just the dialog-owned deployment timing so it overrides the
+        bundled plan without touching guidance (which the trajectory panel
+        owns).  Failure is non-fatal -- the booster hardware is already saved.
+        """
+        stages, node = [], p
+        while node is not None:
+            stages.append({'grid_fin_deploy_schedule':
+                           list(getattr(node, 'grid_fin_deploy_schedule', []) or [])})
+            node = getattr(node, 'stage2', None)
+        tp = {
+            'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
+            'booster_jettison_s':     p.booster_jettison_s,
+            'stages':                 stages,
+        }
+        try:
+            save_flight_plan(p.name, tp, _FLIGHT_PLAN_LIBRARY_PATH)
+        except Exception as exc:
+            print(f"Warning: could not save flight plan for '{p.name}': {exc}")
 
     def _new_booster(self):
         BoosterDialog(self, on_save=self._on_booster_saved)

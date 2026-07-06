@@ -1533,7 +1533,7 @@ def get_booster(name: str) -> BoosterParams:
     # no-op (the plan was extracted from the booster's own fields), and once
     # guidance is stripped from booster files it restores the plan.  Returning
     # the applied copy also avoids callers mutating the shared cached instance.
-    fp = load_flight_plan(name)
+    fp = load_flight_plan(name, extra_dirs=USER_FLIGHT_PLAN_DIRS)
     return apply_flight_plan(p, fp) if fp is not None else p
 
 
@@ -2378,19 +2378,51 @@ def apply_flight_plan(p: BoosterParams, fp: dict) -> BoosterParams:
 
 _BUNDLED_FLIGHT_PLANS = _Path(__file__).resolve().parent / "flight_plans"
 
+# Extra directories (highest precedence last) searched for user flight plans,
+# e.g. the GUI's writable ~/Documents/Thrusty/flight_plans.  A user file is
+# merged *over* the bundled plan per key, so a user booster save can override
+# just the fields it owns (subsystem-deployment timing) without discarding the
+# shipped guidance.  Empty by default so headless/library use only sees the
+# bundled plans.
+USER_FLIGHT_PLAN_DIRS: list = []
+
+
+def _merge_flight_plans(base: dict, over: dict) -> dict:
+    """Overlay flight plan ``over`` onto ``base``, per key and per stage."""
+    out = {k: v for k, v in base.items() if k != 'stages'}
+    for k, v in over.items():
+        if k != 'stages':
+            out[k] = v
+    stages = [dict(s) for s in base.get('stages', [])]
+    for i, ost in enumerate(over.get('stages', [])):
+        if i < len(stages):
+            stages[i].update(ost)
+        else:
+            stages.append(dict(ost))
+    if stages or 'stages' in base or 'stages' in over:
+        out['stages'] = stages
+    return out
+
 
 def load_flight_plan(name: str, extra_dirs=()):
-    """Load a shipped/user flight plan by booster name; None if not found."""
+    """Load a booster's flight plan by name; None if none found.
+
+    Searches the bundled directory first, then each of ``extra_dirs`` in order,
+    merging each file it finds over the accumulated plan (later dirs win).  A
+    user file therefore need only carry the fields it overrides.
+    """
     from pathlib import Path as _P
     safe = _re_safe(name)
+    result = None
     for d in [_BUNDLED_FLIGHT_PLANS, *[_P(x) for x in extra_dirs]]:
         fp = d / f"{safe}.flightplan.json"
         if fp.exists():
             try:
-                return _json.loads(fp.read_text())
+                data = _json.loads(fp.read_text())
             except Exception:
-                pass
-    return None
+                continue
+            result = data if result is None else _merge_flight_plans(result, data)
+    return result
 
 
 def flight_plan_filename(name: str) -> str:
