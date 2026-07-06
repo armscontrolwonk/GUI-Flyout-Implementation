@@ -2301,32 +2301,32 @@ load_booster_library()
 
 
 # ---------------------------------------------------------------------------
-# Flight plans (guidance profiles) — the "how it's flown" half of a booster,
+# Flight plans — the "how it's flown" half of a booster,
 # kept separate from the "what it is" hardware.  A flight plan carries the
 # guidance mode, burnout/launch angles, and the per-stage pitch / yaw / coast /
-# cutoff schedule.  Shipped as guidance_library/*.guidance.json, applied onto a
+# cutoff schedule.  Shipped as flight_plans/*.flightplan.json, applied onto a
 # booster at run time.  Booster files stay hardware-only.
 # ---------------------------------------------------------------------------
-_GUIDANCE_TOP_KEYS = ('guidance', 'burnout_angle_deg', 'loft_angle_rate_deg_s',
+_FLIGHT_PLAN_TOP_KEYS = ('guidance', 'burnout_angle_deg', 'loft_angle_rate_deg_s',
                       'launch_elevation_deg')
-_GUIDANCE_STAGE_KEYS = ('stage_turn_start_s', 'stage_turn_stop_s',
+_FLIGHT_PLAN_STAGE_KEYS = ('stage_turn_start_s', 'stage_turn_stop_s',
                         'stage_burnout_angle_deg', 'coast_time_s', 'stage_cutoff_s',
                         'stage_yaw_start_s', 'stage_yaw_stop_s', 'stage_yaw_final_az_deg')
 
 
-def extract_guidance(p: BoosterParams) -> dict:
+def extract_flight_plan(p: BoosterParams) -> dict:
     """Pull the flight plan (guidance) out of a booster into a plain dict."""
     stages = []
     s = p
     while s is not None:
-        stages.append({k: getattr(s, k) for k in _GUIDANCE_STAGE_KEYS})
+        stages.append({k: getattr(s, k) for k in _FLIGHT_PLAN_STAGE_KEYS})
         s = s.stage2
-    fp = {k: getattr(p, k) for k in _GUIDANCE_TOP_KEYS}
+    fp = {k: getattr(p, k) for k in _FLIGHT_PLAN_TOP_KEYS}
     fp['stages'] = stages
     return fp
 
 
-def apply_guidance(p: BoosterParams, fp: dict) -> BoosterParams:
+def apply_flight_plan(p: BoosterParams, fp: dict) -> BoosterParams:
     """Return a copy of booster `p` with flight plan `fp` stamped onto it.
 
     Top-level guidance fields and the per-stage schedule are set from `fp`;
@@ -2334,29 +2334,29 @@ def apply_guidance(p: BoosterParams, fp: dict) -> BoosterParams:
     """
     import copy as _copy
     q = _copy.deepcopy(p)
-    for k in _GUIDANCE_TOP_KEYS:
+    for k in _FLIGHT_PLAN_TOP_KEYS:
         if k in fp:
             setattr(q, k, fp[k])
     node = q
     for st in fp.get('stages', []):
         if node is None:
             break
-        for k in _GUIDANCE_STAGE_KEYS:
+        for k in _FLIGHT_PLAN_STAGE_KEYS:
             if k in st:
                 setattr(node, k, st[k])
         node = node.stage2
     return q
 
 
-_BUNDLED_GUIDANCE_LIB = _Path(__file__).resolve().parent / "guidance_library"
+_BUNDLED_FLIGHT_PLANS = _Path(__file__).resolve().parent / "flight_plans"
 
 
-def load_guidance(name: str, extra_dirs=()):
+def load_flight_plan(name: str, extra_dirs=()):
     """Load a shipped/user flight plan by booster name; None if not found."""
     from pathlib import Path as _P
     safe = _re_safe(name)
-    for d in [_BUNDLED_GUIDANCE_LIB, *[_P(x) for x in extra_dirs]]:
-        fp = d / f"{safe}.guidance.json"
+    for d in [_BUNDLED_FLIGHT_PLANS, *[_P(x) for x in extra_dirs]]:
+        fp = d / f"{safe}.flightplan.json"
         if fp.exists():
             try:
                 return _json.loads(fp.read_text())
