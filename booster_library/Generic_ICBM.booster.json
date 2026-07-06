@@ -6,11 +6,7 @@
   "diameter_m": 2.0,
   "length_m": 20.0,
   "burn_time_s": 150.0,
-  "coast_time_s": 0.0,
   "isp_s": 280.0,
-  "guidance": "pitch_program",
-  "burnout_angle_deg": 30.0,
-  "loft_angle_rate_deg_s": 0.5,
   "mach_table": [
     0.0,
     0.85,
@@ -82,8 +78,6 @@
   "booster_cd": 0.2,
   "booster_core_delay_s": 0.0,
   "booster_jettison_s": 0.0,
-  "stage_turn_start_s": 0.0,
-  "stage_turn_stop_s": 120.0,
   "stage2": {
     "name": "Generic ICBM Stage 2",
     "mass_initial": 20000.0,
@@ -92,11 +86,7 @@
     "diameter_m": 1.5,
     "length_m": 8.0,
     "burn_time_s": 120.0,
-    "coast_time_s": 0.0,
     "isp_s": 290.0,
-    "guidance": "pitch_program",
-    "burnout_angle_deg": 30.0,
-    "loft_angle_rate_deg_s": 0.5,
     "mach_table": [
       0.0,
       0.85,
