@@ -1527,7 +1527,14 @@ BOOSTER_DB: dict = {}
 def get_booster(name: str) -> BoosterParams:
     if name not in BOOSTER_DB:
         raise ValueError(f"Unknown booster '{name}'. Available: {list(BOOSTER_DB)}")
-    return BOOSTER_DB[name]()
+    p = BOOSTER_DB[name]()
+    # Apply the booster's shipped flight plan (guidance) so it arrives ready to
+    # fly.  This is the seam that separates hardware from flight plan: today a
+    # no-op (the plan was extracted from the booster's own fields), and once
+    # guidance is stripped from booster files it restores the plan.  Returning
+    # the applied copy also avoids callers mutating the shared cached instance.
+    fp = load_flight_plan(name)
+    return apply_flight_plan(p, fp) if fp is not None else p
 
 
 def _migrate_guidance(g: str) -> str:

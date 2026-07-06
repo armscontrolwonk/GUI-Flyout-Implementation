@@ -6,11 +6,7 @@
   "diameter_m": 1.32,
   "length_m": 16.5,
   "burn_time_s": 97.0,
-  "coast_time_s": 0.0,
   "isp_s": 230.0,
-  "guidance": "pitch_program",
-  "burnout_angle_deg": 45.0,
-  "loft_angle_rate_deg_s": 1.5,
   "mach_table": [
     0.0,
     0.85,
@@ -79,7 +75,5 @@
   "booster_length_m": 0.0,
   "booster_cd": 0.2,
   "booster_core_delay_s": 0.0,
-  "booster_jettison_s": 0.0,
-  "stage_turn_start_s": 0.0,
-  "stage_turn_stop_s": 30.0
+  "booster_jettison_s": 0.0
 }
