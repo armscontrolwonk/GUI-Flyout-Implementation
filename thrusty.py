@@ -31,6 +31,7 @@ import matplotlib.ticker
 import booster_models as mm
 from booster_models import (BOOSTER_DB, get_booster,
                            booster_to_dict, booster_from_dict,
+                           extract_flight_plan, apply_flight_plan, save_flight_plan,
                            total_burn_time, tumbling_cylinder_beta,
                            NOSE_SHAPES, NOSE_SHAPE_LABELS,
                            GRAIN_LABELS, grain_fill_factor, _GRAIN_FILL_RANGE,
@@ -296,12 +297,16 @@ def _load_custom_boosters():
 
 
 def _save_custom_boosters():
-    """Write all non-packaged and overridden-packaged boosters to custom_boosters.json."""
+    """Write all non-packaged and overridden-packaged boosters to custom_boosters.json.
+
+    Boosters are stored hardware-only -- guidance/flight-plan fields are not
+    embedded.  The flight plan is persisted separately (traj_profiles.json in
+    the GUI, .flightplan.json on export), so it is never lost."""
     _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {}
     for name in BOOSTER_DB:
         if name not in _PACKAGED_NAMES or name in _OVERRIDDEN_PACKAGED:
-            data[name] = booster_to_dict(BOOSTER_DB[name]())
+            data[name] = booster_to_dict(BOOSTER_DB[name](), include_flight_plan=False)
     _CUSTOM_PATH.write_text(json.dumps(data, indent=2))
 
 
@@ -9924,9 +9929,16 @@ class BoosterFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        data = booster_to_dict(BOOSTER_DB[name]())
+        # get_booster applies the booster's flight plan, so the extracted plan
+        # reflects the shipped guidance rather than hardware defaults.
+        p = get_booster(name)
+        # Booster files are hardware-only; the flight plan travels beside them
+        # as a companion .flightplan.json so guidance never lives on hardware.
+        data = booster_to_dict(p, include_flight_plan=False)
         Path(path).write_text(json.dumps(data, indent=2))
-        self._status_var.set(f"Booster exported: {path}")
+        fp_path = save_flight_plan(name, extract_flight_plan(p), Path(path).parent)
+        self._status_var.set(
+            f"Booster exported: {path}  (+ flight plan {Path(fp_path).name})")
 
     def _load_ro(self):
         """Import a .ro.json file into the RV library (parallel to Load Booster)."""
@@ -10174,6 +10186,17 @@ class BoosterFlyoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse booster file:\n{e}")
             return
+        # Booster files are hardware-only; if the export dropped a companion
+        # flight plan beside it, apply it so the imported booster keeps its
+        # guidance (making import the exact inverse of export).
+        _fp_sibling = Path(path).with_name(
+            Path(path).name.replace('.booster.json', '').replace('.json', '')
+            + '.flightplan.json')
+        if _fp_sibling.exists():
+            try:
+                p = apply_flight_plan(p, json.loads(_fp_sibling.read_text()))
+            except Exception:
+                pass
         name = data.get('name') or Path(path).stem.replace('.booster', '').replace('.booster', '')
         if not name:
             messagebox.showerror("Load error", "Booster file has no name field.")

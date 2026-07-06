@@ -1576,8 +1576,16 @@ def _convert_loft_to_gravity_turn(p: BoosterParams) -> None:
         s = s.stage2
 
 
-def booster_to_dict(p: BoosterParams) -> dict:
-    """Serialise a BoosterParams to a JSON-compatible dict."""
+def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
+    """Serialise a BoosterParams to a JSON-compatible dict.
+
+    With ``include_flight_plan=False`` the flight-plan fields (guidance and the
+    per-stage schedule -- everything in ``_FLIGHT_PLAN_TOP_KEYS`` and
+    ``_FLIGHT_PLAN_STAGE_KEYS``) are omitted at every nesting level, yielding a
+    hardware-only booster.  That is the form the booster library stores; the
+    flight plan travels separately in a ``.flightplan.json`` file.  The default
+    (``True``) keeps the full serialisation for internal round-trips.
+    """
     d = {
         'name':                  p.name,
         'mass_initial':          p.mass_initial,
@@ -1667,7 +1675,10 @@ def booster_to_dict(p: BoosterParams) -> dict:
     if p.stage_yaw_final_az_deg is not None:
         d['stage_yaw_final_az_deg'] = p.stage_yaw_final_az_deg
     if p.stage2 is not None:
-        d['stage2'] = booster_to_dict(p.stage2)
+        d['stage2'] = booster_to_dict(p.stage2, include_flight_plan)
+    if not include_flight_plan:
+        for _k in (*_FLIGHT_PLAN_TOP_KEYS, *_FLIGHT_PLAN_STAGE_KEYS):
+            d.pop(_k, None)
     return d
 
 
@@ -2370,6 +2381,25 @@ def load_flight_plan(name: str, extra_dirs=()):
             except Exception:
                 pass
     return None
+
+
+def flight_plan_filename(name: str) -> str:
+    """Canonical flight-plan filename for a booster name."""
+    return f"{_re_safe(name)}.flightplan.json"
+
+
+def save_flight_plan(name: str, fp: dict, out_dir) -> str:
+    """Write flight plan ``fp`` for ``name`` into ``out_dir``; return the path.
+
+    Mirrors :func:`load_flight_plan` so the ``.flightplan.json`` naming lives in
+    one place.  ``fp`` is typically the dict from :func:`extract_flight_plan`.
+    """
+    from pathlib import Path as _P
+    d = _P(out_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / flight_plan_filename(name)
+    path.write_text(_json.dumps(fp, indent=2) + "\n")
+    return str(path)
 
 
 def _re_safe(s: str, maxlen: int = 60) -> str:
