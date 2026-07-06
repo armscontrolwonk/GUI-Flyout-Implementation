@@ -370,12 +370,28 @@ def _load_ro_library():
                 print(f"Warning: could not load Reentry object '{fp.name}': {exc}")
 
 
+def _ro_plan_sibling(ro_path) -> Path:
+    """Companion .reentryplan.json path paired to a .ro.json file by stem."""
+    p = Path(ro_path)
+    for suf in ('.ro.json', '.json'):
+        if p.name.endswith(suf):
+            return p.with_name(p.name[:-len(suf)] + '.reentryplan.json')
+    return p.with_name(p.stem + '.reentryplan.json')
+
+
 def _save_ro_to_library(ro) -> Path:
-    """Write an ROParams to <safe_name>.ro.json and register it in RO_DB."""
+    """Write a hardware-only <safe_name>.ro.json, persist its reentry plan, and
+    register the ready-to-fly object in RO_DB.
+
+    Object files are hardware-only; the reentry plan (glide mode, turns, dives,
+    separation) is written to the user reentry-plan library, where
+    _load_ro_library merges it back on top by name.  This keeps GUI edits from
+    re-embedding the plan into the object file."""
     _ensure_dir(_RO_LIBRARY_PATH)
     safe = _safe_name(ro.name) or "RO"
     fp = _RO_LIBRARY_PATH / f"{safe}.ro.json"
-    fp.write_text(json.dumps(ro_to_dict(ro), indent=2))
+    fp.write_text(json.dumps(ro_to_dict(ro, include_reentry_plan=False), indent=2))
+    save_reentry_plan(ro.name, extract_reentry_plan(ro), _REENTRY_PLAN_LIBRARY_PATH)
     RO_DB[ro.name] = lambda _r=ro: _r
     return fp
 
@@ -2954,7 +2970,12 @@ class ROEditorDialog(tk.Toplevel):
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(ro_to_dict(ro), indent=2))
+            # Hardware-only object file; the reentry plan is written by name to
+            # the reentry-plan library, where _load_ro_library merges it back on.
+            Path(path).write_text(
+                json.dumps(ro_to_dict(ro, include_reentry_plan=False), indent=2))
+            save_reentry_plan(ro.name, extract_reentry_plan(ro),
+                              _REENTRY_PLAN_LIBRARY_PATH)
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}",
@@ -10005,6 +10026,14 @@ class BoosterFlyoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Load error", f"Could not parse reentry-object file:\n{e}")
             return
+        # Object files are hardware-only; apply a companion reentry plan if the
+        # export dropped one beside it, so import is the inverse of export.
+        _sib = _ro_plan_sibling(path)
+        if _sib.exists():
+            try:
+                ro = apply_reentry_plan(ro, json.loads(_sib.read_text()))
+            except Exception:
+                pass
         name = ro.name or Path(path).stem.replace('.ro', '')
         if not name:
             messagebox.showerror("Load error", "reentry-object file has no name field.")
@@ -10040,7 +10069,12 @@ class BoosterFlyoutApp(tk.Tk):
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(ro_to_dict(ro), indent=2))
+            # Hardware-only object file plus a companion reentry plan beside it,
+            # so the exported pair round-trips without embedding the plan.
+            Path(path).write_text(
+                json.dumps(ro_to_dict(ro, include_reentry_plan=False), indent=2))
+            _ro_plan_sibling(path).write_text(
+                json.dumps(extract_reentry_plan(ro), indent=2) + "\n")
         except Exception as exc:
             messagebox.showerror("Save Reentry Object",
                                  f"Could not write reentry-object file:\n{exc}", parent=self)
