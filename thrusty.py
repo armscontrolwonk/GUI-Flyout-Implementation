@@ -6311,6 +6311,19 @@ class BoosterFlyoutApp(tk.Tk):
         if sel in RO_DB:
             self._ro = RO_DB[sel]()
             self._ro_del_btn.config(state=tk.NORMAL)
+            # Immediate compatibility feedback: a separating object needs a
+            # booster configured with a separating payload (a body-mode object
+            # applies to any booster).  The run path enforces the same rule.
+            try:
+                _p = get_booster(self._booster_var.get())
+                if (getattr(self._ro, 'separation_mode', 'separating_ro')
+                        != 'body' and not getattr(_p, 'ro_separates', False)):
+                    self._status_var.set(
+                        f"Note: '{sel}' is a separating reentry object but "
+                        f"'{_p.name}' has no separating payload configured — "
+                        f"it will be ignored at run time.")
+            except Exception:
+                pass
         else:
             self._ro_del_btn.config(state=tk.DISABLED)
             # Fall back to whatever the active booster carries.
@@ -7491,13 +7504,26 @@ class BoosterFlyoutApp(tk.Tk):
         booster  = get_booster(self._booster_var.get())
 
         # Override / supply the booster's RV from the sidebar library.
-        # Only applies when the booster is configured for a separating RV;
-        # otherwise the booster is treated as a ballistic body and the
-        # selection is ignored.
+        # A body-mode object (separation_mode='body') describes how the
+        # attached airframe reenters (pull-up, L/D, TPS) with no mass
+        # implications, so it applies to ANY booster.  A separating object is
+        # a physical payload swap and only makes sense on a booster configured
+        # with a separating payload; on a non-separating booster it is refused
+        # with a visible warning (previously: silently ignored).
         _ro_sel = getattr(self, '_ro_main_var', None)
         _ro_name = _ro_sel.get() if _ro_sel is not None else ""
-        if _ro_name in RO_DB and getattr(booster, 'ro_separates', False):
+        _inject = False
+        if _ro_name in RO_DB:
             _user_ro = RO_DB[_ro_name]()
+            _is_body = (getattr(_user_ro, 'separation_mode', 'separating_ro')
+                        == 'body')
+            _inject = _is_body or getattr(booster, 'ro_separates', False)
+            if not _inject:
+                self._status_var.set(
+                    f"'{_ro_name}' is a separating reentry object but "
+                    f"'{booster.name}' has no separating payload configured — "
+                    f"selection ignored (edit the booster to add one).")
+        if _inject:
             booster = copy.deepcopy(booster)
             _node, _placed = booster, False
             while _node is not None:
