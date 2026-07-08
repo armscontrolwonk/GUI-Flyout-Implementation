@@ -29,6 +29,13 @@ same steel-case HTPB technology family):
                       mdot(d) = 493·(d/2)² and burn = propellant/mdot.
                       → S1 47 s, S2 27 s, S3 (1.8 m) 18 s.
   stage-1 nozzle A_e  sized so sea-level Isp comes out at exactly 248 s
+  fairing             covers the measured 608 px (4.32 m) forward section;
+                      blunt (parabola) nose, 1.5 m nose length.  Mass from
+                      the Akin fairing MER (mass_estimator.fairing_mass)
+                      x1.5 for hydrodynamic (water-egress) loads ≈ 300 kg.
+                      An SLBM fairing exists to get through WATER, not
+                      atmosphere — jettisoned at 2 km, seconds into flight,
+                      not the 80 km launch-vehicle default.
 Stage 3 propellant is sized relative to stages 1 & 2 (geometric mass taper
 P2/P1 ≈ 0.56); its diameter is the one free choice (1.8 m).  The warhead is
 out of scope — RV mass/beta are left blank and the RV mass is NOT carried
@@ -120,6 +127,20 @@ L3    = length_for_prop(PROP3, DIAMETER3_M)
 SHROUD_M   = PX_SHROUD * SCALE
 WARHEAD_BAY_M = SHROUD_M - L3       # length left in shroud for RV + bus (out of scope)
 
+# ── Fairing (hydrodynamic shroud over the 608 px forward section) ───────────
+SHROUD_NOSE_LEN_M   = 1.5           # blunt rounded profile ~ parabola
+SHROUD_NOSE_SHAPE   = 'parabola'
+SHROUD_JETTISON_KM  = 2.0           # water-egress structure; sheds seconds in
+HYDRO_FACTOR        = 1.5           # water loads vs Akin composite-fairing MER
+
+def shroud_mass_kg() -> float:
+    import mass_estimator as mest
+    area = (math.pi * DIAMETER_M * (SHROUD_M - SHROUD_NOSE_LEN_M)
+            + 0.75 * math.pi * DIAMETER_M * SHROUD_NOSE_LEN_M)
+    return mest.fairing_mass(area) * HYDRO_FACTOR
+
+SHROUD_MASS_KG = shroud_mass_kg()
+
 CITATION = ('Photogrammetry of 2019-parade JL-3 canister (proxy geometry); '
             'motor anchors from P35 (Wei & Bai, GLEX 2017 #36288): '
             'steel case HTPB, mass ratio 0.88, ground Isp 248 s')
@@ -151,11 +172,21 @@ def build_detailed(path: str) -> None:
 
     # mass_initial = wet mass of this stage + everything above it. Payload
     # (warhead) is out of scope, so the RV mass is NOT included in the stack.
-    s1 = mk('JL-2', WET1 + WET2 + WET3, PROP1, DRY1, L1, THRUST1_N, BURN1_S, round(AE1_M2, 2), DIAMETER_M)
+    # The fairing rides on stage 1 only (jettisoned at 2 km, mid-burn).
+    s1 = mk('JL-2', WET1 + WET2 + WET3 + SHROUD_MASS_KG, PROP1, DRY1, L1,
+            THRUST1_N, BURN1_S, round(AE1_M2, 2), DIAMETER_M)
     s2 = mk('JL-2 S2', WET2 + WET3, PROP2, DRY2, L2, THRUST2_N, BURN2_S, 0.0, DIAMETER_M)
     s3 = mk('JL-2 S3', WET3, PROP3, DRY3, L3, THRUST3_N, BURN3_S, 0.0, DIAMETER3_M)
     s1.stage2 = s2
     s2.stage2 = s3
+    # Fairing: hydrodynamic shroud, shed as soon as the missile is out of
+    # the water and settled — 2 km, not the 80 km launch-vehicle default.
+    s1.shroud_mass_kg        = round(SHROUD_MASS_KG)
+    s1.shroud_jettison_alt_km = SHROUD_JETTISON_KM
+    s1.shroud_length_m       = round(SHROUD_M, 2)
+    s1.shroud_diameter_m     = DIAMETER_M
+    s1.shroud_nose_shape     = SHROUD_NOSE_SHAPE
+    s1.shroud_nose_length_m  = SHROUD_NOSE_LEN_M
     # RV block — mass/beta/geometry to be filled from a future measurement
     s1.num_rvs = 1
     s1.rv_separates = True
@@ -217,7 +248,9 @@ if __name__ == '__main__':
     print(f'  S1 A_e {AE1_M2:.2f} m² '
           f'(ground Isp check: {ISP_VAC_S - PA_SL*AE1_M2/(mdot_for(DIAMETER_M)*G0):.1f} s)')
     print(f'  shroud {SHROUD_M:.2f} m -> stage 3 {L3:.2f} m + warhead bay {WARHEAD_BAY_M:.2f} m (out of scope)')
-    print(f'  motor stack wet: {(WET1+WET2+WET3)/1000:.1f} t')
+    print(f'  fairing: {SHROUD_MASS_KG:.0f} kg ({SHROUD_NOSE_SHAPE} nose {SHROUD_NOSE_LEN_M} m), '
+          f'jettison at {SHROUD_JETTISON_KM:.0f} km')
+    print(f'  launch mass (motors + fairing, no warhead): {(WET1+WET2+WET3+SHROUD_MASS_KG)/1000:.1f} t')
     out = os.path.dirname(os.path.abspath(__file__))
     build_detailed(os.path.join(out, 'JL-2.xlsx'))
     build_catalog(os.path.join(out, 'JL-2_catalog.xlsx'))
