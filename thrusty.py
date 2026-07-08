@@ -1519,8 +1519,8 @@ class BoosterDialog(tk.Toplevel):
             self._shroud_section, "Total shroud length (m):", 3, "0", "m")
         self._shroud_nose_length_var, self._shroud_nose_length_entry = _fe_entry(
             self._shroud_section, "Nose segment length (m):", 4, "0", "m")
-        self._shroud_alt_var, self._shroud_alt_entry = _fe_entry(
-            self._shroud_section, "Jettison alt (km):", 5, "80", "km", pady=(2, 4))
+        # Jettison altitude is a flight-plan choice, not hardware — it lives in
+        # the main window's "Fairing jettison" panel, not this booster editor.
 
         # ── Aerospike (drag-reduction probe attached to shroud) ─────────────
         # Effect applies only while shroud is attached; it stops at jettison.
@@ -1729,7 +1729,6 @@ class BoosterDialog(tk.Toplevel):
         self._shroud_diameter_entry.config(state="disabled")
         self._shroud_length_entry.config(state="disabled")
         self._shroud_nose_length_entry.config(state="disabled")
-        self._shroud_alt_entry.config(state="disabled")
         # Fins section
         self._fins_var.set(False)
         self._update_fins_state()
@@ -2071,7 +2070,6 @@ class BoosterDialog(tk.Toplevel):
         has_shroud = shroud_mass > 0
         self._shroud_var.set(has_shroud)
         self._shroud_mass_var.set(f"{shroud_mass:.0f}")
-        self._shroud_alt_var.set(f"{p.shroud_jettison_alt_km:.0f}")
         self._shroud_length_var.set(f"{p.shroud_length_m:.1f}")
         self._shroud_diameter_var.set(f"{p.shroud_diameter_m:.2f}")
         self._shroud_nose_shape_var.set(
@@ -2212,9 +2210,8 @@ class BoosterDialog(tk.Toplevel):
         except ValueError:
             raise ValueError("PBV diameter and length must be numbers.")
 
-        # Shroud
+        # Shroud (hardware only; jettison timing is a flight-plan field)
         shroud_mass          = 0.0
-        shroud_alt_km        = 80.0
         shroud_length_m      = 0.0
         shroud_diameter_m    = 0.0
         shroud_nose_shape    = ""
@@ -2222,7 +2219,6 @@ class BoosterDialog(tk.Toplevel):
         if self._shroud_var.get():
             try:
                 shroud_mass          = float(self._shroud_mass_var.get())
-                shroud_alt_km        = float(self._shroud_alt_var.get())
                 shroud_length_m      = float(self._shroud_length_var.get())
                 shroud_diameter_m    = float(self._shroud_diameter_var.get())
                 _snl = self._shroud_nose_length_var.get().strip()
@@ -2304,7 +2300,6 @@ class BoosterDialog(tk.Toplevel):
         node.pbv_diameter_m         = pbv_diameter_m
         node.pbv_length_m           = pbv_length_m
         node.shroud_mass_kg         = shroud_mass
-        node.shroud_jettison_alt_km = shroud_alt_km
         node.shroud_length_m        = shroud_length_m
         node.shroud_diameter_m      = shroud_diameter_m
         node.shroud_nose_shape      = shroud_nose_shape
@@ -4892,6 +4887,24 @@ class BoosterFlyoutApp(tk.Tk):
         self._adv_yaw_chk.grid_forget()
         self._update_guidance_labels("pitch_program")
 
+        # ── Fairing / shroud jettison (a flight-plan choice, not hardware) ──
+        # The fairing's mass/shape/size are hardware (booster editor); WHEN it
+        # is jettisoned is a flight decision, so it lives here on the flight
+        # plan.  Blank = the heating-flux default (drop when free-molecular flux
+        # falls below the fairing criterion); a number = a fixed altitude.
+        self._fair_frame = ttk.LabelFrame(parent, text="Fairing jettison")
+        self._fair_frame.columnconfigure(1, weight=1)
+        ttk.Label(self._fair_frame, text="Jettison alt:").grid(
+            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+        _fj_row = ttk.Frame(self._fair_frame)
+        _fj_row.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._shroud_jett_var = tk.StringVar(value="")
+        ttk.Entry(_fj_row, textvariable=self._shroud_jett_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(_fj_row, text="km  (blank = heating-flux default)").pack(
+            side=tk.LEFT, padx=2)
+        # Packed only when the selected booster carries a shroud (see
+        # _on_booster_changed); created here so the widget always exists.
+
         # ── Reentry Mode ──────────────────────────────────────────────
         rf = ttk.LabelFrame(parent, text="Reentry Mode")
         rf.pack(fill=tk.X, padx=6, pady=3)
@@ -5590,6 +5603,23 @@ class BoosterFlyoutApp(tk.Tk):
             self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
             self._guidance_var.set(p.guidance)
 
+        # Fairing jettison altitude (flight-plan field): profile value if saved,
+        # else the booster's applied flight-plan value.  <=0 shows as blank
+        # (heating-flux default).  The section is shown only when there's a
+        # shroud to jettison.
+        _sj = (prof.get('shroud_jettison_alt_km', p.shroud_jettison_alt_km)
+               if prof else p.shroud_jettison_alt_km)
+        try:
+            _sj = float(_sj)
+        except (TypeError, ValueError):
+            _sj = 0.0
+        self._shroud_jett_var.set(f"{_sj:g}" if _sj > 0 else "")
+        if getattr(p, 'shroud_mass_kg', 0.0) > 0:
+            self._fair_frame.pack(fill=tk.X, padx=6, pady=3,
+                                  before=self._reentry_frame)
+        else:
+            self._fair_frame.pack_forget()
+
         self._update_guidance_labels(self._guidance_var.get())
         self._update_params_display(p)
         self._del_btn.config(state=tk.NORMAL)
@@ -6240,9 +6270,11 @@ class BoosterFlyoutApp(tk.Tk):
     def _save_timing_flight_plan(self, p):
         """Write a timing-only flight plan for booster ``p`` to the user library.
 
-        Carries just the dialog-owned deployment timing so it overrides the
-        bundled plan without touching guidance (which the trajectory panel
-        owns).  Failure is non-fatal -- the booster hardware is already saved.
+        Carries the deployment timing the booster editor owns -- strap-on
+        jettison and the grid-fin schedule -- so it overrides the bundled plan
+        without touching guidance or fairing jettison (which the trajectory
+        panel owns).  Failure is non-fatal -- the booster hardware is already
+        saved.
         """
         stages, node = [], p
         while node is not None:
@@ -6250,7 +6282,6 @@ class BoosterFlyoutApp(tk.Tk):
                            list(getattr(node, 'grid_fin_deploy_schedule', []) or [])})
             node = getattr(node, 'stage2', None)
         tp = {
-            'shroud_jettison_alt_km': p.shroud_jettison_alt_km,
             'booster_jettison_s':     p.booster_jettison_s,
             'stages':                 stages,
         }
@@ -6454,10 +6485,17 @@ class BoosterFlyoutApp(tk.Tk):
                     'final_az': yv['final_az'].get().strip(),
                 })
 
+        _sj_str = self._shroud_jett_var.get().strip()
+        try:
+            shroud_jett = float(_sj_str) if _sj_str else 0.0
+        except ValueError:
+            shroud_jett = 0.0
+
         prof = {
             'guidance':             self._guidance_var.get(),
             'burnout_angle_deg':       loft_angle,
             'launch_elevation_deg': launch_el,
+            'shroud_jettison_alt_km': shroud_jett,
             'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
             'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
             'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
@@ -7623,6 +7661,16 @@ class BoosterFlyoutApp(tk.Tk):
         except (ValueError, AttributeError):
             launch_elevation_deg = 90.0
         booster.launch_elevation_deg = launch_elevation_deg
+
+        # Fairing jettison is a flight-plan choice: stamp the panel value onto
+        # a shrouded booster (blank = 0 = heating-flux default).  Left untouched
+        # for boosters with no shroud, where the value is inert anyway.
+        if getattr(booster, 'shroud_mass_kg', 0.0) > 0:
+            _sj = self._shroud_jett_var.get().strip()
+            try:
+                booster.shroud_jettison_alt_km = float(_sj) if _sj else 0.0
+            except ValueError:
+                pass
 
         # Glider / HGV mission control — write only mission-time fields.
         # Vehicle properties (glider_enabled, glider_LD, glider_pullup_g_max,
