@@ -187,9 +187,11 @@ def build_detailed(path: str) -> None:
     s1.shroud_diameter_m     = DIAMETER_M
     s1.shroud_nose_shape     = SHROUD_NOSE_SHAPE
     s1.shroud_nose_length_m  = SHROUD_NOSE_LEN_M
-    # RV block — mass/beta/geometry to be filled from a future measurement
+    # RV block — single RV mounted directly on stage 3: NO bus/PBV
+    # (decision 2026-07-08). Mass/beta/geometry still to be filled.
     s1.num_rvs = 1
     s1.rv_separates = True
+    s1.bus_mass_kg = 0.0
     export_missile_xlsx(path, s1)
 
     # rv_shape only serialises alongside a positive beta, which we don't
