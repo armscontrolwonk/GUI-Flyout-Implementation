@@ -467,25 +467,25 @@ def _build_missile_sheet(ws, stages: list, top: dict) -> None:
     prow('pbv_diam', 'PBV diameter',            'm',     'pbv_diameter_m')
     prow('pbv_len',  'PBV length',              'm',     'pbv_length_m')
 
-    # ── SHROUD / FAIRING ─────────────────────────────────────────────────────
-    _section(ws, r['shr_mass'] - 1, 'SHROUD / FAIRING')
+    # ── FAIRING (internal keys remain shroud_* for back-compat) ─────────────
+    _section(ws, r['shr_mass'] - 1, 'FAIRING')
 
     def shrow(rk, label, unit, key, cast=float, notes=''):
         _label(ws, r[rk], label, unit, notes)
         v = top.get(key)
         _inputs(ws, r[rk], [4], [cast(v) if v not in (None, '') else None])
 
-    shrow('shr_mass',    'Shroud mass',       'kg', 'shroud_mass_kg',
-          notes='0 = no shroud')
+    shrow('shr_mass',    'Fairing mass',      'kg', 'shroud_mass_kg',
+          notes='0 = no fairing')
     shrow('shr_alt',     'Jettison altitude', 'km', 'shroud_jettison_alt_km',
-          notes='Default 80 km')
-    shrow('shr_len',     'Shroud length',     'm',  'shroud_length_m')
-    shrow('shr_diam',    'Shroud diameter',   'm',  'shroud_diameter_m')
-    _label(ws, r['shr_shape'], 'Shroud nose shape', '—')
+          notes='Default 80 km; SLBM water-egress fairings shed low (~2 km)')
+    shrow('shr_len',     'Fairing length',    'm',  'shroud_length_m')
+    shrow('shr_diam',    'Fairing diameter',  'm',  'shroud_diameter_m')
+    _label(ws, r['shr_shape'], 'Fairing nose shape', '—')
     _inputs(ws, r['shr_shape'], [4],
             [_nose_label(top.get('shroud_nose_shape', ''))])
     _dropdown(ws, r['shr_shape'], 4, _NOSE_OPTS)
-    shrow('shr_noselen', 'Shroud nose length', 'm', 'shroud_nose_length_m')
+    shrow('shr_noselen', 'Fairing nose length', 'm', 'shroud_nose_length_m')
 
     # ── AERODYNAMICS ─────────────────────────────────────────────────────────
     _section(ws, r['nose_shape'] - 1, 'AERODYNAMICS')

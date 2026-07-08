@@ -2333,7 +2333,7 @@ def integrate_trajectory(params: MissileParams,
                              ascending=True)
         if t_ev is not None:
             row = _milestone(t_ev)
-            row['event'] = "Shroud jettison"
+            row['event'] = "Fairing jettison"
             _insert_chrono(row)
 
     # --- Debris impact arcs (tumbling empty stages + shroud) -----------------
@@ -2438,7 +2438,7 @@ def integrate_trajectory(params: MissileParams,
                     _rng = range_between(lat0, lon0,
                                          np.radians(_d_lat), np.radians(_d_lon))
                     _insert_chrono({
-                        'event':              "Shroud impact",
+                        'event':              "Fairing impact",
                         't_s':                _t_fair + _dt,
                         'alt_km':             0.0,
                         'range_km':           _rng / 1000.0,
@@ -2452,7 +2452,7 @@ def integrate_trajectory(params: MissileParams,
                     })
                     _d_traj['t'] = _d_traj['t'] + _t_fair
                     _debris_trajectories.append({
-                        'label': 'Shroud',
+                        'label': 'Fairing',
                         **_d_traj,
                     })
 

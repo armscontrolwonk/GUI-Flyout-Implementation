@@ -1373,7 +1373,7 @@ class MissileDialog(tk.Toplevel):
         # ── Row 6: Has Shroud toggle ─────────────────────────────────────────
         self._shroud_var = tk.BooleanVar(value=False)
         self._shroud_check = ttk.Checkbutton(
-            pl, text="Has Shroud",
+            pl, text="Has Fairing",
             variable=self._shroud_var,
             command=self._update_shroud_state)
         self._shroud_check.grid(
@@ -1398,7 +1398,7 @@ class MissileDialog(tk.Toplevel):
         self._shroud_diameter_var, self._shroud_diameter_entry = _fe_entry(
             self._shroud_section, "Diameter (m):", 2, "0", "m")
         self._shroud_length_var, self._shroud_length_entry = _fe_entry(
-            self._shroud_section, "Total shroud length (m):", 3, "0", "m")
+            self._shroud_section, "Total fairing length (m):", 3, "0", "m")
         self._shroud_nose_length_var, self._shroud_nose_length_entry = _fe_entry(
             self._shroud_section, "Nose segment length (m):", 4, "0", "m")
         self._shroud_alt_var, self._shroud_alt_entry = _fe_entry(
@@ -1941,7 +1941,7 @@ class MissileDialog(tk.Toplevel):
                 shroud_nose_length_m = float(_snl) if _snl and float(_snl) > 0 \
                                        else shroud_length_m
             except ValueError:
-                raise ValueError("Shroud fields must be numbers.")
+                raise ValueError("Fairing fields must be numbers.")
             _slabel = self._shroud_nose_shape_var.get()
             shroud_nose_shape = next(
                 (k for k, v in NOSE_SHAPE_LABELS.items() if v == _slabel), "")
@@ -6202,7 +6202,7 @@ class MissileFlyoutApp(tk.Tk):
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
-            ff = ttk.LabelFrame(self._params_inner, text="Shroud")
+            ff = ttk.LabelFrame(self._params_inner, text="Fairing")
             ff.pack(fill=tk.X, **pad)
             r = 0
             _row(ff, r, "Mass (kg):",          f"{p.shroud_mass_kg:,.0f}"); r += 1
@@ -6225,7 +6225,7 @@ class MissileFlyoutApp(tk.Tk):
                 _row(ff, r, "Length (m):",     f"{p.shroud_length_m:.2f}"); r += 1
                 beta = tumbling_cylinder_beta(p.shroud_mass_kg, _sd, p.shroud_length_m)
                 if beta > 0:
-                    _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
+                    _row(ff, r, "Fairing β (kg/m²):", f"{beta:,.0f}"); r += 1
 
 
     # ------------------------------------------------------------------

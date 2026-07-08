@@ -69,6 +69,17 @@ ROCKETS_COLS = [
     ("license", None),
 ]
 
+FAIRING_COLS = [
+    ("model_id", None),            # links to rockets.model_id (one row per model)
+    ("mass_kg", None),
+    ("jettison_alt_km", None),     # default 80; SLBM water-egress fairings shed low (~2)
+    ("length_m", None),
+    ("diameter_m", None),
+    ("nose_shape", "shape"),
+    ("nose_length_m", None),
+    ("source_citation", None),
+]
+
 PAYLOADS_COLS = [
     ("payload_id", None),
     ("name", None),
@@ -131,6 +142,9 @@ ROCKETS_ROWS = [
      "", "", "", 0.9, "", "", "", "", "YES", "", "orbital_insertion",
      "", "", 0, "", "", "", "", "", ""],
 ]
+
+# Fairing: one row per model that carries one (maps to shroud_* params).
+FAIRING_ROWS = []
 
 # Payloads: one row per RV / glide body.
 PAYLOADS_ROWS = [
@@ -220,9 +234,10 @@ def write_readme(ws):
     lines = [
         ("Thrusty catalog — DRAFT format", True),
         ("", False),
-        ("Two record types live in two tabs:", True),
+        ("Record types live in their own tabs:", True),
         ("  • rockets  — one row per STAGE; rows sharing model_id form the stage chain (sorted by stage_no).", False),
         ("  • payloads — one row per reentry vehicle / glide body; reused across rockets via payload_id.", False),
+        ("  • fairing  — one row per model with a fairing, keyed by model_id (maps to the shroud_* params).", False),
         ("", False),
         ("Conventions", True),
         ("  • BLANK numeric cells are intentional — the ingest resolver estimates them and flags VERIFY.", False),
@@ -255,6 +270,12 @@ def main():
     ws_p = wb.create_sheet("payloads")
     write_sheet(ws_p, PAYLOADS_COLS, PAYLOADS_ROWS,
                 "DRAFT — one row per reentry vehicle / glide body. Referenced by rockets via payload_id.")
+
+    ws_f = wb.create_sheet("fairing")
+    write_sheet(ws_f, FAIRING_COLS, FAIRING_ROWS,
+                "DRAFT — one row per model with a fairing (keyed by model_id; maps to the "
+                "shroud_* params). jettison_alt_km: 80 is the launch-vehicle default; "
+                "SLBM water-egress fairings shed low (~2 km).")
 
     write_enums(wb.create_sheet("enums"))
     write_readme(wb.create_sheet("README"))

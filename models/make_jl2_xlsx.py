@@ -233,6 +233,10 @@ def build_catalog(path: str) -> None:
         ['jl2_rv', 'JL-2 RV', 'ballistic', '', '', 'cone', '', '', '',
          '', '', '', '', 'NO', '', '', '', '', CITATION, '', ''],
     ]
+    cat.FAIRING_ROWS = [
+        ['jl2', round(SHROUD_MASS_KG), SHROUD_JETTISON_KM, round(SHROUD_M, 2),
+         DIAMETER_M, SHROUD_NOSE_SHAPE, SHROUD_NOSE_LEN_M, CITATION],
+    ]
     cat.OUT = path
     cat.main()
 
