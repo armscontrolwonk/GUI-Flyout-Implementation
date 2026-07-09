@@ -5827,32 +5827,41 @@ class BoosterFlyoutApp(tk.Tk):
             self._refresh_flight_plan_list()
         p = get_booster(name)
 
-        prof = _load_traj_profiles().get(name)
-        if prof:
-            self._guidance_var.set(prof.get('guidance', p.guidance))
-            self._loft_angle_var.set(str(prof.get('burnout_angle_deg', p.burnout_angle_deg)))
-            self._launch_el_var.set(str(prof.get('launch_elevation_deg', p.launch_elevation_deg)))
-            gt_start = prof.get('gt_turn_start_s', 5.0)
-            self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
-            gt_stop = prof.get('gt_turn_stop_s')
-            self._gt_turn_stop_var.set(str(gt_stop) if gt_stop is not None else "")
-            cutoff = prof.get('cutoff_time_s')
-            self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
-                                 else str(int(total_burn_time(p))))
-        else:
-            self._cutoff_var.set(str(int(total_burn_time(p))))
-            self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
-            self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
-            self._guidance_var.set(p.guidance)
+        # The panel populates from the ACTIVE flight plan (single store).
+        # Scalars come from the applied booster `p`; GUI-only run-args (global
+        # turn window, cutoff, advanced-pitch toggle, yaw program) come from the
+        # raw plan file, with the legacy trajectory_profiles store as a one-time
+        # migration fallback.
+        raw = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        _active = self._active_plan_name()
+        if _active:
+            raw = mm._merge_flight_plans(
+                raw, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
+                                         plan=_active) or {})
+        legacy = _load_traj_profiles().get(name, {})
 
-        # Fairing jettison altitude (flight-plan field): profile value if saved,
-        # else the booster's applied flight-plan value.  <=0 shows as blank
-        # (heating-flux default).  The section is shown only when there's a
-        # shroud to jettison.
-        _sj = (prof.get('shroud_jettison_alt_km', p.shroud_jettison_alt_km)
-               if prof else p.shroud_jettison_alt_km)
+        def _gk(key, default=None):
+            if key in raw:
+                return raw[key]
+            if key in legacy:
+                return legacy[key]
+            return default
+
+        self._guidance_var.set(p.guidance)
+        self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
+        self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
+        gt_start = _gk('gt_turn_start_s', 5.0)
+        self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
+        gt_stop = _gk('gt_turn_stop_s')
+        self._gt_turn_stop_var.set(str(gt_stop) if gt_stop is not None else "")
+        cutoff = _gk('cutoff_time_s')
+        self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
+                             else str(int(total_burn_time(p))))
+
+        # Fairing jettison altitude (from the applied plan); <=0 shows as blank
+        # (heating default).  Shown only when there's a shroud to jettison.
         try:
-            _sj = float(_sj)
+            _sj = float(p.shroud_jettison_alt_km)
         except (TypeError, ValueError):
             _sj = 0.0
         self._shroud_jett_var.set(f"{_sj:g}" if _sj > 0 else "")
@@ -5866,34 +5875,44 @@ class BoosterFlyoutApp(tk.Tk):
         self._update_params_display(p)
         self._del_btn.config(state=tk.NORMAL)
 
-        # Restore Advanced Pitch Program checkbox + per-stage rows.
-        if prof and 'adv_pitch_on' in prof:
-            self._adv_pitch_var.set(bool(prof['adv_pitch_on']))
-            self._on_adv_pitch_toggled()
-            stage_data = prof.get('stage_rows') or []
-            if self._adv_pitch_var.get() and stage_data:
-                # _on_adv_pitch_toggled already called _rebuild_stage_rows;
-                # overwrite the seeded values with the snapshot.
-                for row, saved in zip(self._stage_rows, stage_data):
-                    if 'start' in saved: row['start'].set(saved['start'])
-                    if 'stop'  in saved: row['stop'].set(saved['stop'])
-                    if 'angle' in saved: row['angle'].set(saved['angle'])
-                    if 'coast' in saved: row['coast'].set(saved['coast'])
-                    if 'cutoff' in saved and not row.get('solid') and 'cutoff' in row:
-                        row['cutoff'].set(saved['cutoff'])
-        elif self._adv_pitch_var.get():
-            self._rebuild_stage_rows()
+        # Advanced-pitch toggle + per-stage rows.  The toggle is a GUI key;
+        # default it to "on" when the plan carries any per-stage angle override.
+        _pstages = []
+        _n = p
+        while _n is not None:
+            _pstages.append(_n)
+            _n = getattr(_n, 'stage2', None)
+        _adv_default = any(getattr(s, 'stage_burnout_angle_deg', None) is not None
+                           for s in _pstages)
+        self._adv_pitch_var.set(bool(_gk('adv_pitch_on', _adv_default)))
+        self._on_adv_pitch_toggled()
+        if self._adv_pitch_var.get() and getattr(self, '_stage_rows', None):
+            # Fill the per-stage rows from the applied booster's stage chain.
+            for row, s in zip(self._stage_rows, _pstages):
+                def _s(v):
+                    return "" if v is None else f"{float(v):g}"
+                row['start'].set(_s(getattr(s, 'stage_turn_start_s', None)))
+                row['stop'].set(_s(getattr(s, 'stage_turn_stop_s', None)))
+                row['angle'].set(_s(getattr(s, 'stage_burnout_angle_deg', None)))
+                row['coast'].set(_s(getattr(s, 'coast_time_s', None)))
+                if not row.get('solid') and 'cutoff' in row:
+                    row['cutoff'].set(_s(getattr(s, 'stage_cutoff_s', None)))
 
-        # Restore Yaw / dogleg program checkbox + entries.
-        if prof and 'adv_yaw_on' in prof:
-            self._adv_yaw_var.set(bool(prof['adv_yaw_on']))
-            self._on_adv_yaw_toggled()
-            yaw_data = prof.get('yaw_rows') or []
-            if self._adv_yaw_var.get() and yaw_data:
-                for yv, saved in zip(self._yaw_vars, yaw_data):
-                    if 'start'    in saved: yv['start'].set(saved['start'])
-                    if 'stop'     in saved: yv['stop'].set(saved['stop'])
-                    if 'final_az' in saved: yv['final_az'].set(saved['final_az'])
+        # Yaw / dogleg program.  Prefer the plan's yaw_maneuvers list; fall back
+        # to the legacy yaw_rows (strings) for migration.
+        _yaw = _gk('yaw_maneuvers')
+        if _yaw is None and 'yaw_rows' in legacy:
+            _yaw = [[m.get('start'), m.get('stop'), m.get('final_az')]
+                    for m in (legacy.get('yaw_rows') or [])]
+        self._adv_yaw_var.set(bool(_gk('adv_yaw_on', bool(_yaw))))
+        self._on_adv_yaw_toggled()
+        if self._adv_yaw_var.get() and _yaw and getattr(self, '_yaw_vars', None):
+            for yv, man in zip(self._yaw_vars, _yaw):
+                def _m(v):
+                    return "" if v in (None, "") else str(v)
+                yv['start'].set(_m(man[0] if len(man) > 0 else ""))
+                yv['stop'].set(_m(man[1] if len(man) > 1 else ""))
+                yv['final_az'].set(_m(man[2] if len(man) > 2 else ""))
 
         # Seed glider mission-control fields from the RV if it has glider
         # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
@@ -6656,92 +6675,100 @@ class BoosterFlyoutApp(tk.Tk):
         self._refresh_ro_list(select_name=self._RO_DEFAULT_SENTINEL)
         self._status_var.set(f"Reentry object '{sel}' deleted.")
 
+    def _active_plan_name(self):
+        """Name of the active flight-plan variant, or None for the default."""
+        sel = self._fp_var.get() if hasattr(self, '_fp_var') else mm.DEFAULT_PLAN_LABEL
+        return None if sel == mm.DEFAULT_PLAN_LABEL else sel
+
+    @staticmethod
+    def _fnum(sv):
+        s = sv.get().strip()
+        try:
+            return float(s) if s else None
+        except ValueError:
+            return None
+
     def _snapshot_traj_profile(self, booster_name: str) -> None:
-        """Save current trajectory panel fields as a profile for booster_name.
+        """Persist the trajectory-panel state into the active flight plan.
 
-        Captures everything the user can change in the Guidance panel —
-        global pitch / cutoff fields, the Advanced Pitch Program rows
-        (per stage), and the Yaw / dogleg program — so the next time this
-        booster is loaded the panel can be restored exactly.  This is
-        called after Save Booster so the editor dialog cannot wipe out
-        the user's trajectory work just by re-saving the booster.
+        The panel and the flight-plan dialog are two views of ONE store: this
+        merges the panel's fields over the current plan (preserving the
+        dialog-owned events grid-fin / strap-on) and writes the active plan
+        file.  GUI-only run-args with no BoosterParams home — global turn
+        window, engine cutoff, the advanced-pitch toggle, and the yaw program —
+        ride along as extra keys in the plan file, read back on load.
         """
-        cutoff_str   = self._cutoff_var.get().strip()
-        gt_start_str = self._gt_turn_start_var.get().strip()
-        gt_stop_str  = self._gt_turn_stop_var.get().strip()
+        base = extract_flight_plan(get_booster(booster_name))
+        base['guidance'] = self._guidance_var.get()
+        for key, var in (('launch_elevation_deg', self._launch_el_var),
+                         ('burnout_angle_deg', self._loft_angle_var)):
+            v = self._fnum(var)
+            if v is not None:
+                base[key] = v
+        _sj = self._shroud_jett_var.get().strip()
         try:
-            loft_angle = float(self._loft_angle_var.get())
+            base['shroud_jettison_alt_km'] = float(_sj) if _sj else 0.0
         except ValueError:
-            loft_angle = 45.0
-        try:
-            launch_el = float(self._launch_el_var.get())
-        except (ValueError, AttributeError):
-            launch_el = 90.0
+            pass
+        # GUI-only run-args (extra keys; apply_flight_plan ignores them).
+        base['gt_turn_start_s'] = self._fnum(self._gt_turn_start_var) or 5.0
+        base['gt_turn_stop_s']  = self._fnum(self._gt_turn_stop_var)
+        base['cutoff_time_s']   = self._fnum(self._cutoff_var)
+        adv_pitch = bool(getattr(self, '_adv_pitch_var', tk.BooleanVar()).get())
+        base['adv_pitch_on'] = adv_pitch
 
-        # Per-stage Advanced Pitch Program rows.
-        adv_pitch_on = bool(getattr(self, '_adv_pitch_var', tk.BooleanVar()).get())
-        stage_rows_data = []
-        if adv_pitch_on and getattr(self, '_stage_rows', None):
-            for row in self._stage_rows:
-                stage_rows_data.append({
-                    'start': row['start'].get().strip(),
-                    'stop':  row['stop'].get().strip(),
-                    'angle': row['angle'].get().strip(),
-                    'coast': row['coast'].get().strip(),
-                    'cutoff': row.get('cutoff', tk.StringVar()).get().strip(),
-                })
+        stages = base.get('stages', [])
+        if adv_pitch and getattr(self, '_stage_rows', None):
+            for i, row in enumerate(self._stage_rows):
+                if i >= len(stages):
+                    break
+                stages[i]['stage_turn_start_s']     = self._fnum(row['start'])
+                stages[i]['stage_turn_stop_s']      = self._fnum(row['stop'])
+                stages[i]['stage_burnout_angle_deg'] = self._fnum(row['angle'])
+                _c = self._fnum(row.get('coast', tk.StringVar()))
+                if _c is not None:
+                    stages[i]['coast_time_s'] = _c
+                stages[i]['stage_cutoff_s'] = (None if row.get('solid')
+                                               else self._fnum(row.get('cutoff', tk.StringVar())))
+        else:
+            # Simple mode: clear per-stage angle overrides so the global
+            # burnout angle governs the whole ascent.
+            for st in stages:
+                st['stage_burnout_angle_deg'] = None
+        base['stages'] = stages
 
-        # Yaw / dogleg program.
-        adv_yaw_on = bool(getattr(self, '_adv_yaw_var', tk.BooleanVar()).get())
-        yaw_rows_data = []
-        if adv_yaw_on and getattr(self, '_yaw_vars', None):
+        adv_yaw = bool(getattr(self, '_adv_yaw_var', tk.BooleanVar()).get())
+        base['adv_yaw_on'] = adv_yaw
+        yaw = []
+        if adv_yaw and getattr(self, '_yaw_vars', None):
             for yv in self._yaw_vars:
-                yaw_rows_data.append({
-                    'start':    yv['start'].get().strip(),
-                    'stop':     yv['stop'].get().strip(),
-                    'final_az': yv['final_az'].get().strip(),
-                })
+                yaw.append([self._fnum(yv['start']), self._fnum(yv['stop']),
+                            self._fnum(yv['final_az'])])
+        base['yaw_maneuvers'] = yaw
 
-        _sj_str = self._shroud_jett_var.get().strip()
         try:
-            shroud_jett = float(_sj_str) if _sj_str else 0.0
-        except ValueError:
-            shroud_jett = 0.0
-
-        prof = {
-            'guidance':             self._guidance_var.get(),
-            'burnout_angle_deg':       loft_angle,
-            'launch_elevation_deg': launch_el,
-            'shroud_jettison_alt_km': shroud_jett,
-            'gt_turn_start_s':       float(gt_start_str) if gt_start_str else 5.0,
-            'gt_turn_stop_s':        float(gt_stop_str)  if gt_stop_str  else None,
-            'cutoff_time_s':         float(cutoff_str)   if cutoff_str   else None,
-            'adv_pitch_on':          adv_pitch_on,
-            'stage_rows':            stage_rows_data,
-            'adv_yaw_on':            adv_yaw_on,
-            'yaw_rows':              yaw_rows_data,
-        }
-        profiles = _load_traj_profiles()
-        profiles[booster_name] = prof
-        _save_traj_profiles(profiles)
+            save_flight_plan(booster_name, base, _FLIGHT_PLAN_LIBRARY_PATH,
+                             plan=self._active_plan_name())
+        except Exception as exc:
+            print(f"Warning: could not save flight plan for '{booster_name}': {exc}")
 
     def _reset_traj_profile(self) -> None:
-        """Delete the saved trajectory profile for the current booster and restore defaults."""
+        """Revert the active flight plan to the shipped/bundled default by
+        removing the user override, then repopulate the panel."""
         name = self._booster_var.get()
         if not name:
             return
+        # Drop the user override for the active plan and the legacy profile.
+        try:
+            (Path(_FLIGHT_PLAN_LIBRARY_PATH)
+             / mm.flight_plan_filename(name, self._active_plan_name())).unlink(missing_ok=True)
+        except Exception as exc:
+            print(f"Warning: could not reset flight plan for '{name}': {exc}")
         profiles = _load_traj_profiles()
         if name in profiles:
             del profiles[name]
             _save_traj_profiles(profiles)
-        p = get_booster(name)
-        self._cutoff_var.set(str(int(total_burn_time(p))))
-        self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
-        self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
-        self._guidance_var.set(p.guidance)
-        self._gt_turn_start_var.set("5.0")
-        self._gt_turn_stop_var.set("")
-        self._update_guidance_labels(p.guidance)
+        self._on_booster_changed()
         self._status_var.set(f"Trajectory reset to '{name}' defaults.")
 
     # Guidance-program fields that belong in an export file.
