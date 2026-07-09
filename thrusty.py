@@ -1488,10 +1488,10 @@ class BoosterDialog(tk.Toplevel):
         # Legacy alias: bus_var → pbv_mass_var
         self._bus_var = self._pbv_mass_var
 
-        # ── Row 6: Has Shroud toggle ─────────────────────────────────────────
+        # ── Row 6: Has Fairing toggle ─────────────────────────────────────────
         self._shroud_var = tk.BooleanVar(value=False)
         self._shroud_check = ttk.Checkbutton(
-            pl, text="Has Shroud",
+            pl, text="Has Fairing",
             variable=self._shroud_var,
             command=self._update_shroud_state)
         self._shroud_check.grid(
@@ -1516,7 +1516,7 @@ class BoosterDialog(tk.Toplevel):
         self._shroud_diameter_var, self._shroud_diameter_entry = _fe_entry(
             self._shroud_section, "Diameter (m):", 2, "0", "m")
         self._shroud_length_var, self._shroud_length_entry = _fe_entry(
-            self._shroud_section, "Total shroud length (m):", 3, "0", "m")
+            self._shroud_section, "Total fairing length (m):", 3, "0", "m")
         self._shroud_nose_length_var, self._shroud_nose_length_entry = _fe_entry(
             self._shroud_section, "Nose segment length (m):", 4, "0", "m")
         # Jettison altitude is a flight-plan choice, not hardware — it lives in
@@ -2225,7 +2225,7 @@ class BoosterDialog(tk.Toplevel):
                 shroud_nose_length_m = float(_snl) if _snl and float(_snl) > 0 \
                                        else shroud_length_m
             except ValueError:
-                raise ValueError("Shroud fields must be numbers.")
+                raise ValueError("Fairing fields must be numbers.")
             _slabel = self._shroud_nose_shape_var.get()
             shroud_nose_shape = next(
                 (k for k, v in NOSE_SHAPE_LABELS.items() if v == _slabel), "")
@@ -6910,7 +6910,7 @@ class BoosterFlyoutApp(tk.Tk):
 
         # ── Shroud ────────────────────────────────────────────────────
         if p.shroud_mass_kg > 0:
-            ff = ttk.LabelFrame(self._params_inner, text="Shroud")
+            ff = ttk.LabelFrame(self._params_inner, text="Fairing")
             ff.pack(fill=tk.X, **pad)
             r = 0
             _row(ff, r, "Mass (kg):",          f"{p.shroud_mass_kg:,.0f}"); r += 1
@@ -6933,7 +6933,7 @@ class BoosterFlyoutApp(tk.Tk):
                 _row(ff, r, "Length (m):",     f"{p.shroud_length_m:.2f}"); r += 1
                 beta = tumbling_cylinder_beta(p.shroud_mass_kg, _sd, p.shroud_length_m)
                 if beta > 0:
-                    _row(ff, r, "Shroud β (kg/m²):", f"{beta:,.0f}"); r += 1
+                    _row(ff, r, "Fairing β (kg/m²):", f"{beta:,.0f}"); r += 1
 
 
     # ------------------------------------------------------------------
@@ -9264,7 +9264,8 @@ class BoosterFlyoutApp(tk.Tk):
 
         def _show_labeled(e, is_debris, ms):
             if is_debris:
-                return (('empty impact' in e or 'shroud impact' in e)
+                return (('empty impact' in e or 'shroud impact' in e
+                         or 'fairing impact' in e)   # old + new labels
                         and 'impact_lat' in ms)
             # Dots for ground events only: launch ignition and impacts.
             # "Ignition" (no boosters, t=0) and "Launch" (strap-on boosters,
@@ -9496,11 +9497,13 @@ class BoosterFlyoutApp(tk.Tk):
         #   All other non-debris flight events (apogee, re-entry, burnouts…).
         def _show_labeled(e, is_debris, ms):
             if is_debris:
-                return (('empty impact' in e or 'shroud impact' in e)
+                return (('empty impact' in e or 'shroud impact' in e
+                         or 'fairing impact' in e)   # old + new labels
                         and 'impact_lat' in ms)
             return (('ignition' in e and 'stage' not in e) or
                     ('impact'   in e and 'empty' not in e
-                                     and 'shroud' not in e))
+                                     and 'shroud' not in e
+                                     and 'fairing' not in e))
 
         def _show_tick(e, is_debris):
             if is_debris:
