@@ -3053,6 +3053,23 @@ class FlightPlanDialog(tk.Toplevel):
         self._wheelon_btn = ttk.Button(self._burnout_frame, text="Estimate ε*",
                                        command=self._estimate_wheelon)
         self._wheelon_btn.pack(side=tk.LEFT, padx=6); r += 1
+
+        # ── Global turn window (used by simple / gravity / orbital) ──────
+        self._turn_start_lbl = ttk.Label(frm, text="Turn start (s):")
+        self._turn_start_lbl.grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._turn_start_var = tk.StringVar(
+            value=("" if plan.get('gt_turn_start_s') is None
+                   else f"{float(plan.get('gt_turn_start_s')):g}"))
+        self._turn_start_ent = ttk.Entry(frm, textvariable=self._turn_start_var, width=10)
+        self._turn_start_ent.grid(row=r, column=1, sticky=tk.W, pady=3); r += 1
+        self._turn_stop_lbl = ttk.Label(frm, text="Turn stop (s):")
+        self._turn_stop_lbl.grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._turn_stop_var = tk.StringVar(
+            value=("" if plan.get('gt_turn_stop_s') is None
+                   else f"{float(plan.get('gt_turn_stop_s')):g}"))
+        self._turn_stop_ent = ttk.Entry(frm, textvariable=self._turn_stop_var, width=10)
+        self._turn_stop_ent.grid(row=r, column=1, sticky=tk.W, pady=3); r += 1
+
         self._mode_note = ttk.Label(frm, text="", foreground="#555555")
         self._mode_note.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=(0, 4)); r += 1
 
@@ -3119,6 +3136,24 @@ class FlightPlanDialog(tk.Toplevel):
         if _has_ev:
             _ev.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=(10, 2)); r += 1
 
+        # ── Yaw / dogleg program (up to three azimuth maneuvers) ─────────
+        _yf = ttk.LabelFrame(frm, text="Yaw / dogleg program", padding=6)
+        _yf.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=(10, 2)); r += 1
+        for _c, _h in enumerate(["", "Start (s)", "Stop (s)", "Final az (°)"]):
+            ttk.Label(_yf, text=_h, foreground="#555555").grid(row=0, column=_c, padx=3, pady=(0, 1))
+        _yaw = plan.get('yaw_maneuvers') or []
+        self._yaw_rows = []
+        for _i in range(3):
+            man = _yaw[_i] if _i < len(_yaw) else [None, None, None]
+            ttk.Label(_yf, text=f"#{_i + 1}").grid(row=_i + 1, column=0, padx=3)
+            trip = {}
+            for _c, _k in enumerate(('start', 'stop', 'final_az'), start=1):
+                v = man[_c - 1] if _c - 1 < len(man) else None
+                sv = tk.StringVar(value="" if v in (None, "") else f"{float(v):g}")
+                ttk.Entry(_yf, textvariable=sv, width=8).grid(row=_i + 1, column=_c, padx=3, pady=1)
+                trip[_k] = sv
+            self._yaw_rows.append(trip)
+
         # ── Provenance ───────────────────────────────────────────────────
         ttk.Label(frm, text="Source:").grid(row=r, column=0, sticky=tk.W, pady=(10, 2))
         self._source_var = tk.StringVar(value=str(plan.get('source', '')))
@@ -3169,6 +3204,12 @@ class FlightPlanDialog(tk.Toplevel):
             self._pstage_lbl.grid(); self._pstage_tbl.grid()
         else:
             self._pstage_lbl.grid_remove(); self._pstage_tbl.grid_remove()
+        # Global turn window applies to every mode except advanced pitch (which
+        # sets turn start/stop per stage in the table above).
+        _show_turn = not show_table
+        for _w in (self._turn_start_lbl, self._turn_start_ent,
+                   self._turn_stop_lbl, self._turn_stop_ent):
+            (_w.grid() if _show_turn else _w.grid_remove())
         # In gravity turn the per-stage "Angle" column is the eta kick angle.
         if self._angle_hdr is not None:
             self._angle_hdr.config(text="η (°)" if m == "Gravity turn" else "Angle")
@@ -3202,6 +3243,9 @@ class FlightPlanDialog(tk.Toplevel):
         bo = self._f(self._burnout_var)
         if bo is not None:
             plan['burnout_angle_deg'] = bo
+        # Global turn window (GUI keys the run path reads).
+        plan['gt_turn_start_s'] = self._f(self._turn_start_var)
+        plan['gt_turn_stop_s']  = self._f(self._turn_stop_var)
 
         stages = [dict(s) for s in plan.get('stages', [])]
         while len(stages) < len(self._stage_rows):
@@ -3234,6 +3278,15 @@ class FlightPlanDialog(tk.Toplevel):
                                      parent=self)
                 return
         plan['stages'] = stages
+        # Yaw / dogleg program -> yaw_maneuvers list (GUI key); a maneuver
+        # counts only when it has a final azimuth.
+        yaw = []
+        for trip in self._yaw_rows:
+            fa = self._f(trip['final_az'])
+            if fa is not None:
+                yaw.append([self._f(trip['start']), self._f(trip['stop']), fa])
+        plan['yaw_maneuvers'] = yaw
+        plan['adv_yaw_on'] = bool(yaw)
         plan['source'] = self._source_var.get().strip()
         plan['notes'] = self._notes_text.get("1.0", "end").strip()
         self._result = plan
@@ -6075,12 +6128,10 @@ class BoosterFlyoutApp(tk.Tk):
                 w.grid()
 
     def _on_adv_yaw_toggled(self):
-        """Show or hide the global yaw fields."""
-        if self._adv_yaw_var.get():
-            self._adv_yaw_frame.grid(row=10, column=0, columnspan=2,
-                                      sticky=tk.EW, padx=0, pady=(0, 4))
-        else:
-            self._adv_yaw_frame.grid_forget()
+        """Yaw / dogleg now lives in the Flight Plan dialog; keep its sidebar
+        frame hidden regardless of the (hidden) checkbox state.  The yaw
+        StringVars remain live so _get_inputs still applies the program."""
+        self._adv_yaw_frame.grid_remove()
 
     def _refresh_glider_status_line(self):
         """Update the Glider/HGV status label.  The reentry-mode combobox is
@@ -6268,15 +6319,13 @@ class BoosterFlyoutApp(tk.Tk):
         # Column header
         af = self._adv_pitch_frame
         af.columnconfigure(0, minsize=55)
-        _headers = [
-            (0, "Stage"),
-            (1, "Turn start (s)"),
-            (2, "Turn stop (s)"),
-            (3, "Angle (°)"),
-            (4, "Coast (s)"),
-            (5, "Cutoff (s)"),
-            (6, "Burn window"),
-        ]
+        # Quick strip: only the two hot-loop columns are shown per stage
+        # (Angle, Turn stop).  Turn start / coast / end-burn are set-once fields
+        # edited in the Flight Plan dialog; their StringVars still exist here so
+        # _get_inputs keeps working, but the entries are not shown.
+        _angle_hdr = "η (°)" if _gui_guidance == "true_gravity_turn" else "Angle (°)"
+        _headers = [(0, "Stage"), (1, _angle_hdr), (2, "Turn stop (s)"),
+                    (3, "Burn window")]
         for col, hdr in _headers:
             ttk.Label(af, text=hdr, foreground="#555555").grid(
                 row=0, column=col, padx=(8 if col == 0 else 4, 4),
@@ -6330,28 +6379,23 @@ class BoosterFlyoutApp(tk.Tk):
                 value=f"{node.stage_cutoff_s:.1f}"
                       if node.stage_cutoff_s is not None else "")
 
+            # Solid motors cannot be shut down — no per-stage cutoff.
+            if node.solid_motor:
+                sv_cutoff.set("")
+
             row = i + 1
             ttk.Label(af, text=f"Stage {i+1}:").grid(
                 row=row, column=0, sticky=tk.W, padx=(8, 4), pady=1)
-            ttk.Entry(af, textvariable=sv_start, width=5).grid(
+            # Only Angle and Turn stop are shown (the hot loop); sv_start /
+            # sv_coast / sv_cutoff remain live for _get_inputs but are edited in
+            # the Flight Plan dialog.
+            ttk.Entry(af, textvariable=sv_angle, width=5).grid(
                 row=row, column=1, padx=3, pady=1)
             ttk.Entry(af, textvariable=sv_stop,  width=5).grid(
                 row=row, column=2, padx=3, pady=1)
-            ttk.Entry(af, textvariable=sv_angle, width=5).grid(
-                row=row, column=3, padx=3, pady=1)
-            coast_e = ttk.Entry(af, textvariable=sv_coast, width=5)
-            coast_e.grid(row=row, column=4, padx=3, pady=1)
-            if is_last:
-                coast_e.config(state="disabled")
-            cutoff_e = ttk.Entry(af, textvariable=sv_cutoff, width=5)
-            cutoff_e.grid(row=row, column=5, padx=3, pady=1)
-            if node.solid_motor:
-                # Solid motors cannot be shut down — no cutoff.
-                sv_cutoff.set("")
-                cutoff_e.config(state="disabled")
             ttk.Label(af, text=f"({t_i:.0f}–{t_b:.0f} s)",
                       foreground="#888888").grid(
-                row=row, column=6, sticky=tk.W, padx=(4, 8), pady=1)
+                row=row, column=3, sticky=tk.W, padx=(4, 8), pady=1)
 
             self._stage_rows.append(
                 {'start': sv_start, 'stop': sv_stop, 'angle': sv_angle,
@@ -6495,21 +6539,21 @@ class BoosterFlyoutApp(tk.Tk):
             else:
                 self._loft_angle_lbl.config(text="Burnout Angle:")
                 self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
-            # Only restore basic fields when the advanced per-stage panel is
-            # not active; otherwise _on_adv_pitch_toggled already hid them.
+            # Quick strip: burnout angle + turn stop only.  Launch elevation,
+            # turn start, coast, and cutoff are set-once fields edited in the
+            # Flight Plan dialog; their widgets stay hidden here (grid_remove so
+            # their StringVars keep feeding _get_inputs) rather than shown.
+            self._gt_turn_start_lbl.grid_remove()
+            self._gt_turn_start_frame.grid_remove()
             if not self._adv_pitch_var.get():
                 self._loft_angle_lbl.grid(
                     row=2, column=0, sticky=tk.W, padx=(8, 2), pady=2)
                 self._loft_angle_frame.grid(
                     row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
-                self._gt_turn_start_lbl.grid(
-                    row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-                self._gt_turn_start_frame.grid(
-                    row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
                 self._gt_turn_stop_lbl.grid(
-                    row=4, column=0, sticky=tk.W, padx=(8, 2), pady=2)
+                    row=3, column=0, sticky=tk.W, padx=(8, 2), pady=2)
                 self._gt_turn_stop_frame.grid(
-                    row=4, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+                    row=3, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         if guidance == "orbital_insertion":
             self._orbit_alt_lbl.grid(
                 row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -6534,18 +6578,15 @@ class BoosterFlyoutApp(tk.Tk):
             if self._adv_pitch_var.get():
                 self._adv_pitch_frame.grid(row=8, column=0, columnspan=2,
                                             sticky=tk.EW, padx=0, pady=(0, 4))
-            # Yaw checkbox — shown for all ascent modes
-            self._adv_yaw_chk.grid(row=9, column=0, columnspan=2,
-                                    sticky=tk.W, padx=8, pady=(0, 2))
-            if self._adv_yaw_var.get():
-                self._adv_yaw_frame.grid(row=10, column=0, columnspan=2,
-                                          sticky=tk.EW, padx=0, pady=(0, 4))
+            # Yaw / dogleg is a set-once program edited in the Flight Plan
+            # dialog; its sidebar checkbox/frame stay hidden.
+            self._adv_yaw_chk.grid_remove()
+            self._adv_yaw_frame.grid_remove()
         else:
             self._adv_pitch_chk.grid_forget()
             self._adv_pitch_frame.grid_forget()
-            self._adv_yaw_chk.grid_forget()
-            self._adv_yaw_frame.grid_forget()
-            self._adv_yaw_var.set(False)
+            self._adv_yaw_chk.grid_remove()
+            self._adv_yaw_frame.grid_remove()
 
         # Reentry Mode frame: orbital insertion has no descent phase.
         if hasattr(self, '_main_guidance_cb'):
