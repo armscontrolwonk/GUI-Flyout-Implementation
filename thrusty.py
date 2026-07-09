@@ -1623,13 +1623,13 @@ class BoosterDialog(tk.Toplevel):
                   width=12).pack(side=tk.LEFT)
         ttk.Button(_sol_inner, text="Calculate σ…",
                    command=self._calc_gridfin_solidity).pack(side=tk.LEFT, padx=(6, 0))
-        self._gfin_edge_var   = _gf_entry(5, "Edge factor (0.6–1.0):", "1.0", "")
-        self._gfin_deploy_var = _gf_entry(6, "Deploy schedule (t:n, …):",
-                                          "", "", pady=(2, 4))
+        self._gfin_edge_var   = _gf_entry(5, "Edge factor (0.6–1.0):", "1.0", "",
+                                          pady=(2, 4))
+        # Grid-fin DEPLOY SCHEDULE is a flight-plan choice (when the fins open),
+        # not hardware — it lives in the Flight Plan editor, not here.
         ttk.Label(self._gridfins_section,
-                  text="e.g. \"3:4, 63:4\" = 4 fins at t=3 s, 4 more at t=63 s; "
-                       "blank = all deployed at launch.",
-                  foreground="#666").grid(row=7, column=0, columnspan=2,
+                  text="Deploy schedule is set in the Flight Plan editor.",
+                  foreground="#666").grid(row=6, column=0, columnspan=2,
                                           sticky=tk.W, padx=(6, 6), pady=(0, 4))
 
         # ── Guidance mode ────────────────────────────────────────────────
@@ -1661,17 +1661,18 @@ class BoosterDialog(tk.Toplevel):
             ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
             return _var
 
+        # Strap-on JETTISON TIME (booster drop) is a flight-plan choice and
+        # lives in the Flight Plan editor; only the motor/mass hardware is here.
         self._b_thrust_var      = _be_entry(0, "Thrust per booster (kN):", "500",  "kN")
         self._b_burn_var        = _be_entry(1, "Burn time (s):",            "60",   "s")
-        self._b_jett_var        = _be_entry(2, "Jettison time (s):",        "0",    "s  (0 = at burnout)")
-        self._b_core_delay_var  = _be_entry(3, "Core ignition delay (s):", "0",    "s")
-        self._b_inert_var       = _be_entry(4, "Inert mass per booster (kg):", "2000", "kg")
-        self._b_prop_var        = _be_entry(5, "Propellant per booster (kg):", "10000","kg")
-        self._b_isp_var         = _be_entry(6, "Isp (vacuum, s):",          "270",  "s")
-        self._b_nozzle_var      = _be_entry(7, "Nozzle exit area (m²):",    "0",    "m²")
-        self._b_diam_var        = _be_entry(8, "Diameter (m):",              "1.2",  "m")
-        self._b_length_var      = _be_entry(9, "Length (m):",               "0",    "m  (0 = 2×dia)")
-        self._b_cd_var          = _be_entry(10, "Cd (drag coeff):",         "0.20", "",
+        self._b_core_delay_var  = _be_entry(2, "Core ignition delay (s):", "0",    "s")
+        self._b_inert_var       = _be_entry(3, "Inert mass per booster (kg):", "2000", "kg")
+        self._b_prop_var        = _be_entry(4, "Propellant per booster (kg):", "10000","kg")
+        self._b_isp_var         = _be_entry(5, "Isp (vacuum, s):",          "270",  "s")
+        self._b_nozzle_var      = _be_entry(6, "Nozzle exit area (m²):",    "0",    "m²")
+        self._b_diam_var        = _be_entry(7, "Diameter (m):",              "1.2",  "m")
+        self._b_length_var      = _be_entry(8, "Length (m):",               "0",    "m  (0 = 2×dia)")
+        self._b_cd_var          = _be_entry(9, "Cd (drag coeff):",          "0.20", "",
                                             pady=(2, 6))
         ttk.Label(self._booster_frame, text="Cd guide: 0.10 ogive · 0.20 cone · 0.40 hemi · 1.0 flat",
                   foreground="gray50").grid(
@@ -2064,8 +2065,6 @@ class BoosterDialog(tk.Toplevel):
         self._gfin_chord_var.set(f"{float(getattr(p, 'grid_fin_chord_m', 0.0)):.3f}")
         self._gfin_solidity_var.set(f"{float(getattr(p, 'grid_fin_solidity', 0.0)):.3f}")
         self._gfin_edge_var.set(f"{float(getattr(p, 'grid_fin_edge_factor', 1.0) or 1.0):.2f}")
-        self._gfin_deploy_var.set(
-            _format_deploy_schedule(getattr(p, 'grid_fin_deploy_schedule', [])))
         self._update_gridfins_state()
 
         # Shroud
@@ -2099,7 +2098,6 @@ class BoosterDialog(tk.Toplevel):
             self._b_length_var.set(f"{getattr(p, 'booster_length_m', 0.0):.2f}")
             self._b_cd_var.set(f"{getattr(p, 'booster_cd', 0.20):.2f}")
             self._b_core_delay_var.set(f"{getattr(p, 'booster_core_delay_s', 0.0):.1f}")
-            self._b_jett_var.set(f"{getattr(p, 'booster_jettison_s', 0.0):.1f}")
         self._update_booster_frame()
 
         # Apply show/hide state for all sections
@@ -2194,14 +2192,9 @@ class BoosterDialog(tk.Toplevel):
                 gfin_edge_factor = float(self._gfin_edge_var.get())
             except ValueError:
                 raise ValueError("Grid-fin dimensions must be numbers.")
-            try:
-                gfin_deploy = _parse_deploy_schedule(self._gfin_deploy_var.get())
-            except ValueError as exc:
-                raise ValueError(f"Grid-fin deploy schedule: {exc}")
         else:
             n_grid_fins = 0; gfin_width_m = 0.0; gfin_height_m = 0.0
             gfin_chord_m = 0.0; gfin_solidity = 0.0; gfin_edge_factor = 1.0
-            gfin_deploy = []
 
         # PBV geometry
         try:
@@ -2322,7 +2315,8 @@ class BoosterDialog(tk.Toplevel):
         node.grid_fin_chord_m       = gfin_chord_m
         node.grid_fin_solidity      = gfin_solidity
         node.grid_fin_edge_factor   = gfin_edge_factor
-        node.grid_fin_deploy_schedule = gfin_deploy
+        # grid_fin_deploy_schedule is flight-plan data (owned by the Flight Plan
+        # editor); left at its default here so a booster save never clobbers it.
 
         # Strap-on boosters
         try:
@@ -2334,7 +2328,6 @@ class BoosterDialog(tk.Toplevel):
                 _b_thrust_kn   = float(self._b_thrust_var.get())
                 _b_burn        = float(self._b_burn_var.get())
                 _b_core_delay  = float(self._b_core_delay_var.get())
-                _b_jettison    = float(self._b_jett_var.get() or 0.0)
                 _b_inert       = float(self._b_inert_var.get())
                 _b_prop        = float(self._b_prop_var.get())
                 _b_isp         = float(self._b_isp_var.get())
@@ -2352,7 +2345,8 @@ class BoosterDialog(tk.Toplevel):
             node.booster_thrust_n       = _b_thrust_kn * 1000.0
             node.booster_burn_time_s    = _b_burn
             node.booster_core_delay_s   = max(0.0, _b_core_delay)
-            node.booster_jettison_s     = max(0.0, _b_jettison)
+            # booster_jettison_s is flight-plan data (owned by the Flight Plan
+            # editor); left at its default here so a save never clobbers it.
             node.booster_inert_kg       = _b_inert
             node.booster_prop_kg        = _b_prop
             node.booster_isp_s          = _b_isp
@@ -6505,38 +6499,13 @@ class BoosterFlyoutApp(tk.Tk):
         name = p.name
         BOOSTER_DB[name] = lambda _p=p: _p
         _save_custom_boosters()
-        # Booster files are hardware-only, so the subsystem-deployment timing
-        # the dialog owns (shroud jettison alt, strap-on jettison time, grid-fin
-        # deploy schedule) would be lost on reload.  Persist it as a timing-only
-        # user flight plan; get_booster merges it over the bundled plan.
-        self._save_timing_flight_plan(p)
+        # Deployment timing (fairing / booster-drop / grid-fin) is flight-plan
+        # data owned by the Flight Plan editor, so a booster save must NOT write
+        # it -- the plan file is its sole source of truth.
         # Snapshot trajectory panel so saving the booster doesn't reset it.
         self._snapshot_traj_profile(name)
         self._refresh_booster_list(select_name=name)
         self._status_var.set(f"Booster '{name}' saved.")
-
-    def _save_timing_flight_plan(self, p):
-        """Write a timing-only flight plan for booster ``p`` to the user library.
-
-        Carries the deployment timing the booster editor owns -- strap-on
-        jettison and the grid-fin schedule -- so it overrides the bundled plan
-        without touching guidance or fairing jettison (which the trajectory
-        panel owns).  Failure is non-fatal -- the booster hardware is already
-        saved.
-        """
-        stages, node = [], p
-        while node is not None:
-            stages.append({'grid_fin_deploy_schedule':
-                           list(getattr(node, 'grid_fin_deploy_schedule', []) or [])})
-            node = getattr(node, 'stage2', None)
-        tp = {
-            'booster_jettison_s':     p.booster_jettison_s,
-            'stages':                 stages,
-        }
-        try:
-            save_flight_plan(p.name, tp, _FLIGHT_PLAN_LIBRARY_PATH)
-        except Exception as exc:
-            print(f"Warning: could not save flight plan for '{p.name}': {exc}")
 
     def _new_booster(self):
         BoosterDialog(self, on_save=self._on_booster_saved)
