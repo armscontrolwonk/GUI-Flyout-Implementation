@@ -2985,6 +2985,212 @@ class ROEditorDialog(tk.Toplevel):
 
 
 # ---------------------------------------------------------------------------
+# Flight-plan editor dialog — the "how it's flown" half of a booster, given the
+# same New/Edit/Delete dialog treatment as boosters and reentry objects.  It
+# edits the flight-plan FILE fields: ascent mode, launch elevation, the
+# per-stage pitch schedule (turn start/stop, burnout angle, coast, end-burn),
+# and the subsystem-deployment events (fairing / booster drop / grid-fin),
+# each shown only when the booster actually carries that hardware, plus
+# provenance.  Yaw/dogleg stays on the sidebar for now (a separate global
+# representation) and is reconciled when the profile store is unified.
+# ---------------------------------------------------------------------------
+
+class FlightPlanDialog(tk.Toplevel):
+    """Edit the flight plan for one booster; returns an updated plan dict."""
+
+    def __init__(self, parent, booster_name, plan, booster):
+        super().__init__(parent)
+        self._result = None
+        self._booster = booster
+        self._name = booster_name
+        self.title(f"Flight Plan — {booster_name}")
+        self.transient(parent)
+        self.resizable(False, False)
+
+        # Stage chain (root first) — drives the per-stage rows and which events
+        # apply.
+        self._stages = []
+        _n = booster
+        while _n is not None:
+            self._stages.append(_n)
+            _n = getattr(_n, 'stage2', None)
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+        r = 0
+
+        # ── Mode ─────────────────────────────────────────────────────────
+        ttk.Label(frm, text="Mode:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._mode_var = tk.StringVar()
+        _g = str(plan.get('guidance', 'pitch_program'))
+        # advanced pitch = any per-stage angle override present
+        _adv = any(s.get('stage_burnout_angle_deg') is not None
+                   for s in plan.get('stages', []))
+        self._mode_var.set(
+            "Advanced pitch profile" if (_g == 'pitch_program' and _adv) else
+            "Simple pitch profile"   if _g == 'pitch_program' else
+            "Gravity turn"           if _g == 'true_gravity_turn' else
+            "Orbital insertion"      if _g == 'orbital_insertion' else
+            "Simple pitch profile")
+        ttk.Combobox(frm, textvariable=self._mode_var, state="readonly", width=22,
+                     values=["Simple pitch profile", "Advanced pitch profile",
+                             "Gravity turn", "Orbital insertion"]).grid(
+            row=r, column=1, sticky=tk.W, pady=3); r += 1
+
+        # ── Launch elevation + burnout angle ─────────────────────────────
+        ttk.Label(frm, text="Launch elev. (°):").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._launch_el_var = tk.StringVar(value=f"{float(plan.get('launch_elevation_deg', 90.0)):g}")
+        ttk.Entry(frm, textvariable=self._launch_el_var, width=10).grid(
+            row=r, column=1, sticky=tk.W, pady=3); r += 1
+
+        ttk.Label(frm, text="Burnout angle (°):").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._burnout_var = tk.StringVar(value=f"{float(plan.get('burnout_angle_deg', 45.0)):g}")
+        ttk.Entry(frm, textvariable=self._burnout_var, width=10).grid(
+            row=r, column=1, sticky=tk.W, pady=3); r += 1
+
+        # ── Per-stage pitch table ────────────────────────────────────────
+        ttk.Label(frm, text="Per-stage pitch program",
+                  font=("TkDefaultFont", 10, "bold")).grid(
+            row=r, column=0, columnspan=2, sticky=tk.W, pady=(10, 2)); r += 1
+        tbl = ttk.Frame(frm)
+        tbl.grid(row=r, column=0, columnspan=2, sticky=tk.W); r += 1
+        for c, h in enumerate(["Stage", "Turn start", "Turn stop", "Angle",
+                               "Coast", "End-burn"]):
+            ttk.Label(tbl, text=h, foreground="#555555").grid(
+                row=0, column=c, padx=3, pady=(2, 1))
+        self._stage_rows = []
+        for i, st in enumerate(plan.get('stages', [])):
+            ttk.Label(tbl, text=f"{i + 1}").grid(row=i + 1, column=0, padx=3)
+            row = {}
+            for c, key in enumerate(['stage_turn_start_s', 'stage_turn_stop_s',
+                                     'stage_burnout_angle_deg', 'coast_time_s',
+                                     'stage_cutoff_s'], start=1):
+                v = st.get(key)
+                sv = tk.StringVar(value="" if v is None else f"{float(v):g}")
+                ttk.Entry(tbl, textvariable=sv, width=8).grid(
+                    row=i + 1, column=c, padx=3, pady=1)
+                row[key] = sv
+            self._stage_rows.append(row)
+
+        # ── Events (only for hardware the booster actually carries) ──────
+        self._ev_vars = {}
+        _ev = ttk.LabelFrame(frm, text="Deployment events", padding=6)
+        _has_ev = False
+        er = 0
+        if getattr(booster, 'shroud_mass_kg', 0.0) > 0:
+            ttk.Label(_ev, text="Fairing jettison (km):").grid(row=er, column=0, sticky=tk.W, pady=2)
+            _sj = float(plan.get('shroud_jettison_alt_km', 0.0) or 0.0)
+            self._ev_vars['shroud'] = tk.StringVar(value=f"{_sj:g}" if _sj > 0 else "")
+            ttk.Entry(_ev, textvariable=self._ev_vars['shroud'], width=10).grid(row=er, column=1, sticky=tk.W)
+            ttk.Label(_ev, text="blank = heating", foreground="#555555").grid(row=er, column=2, sticky=tk.W, padx=4)
+            er += 1; _has_ev = True
+        if getattr(booster, 'n_boosters', 0) > 0:
+            ttk.Label(_ev, text="Booster drop (s):").grid(row=er, column=0, sticky=tk.W, pady=2)
+            _bj = float(plan.get('booster_jettison_s', 0.0) or 0.0)
+            self._ev_vars['booster'] = tk.StringVar(value=f"{_bj:g}" if _bj > 0 else "")
+            ttk.Entry(_ev, textvariable=self._ev_vars['booster'], width=10).grid(row=er, column=1, sticky=tk.W)
+            ttk.Label(_ev, text="blank = at burnout", foreground="#555555").grid(row=er, column=2, sticky=tk.W, padx=4)
+            er += 1; _has_ev = True
+        self._ev_gridfin = {}
+        for i, s in enumerate(self._stages):
+            if getattr(s, 'has_grid_fins', False) and getattr(s, 'n_grid_fins', 0) > 0:
+                ttk.Label(_ev, text=f"Grid-fin deploy, stage {i + 1} (t:n,…):").grid(
+                    row=er, column=0, sticky=tk.W, pady=2)
+                sched = []
+                if i < len(plan.get('stages', [])):
+                    sched = plan['stages'][i].get('grid_fin_deploy_schedule') or []
+                sv = tk.StringVar(value=_format_deploy_schedule(sched))
+                ttk.Entry(_ev, textvariable=sv, width=18).grid(row=er, column=1, columnspan=2, sticky=tk.W)
+                self._ev_gridfin[i] = sv
+                er += 1; _has_ev = True
+        if _has_ev:
+            _ev.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=(10, 2)); r += 1
+
+        # ── Provenance ───────────────────────────────────────────────────
+        ttk.Label(frm, text="Source:").grid(row=r, column=0, sticky=tk.W, pady=(10, 2))
+        self._source_var = tk.StringVar(value=str(plan.get('source', '')))
+        ttk.Entry(frm, textvariable=self._source_var, width=44).grid(
+            row=r, column=1, sticky=tk.EW, pady=(10, 2)); r += 1
+        ttk.Label(frm, text="Notes:").grid(row=r, column=0, sticky=tk.NW, pady=2)
+        self._notes_text = tk.Text(frm, width=44, height=3, wrap=tk.WORD)
+        self._notes_text.grid(row=r, column=1, sticky=tk.EW, pady=2)
+        if plan.get('notes'):
+            self._notes_text.insert("1.0", str(plan['notes']))
+        r += 1
+
+        bf = ttk.Frame(frm)
+        bf.grid(row=r, column=0, columnspan=2, sticky=tk.E, pady=(12, 0))
+        ttk.Button(bf, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(bf, text="Save", command=self._save).pack(side=tk.RIGHT)
+
+        self._base_plan = plan
+        self.grab_set()
+
+    @staticmethod
+    def _f(sv):
+        s = sv.get().strip()
+        if not s:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+
+    def _save(self):
+        plan = dict(self._base_plan)   # keep unknown keys (loft rate, yaw, …)
+        _mode = self._mode_var.get()
+        plan['guidance'] = ("true_gravity_turn" if _mode == "Gravity turn" else
+                            "orbital_insertion" if _mode == "Orbital insertion" else
+                            "pitch_program")
+        le = self._f(self._launch_el_var)
+        if le is not None:
+            plan['launch_elevation_deg'] = le
+        bo = self._f(self._burnout_var)
+        if bo is not None:
+            plan['burnout_angle_deg'] = bo
+
+        stages = [dict(s) for s in plan.get('stages', [])]
+        while len(stages) < len(self._stage_rows):
+            stages.append({})
+        _advanced = (_mode == "Advanced pitch profile")
+        for i, row in enumerate(self._stage_rows):
+            for key, sv in row.items():
+                val = self._f(sv)
+                # In non-advanced modes, a blank per-stage angle clears the
+                # override so the global burnout angle governs.
+                if key == 'stage_burnout_angle_deg' and not _advanced and val is None:
+                    stages[i][key] = None
+                elif val is not None:
+                    stages[i][key] = val
+                elif key in ('coast_time_s',):
+                    stages[i][key] = 0.0
+        # events
+        if 'shroud' in self._ev_vars:
+            v = self._f(self._ev_vars['shroud'])
+            plan['shroud_jettison_alt_km'] = v if v is not None else 0.0
+        if 'booster' in self._ev_vars:
+            v = self._f(self._ev_vars['booster'])
+            plan['booster_jettison_s'] = v if v is not None else 0.0
+        for i, sv in self._ev_gridfin.items():
+            try:
+                stages[i]['grid_fin_deploy_schedule'] = _parse_deploy_schedule(sv.get())
+            except ValueError:
+                messagebox.showerror("Flight Plan",
+                                     f"Grid-fin schedule for stage {i + 1} must be 't:n, t:n'.",
+                                     parent=self)
+                return
+        plan['stages'] = stages
+        plan['source'] = self._source_var.get().strip()
+        plan['notes'] = self._notes_text.get("1.0", "end").strip()
+        self._result = plan
+        self.destroy()
+
+    @property
+    def result(self):
+        return self._result
+
+
+# ---------------------------------------------------------------------------
 # Range-ring dialog
 # ---------------------------------------------------------------------------
 
@@ -4474,6 +4680,7 @@ class BoosterFlyoutApp(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
+        analysis_menu.add_command(label="Edit Flight Plan…",        command=self._edit_flight_plan_main)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         analysis_menu.add_command(label="Engine Cutoff (liquid)…",  command=self._set_engine_cutoff)
@@ -7494,6 +7701,28 @@ class BoosterFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Run buttons
     # ------------------------------------------------------------------
+    def _edit_flight_plan_main(self):
+        """Open the flight-plan editor for the selected booster and, on save,
+        write the updated plan to the user flight-plan library."""
+        name = self._booster_var.get()
+        if name not in BOOSTER_DB:
+            messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
+            return
+        booster = get_booster(name)
+        plan = extract_flight_plan(booster)
+        dlg = FlightPlanDialog(self, name, plan, booster)
+        self.wait_window(dlg)
+        if dlg.result is None:
+            return
+        try:
+            save_flight_plan(name, dlg.result, _FLIGHT_PLAN_LIBRARY_PATH)
+        except Exception as exc:
+            messagebox.showerror("Flight Plan",
+                                 f"Could not save flight plan:\n{exc}", parent=self)
+            return
+        self._on_booster_changed()
+        self._status_var.set(f"Flight plan for '{name}' saved.")
+
     def _set_engine_cutoff(self):
         """Analysis ▸ Engine Cutoff… — view/set the early-cutoff time.
 
