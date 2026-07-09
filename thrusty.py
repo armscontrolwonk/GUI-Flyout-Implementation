@@ -4741,7 +4741,6 @@ class BoosterFlyoutApp(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
 
         analysis_menu = tk.Menu(menubar, tearoff=0)
-        analysis_menu.add_command(label="Edit Flight Plan…",        command=self._edit_flight_plan_main)
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         analysis_menu.add_command(label="Engine Cutoff (liquid)…",  command=self._set_engine_cutoff)
