@@ -5008,8 +5008,12 @@ class BoosterFlyoutApp(tk.Tk):
         # are <booster>__<plan>.flightplan.json in the user library.  The
         # active selection feeds get_booster via ACTIVE_FLIGHT_PLANS, so the
         # whole panel (and every run) follows the chosen plan.
+        # The Flight Plan section is created here but packed later, after Launch
+        # Site, so the sidebar runs in flight order: Booster, Reentry Object,
+        # Launch Site, Flight Plan, Reentry Plan.  It also hosts the ascent
+        # strip (built below), consolidating what were two separate panels.
         fpf = ttk.LabelFrame(parent, text="Flight Plan")
-        fpf.pack(fill=tk.X, padx=6, pady=3)
+        self._flight_plan_section = fpf
         self._fp_var = tk.StringVar(value=mm.DEFAULT_PLAN_LABEL)
         self._fp_cb = ttk.Combobox(fpf, textvariable=self._fp_var,
                                    values=[mm.DEFAULT_PLAN_LABEL],
@@ -5097,9 +5101,15 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Button(az_frame, text="Estimate…", width=10,
                    command=self._estimate_azimuth).pack(side=tk.LEFT, padx=4)
 
-        # ── Guidance — mode radio + burnout angle / pitch-over ───────
-        gf = ttk.LabelFrame(parent, text="Ascent Mode")
-        gf.pack(fill=tk.X, padx=6, pady=3)
+        # Flight Plan section takes its place now (after Launch Site), then the
+        # ascent strip is built inside it as a plain frame — one consolidated
+        # panel instead of a separate "Ascent Mode" box.
+        fpf.pack(fill=tk.X, padx=6, pady=3)
+        ttk.Separator(fpf, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=6, pady=(2, 4))
+
+        # ── Ascent strip — mode + hot-loop pitch controls ────────────
+        gf = ttk.Frame(fpf)
+        gf.pack(fill=tk.X)
         self._guidance_frame = gf          # saved for dynamic grid management
         gf.columnconfigure(1, weight=1)    # column 1 fills available width
 
@@ -5257,7 +5267,7 @@ class BoosterFlyoutApp(tk.Tk):
         # _on_booster_changed); created here so the widget always exists.
 
         # ── Reentry Mode ──────────────────────────────────────────────
-        rf = ttk.LabelFrame(parent, text="Reentry Mode")
+        rf = ttk.LabelFrame(parent, text="Reentry Plan")
         rf.pack(fill=tk.X, padx=6, pady=3)
         self._reentry_frame = rf
         rf.columnconfigure(1, weight=1)
