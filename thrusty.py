@@ -5248,23 +5248,11 @@ class BoosterFlyoutApp(tk.Tk):
         self._adv_yaw_chk.grid_forget()
         self._update_guidance_labels("pitch_program")
 
-        # ── Fairing / shroud jettison (a flight-plan choice, not hardware) ──
-        # The fairing's mass/shape/size are hardware (booster editor); WHEN it
-        # is jettisoned is a flight decision, so it lives here on the flight
-        # plan.  Blank = the heating-flux default (drop when free-molecular flux
-        # falls below the fairing criterion); a number = a fixed altitude.
-        self._fair_frame = ttk.LabelFrame(parent, text="Fairing jettison")
-        self._fair_frame.columnconfigure(1, weight=1)
-        ttk.Label(self._fair_frame, text="Jettison alt:").grid(
-            row=0, column=0, sticky=tk.W, padx=(8, 2), pady=2)
-        _fj_row = ttk.Frame(self._fair_frame)
-        _fj_row.grid(row=0, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        # Fairing jettison altitude is a flight-plan field edited in the Flight
+        # Plan dialog (shown there only when the booster carries a shroud); it no
+        # longer has its own sidebar box.  Keep the StringVar so _get_inputs and
+        # the profile snapshot still read the value the plan supplies.
         self._shroud_jett_var = tk.StringVar(value="")
-        ttk.Entry(_fj_row, textvariable=self._shroud_jett_var, width=8).pack(side=tk.LEFT)
-        ttk.Label(_fj_row, text="km  (blank = heating-flux default)").pack(
-            side=tk.LEFT, padx=2)
-        # Packed only when the selected booster carries a shroud (see
-        # _on_booster_changed); created here so the widget always exists.
 
         # ── Reentry Mode ──────────────────────────────────────────────
         rf = ttk.LabelFrame(parent, text="Reentry Plan")
@@ -5981,18 +5969,14 @@ class BoosterFlyoutApp(tk.Tk):
         self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
                              else str(int(total_burn_time(p))))
 
-        # Fairing jettison altitude (from the applied plan); <=0 shows as blank
-        # (heating default).  Shown only when there's a shroud to jettison.
+        # Fairing jettison altitude (from the applied plan); <=0 = heating
+        # default.  Kept in a hidden StringVar so _get_inputs applies it; it is
+        # edited in the Flight Plan dialog, not the sidebar.
         try:
             _sj = float(p.shroud_jettison_alt_km)
         except (TypeError, ValueError):
             _sj = 0.0
         self._shroud_jett_var.set(f"{_sj:g}" if _sj > 0 else "")
-        if getattr(p, 'shroud_mass_kg', 0.0) > 0:
-            self._fair_frame.pack(fill=tk.X, padx=6, pady=3,
-                                  before=self._reentry_frame)
-        else:
-            self._fair_frame.pack_forget()
 
         self._update_guidance_labels(self._guidance_var.get())
         self._update_params_display(p)
