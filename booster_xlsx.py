@@ -630,7 +630,14 @@ def import_booster_xlsx(path: str):
     from booster_models import booster_from_dict
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
-    ws = wb['Booster'] if 'Booster' in wb.sheetnames else wb['Booster']
+    # Current sheet name first, then the legacy pre-rename 'Missile' sheet
+    # (older saved workbooks), then the first sheet as a last resort.
+    if 'Booster' in wb.sheetnames:
+        ws = wb['Booster']
+    elif 'Missile' in wb.sheetnames:
+        ws = wb['Missile']
+    else:
+        ws = wb[wb.sheetnames[0]]
     r  = _R
 
     name = _rstr(ws, r['name'], 4, 'Unnamed')
