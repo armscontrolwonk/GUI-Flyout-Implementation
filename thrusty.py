@@ -6878,7 +6878,10 @@ class BoosterFlyoutApp(tk.Tk):
             _row2(af, r, "No. of reentry objects:", str(p.num_ros),
                   "Per-object mass:", f"{p.ro_mass_kg:,.0f} kg"); r += 1
             _ero     = effective_ro(p)
-            _ro_beta = _ero.beta_kg_m2 if _ero else p.ro_beta_kg_m2
+            # ro_beta_kg_m2 was removed from BoosterParams (reentry hardware now
+            # lives on the reentry object); fall back to 0 ("—") when there is
+            # no reentry object to read beta from.
+            _ro_beta = _ero.beta_kg_m2 if _ero else getattr(p, 'ro_beta_kg_m2', 0.0)
             _pbv_m   = p.bus_mass_kg
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
