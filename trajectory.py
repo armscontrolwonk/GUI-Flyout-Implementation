@@ -3313,6 +3313,20 @@ def _wheelon_gamma_opt(v_bo: float, burnout_alt_m: float = 150_000.0) -> float:
     return 0.5 * np.degrees(np.arccos(cos_2g))
 
 
+def wheelon_burnout_angle(params: BoosterParams) -> float:
+    """Estimated Wheelon-optimal burnout elevation angle (deg) for max range.
+
+    Public one-shot estimator: derives an ideal burnout speed from the
+    Tsiolkovsky delta-V (de-rated for gravity/drag losses the way
+    maximize_range seeds its search) and returns the Wheelon gamma_opt.  This
+    is the same estimate maximize_range narrows its grid around, exposed so the
+    GUI can fill the burnout-angle field without a full range sweep.
+    """
+    _dv_ideal = _tsiolkovsky_dv(params)
+    _v_bo_est = max(1000.0, _dv_ideal * 0.82 - 300.0)
+    return _wheelon_gamma_opt(_v_bo_est)
+
+
 def maximize_range(params: BoosterParams,
                    launch_lat_deg: float,
                    launch_lon_deg: float,

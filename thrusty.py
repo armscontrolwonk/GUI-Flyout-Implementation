@@ -39,7 +39,8 @@ from booster_models import (BOOSTER_DB, get_booster,
                            extract_reentry_plan, apply_reentry_plan,
                            load_reentry_plan, save_reentry_plan)
 from trajectory import (integrate_trajectory, maximize_range, aim_booster,
-                        plan_orbital_insertion, MaxRangeCancelled)
+                        plan_orbital_insertion, MaxRangeCancelled,
+                        wheelon_burnout_angle)
 from coordinates import range_between
 from slv_performance import schilling_performance
 import mass_estimator as mest
@@ -3028,32 +3029,47 @@ class FlightPlanDialog(tk.Toplevel):
             "Gravity turn"           if _g == 'true_gravity_turn' else
             "Orbital insertion"      if _g == 'orbital_insertion' else
             "Simple pitch profile")
-        ttk.Combobox(frm, textvariable=self._mode_var, state="readonly", width=22,
-                     values=["Simple pitch profile", "Advanced pitch profile",
-                             "Gravity turn", "Orbital insertion"]).grid(
-            row=r, column=1, sticky=tk.W, pady=3); r += 1
+        self._mode_cb = ttk.Combobox(
+            frm, textvariable=self._mode_var, state="readonly", width=22,
+            values=["Simple pitch profile", "Advanced pitch profile",
+                    "Gravity turn", "Orbital insertion"])
+        self._mode_cb.grid(row=r, column=1, sticky=tk.W, pady=3)
+        self._mode_cb.bind("<<ComboboxSelected>>", self._on_mode_changed)
+        r += 1
 
-        # ── Launch elevation + burnout angle ─────────────────────────────
+        # ── Launch elevation (always shown) ──────────────────────────────
         ttk.Label(frm, text="Launch elev. (°):").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._launch_el_var = tk.StringVar(value=f"{float(plan.get('launch_elevation_deg', 90.0)):g}")
         ttk.Entry(frm, textvariable=self._launch_el_var, width=10).grid(
             row=r, column=1, sticky=tk.W, pady=3); r += 1
 
-        ttk.Label(frm, text="Burnout angle (°):").grid(row=r, column=0, sticky=tk.W, pady=3)
+        # ── Burnout / boost angle (mode-dependent) + Wheelon estimator ───
+        self._burnout_lbl = ttk.Label(frm, text="Burnout angle (°):")
+        self._burnout_lbl.grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._burnout_frame = ttk.Frame(frm)
+        self._burnout_frame.grid(row=r, column=1, sticky=tk.W, pady=3)
         self._burnout_var = tk.StringVar(value=f"{float(plan.get('burnout_angle_deg', 45.0)):g}")
-        ttk.Entry(frm, textvariable=self._burnout_var, width=10).grid(
-            row=r, column=1, sticky=tk.W, pady=3); r += 1
+        ttk.Entry(self._burnout_frame, textvariable=self._burnout_var, width=10).pack(side=tk.LEFT)
+        self._wheelon_btn = ttk.Button(self._burnout_frame, text="Estimate ε*",
+                                       command=self._estimate_wheelon)
+        self._wheelon_btn.pack(side=tk.LEFT, padx=6); r += 1
+        self._mode_note = ttk.Label(frm, text="", foreground="#555555")
+        self._mode_note.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=(0, 4)); r += 1
 
-        # ── Per-stage pitch table ────────────────────────────────────────
-        ttk.Label(frm, text="Per-stage pitch program",
-                  font=("TkDefaultFont", 10, "bold")).grid(
-            row=r, column=0, columnspan=2, sticky=tk.W, pady=(10, 2)); r += 1
+        # ── Per-stage pitch table (mode-dependent) ───────────────────────
+        self._pstage_lbl = ttk.Label(frm, text="Per-stage pitch program",
+                                     font=("TkDefaultFont", 10, "bold"))
+        self._pstage_lbl.grid(row=r, column=0, columnspan=2, sticky=tk.W, pady=(10, 2)); r += 1
         tbl = ttk.Frame(frm)
+        self._pstage_tbl = tbl
         tbl.grid(row=r, column=0, columnspan=2, sticky=tk.W); r += 1
+        self._angle_hdr = None
         for c, h in enumerate(["Stage", "Turn start", "Turn stop", "Angle",
                                "Coast", "End-burn"]):
-            ttk.Label(tbl, text=h, foreground="#555555").grid(
-                row=0, column=c, padx=3, pady=(2, 1))
+            _hl = ttk.Label(tbl, text=h, foreground="#555555")
+            _hl.grid(row=0, column=c, padx=3, pady=(2, 1))
+            if h == "Angle":
+                self._angle_hdr = _hl
         self._stage_rows = []
         for i, st in enumerate(plan.get('stages', [])):
             ttk.Label(tbl, text=f"{i + 1}").grid(row=i + 1, column=0, padx=3)
@@ -3067,6 +3083,7 @@ class FlightPlanDialog(tk.Toplevel):
                     row=i + 1, column=c, padx=3, pady=1)
                 row[key] = sv
             self._stage_rows.append(row)
+        self._on_mode_changed()   # apply initial mode visibility
 
         # ── Events (only for hardware the booster actually carries) ──────
         self._ev_vars = {}
@@ -3131,6 +3148,47 @@ class FlightPlanDialog(tk.Toplevel):
             return float(s)
         except ValueError:
             return None
+
+    def _on_mode_changed(self, *_):
+        """Show only the controls the selected ascent mode actually uses."""
+        m = self._mode_var.get()
+        show_angle   = m in ("Simple pitch profile", "Orbital insertion")
+        show_wheelon = m == "Simple pitch profile"
+        show_table   = m in ("Advanced pitch profile", "Gravity turn")
+        self._burnout_lbl.config(
+            text="Boost angle (°):" if m == "Orbital insertion" else "Burnout angle (°):")
+        if show_angle:
+            self._burnout_lbl.grid(); self._burnout_frame.grid()
+        else:
+            self._burnout_lbl.grid_remove(); self._burnout_frame.grid_remove()
+        if show_wheelon:
+            self._wheelon_btn.pack(side=tk.LEFT, padx=6)
+        else:
+            self._wheelon_btn.pack_forget()
+        if show_table:
+            self._pstage_lbl.grid(); self._pstage_tbl.grid()
+        else:
+            self._pstage_lbl.grid_remove(); self._pstage_tbl.grid_remove()
+        # In gravity turn the per-stage "Angle" column is the eta kick angle.
+        if self._angle_hdr is not None:
+            self._angle_hdr.config(text="η (°)" if m == "Gravity turn" else "Angle")
+        self._mode_note.config(text={
+            "Simple pitch profile":
+                "Linear pitch to the burnout angle; Estimate ε* fills the Wheelon optimum.",
+            "Advanced pitch profile":
+                "Per-stage pitch schedule below.",
+            "Gravity turn":
+                "Thrust follows velocity from the launch elevation; per-stage η is an optional kick.",
+            "Orbital insertion":
+                "Use Plan Orbit on the main panel to solve the boost angle for a target orbit.",
+        }.get(m, ""))
+
+    def _estimate_wheelon(self):
+        """Fill the burnout-angle field with the Wheelon-optimal estimate."""
+        try:
+            self._burnout_var.set(f"{wheelon_burnout_angle(self._booster):.1f}")
+        except Exception as exc:
+            messagebox.showerror("Estimate ε*", str(exc), parent=self)
 
     def _save(self):
         plan = dict(self._base_plan)   # keep unknown keys (loft rate, yaw, …)
@@ -5030,6 +5088,9 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
         self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
         self._loft_angle_unit_lbl.pack(side=tk.LEFT, padx=2)
+        # Wheelon optimal-angle estimator — fills the field without a full sweep.
+        ttk.Button(la_frame, text="ε*", width=3,
+                   command=self._estimate_wheelon_main).pack(side=tk.LEFT, padx=(4, 0))
 
         self._gt_turn_start_lbl = ttk.Label(gf, text="Turn Start:")
         self._gt_turn_start_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -6674,6 +6735,17 @@ class BoosterFlyoutApp(tk.Tk):
         RO_DB.pop(sel, None)
         self._refresh_ro_list(select_name=self._RO_DEFAULT_SENTINEL)
         self._status_var.set(f"Reentry object '{sel}' deleted.")
+
+    def _estimate_wheelon_main(self):
+        """Fill the main-panel burnout-angle field with the Wheelon estimate."""
+        name = self._booster_var.get()
+        if name not in BOOSTER_DB:
+            return
+        try:
+            self._loft_angle_var.set(f"{wheelon_burnout_angle(get_booster(name)):.1f}")
+            self._status_var.set("Burnout angle set to the Wheelon ε* estimate.")
+        except Exception as exc:
+            messagebox.showerror("Estimate ε*", str(exc), parent=self)
 
     def _active_plan_name(self):
         """Name of the active flight-plan variant, or None for the default."""
