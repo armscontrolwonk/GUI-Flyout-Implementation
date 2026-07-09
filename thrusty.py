@@ -183,6 +183,8 @@ _OVERRIDDEN_PACKAGED: set[str] = set()
 _CUSTOM_PATH        = Path.home() / ".gui_missile_flyout" / "custom_boosters.json"
 _CUSTOM_PATH_LEGACY = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
+# Which named flight plan is active per booster (booster name -> plan name).
+_ACTIVE_PLANS_PATH = Path.home() / ".gui_missile_flyout" / "active_flight_plans.json"
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_BOOSTERS     = _THRUSTY_ROOT / "boosters"
@@ -4622,6 +4624,13 @@ class BoosterFlyoutApp(tk.Tk):
 
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
         _load_custom_boosters()      # restore any user-saved boosters
+        # Restore per-booster named flight-plan selections.
+        try:
+            if _ACTIVE_PLANS_PATH.exists():
+                mm.ACTIVE_FLIGHT_PLANS.update(
+                    json.loads(_ACTIVE_PLANS_PATH.read_text()))
+        except Exception as exc:
+            print(f"Warning: could not load active flight plans: {exc}")
         _extract_ros_from_boosters() # migrate: pull embedded RVs into the library
 
         self._build_menu()
@@ -4889,6 +4898,34 @@ class BoosterFlyoutApp(tk.Tk):
                                    command=self._delete_booster,
                                    state=tk.DISABLED)
         self._del_btn.pack(side=tk.LEFT, padx=2)
+
+        # ── Flight plan — a booster can fly many named plans ───────────
+        # "(default)" is the booster-named plan file (undeletable); variants
+        # are <booster>__<plan>.flightplan.json in the user library.  The
+        # active selection feeds get_booster via ACTIVE_FLIGHT_PLANS, so the
+        # whole panel (and every run) follows the chosen plan.
+        fpf = ttk.LabelFrame(parent, text="Flight Plan")
+        fpf.pack(fill=tk.X, padx=6, pady=3)
+        self._fp_var = tk.StringVar(value=mm.DEFAULT_PLAN_LABEL)
+        self._fp_cb = ttk.Combobox(fpf, textvariable=self._fp_var,
+                                   values=[mm.DEFAULT_PLAN_LABEL],
+                                   state="readonly", width=24)
+        self._fp_cb.pack(padx=6, pady=(4, 2))
+        self._fp_cb.bind("<<ComboboxSelected>>", self._on_flight_plan_selected)
+        _bind_typeahead(self._fp_cb)
+        fpb = ttk.Frame(fpf)
+        fpb.pack(padx=6, pady=(0, 2))
+        ttk.Button(fpb, text="New",   width=7,
+                   command=self._new_flight_plan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(fpb, text="Edit…", width=7,
+                   command=self._edit_flight_plan_main).pack(side=tk.LEFT, padx=2)
+        self._fp_del_btn = ttk.Button(fpb, text="Delete", width=7,
+                                      command=self._delete_flight_plan,
+                                      state=tk.DISABLED)
+        self._fp_del_btn.pack(side=tk.LEFT, padx=2)
+        self._fp_summary_var = tk.StringVar(value="")
+        ttk.Label(fpf, textvariable=self._fp_summary_var,
+                  foreground="#555555").pack(padx=8, pady=(0, 4), anchor=tk.W)
 
         # ── Reentry vehicle (payload) ─────────────────────────────────
         # The RV library is independent of any booster; the run-time
@@ -5790,6 +5827,10 @@ class BoosterFlyoutApp(tk.Tk):
         if name not in BOOSTER_DB:
             return
         self._last_valid_booster = name
+        # Refresh the Flight Plan combobox for this booster (the plan set and
+        # active selection are per booster) before reading the applied booster.
+        if hasattr(self, '_fp_cb'):
+            self._refresh_flight_plan_list()
         p = get_booster(name)
 
         prof = _load_traj_profiles().get(name)
@@ -7701,27 +7742,135 @@ class BoosterFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     # Run buttons
     # ------------------------------------------------------------------
-    def _edit_flight_plan_main(self):
-        """Open the flight-plan editor for the selected booster and, on save,
-        write the updated plan to the user flight-plan library."""
+    def _save_active_plans(self):
+        try:
+            _ACTIVE_PLANS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _ACTIVE_PLANS_PATH.write_text(json.dumps(mm.ACTIVE_FLIGHT_PLANS, indent=2))
+        except Exception as exc:
+            print(f"Warning: could not save active flight plans: {exc}")
+
+    def _refresh_flight_plan_list(self, select=None):
+        """Repopulate the Flight Plan combobox for the current booster."""
+        name = self._booster_var.get()
+        plans = (mm.list_flight_plans(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS)
+                 if name in BOOSTER_DB else [mm.DEFAULT_PLAN_LABEL])
+        self._fp_cb.config(values=plans)
+        active = select or mm.ACTIVE_FLIGHT_PLANS.get(name, mm.DEFAULT_PLAN_LABEL)
+        if active not in plans:
+            active = mm.DEFAULT_PLAN_LABEL
+        self._fp_var.set(active)
+        self._fp_del_btn.config(
+            state=tk.NORMAL if active != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
+        self._update_flight_plan_summary()
+
+    def _on_flight_plan_selected(self, _event=None):
+        name = self._booster_var.get()
+        sel = self._fp_var.get()
+        if sel == mm.DEFAULT_PLAN_LABEL:
+            mm.ACTIVE_FLIGHT_PLANS.pop(name, None)
+        else:
+            mm.ACTIVE_FLIGHT_PLANS[name] = sel
+        self._save_active_plans()
+        self._fp_del_btn.config(
+            state=tk.NORMAL if sel != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
+        self._on_booster_changed()
+
+    def _update_flight_plan_summary(self):
+        """One-line summary of the active plan under the combobox."""
+        try:
+            p = get_booster(self._booster_var.get())
+        except Exception:
+            self._fp_summary_var.set("")
+            return
+        _mode = {"pitch_program": "pitch", "true_gravity_turn": "gravity turn",
+                 "orbital_insertion": "orbital"}.get(p.guidance, p.guidance)
+        parts = [_mode, f"burnout {p.burnout_angle_deg:g}°"]
+        if getattr(p, 'shroud_mass_kg', 0.0) > 0:
+            parts.append("fairing @ "
+                         + (f"{p.shroud_jettison_alt_km:g} km"
+                            if p.shroud_jettison_alt_km > 0 else "heating"))
+        self._fp_summary_var.set(" · ".join(parts))
+
+    def _new_flight_plan(self):
+        """Duplicate the active plan under a new name (a variant of this booster)."""
         name = self._booster_var.get()
         if name not in BOOSTER_DB:
             messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
             return
-        booster = get_booster(name)
+        new_name = simpledialog.askstring(
+            "New Flight Plan",
+            f"Name for the new flight plan for '{name}':", parent=self)
+        if not new_name or not new_name.strip():
+            return
+        new_name = new_name.strip()
+        if new_name == mm.DEFAULT_PLAN_LABEL:
+            messagebox.showerror("Flight Plan",
+                                 f"'{mm.DEFAULT_PLAN_LABEL}' is reserved.", parent=self)
+            return
+        booster = get_booster(name)          # active plan as the starting point
         plan = extract_flight_plan(booster)
-        dlg = FlightPlanDialog(self, name, plan, booster)
+        dlg = FlightPlanDialog(self, f"{name} — {new_name}", plan, booster)
         self.wait_window(dlg)
         if dlg.result is None:
             return
         try:
-            save_flight_plan(name, dlg.result, _FLIGHT_PLAN_LIBRARY_PATH)
+            save_flight_plan(name, dlg.result, _FLIGHT_PLAN_LIBRARY_PATH, plan=new_name)
+        except Exception as exc:
+            messagebox.showerror("Flight Plan",
+                                 f"Could not save flight plan:\n{exc}", parent=self)
+            return
+        mm.ACTIVE_FLIGHT_PLANS[name] = new_name
+        self._save_active_plans()
+        self._refresh_flight_plan_list(select=new_name)
+        self._on_booster_changed()
+        self._status_var.set(f"Flight plan '{new_name}' created for '{name}'.")
+
+    def _delete_flight_plan(self):
+        name = self._booster_var.get()
+        sel = self._fp_var.get()
+        if sel == mm.DEFAULT_PLAN_LABEL:
+            return
+        if not messagebox.askyesno(
+                "Delete Flight Plan",
+                f"Delete flight plan '{sel}' for '{name}'?", parent=self):
+            return
+        fp = Path(_FLIGHT_PLAN_LIBRARY_PATH) / mm.flight_plan_filename(name, sel)
+        try:
+            fp.unlink(missing_ok=True)
+        except Exception as exc:
+            messagebox.showerror("Flight Plan",
+                                 f"Could not delete flight plan:\n{exc}", parent=self)
+            return
+        mm.ACTIVE_FLIGHT_PLANS.pop(name, None)
+        self._save_active_plans()
+        self._refresh_flight_plan_list(select=mm.DEFAULT_PLAN_LABEL)
+        self._on_booster_changed()
+        self._status_var.set(f"Flight plan '{sel}' deleted.")
+
+    def _edit_flight_plan_main(self):
+        """Open the flight-plan editor for the ACTIVE plan of the selected
+        booster and, on save, write it back (default file or the named variant)."""
+        name = self._booster_var.get()
+        if name not in BOOSTER_DB:
+            messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
+            return
+        sel = self._fp_var.get()
+        booster = get_booster(name)
+        plan = extract_flight_plan(booster)
+        title_name = name if sel == mm.DEFAULT_PLAN_LABEL else f"{name} — {sel}"
+        dlg = FlightPlanDialog(self, title_name, plan, booster)
+        self.wait_window(dlg)
+        if dlg.result is None:
+            return
+        try:
+            save_flight_plan(name, dlg.result, _FLIGHT_PLAN_LIBRARY_PATH,
+                             plan=None if sel == mm.DEFAULT_PLAN_LABEL else sel)
         except Exception as exc:
             messagebox.showerror("Flight Plan",
                                  f"Could not save flight plan:\n{exc}", parent=self)
             return
         self._on_booster_changed()
-        self._status_var.set(f"Flight plan for '{name}' saved.")
+        self._status_var.set(f"Flight plan for '{title_name}' saved.")
 
     def _set_engine_cutoff(self):
         """Analysis ▸ Engine Cutoff… — view/set the early-cutoff time.

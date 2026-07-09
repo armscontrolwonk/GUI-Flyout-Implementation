@@ -1541,17 +1541,30 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
 BOOSTER_DB: dict = {}
 
 
-def get_booster(name: str) -> BoosterParams:
+def get_booster(name: str, plan: str = None) -> BoosterParams:
+    """Return the named booster with its flight plan applied.
+
+    A booster can fly many flight plans: the booster-named file is the
+    "(default)" plan; named variants (see list_flight_plans) reference the
+    booster and are applied ON TOP of the default, so a variant need only
+    carry the fields it changes.  ``plan`` selects a variant explicitly;
+    when None, the ACTIVE_FLIGHT_PLANS selection (set by the GUI) is used,
+    falling back to the default.  Headless callers that never touch either
+    get the default plan, exactly as before.
+    """
     if name not in BOOSTER_DB:
         raise ValueError(f"Unknown booster '{name}'. Available: {list(BOOSTER_DB)}")
     p = BOOSTER_DB[name]()
-    # Apply the booster's shipped flight plan (guidance) so it arrives ready to
-    # fly.  This is the seam that separates hardware from flight plan: today a
-    # no-op (the plan was extracted from the booster's own fields), and once
-    # guidance is stripped from booster files it restores the plan.  Returning
-    # the applied copy also avoids callers mutating the shared cached instance.
     fp = load_flight_plan(name, extra_dirs=USER_FLIGHT_PLAN_DIRS)
-    return apply_flight_plan(p, fp) if fp is not None else p
+    if fp is not None:
+        p = apply_flight_plan(p, fp)
+    if plan is None:
+        plan = ACTIVE_FLIGHT_PLANS.get(name)
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        vp = load_flight_plan(name, extra_dirs=USER_FLIGHT_PLAN_DIRS, plan=plan)
+        if vp is not None:
+            p = apply_flight_plan(p, vp)
+    return p
 
 
 def _migrate_guidance(g: str) -> str:
@@ -2421,18 +2434,29 @@ def _merge_flight_plans(base: dict, over: dict) -> dict:
     return out
 
 
-def load_flight_plan(name: str, extra_dirs=()):
-    """Load a booster's flight plan by name; None if none found.
+# Sentinel label for the booster-named default plan (undeletable; the file
+# named after the booster itself).
+DEFAULT_PLAN_LABEL = "(default)"
 
-    Searches the bundled directory first, then each of ``extra_dirs`` in order,
-    merging each file it finds over the accumulated plan (later dirs win).  A
-    user file therefore need only carry the fields it overrides.
+# Active named flight plan per booster, set by the GUI (booster name -> plan
+# name).  Consulted by get_booster when no explicit plan is passed; headless
+# callers that never populate it always get the default plan.
+ACTIVE_FLIGHT_PLANS: dict = {}
+
+
+def load_flight_plan(name: str, extra_dirs=(), plan: str = None):
+    """Load a booster's flight plan; None if none found.
+
+    With ``plan=None``, loads the (default) plan: bundled directory first, then
+    each of ``extra_dirs`` in order, merging each file found over the
+    accumulated plan (later dirs win) — a user file need only carry the fields
+    it overrides.  With a ``plan`` name, loads that named variant the same way.
     """
     from pathlib import Path as _P
-    safe = _re_safe(name)
+    fname = flight_plan_filename(name, plan)
     result = None
     for d in [_BUNDLED_FLIGHT_PLANS, *[_P(x) for x in extra_dirs]]:
-        fp = d / f"{safe}.flightplan.json"
+        fp = d / fname
         if fp.exists():
             try:
                 data = _json.loads(fp.read_text())
@@ -2442,21 +2466,54 @@ def load_flight_plan(name: str, extra_dirs=()):
     return result
 
 
-def flight_plan_filename(name: str) -> str:
-    """Canonical flight-plan filename for a booster name."""
+def flight_plan_filename(name: str, plan: str = None) -> str:
+    """Canonical flight-plan filename: booster-named for the default plan,
+    ``<booster>__<plan>.flightplan.json`` for a named variant."""
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        return f"{_re_safe(name)}__{_re_safe(plan)}.flightplan.json"
     return f"{_re_safe(name)}.flightplan.json"
 
 
-def save_flight_plan(name: str, fp: dict, out_dir) -> str:
-    """Write flight plan ``fp`` for ``name`` into ``out_dir``; return the path.
+def list_flight_plans(name: str, extra_dirs=()) -> list:
+    """Names of the flight plans available for booster ``name``.
 
-    Mirrors :func:`load_flight_plan` so the ``.flightplan.json`` naming lives in
-    one place.  ``fp`` is typically the dict from :func:`extract_flight_plan`.
+    Always starts with DEFAULT_PLAN_LABEL; named variants follow in sorted
+    order, discovered in the bundled dir and ``extra_dirs`` by the
+    ``<booster>__<plan>.flightplan.json`` naming convention.
+    """
+    from pathlib import Path as _P
+    prefix = f"{_re_safe(name)}__"
+    suffix = ".flightplan.json"
+    plans = set()
+    for d in [_BUNDLED_FLIGHT_PLANS, *[_P(x) for x in extra_dirs]]:
+        if not d.exists():
+            continue
+        for fp in d.glob(f"{prefix}*{suffix}"):
+            token = fp.name[len(prefix):-len(suffix)]
+            if not token:
+                continue
+            try:
+                data = _json.loads(fp.read_text())
+                label = str(data.get('name', '')) or token
+            except Exception:
+                label = token
+            plans.add(label)
+    return [DEFAULT_PLAN_LABEL, *sorted(plans)]
+
+
+def save_flight_plan(name: str, fp: dict, out_dir, plan: str = None) -> str:
+    """Write flight plan ``fp`` for booster ``name`` into ``out_dir``.
+
+    ``plan`` names a variant (stamped into the file as ``name``/``booster``
+    metadata so the file is self-describing); None writes the default plan.
+    Returns the path.  ``fp`` is typically from :func:`extract_flight_plan`.
     """
     from pathlib import Path as _P
     d = _P(out_dir)
     d.mkdir(parents=True, exist_ok=True)
-    path = d / flight_plan_filename(name)
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        fp = {**fp, 'name': plan, 'booster': name}
+    path = d / flight_plan_filename(name, plan)
     path.write_text(_json.dumps(fp, indent=2) + "\n")
     return str(path)
 
