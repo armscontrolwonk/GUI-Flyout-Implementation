@@ -644,10 +644,19 @@ def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
             lat_rad, lon_rad, azimuth_rad,
             params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s,
             t_final_ignition, t)
+    # A stage with no per-stage burnout angle continues the ascent from where
+    # the previous stage left off -- NOT from launch elevation.  When no stage
+    # carries an override, _prev_burnout_angle() returns launch_elevation_deg
+    # for every stage, so the whole boost is the single continuous global ramp.
+    # When an earlier stage DID pitch to a per-stage angle, this later stage
+    # holds/continues from that angle instead of snapping the pitch back up to
+    # 90 deg and re-running the global ramp (the "pitch resets each stage" bug).
+    _start_angle = (_prev_burnout_angle(params, astage)
+                    if astage is not None else params.launch_elevation_deg)
     return _gravity_turn_thrust_dir(
         lat_rad, lon_rad, azimuth_rad,
         params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s, t,
-        start_angle_deg=params.launch_elevation_deg)
+        start_angle_deg=_start_angle)
 
 
 # ---------------------------------------------------------------------------
