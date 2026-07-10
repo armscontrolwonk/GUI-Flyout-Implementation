@@ -5169,8 +5169,11 @@ class BoosterFlyoutApp(tk.Tk):
         gt_te_frame.grid(row=6, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._gt_turn_stop_frame = gt_te_frame
         self._gt_turn_stop_var = tk.StringVar(value="")
+        # Autopopulated with the booster burn time; while untouched it still
+        # reads as "optimize me" for Max Range (see _maximize_range).
+        self._gt_turn_stop_auto = None
         ttk.Entry(gt_te_frame, textvariable=self._gt_turn_stop_var, width=8).pack(side=tk.LEFT)
-        ttk.Label(gt_te_frame, text="s  (blank = full burn)").pack(side=tk.LEFT, padx=2)
+        ttk.Label(gt_te_frame, text="s  (default = burn time)").pack(side=tk.LEFT, padx=2)
 
         self._orbit_alt_lbl = ttk.Label(gf, text="Target orbit alt:")
         self._orbit_alt_lbl.grid(row=7, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -5961,10 +5964,26 @@ class BoosterFlyoutApp(tk.Tk):
         self._guidance_var.set(p.guidance)
         self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
         self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
-        gt_start = _gk('gt_turn_start_s', 5.0)
-        self._gt_turn_start_var.set(str(gt_start) if gt_start else "5.0")
+        # Turn start defaults to 0 s (from liftoff); a saved plan value wins.
+        gt_start = _gk('gt_turn_start_s', 0.0)
+        self._gt_turn_start_var.set(str(gt_start) if gt_start is not None else "0")
+        # Turn stop autopopulates with the booster burn time so the field is
+        # never blank, but until the user changes or saves it we keep it flagged
+        # as an auto-default so Max Range still treats it as "optimize me".
+        # Orbital insertion is exempt: there a blank turn-stop makes the boost
+        # pitch end just before final-stage ignition (not at full burn), so
+        # autopopulating burn time would alter the pitch program -- leave blank.
         gt_stop = _gk('gt_turn_stop_s')
-        self._gt_turn_stop_var.set(str(gt_stop) if gt_stop is not None else "")
+        if gt_stop is not None:
+            self._gt_turn_stop_var.set(str(gt_stop))
+            self._gt_turn_stop_auto = None
+        elif p.guidance == "orbital_insertion":
+            self._gt_turn_stop_var.set("")
+            self._gt_turn_stop_auto = None
+        else:
+            _auto = f"{total_burn_time(p):g}"
+            self._gt_turn_stop_var.set(_auto)
+            self._gt_turn_stop_auto = _auto
         cutoff = _gk('cutoff_time_s')
         self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
                              else str(int(total_burn_time(p))))
@@ -6817,8 +6836,15 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError:
             pass
         # GUI-only run-args (extra keys; apply_flight_plan ignores them).
-        base['gt_turn_start_s'] = self._fnum(self._gt_turn_start_var) or 5.0
-        base['gt_turn_stop_s']  = self._fnum(self._gt_turn_stop_var)
+        base['gt_turn_start_s'] = self._fnum(self._gt_turn_start_var) or 0.0
+        # Turn stop autopopulates with the booster burn time; while it is still
+        # the untouched auto-default, persist None so it keeps reading as
+        # "optimize me" for Max Range rather than locking in the burn time.
+        _auto = getattr(self, '_gt_turn_stop_auto', None)
+        if _auto is not None and self._gt_turn_stop_var.get().strip() == _auto:
+            base['gt_turn_stop_s'] = None
+        else:
+            base['gt_turn_stop_s'] = self._fnum(self._gt_turn_stop_var)
         base['cutoff_time_s']   = self._fnum(self._cutoff_var)
         adv_pitch = bool(getattr(self, '_adv_pitch_var', tk.BooleanVar()).get())
         base['adv_pitch_on'] = adv_pitch
@@ -8080,7 +8106,7 @@ class BoosterFlyoutApp(tk.Tk):
         la       = self._field_float("Loft / burnout angle (°)",
                                      self._loft_angle_var.get(), required=True)
         gt_start_s = self._field_float("Turn start (s)", self._gt_turn_start_var.get(),
-                                       default=5.0)
+                                       default=0.0)
         gt_stop_s  = self._field_float("Turn stop (s)",  self._gt_turn_stop_var.get())
         target_orbit_km = (self._field_float("Target orbit altitude (km)",
                                              self._orbit_alt_var.get())
@@ -8321,6 +8347,12 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
+        # Turn stop is autopopulated with the booster burn time, but until the
+        # user changes or saves it we treat it as unset and let the optimiser
+        # pick the turn-stop.  A user-changed/saved value is honoured verbatim.
+        _auto = getattr(self, '_gt_turn_stop_auto', None)
+        _untouched = _auto is not None and self._gt_turn_stop_var.get().strip() == _auto
+        opt_stop = None if _untouched else gt_stop_s
         self._cancel_event.clear()
         self._running = True
         self._cancel_max_btn.config(state=tk.NORMAL)
@@ -8328,7 +8360,7 @@ class BoosterFlyoutApp(tk.Tk):
         threading.Thread(
             target=self._run_thread,
             args=(booster, guidance, lat, lon, az, cutoff, la,
-                  gt_start_s, None, target_orbit_km,
+                  gt_start_s, opt_stop, target_orbit_km,
                   yaw_maneuvers, launch_elevation_deg, True),
             daemon=True,
         ).start()
