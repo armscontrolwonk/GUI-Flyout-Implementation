@@ -1633,19 +1633,10 @@ class BoosterDialog(tk.Toplevel):
                   foreground="#666").grid(row=6, column=0, columnspan=2,
                                           sticky=tk.W, padx=(6, 6), pady=(0, 4))
 
-        # ── Guidance mode ────────────────────────────────────────────────
-        gf = ttk.LabelFrame(body, text="Guidance Mode")
-        gf.pack(fill=tk.X, padx=8, pady=4)
+        # Guidance mode is flight-plan data, edited in the sidebar / Flight
+        # Plan editor -- not here.  The hidden variable only round-trips the
+        # in-memory value so _collect keeps working; the plan wins at run time.
         self._guidance_var = tk.StringVar(value="pitch_program")
-        ttk.Radiobutton(gf, text="Pitch Program (per-stage thrust angle)",
-                        variable=self._guidance_var, value="pitch_program").pack(
-            anchor=tk.W, padx=8, pady=(4, 2))
-        ttk.Radiobutton(gf, text="Gravity Turn (thrust along velocity, η kick)",
-                        variable=self._guidance_var, value="true_gravity_turn").pack(
-            anchor=tk.W, padx=8, pady=(0, 2))
-        ttk.Radiobutton(gf, text="Orbital Insertion",
-                        variable=self._guidance_var, value="orbital_insertion").pack(
-            anchor=tk.W, padx=8, pady=(0, 4))
 
         # ── Strap-on Boosters panel ─────────────────────────────────────────
         self._booster_frame = ttk.LabelFrame(body, text="Strap-on Boosters")
@@ -4772,8 +4763,8 @@ class BoosterFlyoutApp(tk.Tk):
         file_menu.add_command(label="Save Reentry Object to XLSX…",         command=self._export_ro_xlsx)
         file_menu.add_command(label="New Reentry Object XLSX Template…",    command=self._new_ro_template)
         file_menu.add_separator()
-        file_menu.add_command(label="Load Guidance…",           command=self._import_guidance)
-        file_menu.add_command(label="Save Guidance…",           command=self._export_guidance)
+        file_menu.add_command(label="Load Flight Plan…",        command=self._import_flight_plan_file)
+        file_menu.add_command(label="Save Flight Plan…",        command=self._export_flight_plan_file)
         file_menu.add_separator()
         file_menu.add_command(label="Load Launch Site…",        command=self._load_site)
         file_menu.add_command(label="Save Launch Site…",        command=self._export_site)
@@ -6903,7 +6894,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_booster_changed()
         self._status_var.set(f"Trajectory reset to '{name}' defaults.")
 
-    # Guidance-program fields that belong in an export file.
+    # Legacy pre-flight-plan guidance snapshot keys (read on import only).
     _GUIDANCE_KEYS = frozenset({
         'guidance', 'burnout_angle_deg', 'launch_elevation_deg',
         'gt_turn_start_s', 'gt_turn_stop_s', 'cutoff_s',
@@ -6911,40 +6902,67 @@ class BoosterFlyoutApp(tk.Tk):
         'azimuth_deg', 'launch_lat', 'launch_lon',
     })
 
-    def _export_guidance(self):
-        """Save the current guidance program to a JSON file."""
+    def _export_flight_plan_file(self):
+        """Save the active flight plan (as shown in the panel) to a JSON file.
+
+        The panel is snapshotted to the flight-plan library first, so the
+        exported file is exactly the plan the next Run would fly -- the same
+        .flightplan.json format the library uses, portable between machines.
+        """
         from tkinter import filedialog
-        import datetime as _dt
-        ts      = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        booster = _safe_name(self._booster_var.get())
+        name = self._booster_var.get()
+        if not name:
+            messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
+            return
+        self._snapshot_traj_profile(name)
+        active = self._active_plan_name()
         path = filedialog.asksaveasfilename(
-            title="Export guidance program",
+            title="Save flight plan",
             defaultextension=".json",
-            initialdir=str(_ensure_dir(_DIR_GUIDANCE)),
-            initialfile=f"{ts}_{booster}.guidance.json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialdir=str(_ensure_dir(_THRUSTY_ROOT)),
+            initialfile=mm.flight_plan_filename(name, active),
+            filetypes=[("Flight plan JSON", "*.flightplan.json"),
+                       ("JSON files", "*.json"), ("All files", "*.*")],
             parent=self,
         )
         if not path:
             return
-        meta = self._trajectory_metadata()
-        data = {k: v for k, v in meta.items() if k in self._GUIDANCE_KEYS}
-        data['_type'] = 'guidance_program'
+        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        if active:
+            plan = mm._merge_flight_plans(
+                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
+                                          plan=active) or {})
+        plan['_type']   = 'flight_plan'
+        plan['booster'] = name
+        if active:
+            plan['name'] = active
         try:
             with open(path, 'w') as fh:
-                json.dump(data, fh, indent=2)
+                json.dump(plan, fh, indent=2)
             self._status_var.set(
-                f"Guidance exported: {os.path.basename(path)}")
+                f"Flight plan saved: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Export error", str(exc), parent=self)
 
-    def _import_guidance(self):
-        """Load a guidance program from a JSON file."""
+    def _import_flight_plan_file(self):
+        """Load a flight plan from a JSON file into the active plan slot.
+
+        Reads both the current .flightplan.json format and the legacy
+        .guidance.json snapshots (pre-flight-plan 'Save Guidance…' exports).
+        Either way the result is written to the flight-plan library, so the
+        import persists like any other plan edit.
+        """
         from tkinter import filedialog
+        name = self._booster_var.get()
+        if not name:
+            messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
+            return
+        _legacy_dir = _DIR_GUIDANCE if _DIR_GUIDANCE.is_dir() else _THRUSTY_ROOT
         path = filedialog.askopenfilename(
-            title="Import guidance program",
-            initialdir=str(_ensure_dir(_DIR_GUIDANCE)),
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load flight plan",
+            initialdir=str(_ensure_dir(_legacy_dir)),
+            filetypes=[("Flight plan / guidance JSON", "*.json"),
+                       ("All files", "*.*")],
             parent=self,
         )
         if not path:
@@ -6952,9 +6970,19 @@ class BoosterFlyoutApp(tk.Tk):
         try:
             with open(path) as fh:
                 data = json.load(fh)
-            self._apply_trajectory_metadata(data)
+            if data.get('_type') == 'guidance_program':
+                # Legacy snapshot: apply to the panel fields, then persist
+                # through the normal write-through path.
+                self._apply_trajectory_metadata(data)
+                self._snapshot_traj_profile(name)
+            else:
+                for k in ('_type', 'booster', 'name'):
+                    data.pop(k, None)
+                save_flight_plan(name, data, _FLIGHT_PLAN_LIBRARY_PATH,
+                                 plan=self._active_plan_name())
+                self._on_booster_changed()
             self._status_var.set(
-                f"Guidance imported: {os.path.basename(path)}")
+                f"Flight plan loaded: {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
 
@@ -8322,6 +8350,10 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
+        # Write-through: the plan you fly is the plan on disk.  The sidebar is
+        # a live view of the active flight plan, so every run persists it (the
+        # Reset button still reverts to the shipped default).
+        self._snapshot_traj_profile(self._booster_var.get())
         self._running = True
         self._status_var.set("Running simulation…")
         threading.Thread(
@@ -8347,6 +8379,7 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
+        self._snapshot_traj_profile(self._booster_var.get())   # write-through
         # Turn stop is autopopulated with the booster burn time, but until the
         # user changes or saves it we treat it as unset and let the optimiser
         # pick the turn-stop.  A user-changed/saved value is honoured verbatim.
@@ -8380,6 +8413,7 @@ class BoosterFlyoutApp(tk.Tk):
             messagebox.showerror("Input error",
                                  "Enter a target orbit altitude (km) first.")
             return
+        self._snapshot_traj_profile(self._booster_var.get())   # write-through
         self._running = True
         self._status_var.set(
             f"Planning orbital trajectory to {target_orbit_km:.0f} km…")
@@ -8537,6 +8571,9 @@ class BoosterFlyoutApp(tk.Tk):
             self._loft_angle_var.set(f"{r['optimal_burnout_angle_deg']:.4f}")
         if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "pitch_program":
             self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
+            # The optimiser filling the field is not a USER change: keep it
+            # flagged as auto so the next Max Range still re-optimises.
+            self._gt_turn_stop_auto = self._gt_turn_stop_var.get()
 
         orbital   = r.get('orbital', False)
         rng_km    = r['range_km']
