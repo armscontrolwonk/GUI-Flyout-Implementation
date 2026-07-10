@@ -3174,7 +3174,22 @@ class FlightPlanDialog(tk.Toplevel):
         _yf.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=(10, 2)); r += 1
         for _c, _h in enumerate(["", "Start (s)", "Stop (s)", "Final az (°)"]):
             ttk.Label(_yf, text=_h, foreground="#555555").grid(row=0, column=_c, padx=3, pady=(0, 1))
-        _yaw = plan.get('yaw_maneuvers') or []
+        _yaw = list(plan.get('yaw_maneuvers') or [])
+        # Surface any orphaned per-stage yaw (stage_yaw_*) into the visible grid
+        # so a legacy baked dogleg is editable here too; _save clears the
+        # per-stage fields, leaving the global grid the sole yaw authority.
+        _ign_t = 0.0
+        for _si, _sd in enumerate(plan.get('stages', [])):
+            _fa = _sd.get('stage_yaw_final_az_deg')
+            if _fa is not None:
+                _ys = _sd.get('stage_yaw_start_s')
+                _ye = _sd.get('stage_yaw_stop_s')
+                _yaw.append([_ys if _ys is not None else _ign_t,
+                             _ye if _ye is not None else _ign_t, _fa])
+            if _si < len(self._stages):
+                _st = self._stages[_si]
+                _ign_t += (getattr(_st, 'burn_time_s', 0.0)
+                           + getattr(_st, 'coast_time_s', 0.0))
         self._yaw_rows = []
         for _i in range(3):
             man = _yaw[_i] if _i < len(_yaw) else [None, None, None]
@@ -3320,6 +3335,12 @@ class FlightPlanDialog(tk.Toplevel):
                 yaw.append([self._f(trip['start']), self._f(trip['stop']), fa])
         plan['yaw_maneuvers'] = yaw
         plan['adv_yaw_on'] = bool(yaw)
+        # Yaw is owned by the global grid above; clear any per-stage stage_yaw_*
+        # (surfaced into the grid on load) so it can't override it on reload.
+        for st in stages:
+            st['stage_yaw_start_s'] = None
+            st['stage_yaw_stop_s'] = None
+            st['stage_yaw_final_az_deg'] = None
         plan['source'] = self._source_var.get().strip()
         plan['notes'] = self._notes_text.get("1.0", "end").strip()
         self._result = plan
@@ -6064,7 +6085,24 @@ class BoosterFlyoutApp(tk.Tk):
         if _yaw is None and 'yaw_rows' in legacy:
             _yaw = [[m.get('start'), m.get('stop'), m.get('final_az')]
                     for m in (legacy.get('yaw_rows') or [])]
-        self._adv_yaw_var.set(bool(_gk('adv_yaw_on', bool(_yaw))))
+        _yaw = list(_yaw) if _yaw else []
+        # Surface any orphaned PER-STAGE yaw (stage_yaw_*) into the global grid.
+        # Older builds baked a per-stage dogleg onto the booster; _yaw_program
+        # applies it even with the grid empty, so it flew invisibly.  Absorb it
+        # here (start/stop default to the stage's ignition time) so the user can
+        # see and edit it; _get_inputs / snapshot then clear the per-stage
+        # fields so the visible grid is the sole yaw authority.
+        _ign_t = 0.0
+        for _st in _pstages:
+            _fa = getattr(_st, 'stage_yaw_final_az_deg', None)
+            if _fa is not None:
+                _ys = getattr(_st, 'stage_yaw_start_s', None)
+                _ye = getattr(_st, 'stage_yaw_stop_s', None)
+                _yaw.append([_ys if _ys is not None else _ign_t,
+                             _ye if _ye is not None else _ign_t, _fa])
+            _ign_t += (getattr(_st, 'burn_time_s', 0.0)
+                       + getattr(_st, 'coast_time_s', 0.0))
+        self._adv_yaw_var.set(bool(_gk('adv_yaw_on', bool(_yaw))) or bool(_yaw))
         self._on_adv_yaw_toggled()
         if self._adv_yaw_var.get() and _yaw and getattr(self, '_yaw_vars', None):
             for yv, man in zip(self._yaw_vars, _yaw):
@@ -6911,6 +6949,14 @@ class BoosterFlyoutApp(tk.Tk):
                 yaw.append([self._fnum(yv['start']), self._fnum(yv['stop']),
                             self._fnum(yv['final_az'])])
         base['yaw_maneuvers'] = yaw
+        # Yaw is owned by the global program (yaw_maneuvers) above.  Clear any
+        # per-stage stage_yaw_* so a legacy baked dogleg can't override the
+        # visible grid on the next load/run (it was surfaced into the grid in
+        # _on_booster_changed).
+        for st in stages:
+            st['stage_yaw_start_s'] = None
+            st['stage_yaw_stop_s'] = None
+            st['stage_yaw_final_az_deg'] = None
 
         try:
             save_flight_plan(booster_name, base, _FLIGHT_PLAN_LIBRARY_PATH,
@@ -8120,6 +8166,23 @@ class BoosterFlyoutApp(tk.Tk):
 
     def _get_inputs(self):
         booster  = get_booster(self._booster_var.get())
+
+        # Yaw is driven solely by the global dogleg grid (yaw_maneuvers below).
+        # Strip any legacy per-stage stage_yaw_* off the run booster so a baked
+        # dogleg can't override what the Flight Plan dialog shows.  (It is
+        # surfaced into the grid on load; see _on_booster_changed.)
+        def _stage_chain(_b):
+            _n = _b
+            while _n is not None:
+                yield _n
+                _n = getattr(_n, 'stage2', None)
+        if any(getattr(_n, 'stage_yaw_final_az_deg', None) is not None
+               for _n in _stage_chain(booster)):
+            booster = copy.deepcopy(booster)
+            for _n in _stage_chain(booster):
+                _n.stage_yaw_start_s = None
+                _n.stage_yaw_stop_s = None
+                _n.stage_yaw_final_az_deg = None
 
         # Override / supply the booster's RV from the sidebar library.
         # A body-mode object (separation_mode='body') describes how the
