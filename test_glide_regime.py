@@ -101,6 +101,11 @@ def _fly(mode, cutoff, aero="polar", zeta=None, boost="Minotaur-IV + HTV-2"):
     _rp = load_reentry_plan("C-HGB")
     if _rp is not None:
         chgb = apply_reentry_plan(chgb, _rp)
+    # Pin the terminal-dive command these fixtures were written against
+    # (dive below 30 km) so the regime verdicts don't track the shipped
+    # plan's tunable dive altitude (now 0 = glide to impact by default).
+    chgb.glider_terminal_dive = True
+    chgb.glider_terminal_alt_km = 30.0
     p = get_booster(boost)
     ro = copy.deepcopy(chgb)
     ro.glider_guidance = mode

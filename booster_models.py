@@ -313,8 +313,13 @@ class ROParams:
     glider_LD:              float = 0.0
     glider_guidance:        str   = "equilibrium_glide"
     glider_pullup_g_max:    float = 10.0
+    # Terminal dive: 0 km = glide to impact (no altitude-triggered dive; the
+    # target-proximity trigger still fires if armed).  A positive value
+    # commands the dive when the vehicle descends below that altitude.  The
+    # analytical Tracy/Acton glide always ends at its 30 km validity floor
+    # regardless, handing off to the ballistic-descent integration below it.
     glider_terminal_dive:   bool  = False
-    glider_terminal_alt_km: float = 30.0
+    glider_terminal_alt_km: float = 0.0
     # Bank-turn schedule: list of (t_start_s, t_end_s, bank_deg) tuples in
     # mission-elapsed seconds.  Positive bank = right turn; negative = left.
     # Up to 3 entries.  When non-empty, equilibrium-glide modes fall back
@@ -553,7 +558,7 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_guidance=_g,
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
-        glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
+        glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
         glider_bank_schedule=[tuple(b) for b in d.get('glider_bank_schedule', [])],
         glider_aero_model=str(d.get('glider_aero_model', 'polar')),
         glider_dive_target_lat_deg=float(d.get('glider_dive_target_lat_deg', 0.0)),
@@ -1833,7 +1838,7 @@ def booster_from_dict(d: dict) -> BoosterParams:
                 glider_guidance=_g,
                 glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
                 glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
-                glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 30.0)),
+                glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
                 separation_mode=('separating_ro'
                                  if bool(d.get('ro_separates', d.get('rv_separates', False)))
                                  else 'body'),

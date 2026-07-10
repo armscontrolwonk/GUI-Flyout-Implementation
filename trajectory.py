@@ -782,6 +782,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 bank_rad = np.radians(_bk_deg)
                                 break
                         if _ero.glider_terminal_dive:
+                            # 0 km = glide to impact: the altitude check can
+                            # never fire, so only the target-proximity
+                            # trigger below can command the dive.
                             _dive_now = (alt < _ero.glider_terminal_alt_km * 1000.0)
                             # Target-proximity dive trigger: bypasses the
                             # altitude check when the vehicle gets within
@@ -1849,6 +1852,10 @@ def integrate_trajectory(params: BoosterParams,
             _t_ms_glide_start  = float(t_glide_start)
 
             # ---- Phase 5: equilibrium glide (Tracy / Acton) ----------------
+            # A commanded dive altitude > 0 ends the analytical glide there;
+            # 0 (= glide to impact) keeps the glide down to the 30 km validity
+            # floor of Acton's exponential-atmosphere fit, below which the
+            # ballistic-descent handoff carries the trajectory to the ground.
             _h_term = (float(_ero_full.glider_terminal_alt_km) * 1e3
                        if (_ero_full.glider_terminal_dive
                            and _ero_full.glider_terminal_alt_km > 0)
