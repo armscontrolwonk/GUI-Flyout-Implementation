@@ -3,7 +3,7 @@
   "glider_guidance": "equilibrium_glide",
   "glider_pullup_g_max": 10.0,
   "glider_terminal_dive": false,
-  "glider_terminal_alt_km": 30.0,
+  "glider_terminal_alt_km": 0.0,
   "glider_bank_schedule": [],
   "glider_dive_target_lat_deg": 0.0,
   "glider_dive_target_lon_deg": 0.0,

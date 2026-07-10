@@ -424,6 +424,48 @@ def _extract_ros_from_boosters():
         pass
 
 
+def _migrate_terminal_dive_default():
+    """One-time migration: rewrite glider_terminal_alt_km 30.0 -> 0.0 in user
+    reentry-plan files.  30 km was the old ride-along default and -- since no
+    reentry-plan editor exists yet -- can only have been written by earlier
+    migrations/saves, never chosen by the user.  Under the new semantics
+    0 = glide to impact (dive on the target trigger only).  Marker-gated so a
+    user who later hand-sets 30.0 keeps it."""
+    marker = _REENTRY_PLAN_LIBRARY_PATH / ".dive_default_0"
+    if marker.exists():
+        return
+    if _REENTRY_PLAN_LIBRARY_PATH.is_dir():
+        for fp in _REENTRY_PLAN_LIBRARY_PATH.glob("*.reentryplan.json"):
+            try:
+                d = json.loads(fp.read_text())
+                if float(d.get('glider_terminal_alt_km', 0.0)) == 30.0:
+                    d['glider_terminal_alt_km'] = 0.0
+                    fp.write_text(json.dumps(d, indent=2))
+            except Exception as exc:
+                print(f"Warning: could not migrate reentry plan '{fp.name}': {exc}")
+    # Legacy user boosters may still embed a reentry object carrying the old
+    # ride-along 30 km; rewrite those embeds too.
+    try:
+        if _CUSTOM_PATH.exists():
+            allb = json.loads(_CUSTOM_PATH.read_text())
+            changed = False
+            for bd in allb.values():
+                ro_d = bd.get('ro') if isinstance(bd, dict) else None
+                if (isinstance(ro_d, dict)
+                        and float(ro_d.get('glider_terminal_alt_km', 0.0)) == 30.0):
+                    ro_d['glider_terminal_alt_km'] = 0.0
+                    changed = True
+            if changed:
+                _CUSTOM_PATH.write_text(json.dumps(allb, indent=2))
+    except Exception as exc:
+        print(f"Warning: could not migrate custom boosters: {exc}")
+    try:
+        _REENTRY_PLAN_LIBRARY_PATH.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except Exception:
+        pass
+
+
 _SITE_SEPARATOR = "──────────────────────────────"
 
 
@@ -4718,6 +4760,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
+        _migrate_terminal_dive_default()  # migrate: dive default 30 km -> 0 (glide to impact)
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
         _load_custom_boosters()      # restore any user-saved boosters
         # Restore per-booster named flight-plan selections.
@@ -5327,10 +5370,10 @@ class BoosterFlyoutApp(tk.Tk):
         _r2.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_glide_detail_frm = _r2
         ttk.Label(_r2, text="Terminal dive below").pack(side=tk.LEFT)
-        self._main_dive_alt_var = tk.StringVar(value="30")
+        self._main_dive_alt_var = tk.StringVar(value="0")
         ttk.Entry(_r2, textvariable=self._main_dive_alt_var, width=5).pack(
             side=tk.LEFT, padx=2)
-        ttk.Label(_r2, text="km").pack(side=tk.LEFT)
+        ttk.Label(_r2, text="km (0 = glide to impact)").pack(side=tk.LEFT)
         ttk.Label(_r2, text="   Aero:").pack(side=tk.LEFT, padx=(8, 0))
         self._main_aero_var = tk.StringVar(value="Drag polar (realistic)")
         ttk.Combobox(_r2, textvariable=self._main_aero_var,
@@ -8222,7 +8265,7 @@ class BoosterFlyoutApp(tk.Tk):
             try:
                 _g_dalt = float(self._main_dive_alt_var.get())
             except ValueError:
-                _g_dalt = 30.0
+                _g_dalt = 0.0   # blank/garbage = glide to impact
             _g_guid_label = self._main_guidance_var.get()
             _g_guid_lower = _g_guid_label.lower()
             _g_guid_key = (
@@ -9043,7 +9086,7 @@ class BoosterFlyoutApp(tk.Tk):
             ],
             'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
             'glider_skip_count': getattr(self, '_main_skip_count_var', tk.StringVar(value='1')).get(),
-            'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='30')).get(),
+            'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='0')).get(),
             'glider_bank_on':  getattr(self, '_main_bank_sched_var', tk.BooleanVar()).get(),
             'glider_banks': [
                 {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
@@ -9146,7 +9189,7 @@ class BoosterFlyoutApp(tk.Tk):
             self._main_guidance_var.set(meta.get('glider_guid', 'Equilibrium glide (Tracy)'))
             if hasattr(self, '_main_skip_count_var'):
                 self._main_skip_count_var.set(str(meta.get('glider_skip_count', '1')))
-            self._main_dive_alt_var.set(meta.get('glider_dive_alt', '30'))
+            self._main_dive_alt_var.set(meta.get('glider_dive_alt', '0'))
             self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))
             saved_banks = meta.get('glider_banks', [])
             for _i, _bvars in enumerate(self._main_bank_vars):
