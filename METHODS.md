@@ -2061,6 +2061,21 @@ The result dictionary returns the maximum range plus the optimal
 A `cancel_event` parameter allows GUI cancellation between coarse-grid
 evaluations.
 
+Because both optimisation variables are the *global* (simple-profile)
+pitch knobs — and per-stage overrides take precedence over them in the
+guidance law (Section 9) — the search is only meaningful on a simple
+pitch profile; on an advanced per-stage plan the swept globals are masked
+and the reported optimum is noise. The optimum is also not a property of
+the booster: it depends on launch latitude, azimuth (Earth rotation), and
+the reentry object's drag. The GUI therefore treats Max Range as a
+*generator*, not an editor: it writes the optimised `(burnout_angle,
+turn_stop)` to a reserved `max-range` flight-plan variant (stamped with
+the launch context it is valid for) and switches to it, leaving the
+loaded plan untouched. Conceptually this is the numeric rung between the
+closed-form Wheelon estimate (Section 10.2) that seeds its search window
+and a future full per-stage-profile optimisation that would seed from
+*its* result in turn.
+
 ### 10.4 Aim at target
 
 `aim_booster` (`trajectory.py`) finds the engine cutoff time that

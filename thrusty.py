@@ -4778,6 +4778,11 @@ class BoosterFlyoutApp(tk.Tk):
         self._result         = None
         self._running        = False
         self._cancel_event   = threading.Event()
+        # Max Range state: writes its optimum to the reserved "max-range" plan
+        # variant instead of mutating the active plan (see _write_max_range_variant).
+        self._max_range_pending   = False
+        self._max_range_base_plan = None
+        self._max_range_context   = ""
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
@@ -8048,9 +8053,9 @@ class BoosterFlyoutApp(tk.Tk):
         if not new_name or not new_name.strip():
             return
         new_name = new_name.strip()
-        if new_name == mm.DEFAULT_PLAN_LABEL:
+        if new_name in (mm.DEFAULT_PLAN_LABEL, mm.MAX_RANGE_PLAN_LABEL):
             messagebox.showerror("Flight Plan",
-                                 f"'{mm.DEFAULT_PLAN_LABEL}' is reserved.", parent=self)
+                                 f"'{new_name}' is reserved.", parent=self)
             return
         booster = get_booster(name)          # active plan as the starting point
         plan = extract_flight_plan(booster)
@@ -8478,6 +8483,19 @@ class BoosterFlyoutApp(tk.Tk):
     def _maximize_range(self):
         if self._running:
             return
+        # Max Range optimises the SIMPLE (global) pitch profile — burnout angle
+        # and turn-stop.  Per-stage overrides mask those globals in the guidance
+        # law, so on an advanced-pitch plan the sweep would optimise knobs that
+        # don't fly.  Refuse rather than report a meaningless optimum.
+        if self._adv_pitch_var.get():
+            messagebox.showinfo(
+                "Max Range",
+                "Max Range optimises the simple pitch profile (burnout angle "
+                "and turn-stop).\n\nThe active flight plan uses Advanced pitch, "
+                "whose per-stage angles override those globals, so the sweep "
+                "cannot improve it.\n\nSwitch Mode to “Simple pitch profile” to "
+                "run Max Range.", parent=self)
+            return
         try:
             (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
@@ -8485,13 +8503,26 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
-        self._snapshot_traj_profile(self._booster_var.get())   # write-through
+        # Max Range does NOT mutate the active plan.  It optimises, then writes
+        # the result to the reserved "max-range" variant and switches to it, so
+        # the loaded plan is preserved one click away.  Record the base plan and
+        # the context the optimum is valid for (stamped into the variant notes).
+        self._max_range_base_plan = self._active_plan_name()
+        self._max_range_context = (
+            f"site={self._site_var.get() or f'{lat:.3f},{lon:.3f}'}, "
+            f"az={az:.1f}°, reentry object={self._ro_main_var.get() or '(booster default)'}")
         # Turn stop is autopopulated with the booster burn time, but until the
         # user changes or saves it we treat it as unset and let the optimiser
-        # pick the turn-stop.  A user-changed/saved value is honoured verbatim.
-        _auto = getattr(self, '_gt_turn_stop_auto', None)
-        _untouched = _auto is not None and self._gt_turn_stop_var.get().strip() == _auto
-        opt_stop = None if _untouched else gt_stop_s
+        # pick the turn-stop.  A user-changed/saved value is honoured verbatim —
+        # except when re-running on the max-range variant itself, where we
+        # always re-optimise both knobs (the variant carries the last optimum).
+        if self._max_range_base_plan == mm.MAX_RANGE_PLAN_LABEL:
+            opt_stop = None
+        else:
+            _auto = getattr(self, '_gt_turn_stop_auto', None)
+            _untouched = _auto is not None and self._gt_turn_stop_var.get().strip() == _auto
+            opt_stop = None if _untouched else gt_stop_s
+        self._max_range_pending = True
         self._cancel_event.clear()
         self._running = True
         self._cancel_max_btn.config(state=tk.NORMAL)
@@ -8503,6 +8534,51 @@ class BoosterFlyoutApp(tk.Tk):
                   yaw_maneuvers, launch_elevation_deg, True),
             daemon=True,
         ).start()
+
+    def _write_max_range_variant(self, r):
+        """Save a Max Range result to the reserved 'max-range' plan variant and
+        switch to it, leaving the base plan the user loaded untouched.
+
+        The variant is a simple-profile plan (the optimiser's knobs are the
+        global burnout angle and turn-stop); it starts from the base plan so
+        non-guidance fields (fairing, events, etc.) carry over, then stamps the
+        optimum and the launch context the optimum is valid for.
+        """
+        name = self._booster_var.get()
+        base = getattr(self, '_max_range_base_plan', None)
+        # Base plan fully merged (bundled + user default, then the base variant).
+        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        if base and base != mm.MAX_RANGE_PLAN_LABEL:
+            plan = mm._merge_flight_plans(
+                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
+                                          plan=base) or {})
+        plan = dict(plan)
+        plan['stages'] = [dict(s) for s in plan.get('stages', [])]
+        # Simple pitch profile: the global angle + turn-stop are what flew.
+        plan['guidance'] = 'pitch_program'
+        plan['adv_pitch_on'] = False
+        if r.get('optimal_burnout_angle_deg') is not None:
+            plan['burnout_angle_deg'] = float(r['optimal_burnout_angle_deg'])
+        if r.get('optimal_gt_turn_stop_s') is not None:
+            plan['gt_turn_stop_s'] = float(r['optimal_gt_turn_stop_s'])
+        # Clear per-stage angle overrides so the global profile governs.
+        for st in plan['stages']:
+            st['stage_burnout_angle_deg'] = None
+        plan['source'] = 'Auto-generated by Max Range'
+        plan['notes'] = (
+            f"Optimum for {getattr(self, '_max_range_context', 'the last run')}. "
+            f"Regenerated on every Max Range run; the optimum shifts with launch "
+            f"site, azimuth, and reentry object.")
+        try:
+            save_flight_plan(name, plan, _FLIGHT_PLAN_LIBRARY_PATH,
+                             plan=mm.MAX_RANGE_PLAN_LABEL)
+        except Exception as exc:
+            self._status_var.set(f"Max Range: could not save variant: {exc}")
+            return
+        mm.ACTIVE_FLIGHT_PLANS[name] = mm.MAX_RANGE_PLAN_LABEL
+        self._save_active_plans()
+        self._refresh_flight_plan_list(select=mm.MAX_RANGE_PLAN_LABEL)
+        self._on_booster_changed()
 
     def _plan_orbit(self):
         """Handler for the Plan Orbit button."""
@@ -8670,16 +8746,14 @@ class BoosterFlyoutApp(tk.Tk):
     def _on_result_ready(self):
         r = self._result
 
-        # If this was a Max Range run, update guidance fields now — all GUI
-        # mutations happen here in one batch so nothing fires between the field
-        # updates and the canvas redraw.
-        if r.get('optimal_burnout_angle_deg') is not None:
-            self._loft_angle_var.set(f"{r['optimal_burnout_angle_deg']:.4f}")
-        if r.get('optimal_gt_turn_stop_s') is not None and self._guidance_var.get() == "pitch_program":
-            self._gt_turn_stop_var.set(f"{r['optimal_gt_turn_stop_s']:.1f}")
-            # The optimiser filling the field is not a USER change: keep it
-            # flagged as auto so the next Max Range still re-optimises.
-            self._gt_turn_stop_auto = self._gt_turn_stop_var.get()
+        # If this was a Max Range run, persist the optimum to the reserved
+        # "max-range" flight-plan variant and switch to it — the loaded plan is
+        # left untouched, one dropdown click away.  _write_max_range_variant
+        # repopulates the panel from the saved variant, so the fields update
+        # too.  (Non-Max-Range runs never set the flag.)
+        if getattr(self, '_max_range_pending', False):
+            self._max_range_pending = False
+            self._write_max_range_variant(r)
 
         orbital   = r.get('orbital', False)
         rng_km    = r['range_km']
