@@ -565,7 +565,7 @@ def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
 # Slender-body drag polar (Munk 1924, Ashley & Landahl §6-7, §9-8)
 # ---------------------------------------------------------------------------
 
-def _aero_polar(ro) -> tuple:
+def _aero_polar(ro, ld_override: float = None) -> tuple:
     """Return (C_D0, k, A_ref) for the slender-body drag polar.
 
     Linear slender-body theory gives C_L = 2α (Munk 1924; Ashley & Landahl
@@ -596,7 +596,10 @@ def _aero_polar(ro) -> tuple:
     A_ref = 0.25 * np.pi * d * d
     m   = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
     bet = float(getattr(ro, 'beta_kg_m2', 0.0) or 0.0)
-    LD  = float(getattr(ro, 'glider_LD', 0.0) or 0.0)
+    # ld_override lets the caller supply a Mach-interpolated (L/D)_max (the
+    # derived no-sep body path) instead of the object's constant capability.
+    LD  = float(ld_override if ld_override is not None
+                else (getattr(ro, 'glider_LD', 0.0) or 0.0))
     if m > 0.0 and bet > 0.0:
         C_D0 = m / (bet * A_ref)               # β at zero lift
     else:
@@ -736,9 +739,18 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         # After final-stage burnout, RV is flying: use β-based drag + optional lift.
         speed = np.linalg.norm(vel)
         if speed > 1e-6:
-            _, _, rho, _ = atmosphere(alt)
+            _, _, rho, _a_snd = atmosphere(alt)
             q        = 0.5 * rho * speed ** 2
             ro_mass  = _ero.mass_kg
+            # Mach-varying (L/D)_max for the derived no-sep body: a table
+            # L/D_max(M) is stashed on params at setup (numerical glide modes
+            # only); interpolate it on local Mach.  Falls back to the object's
+            # constant glider_LD when no table is present (separating RVs, and
+            # the analytical Tracy/Acton modes, keep their constant L/D).
+            _ld_eff = _ero.glider_LD
+            _ld_tab = getattr(params, '_ld_of_mach', None)
+            if _ld_tab is not None and _a_snd > 0.0:
+                _ld_eff = _ld_tab(speed / _a_snd)
             drag_mag = q * ro_mass / _ero.beta_kg_m2
             # Reentry-phase activation: glider lift / polar drag override
             # are allowed only after the vehicle has crossed the 100 km
@@ -825,19 +837,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             _g_eff = max(g_mag - speed*speed/r_mag, 0.0)
                             if q > 1.0:
                                 if _polar:
-                                    _CD0,_kp,_Aref=_aero_polar(_ero)
+                                    _CD0,_kp,_Aref=_aero_polar(_ero, _ld_eff)
                                     _CLstar=min(np.sqrt(_CD0/_kp), 2.0*np.radians(25.0))
                                     _L_nom=q*_Aref*_CLstar
                                 else:
                                     _drag_beta=(q/float(_ero.beta_kg_m2))*ro_mass
-                                    _L_nom=_drag_beta*_ero.glider_LD
+                                    _L_nom=_drag_beta*_ld_eff
                                 if _g_eff > 1e-3:
                                     _dh=200.0
                                     _rho0=atmosphere(max(alt,0.0))[2]; _rho1=atmosphere(max(alt,0.0)+_dh)[2]
                                     _Hrho=(_dh/np.log(_rho0/_rho1) if (_rho1>0.0 and _rho0>_rho1) else 7000.0)
                                     _Hrho=min(max(_Hrho,4000.0),12000.0)
                                     _hdot=speed*float(np.dot(v_hat,r_hat))
-                                    _gstar=(-2.0*_Hrho*g_mag/(speed*speed*_cos_b*_ero.glider_LD))
+                                    _gstar=(-2.0*_Hrho*g_mag/(speed*speed*_cos_b*_ld_eff))
                                     _k_h=(2.0*max(float(_ero.glider_damping_zeta),0.0)*ro_mass*np.sqrt(_g_eff/_Hrho))
                                     _L_target=_L_nom - _k_h*(_hdot - speed*_gstar)
                                 else:
@@ -855,7 +867,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     # capture a lofted entry).  Feedback can still
                                     # reduce lift to damp the skip-up.
                                     lift_mag=min(max(_L_target,0.0),_L_nom,_L_max)
-                                    drag_mag=lift_mag/max(_ero.glider_LD,1e-6)
+                                    drag_mag=lift_mag/max(_ld_eff,1e-6)
                                 f_drag=-drag_mag*v_hat
                             else:
                                 lift_mag=0.0
@@ -887,14 +899,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 _hdot = speed * float(np.dot(v_hat, r_hat))
                                 _gstar = (-2.0 * _Hrho * g_mag
                                           / (speed * speed * _cos_b
-                                             * _ero.glider_LD))
+                                             * _ld_eff))
                                 _k_h = (2.0 * max(float(_ero.glider_damping_zeta), 0.0)
                                         * ro_mass * np.sqrt(_g_eff / _Hrho))
                                 # equilibrium trim + phugoid damping:
                                 _L_target = (ro_mass * _g_eff / _cos_b
                                              - _k_h * (_hdot - speed * _gstar))
                                 if _polar:
-                                    _CD0, _kp, _Aref = _aero_polar(_ero)
+                                    _CD0, _kp, _Aref = _aero_polar(_ero, _ld_eff)
                                     # aerodynamic lift ceiling: C_L <= C_L,max
                                     _C_L = min(max(_L_target / (q * _Aref), 0.0),
                                                2.0 * np.radians(25.0))
@@ -909,14 +921,14 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     # zoom-climbing on the growing m·g_eff term
                                     # (the lumped model has no aerodynamic C_L,max
                                     # ceiling to do this on its own).
-                                    _beta_cap = (q / float(_ero.beta_kg_m2)) * ro_mass * _ero.glider_LD
+                                    _beta_cap = (q / float(_ero.beta_kg_m2)) * ro_mass * _ld_eff
                                     lift_mag = min(max(_L_target, 0.0), _beta_cap, _L_max)
-                                    drag_mag = lift_mag / max(_ero.glider_LD, 1e-6)
+                                    drag_mag = lift_mag / max(_ld_eff, 1e-6)
                                 f_drag = -drag_mag * v_hat
                             else:
                                 lift_mag = 0.0
                         elif getattr(_ero, 'glider_aero_model', 'polar') == 'polar':
-                            _CD0, _kp, _Aref = _aero_polar(_ero)
+                            _CD0, _kp, _Aref = _aero_polar(_ero, _ld_eff)
                             _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
                             _L_max = _ero.glider_pullup_g_max * g_mag * ro_mass
                             if _ero.glider_guidance in (
@@ -938,7 +950,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # (g_perp = g − v²/r increases), driving a zoom
                                 # climb instead of a descending equilibrium glide.
                                 _drag_beta  = (q / float(_ero.beta_kg_m2)) * ro_mass
-                                _lift_beta_cap = _drag_beta * _ero.glider_LD
+                                _lift_beta_cap = _drag_beta * _ld_eff
                                 _L_total = min(ro_mass * _g_perp / _cos_b,
                                               _lift_beta_cap,
                                               _L_max)
@@ -982,10 +994,10 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # descends naturally to the proper glide altitude.
                                 lift_mag  = min(
                                     ro_mass * _g_perp_c / _cos_b_c,
-                                    drag_mag * _ero.glider_LD,
+                                    drag_mag * _ld_eff,
                                     _ero.glider_pullup_g_max * g_mag * ro_mass)
                             else:
-                                lift_mag = drag_mag * _ero.glider_LD
+                                lift_mag = drag_mag * _ld_eff
                             lift_cap = _ero.glider_pullup_g_max * g_mag * ro_mass
                             if lift_mag > lift_cap:
                                 lift_mag = lift_cap
@@ -1564,7 +1576,29 @@ def integrate_trajectory(params: BoosterParams,
                     # derive the ballistic-coefficient and zero the lift.
                     params.ro = _dc.replace(_ro, reentry_attitude='tumbling')
                 else:
-                    params.ro = _dc.replace(_ro, glider_LD=_g['LD_achievable'])
+                    # Mach-varying (L/D)_max: sample the geometry build-up over
+                    # a Mach grid, capped by the control-achievable L/D, and
+                    # stash an interpolator on params for the numerical glide
+                    # EOM.  np.interp holds the endpoints, so below M1.5 (where
+                    # the linear wing theory is invalid) the M1.5 value is used.
+                    _ceil = float(_g['LD_achievable'])
+                    _machs = [1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 12.0]
+                    _lds = []
+                    for _M in _machs:
+                        try:
+                            _lm = float(glider_ld.whole_booster_LD(
+                                params, mach=_M).get('ld_max', 0.0))
+                        except Exception:
+                            _lm = _ceil
+                        _lds.append(min(_lm, _ceil) if _lm > 0 else _ceil)
+                    _ma = np.asarray(_machs); _la = np.asarray(_lds)
+                    params._ld_of_mach = (lambda M, _x=_ma, _y=_la:
+                                          float(np.interp(M, _x, _y)))
+                    # Scalar fallback (analytical modes / any non-table read):
+                    # the reference-Mach value.
+                    params.ro = _dc.replace(
+                        _ro, glider_LD=float(np.interp(
+                            glider_ld.GLIDE_MACH_REF, _ma, _la)))
             else:
                 # Gate could not evaluate (no geometry) — fall back to the raw
                 # aerodynamic L/D so a configured glider still glides.
