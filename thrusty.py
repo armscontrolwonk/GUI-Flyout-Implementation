@@ -2463,6 +2463,10 @@ class ROEditorDialog(tk.Toplevel):
         self.resizable(False, True)
         self.grab_set()
         self._result = None
+        # Pull-up g-limit and re-entry βₛ moved to the Reentry Plan editor
+        # (they are "how it's flown", not hardware); preserved here from the
+        # object being edited so a save round-trips them unchanged.
+        self._orig_ro = ro
 
         frm = ttk.Frame(self, padding=12)
         frm.pack(fill=tk.X)
@@ -2571,13 +2575,11 @@ class ROEditorDialog(tk.Toplevel):
             return var
 
         _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
-        _g  = f"{ro.glider_pullup_g_max:.0f}" if ro                       else "10"
-        _bS = (f"{ro.glider_beta_entry_kg_m2:.0f}"
-               if (ro and ro.glider_beta_entry_kg_m2 > 0) else "0")
         self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
-        self._g_var  = _gfe(1, "Pull-up g-limit:", _g, "g")
-        self._bS_var = _gfe(
-            2, "Re-entry βₛ:", _bS, "kg/m²  (Acton Phase 3, 0 = Tracy)")
+        ttk.Label(self._glider_frm,
+                  text="Pull-up g-limit and re-entry βₛ are in the Reentry Plan editor.",
+                  foreground="#888888").grid(row=1, column=0, columnspan=2,
+                                             sticky=tk.W, pady=(2, 0))
 
         self._update_glider_state()
 
@@ -2808,19 +2810,21 @@ class ROEditorDialog(tk.Toplevel):
             return None
 
         glider_on = bool(self._glider_var.get())
+        # Pull-up g-limit and re-entry βₛ are plan fields now (edited in the
+        # Reentry Plan editor); preserve them from the object being edited so an
+        # object save doesn't reset them.  New objects take the dataclass
+        # defaults, which the reentry plan then owns.
+        g_max  = getattr(self._orig_ro, 'glider_pullup_g_max', 10.0) if self._orig_ro else 10.0
+        beta_S = getattr(self._orig_ro, 'glider_beta_entry_kg_m2', 0.0) if self._orig_ro else 0.0
         if glider_on:
             try:
-                LD     = float(self._LD_var.get())
-                g_max  = float(self._g_var.get())
-                beta_S = float(self._bS_var.get())
+                LD = float(self._LD_var.get())
             except ValueError:
                 messagebox.showerror(
-                    "Invalid input",
-                    "L/D, pull-up g-limit and βₛ must be numbers.",
-                    parent=self)
+                    "Invalid input", "L/D must be a number.", parent=self)
                 return None
         else:
-            LD = 0.0; g_max = 10.0; beta_S = 0.0
+            LD = 0.0
 
         # --- TPS materials (§10): resolve each dropdown to a catalog key, or a
         # 'custom_*' sentinel with the bespoke properties stored on the RV. ---
@@ -3008,6 +3012,110 @@ class ROEditorDialog(tk.Toplevel):
                                  parent=self)
             return
         self._result = ro
+        self.destroy()
+
+    @property
+    def result(self):
+        return self._result
+
+
+# ---------------------------------------------------------------------------
+# Reentry-plan editor dialog — the "how it's flown" half of a reentry object,
+# the down-leg analogue of FlightPlanDialog.  It edits the reentry-plan FILE
+# fields that are NOT on the sidebar strip: the commanded L/D (clamped to the
+# airframe's L/D capability — fly it worse, never better), the pull-up g-limit
+# and re-entry βₛ (moved out of the object editor), the control-flap
+# deflection, and provenance.  The hot mission-time fields (glide law, dive,
+# banks, dive-target, ζ, skip, aero) stay on the sidebar strip.
+# ---------------------------------------------------------------------------
+
+class ReentryPlanDialog(tk.Toplevel):
+    """Edit the reentry plan for one reentry object; returns a partial plan dict
+    (only the fields this dialog owns) to merge over the active plan."""
+
+    def __init__(self, parent, title, plan, ld_capability):
+        super().__init__(parent)
+        self._result = None
+        self._cap = float(ld_capability or 0.0)
+        self.title(f"Reentry Plan — {title}")
+        self.transient(parent)
+        self.resizable(False, False)
+        self.grab_set()
+
+        frm = ttk.Frame(self, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+        frm.columnconfigure(1, weight=1)
+        r = 0
+
+        def _f(key, default):
+            v = plan.get(key)
+            return default if v is None else v
+
+        # Commanded L/D — clamped to the airframe capability on save.
+        ttk.Label(frm, text="Commanded L/D:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        _cmd = _f('commanded_LD', self._cap)
+        self._cmd_ld_var = tk.StringVar(value=f"{float(_cmd):g}")
+        _cf = ttk.Frame(frm); _cf.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_cf, textvariable=self._cmd_ld_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_cf, text=f"  (≤ {self._cap:g} airframe max — fly it worse, not better)",
+                  foreground="#888888").pack(side=tk.LEFT); r += 1
+
+        ttk.Label(frm, text="Pull-up g-limit:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._pullup_var = tk.StringVar(value=f"{float(_f('glider_pullup_g_max', 10.0)):g}")
+        _pf = ttk.Frame(frm); _pf.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_pf, textvariable=self._pullup_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_pf, text="  g", foreground="#888888").pack(side=tk.LEFT); r += 1
+
+        ttk.Label(frm, text="Re-entry βₛ:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._beta_s_var = tk.StringVar(value=f"{float(_f('glider_beta_entry_kg_m2', 0.0)):g}")
+        _bf = ttk.Frame(frm); _bf.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_bf, textvariable=self._beta_s_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_bf, text="  kg/m²  (Acton Phase 3; 0 = Tracy)",
+                  foreground="#888888").pack(side=tk.LEFT); r += 1
+
+        ttk.Label(frm, text="Flap deflection:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._flap_var = tk.StringVar(value=f"{float(_f('glider_flap_deflection_deg', 0.0)):g}")
+        _ff = ttk.Frame(frm); _ff.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_ff, textvariable=self._flap_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_ff, text="  °  (0 = 12° default)",
+                  foreground="#888888").pack(side=tk.LEFT); r += 1
+
+        ttk.Label(frm, text="(Glide law, dive, banks, dive-target, ζ, skip and\n"
+                            "aero model are edited on the sidebar strip.)",
+                  foreground="#888888", justify=tk.LEFT).grid(
+            row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 4)); r += 1
+
+        ttk.Label(frm, text="Source:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._source_var = tk.StringVar(value=str(plan.get('source', '') or ''))
+        ttk.Entry(frm, textvariable=self._source_var).grid(
+            row=r, column=1, sticky=tk.EW, pady=3); r += 1
+        ttk.Label(frm, text="Notes:").grid(row=r, column=0, sticky=tk.NW, pady=3)
+        self._notes_text = tk.Text(frm, height=3, width=40, wrap=tk.WORD)
+        self._notes_text.grid(row=r, column=1, sticky=tk.EW, pady=3)
+        self._notes_text.insert("1.0", str(plan.get('notes', '') or '')); r += 1
+
+        bf = ttk.Frame(frm)
+        bf.grid(row=r, column=0, columnspan=2, sticky=tk.E, pady=(10, 0))
+        ttk.Button(bf, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(bf, text="Save", command=self._save).pack(side=tk.RIGHT)
+
+    def _save(self):
+        def _num(sv, default):
+            try:
+                return float(sv.get().strip())
+            except (ValueError, AttributeError):
+                return default
+        cmd = _num(self._cmd_ld_var, self._cap)
+        if self._cap > 0:
+            cmd = min(cmd, self._cap)          # clamp: fly it worse, never better
+        self._result = {
+            'commanded_LD':             cmd,
+            'glider_pullup_g_max':      _num(self._pullup_var, 10.0),
+            'glider_beta_entry_kg_m2':  _num(self._beta_s_var, 0.0),
+            'glider_flap_deflection_deg': _num(self._flap_var, 0.0),
+            'source': self._source_var.get().strip(),
+            'notes':  self._notes_text.get("1.0", "end-1c").strip(),
+        }
         self.destroy()
 
     @property
@@ -5365,6 +5473,8 @@ class BoosterFlyoutApp(tk.Tk):
         _bind_typeahead(self._rp_cb)
         ttk.Button(_rpbar, text="New", width=5,
                    command=self._new_reentry_plan).pack(side=tk.LEFT, padx=(4, 2))
+        ttk.Button(_rpbar, text="Edit…", width=6,
+                   command=self._edit_reentry_plan_main).pack(side=tk.LEFT, padx=(0, 2))
         self._rp_del_btn = ttk.Button(_rpbar, text="Delete", width=6,
                                       command=self._delete_reentry_plan,
                                       state=tk.DISABLED)
@@ -7285,6 +7395,62 @@ class BoosterFlyoutApp(tk.Tk):
         self._refresh_reentry_plan_list(select=new_name)
         self._on_booster_changed()
         self._status_var.set(f"Reentry plan '{new_name}' created for '{name}'.")
+
+    def _ro_hardware(self, name):
+        """The hardware ROParams for ``name`` (its .ro.json, no reentry plan
+        applied) — the source of the TRUE L/D capability, which a plan's
+        commanded_LD clamp must never erode.  Falls back to the booster's own
+        object (get_booster applies the flight plan, not the reentry plan, so
+        its glider_LD is still the capability)."""
+        safe = _safe_name(name)
+        for d in (_RO_LIBRARY_PATH, _BUNDLED_RO_LIBRARY_PATH, _LEGACY_RO_LIBRARY_PATH):
+            fp = d / f"{safe}.ro.json"
+            if fp.exists():
+                try:
+                    return ro_from_dict(json.loads(fp.read_text()))
+                except Exception:
+                    pass
+        try:
+            return effective_ro(get_booster(self._booster_var.get()))
+        except Exception:
+            return None
+
+    def _edit_reentry_plan_main(self):
+        """Open the Reentry Plan editor for the active object + variant, then
+        write the edited fields through to that plan and repopulate."""
+        name, applied = self._active_reentry_object()
+        if name is None:
+            messagebox.showinfo("Reentry Plan",
+                                "Select a maneuvering reentry object first.",
+                                parent=self)
+            return
+        pv = self._active_reentry_plan_name()
+        # Snapshot the sidebar strip first so the dialog edits the same plan the
+        # panel shows (strip + dialog are two views of one plan file).
+        self._snapshot_reentry_plan()
+        plan = (mm.load_reentry_plan(name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS, plan=pv)
+                or extract_reentry_plan(applied))
+        # Capability is the HARDWARE L/D, not the (possibly clamped) applied one.
+        _hw = self._ro_hardware(name)
+        cap = getattr(_hw, 'glider_LD', getattr(applied, 'glider_LD', 0.0))
+        title = name if pv is None else f"{name} — {pv}"
+        dlg = ReentryPlanDialog(self, title, plan, cap)
+        self.wait_window(dlg)
+        if dlg.result is None:
+            return
+        merged = {**plan, **dlg.result}
+        try:
+            save_reentry_plan(name, merged, _REENTRY_PLAN_LIBRARY_PATH, plan=pv)
+        except Exception as exc:
+            messagebox.showerror("Reentry Plan",
+                                 f"Could not save reentry plan:\n{exc}", parent=self)
+            return
+        # Refresh the library baseline when editing the default plan — apply to
+        # the HARDWARE object so the stored capability is never eroded.
+        if pv is None and name in RO_DB and _hw is not None:
+            RO_DB[name] = lambda _r=apply_reentry_plan(_hw, merged): _r
+        self._on_booster_changed()
+        self._status_var.set(f"Reentry plan for '{title}' saved.")
 
     def _delete_reentry_plan(self):
         name, _ = self._active_reentry_object()
