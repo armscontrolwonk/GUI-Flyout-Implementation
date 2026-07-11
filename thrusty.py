@@ -9376,6 +9376,15 @@ class BoosterFlyoutApp(tk.Tk):
                       f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
                       f"Impact spd: {_spd_str}")
             self._status_var.set("Done.  " + _strip)
+        # Surface the static-margin / trim-gate verdict when it changed the
+        # reentry: an unstable body was flipped to a tumbling (ballistic)
+        # descent, or a stable body was L/D-limited by its control authority.
+        _tg = r.get('reentry_trim')
+        if _tg and ('UNSTABLE' in _tg['verdict'] or 'CONTROL-LIMITED' in _tg['verdict']):
+            _sm = _tg['static_margin_cal']
+            self._status_var.set(
+                self._status_var.get()
+                + f"   ⚠ reentry: SM {_sm:+.1f} cal — {_tg['verdict']}")
         self._results_strip_var.set(_strip)
         # Rendering runs here (scheduled via after(), OUTSIDE the flyout's
         # try/except).  Guard it: an unhandled exception here fires after

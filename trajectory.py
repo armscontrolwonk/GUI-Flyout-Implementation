@@ -1533,18 +1533,45 @@ def integrate_trajectory(params: BoosterParams,
     # its (L/D)_max follows from the whole-booster build-up (glider_ld.py:
     # Jorgensen + Allen-Perkins + N-K-P).  A SEPARATING RV keeps its own
     # designed glider_LD; any body whose glider_LD was set >0 is untouched.
+    #
+    # The static-margin / trim gate (trim_gate.py) decides whether that L/D is
+    # ACHIEVABLE: an unstable body (CP ahead of CG) can't hold a trim AoA -> it
+    # tumbles (attitude forced to 'tumbling', so effective_ro derives a tumbling
+    # β and kills lift); an over-stable / weak-control body is limited to the
+    # L/D its control authority can trim to, not the aerodynamic peak.
+    _reentry_trim = None
     _ro = params.ro
     if (_ro is not None
             and getattr(_ro, 'separation_mode', 'separating_ro') == 'body'
+            and getattr(_ro, 'reentry_attitude', 'trim') == 'trim'
             and getattr(_ro, 'glider_enabled', False)
             and float(getattr(_ro, 'glider_LD', 0.0)) <= 0.0):
         try:
             import glider_ld
+            import trim_gate as _tg
             import dataclasses as _dc
-            _ld = glider_ld.derive_glider_LD(params)
-            if _ld > 0.0:
+            _g = _tg.trim_gate(params, mach=glider_ld.GLIDE_MACH_REF)
+            if not _g.get("error"):
+                _reentry_trim = {
+                    'static_margin_cal': _g['static_margin_cal'],
+                    'LD_max': _g['LD_max'], 'LD_achievable': _g['LD_achievable'],
+                    'alpha_trim_max_deg': _g['alpha_trim_max_deg'],
+                    'verdict': _g['verdict'],
+                }
                 params = copy.copy(params)
-                params.ro = _dc.replace(_ro, glider_LD=_ld)
+                if _g['LD_achievable'] <= 0.0:
+                    # Unstable -> tumbles.  effective_ro's tumbling branch will
+                    # derive the ballistic-coefficient and zero the lift.
+                    params.ro = _dc.replace(_ro, reentry_attitude='tumbling')
+                else:
+                    params.ro = _dc.replace(_ro, glider_LD=_g['LD_achievable'])
+            else:
+                # Gate could not evaluate (no geometry) — fall back to the raw
+                # aerodynamic L/D so a configured glider still glides.
+                _ld = glider_ld.derive_glider_LD(params)
+                if _ld > 0.0:
+                    params = copy.copy(params)
+                    params.ro = _dc.replace(_ro, glider_LD=_ld)
         except Exception:
             pass   # leave glider_LD at 0; glide modes will treat it as no lift
 
@@ -3064,6 +3091,7 @@ def integrate_trajectory(params: BoosterParams,
         _glide_regime = None
 
     return {
+        'reentry_trim':       _reentry_trim,   # static-margin / trim-gate verdict, or None
         't':                  t_arr,
         'lat':                lats,
         'lon':                lons,
