@@ -2481,19 +2481,18 @@ class ROEditorDialog(tk.Toplevel):
             e.grid(row=row, column=1, sticky=tk.W, pady=3)
             return e
 
-        # Separation mode — does the vehicle separate from the booster body?
-        _lbl(-1 if False else 0, "Separation:")  # row 0
-        self._sep_var = tk.StringVar(
-            value=getattr(ro, 'separation_mode', 'separating_ro') if ro
-                  else 'separating_ro')
-        _sep_row = ttk.Frame(frm)
-        _sep_row.grid(row=0, column=1, sticky=tk.W, pady=3)
-        ttk.Radiobutton(_sep_row, text="Separating reentry object",
-                        variable=self._sep_var, value='separating_ro',
-                        command=self._update_separation_state).pack(side=tk.LEFT)
-        ttk.Radiobutton(_sep_row, text="Body (no separation)",
-                        variable=self._sep_var, value='body',
-                        command=self._update_separation_state).pack(side=tk.LEFT, padx=(8, 0))
+        # Separation is a reentry-PLAN decision (how the object is flown, not
+        # what it is): it is set with the Separation control in the sidebar's
+        # Reentry Object section and persisted with the plan.  Shown read-only
+        # here so the greyed-out inherited fields below are explicable.
+        _lbl(0, "Separation:")
+        self._plan_sep = (getattr(ro, 'separation_mode', 'separating_ro')
+                          if ro else 'separating_ro')
+        _sep_txt = ("Non-separating — body reenters with the final stage"
+                    if self._plan_sep == 'body'
+                    else "Separates at burnout")
+        ttk.Label(frm, text=f"{_sep_txt}   (set in the sidebar — reentry plan)",
+                  foreground="#888888").grid(row=0, column=1, sticky=tk.W, pady=3)
 
         # Name
         _lbl(1, "Name:")
@@ -2810,12 +2809,6 @@ class ROEditorDialog(tk.Toplevel):
             return None
 
         glider_on = bool(self._glider_var.get())
-        # Pull-up g-limit and re-entry βₛ are plan fields now (edited in the
-        # Reentry Plan editor); preserve them from the object being edited so an
-        # object save doesn't reset them.  New objects take the dataclass
-        # defaults, which the reentry plan then owns.
-        g_max  = getattr(self._orig_ro, 'glider_pullup_g_max', 10.0) if self._orig_ro else 10.0
-        beta_S = getattr(self._orig_ro, 'glider_beta_entry_kg_m2', 0.0) if self._orig_ro else 0.0
         if glider_on:
             try:
                 LD = float(self._LD_var.get())
@@ -2851,15 +2844,12 @@ class ROEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
-        return ROParams(
+        ro_new = ROParams(
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             nose_radius_m=nose_rn,
             glider_enabled=glider_on,
             glider_LD=LD,
-            glider_pullup_g_max=g_max,
-            glider_beta_entry_kg_m2=beta_S,
-            separation_mode=self._sep_var.get(),
             emissivity=emiss,
             nose_tps_material=nose_key,
             body_tps_material=body_key,
@@ -2869,6 +2859,19 @@ class ROEditorDialog(tk.Toplevel):
             source=self._source_var.get().strip(),
             notes=self._notes_text.get("1.0", "end-1c").strip(),
         )
+        # This dialog edits HARDWARE.  Carry every reentry-plan field through
+        # from the object being edited, wholesale — otherwise saving a hardware
+        # tweak would silently reset the stored plan (glide law, dive, banks,
+        # ζ, separation, attitude, …) to dataclass defaults, because
+        # _save_ro_to_library re-extracts the plan from what we return here.
+        # glider_enabled is the one plan key the dialog owns (its checkbox).
+        if self._orig_ro is not None:
+            import dataclasses as _dc
+            _carry = {k: (list(_v) if isinstance(_v := getattr(self._orig_ro, k),
+                                                 list) else _v)
+                      for k in mm._REENTRY_PLAN_KEYS if k != 'glider_enabled'}
+            ro_new = _dc.replace(ro_new, **_carry)
+        return ro_new
 
     def _update_glider_state(self):
         if self._glider_var.get():
@@ -2962,12 +2965,12 @@ class ROEditorDialog(tk.Toplevel):
         }
 
     def _update_separation_state(self):
-        """When 'Body (no separation)' is selected, mass/diameter/length
-        are inherited from the booster body at run-time, so disable those
-        entries to make the inheritance visible to the user.  β stays
-        editable (it's a glide-phase scalar with no clean default from the
-        body's Mach-dependent Cd table)."""
-        is_body = (self._sep_var.get() == 'body')
+        """When the active reentry plan says 'body' (no separation),
+        mass/diameter/length are inherited from the booster body at run-time,
+        so disable those entries to make the inheritance visible to the user.
+        β stays editable (it's a glide-phase scalar with no clean default from
+        the body's Mach-dependent Cd table)."""
+        is_body = (self._plan_sep == 'body')
         state = 'disabled' if is_body else 'normal'
         for w in (getattr(self, '_mass_entry', None),
                   getattr(self, '_dia_entry', None),
@@ -3080,6 +3083,25 @@ class ReentryPlanDialog(tk.Toplevel):
         ttk.Label(_ff, text="  °  (0 = 12° default)",
                   foreground="#888888").pack(side=tk.LEFT); r += 1
 
+        # Reentry attitude — trimmed (controlled) vs tumbling (uncontrolled).
+        # Tumbling zeroes lift and derives β from geometry as a tumbling
+        # cylinder (two-orientation Hoerner form); trim keeps the aeroshell β.
+        # For a non-separating body the run-time static-margin gate flags
+        # SM ≤ 0 and forces tumbling regardless of this setting.
+        ttk.Label(frm, text="Reentry attitude:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._ATT_LABELS = {'trim': "Trimmed (controlled)",
+                            'tumbling': "Tumbling (uncontrolled)"}
+        _att = str(_f('reentry_attitude', 'trim'))
+        self._att_var = tk.StringVar(
+            value=self._ATT_LABELS.get(_att, self._ATT_LABELS['trim']))
+        _af = ttk.Frame(frm); _af.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Combobox(_af, textvariable=self._att_var,
+                     values=list(self._ATT_LABELS.values()),
+                     state="readonly", width=22).pack(side=tk.LEFT)
+        ttk.Label(_af, text="  (tumbling: L/D = 0, β derived from geometry;"
+                            "\n   unstable bodies tumble regardless — SM gate)",
+                  foreground="#888888", justify=tk.LEFT).pack(side=tk.LEFT); r += 1
+
         ttk.Label(frm, text="(Glide law, dive, banks, dive-target, ζ, skip and\n"
                             "aero model are edited on the sidebar strip.)",
                   foreground="#888888", justify=tk.LEFT).grid(
@@ -3113,6 +3135,10 @@ class ReentryPlanDialog(tk.Toplevel):
             'glider_pullup_g_max':      _num(self._pullup_var, 10.0),
             'glider_beta_entry_kg_m2':  _num(self._beta_s_var, 0.0),
             'glider_flap_deflection_deg': _num(self._flap_var, 0.0),
+            'reentry_attitude': ('tumbling'
+                                 if self._att_var.get()
+                                 == self._ATT_LABELS['tumbling']
+                                 else 'trim'),
             'source': self._source_var.get().strip(),
             'notes':  self._notes_text.get("1.0", "end-1c").strip(),
         }
@@ -5480,13 +5506,36 @@ class BoosterFlyoutApp(tk.Tk):
                                       state=tk.DISABLED)
         self._rp_del_btn.pack(side=tk.LEFT)
 
-        # Row 1: status line — terminal vehicle summary (L/D, separation type)
+        # Row 1: Separation — the run-level choice of whether the reentry
+        # object separates at burnout or the last stage reenters whole
+        # (Hwasong-11 / MaRV class).  A reentry-PLAN field like the glide law:
+        # live here, written through to the active plan on every run, so the
+        # same aeroshell can be A/B'd separating vs. integrated in two clicks.
+        _sepbar = ttk.Frame(rf)
+        _sepbar.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(3, 0))
+        ttk.Label(_sepbar, text="Separation:").pack(side=tk.LEFT)
+        self._SEP_LABELS = {
+            'separating_ro': "Separates at burnout",
+            'body':          "Non-separating (body reenters)",
+        }
+        self._main_sep_var = tk.StringVar(
+            value=self._SEP_LABELS['separating_ro'])
+        self._main_sep_cb = ttk.Combobox(
+            _sepbar, textvariable=self._main_sep_var,
+            values=list(self._SEP_LABELS.values()),
+            state="readonly", width=28)
+        self._main_sep_cb.pack(side=tk.LEFT, padx=(6, 0))
+        self._main_sep_cb.bind(
+            "<<ComboboxSelected>>",
+            lambda _e: self._refresh_glider_status_line())
+
+        # Row 2: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
             value="Reentry object not configured for maneuvering"
             " — set L/D in Edit Reentry Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
-        self._glider_status_lbl.grid(row=1, column=0, columnspan=2,
+        self._glider_status_lbl.grid(row=2, column=0, columnspan=2,
                                       sticky=tk.W, padx=8, pady=(2, 2))
 
         # Row 1: reentry-mode detail frame.  Always visible; combobox at the
@@ -5629,7 +5678,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_main_bank_toggled()
         self._on_main_dive_target_toggled()
         self._on_glider_guidance_changed()
-        self._glider_main_frame.grid(row=2, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=3, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
         # ── Engine cutoff ─────────────────────────────────────────────
@@ -6340,7 +6389,13 @@ class BoosterFlyoutApp(tk.Tk):
         always shown; this line summarises the terminal vehicle's properties."""
         ro = getattr(self, '_ro', None)
         if ro and ro.glider_enabled and ro.glider_LD > 0:
-            sep = getattr(ro, 'separation_mode', 'separating_ro')
+            # Separation reads the LIVE strip control (the run-level value),
+            # not the stored object, so a flip is reflected immediately.
+            if getattr(self, '_main_sep_var', None) is not None:
+                sep = ('body' if self._main_sep_var.get()
+                       == self._SEP_LABELS['body'] else 'separating_ro')
+            else:
+                sep = getattr(ro, 'separation_mode', 'separating_ro')
             sep_lbl = "body" if sep == "body" else "separating reentry object"
             self._glider_status_var.set(
                 f"Reentry object: {ro.name or 'RO'}  "
@@ -6352,7 +6407,7 @@ class BoosterFlyoutApp(tk.Tk):
                 "Reentry object not configured for maneuvering"
                 " — set L/D in Edit Reentry Object…")
         # Reentry mode combobox is always visible regardless of glider config.
-        self._glider_main_frame.grid(row=2, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=3, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
     def _is_glider_active(self) -> bool:
@@ -6917,19 +6972,9 @@ class BoosterFlyoutApp(tk.Tk):
         if sel in RO_DB:
             self._ro = RO_DB[sel]()
             self._ro_del_btn.config(state=tk.NORMAL)
-            # Immediate compatibility feedback: a separating object needs a
-            # booster configured with a separating payload (a body-mode object
-            # applies to any booster).  The run path enforces the same rule.
-            try:
-                _p = get_booster(self._booster_var.get())
-                if (getattr(self._ro, 'separation_mode', 'separating_ro')
-                        != 'body' and not getattr(_p, 'ro_separates', False)):
-                    self._status_var.set(
-                        f"Note: '{sel}' is a separating reentry object but "
-                        f"'{_p.name}' has no separating payload configured — "
-                        f"it will be ignored at run time.")
-            except Exception:
-                pass
+            # Any object flies on any booster now: separation is a run-level
+            # plan choice (the sidebar Separation control), so the old
+            # "separating object needs a separating booster" refusal is gone.
         else:
             self._ro_del_btn.config(state=tk.DISABLED)
             # Fall back to whatever the active booster carries.
@@ -7184,8 +7229,15 @@ class BoosterFlyoutApp(tk.Tk):
                "skip_glide"                if "skip"         in label else
                "equilibrium_glide_acton"   if "acton"        in label else
                "equilibrium_glide")
+        # Separation is a plan field on EVERY path — a ballistic reentry
+        # object still either separates at burnout or reenters as the body.
+        _sep = ('body'
+                if getattr(self, '_main_sep_var', None) is not None
+                and self._main_sep_var.get() == self._SEP_LABELS['body']
+                else 'separating_ro')
         if key == "ballistic":
-            return {'glider_enabled': False}   # no lift, regardless of RV config
+            # no lift, regardless of RV config
+            return {'glider_enabled': False, 'separation_mode': _sep}
         try:
             dalt = float(self._main_dive_alt_var.get())
         except (ValueError, AttributeError):
@@ -7222,13 +7274,19 @@ class BoosterFlyoutApp(tk.Tk):
             glider_damping_zeta=zeta, glider_terminal_dive=True,
             glider_terminal_alt_km=dalt, glider_bank_schedule=bank,
             glider_aero_model=aero, glider_dive_target_lat_deg=dt_lat,
-            glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad)
+            glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad,
+            separation_mode=_sep)
 
     def _populate_glider_panel(self, ro):
         """Fill the sidebar glider controls from reentry object ``ro`` (with its
         reentry plan already applied).  Shared by booster-change and
         reentry-object/plan-change population so all paths agree."""
         self._ro = ro           # _refresh_glider_status_line picks this up
+        if hasattr(self, '_main_sep_var'):
+            self._main_sep_var.set(self._SEP_LABELS[
+                'body' if getattr(ro, 'separation_mode',
+                                  'separating_ro') == 'body'
+                else 'separating_ro'])
         _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
         self._main_guidance_var.set(
             "Phugoid / skip-glide"
@@ -8803,18 +8861,16 @@ class BoosterFlyoutApp(tk.Tk):
         # with a visible warning (previously: silently ignored).
         _ro_sel = getattr(self, '_ro_main_var', None)
         _ro_name = _ro_sel.get() if _ro_sel is not None else ""
-        _inject = False
         if _ro_name in RO_DB:
+            # Any library object can fly on any booster: separation is a
+            # run-level plan choice (the sidebar Separation control), not a
+            # compatibility constraint.  A separating object on a booster
+            # whose stage masses embed the warhead (Scud-class) sheds a
+            # casing of (burnout mass − object mass) — the debris arc code
+            # strips the object mass so nothing is counted twice.  A
+            # body-mode selection reenters attached (effective_ro inherits
+            # the last stage's burnout mass and geometry).
             _user_ro = RO_DB[_ro_name]()
-            _is_body = (getattr(_user_ro, 'separation_mode', 'separating_ro')
-                        == 'body')
-            _inject = _is_body or getattr(booster, 'ro_separates', False)
-            if not _inject:
-                self._status_var.set(
-                    f"'{_ro_name}' is a separating reentry object but "
-                    f"'{booster.name}' has no separating payload configured — "
-                    f"selection ignored (edit the booster to add one).")
-        if _inject:
             booster = copy.deepcopy(booster)
             _node, _placed = booster, False
             while _node is not None:
@@ -8825,15 +8881,13 @@ class BoosterFlyoutApp(tk.Tk):
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
                 booster.ro = _user_ro
-            # The reentry plan owns the separation decision: the injected
-            # object's separation_mode is the single source of truth, and the
-            # booster's mass bookkeeping follows it so the two can't disagree.
-            # A separating object sheds its payload at burnout; a body-mode
-            # object reenters attached (effective_ro inherits the last stage's
-            # mass and geometry).
-            booster.ro_separates = (
-                getattr(_user_ro, 'separation_mode', 'separating_ro') == 'separating_ro')
-            if booster.ro_separates:
+            # Mass bookkeeping follows the run-level separation (the strip
+            # value, stamped onto the object below).  booster.ro_separates
+            # itself is NOT rewritten: it stays what the builder recorded
+            # about how the stage masses were entered.
+            if (getattr(self, '_main_sep_var', None) is None
+                    or self._main_sep_var.get()
+                    != self._SEP_LABELS['body']):
                 # Payload carried through boost = throw-weight minus the shroud
                 # (jettisoned mid-boost, tracked separately): the PBV/bus mass
                 # plus the selected object's mass.  Derived here so payload
@@ -8925,18 +8979,27 @@ class BoosterFlyoutApp(tk.Tk):
             except ValueError:
                 pass
 
-        # Glider / HGV mission control — write only mission-time fields.
-        # Vehicle properties (glider_enabled, glider_LD, glider_pullup_g_max,
-        # glider_beta_entry_kg_m2, separation_mode) are owned by the
-        # Terminal Vehicle editor and live on self._ro / params.ro.  This
-        # block runs only when the active terminal vehicle has glider mode
-        # enabled.
-        _g_ero = effective_ro(booster)
-        if _g_ero is not None:
+        # Glider / HGV mission control — write the sidebar strip's plan fields
+        # (glide law, dive, banks, ζ, dive-target, SEPARATION) onto the RAW
+        # reentry object in the stack.  Hardware (glider_LD capability, β,
+        # TPS, mass) is owned by the object editor and untouched.  Stamp the
+        # raw ro, NOT effective_ro's fusion: separation is flippable from the
+        # strip now, and stamping the fused body (stage mass/geometry already
+        # inherited) would let a body→separating flip fly the whole stage's
+        # burnout mass as if it were the separated object.  integrate_trajectory
+        # calls effective_ro itself, after this plan is applied.
+        _g_node = booster
+        _g_raw = None
+        while _g_node is not None:
+            if _g_node.ro is not None:
+                _g_raw = _g_node.ro
+                break
+            _g_node = getattr(_g_node, 'stage2', None)
+        if _g_raw is not None:
             import dataclasses as _dc
             booster = copy.deepcopy(booster)
-            _g_new_ro = _dc.replace(_g_ero, **self._reentry_plan_kwargs())
-            # Write back into wherever the ro currently lives in the stack
+            _g_new_ro = _dc.replace(_g_raw, **self._reentry_plan_kwargs())
+            # Write back into wherever the ro lives in the (copied) stack
             _g_node = booster
             _g_saved = False
             while _g_node is not None:
