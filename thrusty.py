@@ -4794,6 +4794,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._max_range_pending   = False
         self._max_range_base_plan = None
         self._max_range_base_law  = "pitch_program"
+        self._max_range_on_reserved = False
         self._max_range_context   = ""
         self._plan_orbit_base_plan = None
         self._plan_orbit_context   = ""
@@ -6021,12 +6022,7 @@ class BoosterFlyoutApp(tk.Tk):
         # turn window, cutoff, advanced-pitch toggle, yaw program) come from the
         # raw plan file, with the legacy trajectory_profiles store as a one-time
         # migration fallback.
-        raw = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
-        _active = self._active_plan_name()
-        if _active:
-            raw = mm._merge_flight_plans(
-                raw, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
-                                         plan=_active) or {})
+        raw = self._raw_active_plan(name)
         legacy = _load_traj_profiles().get(name, {})
 
         def _gk(key, default=None):
@@ -6913,6 +6909,39 @@ class BoosterFlyoutApp(tk.Tk):
         sel = self._fp_var.get() if hasattr(self, '_fp_var') else mm.DEFAULT_PLAN_LABEL
         return None if sel == mm.DEFAULT_PLAN_LABEL else sel
 
+    def _resolve_generator_base(self, active):
+        """The plan a generator (Max Range / Plan Orbit) should build on.
+
+        Normally the active plan itself; but when the active plan IS a
+        generated variant, rebase onto the plan it was generated from (its
+        stored 'base_plan'), so re-running the generator doesn't quietly
+        forget the curated base's events/yaw and rebuild from (default).
+        """
+        if active in (mm.MAX_RANGE_PLAN_LABEL, mm.ORBITAL_PLAN_LABEL):
+            return self._raw_active_plan(
+                self._booster_var.get(), active).get('base_plan')
+        return active
+
+    def _raw_active_plan(self, name, plan_name=None, use_active=True):
+        """Raw merged plan-file content for booster `name`: the default plan
+        merged with the named (or active) variant.
+
+        This is the ONLY faithful source of the whole plan: GUI-only keys
+        (yaw_maneuvers, turn window, cutoff, adv toggles, target orbit) and
+        provenance (source/notes) exist solely in the file — extract_flight_plan
+        cannot know about them.  Every flow that rebuilds or seeds a plan must
+        start from this, not from extract_flight_plan alone, or those keys are
+        silently destroyed on the next save.
+        """
+        raw = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        pn = plan_name if plan_name is not None else (
+            self._active_plan_name() if use_active else None)
+        if pn:
+            raw = mm._merge_flight_plans(
+                raw, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
+                                         plan=pn) or {})
+        return raw
+
     @staticmethod
     def _fnum(sv):
         s = sv.get().strip()
@@ -6931,7 +6960,12 @@ class BoosterFlyoutApp(tk.Tk):
         window, engine cutoff, the advanced-pitch toggle, and the yaw program —
         ride along as extra keys in the plan file, read back on load.
         """
-        base = extract_flight_plan(get_booster(booster_name))
+        # Start from the raw plan file merged over the extraction, so keys the
+        # panel doesn't own (source/notes, future additions) survive the
+        # rebuild; the panel's fields are then written over the top.
+        base = mm._merge_flight_plans(
+            extract_flight_plan(get_booster(booster_name)),
+            self._raw_active_plan(booster_name))
         base['guidance'] = self._guidance_var.get()
         for key, var in (('launch_elevation_deg', self._launch_el_var),
                          ('burnout_angle_deg', self._loft_angle_var)):
@@ -7054,11 +7088,7 @@ class BoosterFlyoutApp(tk.Tk):
         )
         if not path:
             return
-        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
-        if active:
-            plan = mm._merge_flight_plans(
-                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
-                                          plan=active) or {})
+        plan = dict(self._raw_active_plan(name, active))
         plan['_type']   = 'flight_plan'
         plan['booster'] = name
         if active:
@@ -8136,7 +8166,8 @@ class BoosterFlyoutApp(tk.Tk):
                                  f"'{new_name}' is reserved.", parent=self)
             return
         booster = get_booster(name)          # active plan as the starting point
-        plan = extract_flight_plan(booster)
+        plan = mm._merge_flight_plans(extract_flight_plan(booster),
+                                      self._raw_active_plan(name))
         if law != plan.get('guidance'):
             # Crossing laws: per-stage pitch angles from the old law would be
             # wrong-valued (pitch angle vs η) or masked — start those clean.
@@ -8190,7 +8221,13 @@ class BoosterFlyoutApp(tk.Tk):
             return
         sel = self._fp_var.get()
         booster = get_booster(name)
-        plan = extract_flight_plan(booster)
+        # Seed from the raw plan file merged over the extraction — the file is
+        # the only source of the GUI keys (yaw, turn window) and provenance;
+        # seeding from extract alone wiped them on the next Save.
+        plan = mm._merge_flight_plans(
+            extract_flight_plan(booster),
+            self._raw_active_plan(name,
+                                  None if sel == mm.DEFAULT_PLAN_LABEL else sel))
         title_name = name if sel == mm.DEFAULT_PLAN_LABEL else f"{name} — {sel}"
         dlg = FlightPlanDialog(self, title_name, plan, booster)
         self.wait_window(dlg)
@@ -8601,7 +8638,9 @@ class BoosterFlyoutApp(tk.Tk):
         # the result to the reserved "max-range" variant and switches to it, so
         # the loaded plan is preserved one click away.  Record the base plan and
         # the context the optimum is valid for (stamped into the variant notes).
-        self._max_range_base_plan = self._active_plan_name()
+        _active = self._active_plan_name()
+        self._max_range_base_plan = self._resolve_generator_base(_active)
+        self._max_range_on_reserved = _active == mm.MAX_RANGE_PLAN_LABEL
         self._max_range_base_law = self._guidance_var.get()   # law carries to the variant
         self._max_range_context = (
             f"site={self._site_var.get() or f'{lat:.3f},{lon:.3f}'}, "
@@ -8611,7 +8650,7 @@ class BoosterFlyoutApp(tk.Tk):
         # pick the turn-stop.  A user-changed/saved value is honoured verbatim —
         # except when re-running on the max-range variant itself, where we
         # always re-optimise both knobs (the variant carries the last optimum).
-        if self._max_range_base_plan == mm.MAX_RANGE_PLAN_LABEL:
+        if self._max_range_on_reserved:
             opt_stop = None
         else:
             _auto = getattr(self, '_gt_turn_stop_auto', None)
@@ -8641,14 +8680,17 @@ class BoosterFlyoutApp(tk.Tk):
         """
         name = self._booster_var.get()
         base = getattr(self, '_max_range_base_plan', None)
+        if base in (mm.MAX_RANGE_PLAN_LABEL, mm.ORBITAL_PLAN_LABEL):
+            base = None   # never rebase a generated variant onto itself
         # Base plan fully merged (bundled + user default, then the base variant).
-        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
-        if base and base != mm.MAX_RANGE_PLAN_LABEL:
-            plan = mm._merge_flight_plans(
-                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
-                                          plan=base) or {})
-        plan = dict(plan)
+        plan = dict(self._raw_active_plan(name, plan_name=base, use_active=False))
         plan['stages'] = [dict(s) for s in plan.get('stages', [])]
+        # Remember the plan this optimum was generated FROM, so a re-run while
+        # the variant is active rebases onto it instead of onto (default).
+        if base:
+            plan['base_plan'] = base
+        else:
+            plan.pop('base_plan', None)
         # Simple profile under the base plan's own law (pitch program or
         # gravity turn — the optimiser swept that law's global knobs).
         plan['guidance'] = getattr(self, '_max_range_base_law', 'pitch_program')
@@ -8697,7 +8739,8 @@ class BoosterFlyoutApp(tk.Tk):
                                  "Enter a target orbit altitude (km) first.")
             return
         self._snapshot_traj_profile(self._booster_var.get())   # write-through
-        self._plan_orbit_base_plan = self._active_plan_name()
+        self._plan_orbit_base_plan = self._resolve_generator_base(
+            self._active_plan_name())
         self._plan_orbit_context = (
             f"target {target_orbit_km:g} km orbit, "
             f"site={self._site_var.get() or f'{lat:.3f},{lon:.3f}'}, az={az:.1f}°")
@@ -8716,13 +8759,14 @@ class BoosterFlyoutApp(tk.Tk):
         and switch to it (mirror of _write_max_range_variant)."""
         name = self._booster_var.get()
         base = getattr(self, '_plan_orbit_base_plan', None)
-        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
-        if base and base not in (mm.ORBITAL_PLAN_LABEL,):
-            plan = mm._merge_flight_plans(
-                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
-                                          plan=base) or {})
-        plan = dict(plan)
+        if base in (mm.MAX_RANGE_PLAN_LABEL, mm.ORBITAL_PLAN_LABEL):
+            base = None   # never rebase a generated variant onto itself
+        plan = dict(self._raw_active_plan(name, plan_name=base, use_active=False))
         plan['stages'] = [dict(s) for s in plan.get('stages', [])]
+        if base:
+            plan['base_plan'] = base
+        else:
+            plan.pop('base_plan', None)
         plan['guidance'] = 'orbital_insertion'
         plan['adv_pitch_on'] = False
         plan['burnout_angle_deg'] = float(boost_angle)
