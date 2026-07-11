@@ -1807,10 +1807,31 @@ trim solution.
 
 **Wiring.** The GUI L/D estimator calls `whole_booster_LD` directly. In the
 trajectory, a no-separation body glider left at the sentinel `glider_LD = 0` has
-its value auto-derived once at integration setup (`derive_glider_LD`, at
-`GLIDE_MACH_REF = 5`); a separating RV, or any body with an explicit
-`glider_LD > 0`, is left untouched. The derive runs at setup, not per step (it is
-outside the EOM hot loop).
+its value auto-derived once at integration setup; a separating RV, or any body
+with an explicit `glider_LD > 0`, is left untouched (a separating HGV's L/D is a
+designed property of an aeroshape Thrusty does not store, so the slender-missile
+build-up would not apply). The derive runs at setup, not per step (it is outside
+the EOM hot loop). The setup sequence is:
+
+1. Run the trim/control gate at `GLIDE_MACH_REF = 5`. If **SM ≤ 0** the body
+   cannot hold a trim AoA → the effective reentry attitude is forced to
+   `tumbling` (§8.11: derived tumbling β, no lift). If **control-limited**, the
+   ceiling is the L/D the fins can actually trim to, not the aerodynamic peak.
+2. If the gate passes (`LD_achievable > 0`), build a **Mach-varying `(L/D)_max`
+   table**: sample `whole_booster_LD` over `M ∈ {1.5, 2, 3, 4, 5, 6, 8, 12}`,
+   cap each node at the gate's `LD_achievable`, and stash a linear interpolator
+   on the run parameters. The **numerical** glide modes (`skip_glide`,
+   `skip_to_equilibrium`, `damped_glide`) interpolate it on the local Mach each
+   EOM step; below M1.5 the M1.5 value is held (linear wing theory invalid) and
+   above M12 the M12 value. The **analytical** Tracy/Acton modes keep a constant
+   L/D (their closed form requires it), evaluated at the scalar fallback = the
+   M5 table value. `commanded_LD` (the plan) still caps the whole curve.
+
+The measured airframe swing is ~12–16 % over M1.5→M5 (largest for terminal-phase
+quantities flown at M2–4). For total **range** the effect is sub-1 % on a
+non-separating body: such a body is aeroballistic (range set by the
+exo-atmospheric arc, with the atmospheric glide a terminal sliver), so the
+Mach dependence bites the terminal phase, not the down-leg length.
 
 **L/D during a pull-up maneuver.** The geometry-derived `L/D_max` above is the
 *peak* lift-to-drag, available only at the best-glide angle of attack. A
@@ -1841,6 +1862,52 @@ and `n ≤ glider_pullup_g_max` — so the worst-case induced-drag penalty is
 capped. For a **non-separating** body the `L/D_max` in these formulas is the
 geometry-derived value from this section; for a separating RV it is the designed
 input. The pull-up arc itself and the guidance modes that drive it are §12.
+
+### 8.11 Reentry attitude: trimmed vs. tumbling drag
+
+"Non-separating" hides two distinct physical regimes, and the reentry plan names
+which one applies through `reentry_attitude ∈ {trim, tumbling}`:
+
+- **Trim** — a stable, controlled body (Iskander / MaRV / Pershing-II class).
+  Drag is the aeroshell's ballistic coefficient β as given; lift is the
+  geometry-derived L/D of §8.10, subject to the trim gate. This is the default.
+- **Tumbling** — an uncontrolled body (a spent stage that reenters, a failed
+  RV, or a finless/aft-CG body the trim gate flags SM ≤ 0). It generates **no
+  lift**, and its β is *derived* from geometry as a tumbling cylinder rather
+  than inherited from the aeroshell. The graft of "aeroshell β + stage mass"
+  would be physically meaningless here: a tumbling stage presents a huge mean
+  projected area (low β), the opposite of a streamlined RV.
+
+The tumbling β uses a **two-orientation Hoerner form**, each orientation
+carrying its own hypersonic drag coefficient on its own projected area
+(`tumbling_cylinder_beta(..., cd=None)`, `booster_models.py`):
+
+```
+(C_D·A)_eff = ½ [ C_D,broadside · d·L  +  C_D,end · π d²/4 ]
+β_tumble    = m / (C_D·A)_eff
+```
+
+with coefficients transcribed from Hoerner, *Fluid-Dynamic Drag* (1965),
+Ch. XVIII (hypersonic bluff bodies):
+
+| Term | Coefficient | Hypersonic value | Source |
+|---|---|---|---|
+| impact-pressure coefficient | `C_p• = 1.84 − 0.76/M²` | → 1.84 (M→∞) | eq. (41) |
+| broadside (cross-flow cylinder) | `C_D = ⅔·C_p•` | ≈ **1.2** | eq. (44), Fig. 24 |
+| end-on (blunt cylinder face) | `C_D = 0.89·C_p•` | ≈ **1.6** | Fig. 22 |
+
+Below M ≈ 3 the hypersonic form is invalid; `C_p•` is floored at the
+incompressible bluff-body level (~1.2). Continuum anchors from the same source
+(§3-5/§3-6, Figs. 12/28) — 2-D cross-flow cylinder `C_D ≈ 1.17–1.2` subcritical,
+normal disc 1.17 (3-D) — bracket the low-Mach floor. This is the **same**
+function that computes spent-casing debris arcs (§14.3), which keep the legacy
+single-`C_D = 1.0` mean-area form; the two-term Hoerner form is selected
+(`cd=None`) only for a reentering body's derived β.
+
+`effective_ro` applies this: when the run's attitude resolves to `tumbling` it
+replaces the aeroshell β with `β_tumble`, disables the glider, and zeroes L/D.
+The mass/geometry inheritance for a non-separating body (mass, diameter, length
+from the last-stage burnout state) is unchanged.
 
 ---
 
@@ -3030,7 +3097,10 @@ pitch plane. `C_D = 1.0` (the function's default) is representative of
 bluff-body turbulent flow ([Hoerner 1965](#16-references)). The function
 returns 0 if either length or diameter is zero, so missiles without a
 configured shroud or spent-body geometry simply have no debris arcs
-computed.
+computed. The same function has a **two-orientation hypersonic form**
+(`cd=None`, each orientation with its own Hoerner Ch. XVIII coefficient)
+used for a reentering body flagged `tumbling` (§8.11); debris arcs keep
+the legacy single-`C_D = 1.0` mean-area form above.
 
 Spent bodies that re-enter compute their own impact point and add a
 "Stage N empty impact" or "Shroud impact" or "Booster casing impact"
@@ -3258,7 +3328,12 @@ optimisation) should use higher-fidelity tools.
 
 - **Hoerner, S. F.** (1965). *Fluid-Dynamic Drag.* Self-published,
   Bricktown, NJ. Source for the tumbling-cylinder drag coefficient
-  used in debris arc calculations (Section 14.3).
+  used in debris arc calculations (Section 14.3), and — Ch. XVIII
+  (hypersonic bluff bodies) — for the two-orientation reentry-body
+  tumbling β (Section 8.11): impact-pressure coefficient
+  `C_p• = 1.84 − 0.76/M²` (eq. 41), cross-flow cylinder `C_D = ⅔·C_p•`
+  (eq. 44, Fig. 24), and blunt cylinder face `C_D = 0.89·C_p•` (Fig. 22),
+  with continuum cross-flow anchors from §3-5/§3-6 (Figs. 12/28).
 
 ### Atmosphere
 
