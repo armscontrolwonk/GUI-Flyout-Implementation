@@ -177,7 +177,14 @@ tabbed notebook**.
   active object's reentry plans (`(default)` plus New/Delete variants) over the
   glider mission controls (glide law, terminal-dive altitude, ζ, banks,
   dive-at-target). The controls are the live editor and write through on every
-  run.
+  run. A **Separation** control (*Separates at burnout* / *Non-separating —
+  body reenters*) sits here too: separation is a run-level mission choice, not
+  a stored property of the object, so the same aeroshell can be A/B'd
+  separating vs. integrated in two clicks (and any object flies on any
+  booster — no compatibility refusal). Non-separating inherits the last stage's
+  burnout mass and geometry; the casing debris on a separating run carries the
+  burnout mass minus the object, so nothing is double-counted. Edit… also
+  exposes the **reentry attitude** (trimmed vs. tumbling).
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
@@ -217,15 +224,17 @@ tabbed notebook**.
   The payload is throw-weight: bus mass + the selected reentry object.
 - **Reentry-object editor** — define a reentry object's **hardware**: mass,
   ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
-  separation mode, the airframe's **L/D capability**, TPS materials (nose and
-  body, from a catalog or bespoke values), and provenance. How it is *flown* —
-  commanded L/D (≤ capability), pull-up g, βₛ, glide law, dives, banks — lives
-  in the Reentry Plan, not here.
+  the airframe's **L/D capability**, TPS materials (nose and body, from a
+  catalog or bespoke values), and provenance. Separation is shown read-only
+  here (it is a plan choice, set on the sidebar). How the object is *flown* —
+  commanded L/D (≤ capability), pull-up g, βₛ, glide law, dives, banks,
+  separation, attitude — lives in the Reentry Plan, not here.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
   (Reentry Plan ▸ Edit…): commanded L/D clamped to the airframe capability
   ("fly it worse, never better"), pull-up g-limit, re-entry βₛ, flap
-  deflection, and plan source/notes. The hot mission-time fields (glide law,
-  terminal-dive altitude, ζ, banks, dive-at-target) stay on the sidebar strip.
+  deflection, **reentry attitude** (trimmed vs. tumbling), and plan
+  source/notes. The hot mission-time fields (glide law, terminal-dive altitude,
+  ζ, banks, dive-at-target, separation) stay on the sidebar strip.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone
@@ -289,9 +298,12 @@ upper stages).  Key fields on the top-level node:
 
 **Payload / reentry object (top-level)**
 - `payload_kg` — total payload (throw-weight) carried to burnout = bus + object
-- `ro_separates` — if true, the reentry object separates from the final-stage
-  body; post-shroud ascent drag uses the object's geometry for the nose shape
-  instead of the payload shape fields
+- `ro_separates` — a **build-time** descriptor of how the booster's stage
+  masses were entered (whether the last stage's `mass_final` excludes the
+  payload). It seeds the ascent-drag geometry and the throw-weight bookkeeping,
+  but it is **no longer the run authority** for separation: whether the object
+  separates at burnout is a run-level plan choice (the sidebar Separation
+  control → `separation_mode` on the reentry plan)
 - `bus_mass_kg`, `num_ros` — payload decomposition (bus plus N reentry objects)
 - `ro_beta_kg_m2`, `ro_mass_kg`, `ro_shape`, `ro_diameter_m`, `ro_length_m` —
   *deprecated* inline fields, superseded by the linked `ro` object

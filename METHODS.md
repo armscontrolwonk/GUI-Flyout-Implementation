@@ -601,11 +601,32 @@ re-entry vehicle (Section 8.2).
 
 ### 6.4 Reentry vehicle separation
 
-If `ro_separates = True` on the top-level node, the RV separates from the
-final stage body at burnout. Post-burnout drag is then computed from the
-RV's geometry and ballistic coefficient rather than from the spent final
-stage. This matters for ICBMs and SLVs where the spent upper stage has
-very different drag characteristics from the warhead or payload it deployed.
+Whether the reentry object separates from the final-stage body at burnout is a
+**run-level mission choice**, not a stored property of the object or a fixed
+attribute of the booster. It is set by the sidebar **Separation** control and
+persisted on the reentry plan as `separation_mode ∈ {separating_ro, body}`
+(§8.11); the same aeroshell can therefore be flown separating or integrated
+without editing the object, and any object can be flown on any booster.
+
+- **Separating** (`separating_ro`): the object departs at burnout and reenters
+  on its own geometry/β; the spent final stage tumbles away as debris (§14.3).
+  The casing's debris mass is the last stage's **burnout mass**
+  (`mass_initial − mass_propellant`) minus the object's mass, so a warhead that
+  was carried inside the stage's mass budget is not counted twice.
+- **Non-separating** (`body`): the last stage *is* the reentering vehicle
+  (Hwasong-11 / Pershing-II MaRV class). `effective_ro` inherits the stage's
+  burnout mass, diameter, and length; no separate last-stage debris arc is
+  emitted. Attitude (§8.11) then decides trimmed vs. tumbling drag.
+
+The legacy `BoosterParams.ro_separates` flag is retained as a **build-time
+descriptor** — it records whether the stored stage masses embed the payload,
+seeding the ascent-drag geometry and throw-weight bookkeeping — but the run
+path (separation debris, post-burnout mass) consults the plan's
+`separation_mode`, falling back to `ro_separates` only when no reentry object
+is configured at all. Post-burnout drag uses the reentering vehicle's geometry
+and ballistic coefficient rather than the spent stage's. This matters for ICBMs
+and SLVs where the spent upper stage has very different drag characteristics
+from the warhead or payload it deployed.
 
 ### 6.5 Strap-on boosters
 
@@ -3101,6 +3122,15 @@ computed. The same function has a **two-orientation hypersonic form**
 (`cd=None`, each orientation with its own Hoerner Ch. XVIII coefficient)
 used for a reentering body flagged `tumbling` (§8.11); debris arcs keep
 the legacy single-`C_D = 1.0` mean-area form above.
+
+Whether the **last** stage sheds a debris body is the run-level separation
+decision (§6.4): a separating run tumbles the casing; a non-separating (`body`)
+run keeps it fused as the reentering vehicle, so no last-stage arc is emitted.
+The casing mass for that arc is the stage's burnout mass
+(`mass_initial − mass_propellant`) minus the reentry object's mass — so a
+warhead carried inside the stage's mass budget is stripped from the casing
+rather than double-counted. (Non-last stages always shed their full
+`mass_final`.)
 
 Spent bodies that re-enter compute their own impact point and add a
 "Stage N empty impact" or "Shroud impact" or "Booster casing impact"

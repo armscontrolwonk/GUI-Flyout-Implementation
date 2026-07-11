@@ -2544,11 +2544,19 @@ def integrate_trajectory(params: BoosterParams,
     _debris_trajectories = []   # list of {label, t, lat, lon, alt} dicts
 
     # Walk stages: every jettisoned stage body gets a debris arc.
-    # Non-last stages are always jettisoned.  The last stage body is also
-    # jettisoned when the RV/payload separates cleanly at burnout — detected
-    # by mass_final ≈ dry mass alone (mass_initial − propellant − payload_kg).
-    # When mass_final includes the payload (e.g. Scud warhead stays on),
-    # the body is NOT separate debris and is skipped.
+    # Non-last stages are always jettisoned.  Whether the LAST stage body is
+    # separate debris is the run-level separation decision, owned by the
+    # reentry plan (ro.separation_mode): a separating reentry object sheds the
+    # casing at burnout; a body-mode ('no separation') vehicle keeps the stage
+    # fused — the body IS the reentering vehicle, not debris.  The legacy
+    # params.ro_separates flag is only the fallback when no reentry object is
+    # configured at all (it then just records how the booster was built).
+    _ro_run = params.ro
+    if _ro_run is not None:
+        _run_separates = (getattr(_ro_run, 'separation_mode',
+                                  'separating_ro') == 'separating_ro')
+    else:
+        _run_separates = bool(params.ro_separates)
     _t_node = 0.0
     _node   = params
     _sn     = 1
@@ -2556,15 +2564,28 @@ def integrate_trajectory(params: BoosterParams,
         _t_bo    = _t_node + _node.burn_time_s
         _is_last = (_node.stage2 is None)
         if _is_last:
-            # Last stage body is jettisoned only when the RV/payload separates
-            # explicitly (ro_separates flag).  Without it the body stays fused
-            # to the warhead (e.g. Scud-B) and is not separate debris.
-            _body_jettisoned = params.ro_separates
+            _body_jettisoned = _run_separates
+            # Casing mass: the physical burnout mass of the last stage is
+            # mass_initial − mass_propellant (independent of whether the
+            # builder baked the payload into mass_final — Scud-class — or
+            # kept it separate — Minotaur-class).  What tumbles after the
+            # reentry object departs is that burnout mass minus the object.
+            # For payload==object this reproduces the stored mass_final
+            # exactly; for a non-separating-built booster flown with a
+            # separating object it correctly strips the warhead mass from
+            # the casing instead of counting it twice.
+            _m_bo = (_node.mass_initial - _node.mass_propellant
+                     if _node.mass_propellant > 0 else _node.mass_final)
+            _m_ro = (float(getattr(_ro_run, 'mass_kg', 0.0) or 0.0)
+                     if _ro_run is not None else
+                     (params.payload_kg if params.payload_kg > 0 else 0.0))
+            _cas_mass = _m_bo - _m_ro if _m_bo > _m_ro else _node.mass_final
         else:
             _body_jettisoned = True   # non-last stages always shed their body
+            _cas_mass = _node.mass_final
 
-        if _body_jettisoned and _node.mass_final > 0 and _t_bo <= t_arr[-1]:
-            beta = tumbling_cylinder_beta(_node.mass_final,
+        if _body_jettisoned and _cas_mass > 0 and _t_bo <= t_arr[-1]:
+            beta = tumbling_cylinder_beta(_cas_mass,
                                           _node.diameter_m, _node.length_m)
             if beta > 0:
                 _pos_s, _vel_s = _ecef_state_at(_t_bo)
@@ -2581,7 +2602,7 @@ def integrate_trajectory(params: BoosterParams,
                         'alt_km':  0.0, 'range_km': 0.0,
                         'speed_kms': 0.0, 'inertial_speed_kms': 0.0,
                         'accel_ms2': 0.0,
-                        'mass_t':  _node.mass_final / 1000.0,
+                        'mass_t':  _cas_mass / 1000.0,
                         'is_debris': True,
                     })
                 else:
@@ -2596,7 +2617,7 @@ def integrate_trajectory(params: BoosterParams,
                         'speed_kms':          _d_spd / 1000.0,
                         'inertial_speed_kms': _d_spd / 1000.0,
                         'accel_ms2':          0.0,
-                        'mass_t':             _node.mass_final / 1000.0,
+                        'mass_t':             _cas_mass / 1000.0,
                         'is_debris':          True,
                         'impact_lat':         _d_lat,
                         'impact_lon':         _d_lon,

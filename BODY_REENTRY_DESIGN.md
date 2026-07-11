@@ -1,8 +1,22 @@
 # Body-Reentry Redesign: separation, attitude, drag, and L/D
 
 Design document for the "B1" separation redesign and the reentry-drag work
-that grew out of it.  Status: **approved direction, pre-implementation**.
-Companion to `GLIDE_CAPTURE_DESIGN.md` / `DAMPED_GLIDE.md`.
+that grew out of it.  Status: **implemented** (Phases A/C/D/E + the separation
+run-level control).  Companion to `GLIDE_CAPTURE_DESIGN.md` / `DAMPED_GLIDE.md`.
+
+Implemented deltas from the plan below:
+* Separation is a reentry-**plan** field (`separation_mode`) driven by a sidebar
+  Separation control, written through on every run — not a GUI-only flight-plan
+  key.  `ROParams.separation_mode` is retained (it is the plan's home) rather
+  than removed; `BoosterParams.ro_separates` is demoted to a build-time
+  descriptor (ascent-drag geometry + throw-weight) and no longer the run
+  authority.  The run path (separation debris, post-burnout mass) reads the
+  plan, falling back to `ro_separates` only when no reentry object is set.
+* Casing debris mass is made honest: burnout mass − object mass, so a warhead
+  carried inside the stage budget (Scud-class) is not double-counted, and any
+  object flies on any booster (the old compatibility refusal is gone).
+* The separating/non-separating A/B is a two-click sidebar flip; the object
+  editor shows separation read-only.
 
 ---
 
