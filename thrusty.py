@@ -5226,9 +5226,11 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Entry(la_frame, textvariable=self._loft_angle_var, width=8).pack(side=tk.LEFT)
         self._loft_angle_unit_lbl = ttk.Label(la_frame, text="°  (final elev.)")
         self._loft_angle_unit_lbl.pack(side=tk.LEFT, padx=2)
-        # Wheelon optimal-angle estimator — fills the field without a full sweep.
-        ttk.Button(la_frame, text="ε*", width=3,
-                   command=self._estimate_wheelon_main).pack(side=tk.LEFT, padx=(4, 0))
+        # Wheelon optimal-angle estimator — fills the field without a full
+        # sweep.  Pitch-program law only; hidden otherwise (_update_guidance_labels).
+        self._wheelon_main_btn = ttk.Button(
+            la_frame, text="ε*", width=3, command=self._estimate_wheelon_main)
+        self._wheelon_main_btn.pack(side=tk.LEFT, padx=(4, 0))
 
         self._gt_turn_start_lbl = ttk.Label(gf, text="Turn Start:")
         self._gt_turn_start_lbl.grid(row=5, column=0, sticky=tk.W, padx=(8, 2), pady=2)
@@ -6138,6 +6140,13 @@ class BoosterFlyoutApp(tk.Tk):
         # glider_enabled, populate self._ro so the status line and the
         # mission-control frame appear automatically.
         _p_ero = effective_ro(p)
+        # Apply the saved reentry plan so the sidebar reflects the store (the
+        # booster's own object is hardware-only; get_booster doesn't apply the
+        # reentry plan the way it applies the flight plan).
+        if _p_ero is not None and _p_ero.name:
+            _rp = load_reentry_plan(_p_ero.name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
+            if _rp is not None:
+                _p_ero = apply_reentry_plan(_p_ero, _rp)
         # If the booster carries a named RV that we have in the library, point
         # the main-panel combobox at it.  Otherwise leave the user's current
         # selection (or the sentinel) alone — they may want the same RV across
@@ -6147,6 +6156,13 @@ class BoosterFlyoutApp(tk.Tk):
                 and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
             self._ro_main_var.set(_p_ero.name)
             self._ro_del_btn.config(state=tk.NORMAL)
+        # When a LIBRARY reentry object is the active selection, it — not the
+        # booster's embedded object — is the source of truth for the glider
+        # panel, the run, and the reentry-plan write-through.  (Its RO_DB entry
+        # is refreshed on save, so it reflects the store.)
+        _sel_ro = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
+        if _sel_ro in RO_DB:
+            _p_ero = RO_DB[_sel_ro]()
         if _p_ero is not None:
             # Sync self._ro so _refresh_glider_status_line picks it up.
             # Reentry mode is always loaded, regardless of glider_enabled.
@@ -6607,6 +6623,21 @@ class BoosterFlyoutApp(tk.Tk):
         """Called when the user selects an ascent mode from the dropdown."""
         display = self._guidance_cb.get()
         if display == "Simple pitch profile":
+            # Dropping to Simple discards the per-stage pitch table on the next
+            # run/save (per-stage angles fly whenever present, so they must be
+            # cleared for the global profile to govern).  Confirm when the
+            # table actually holds values.
+            if (self._adv_pitch_var.get()
+                    and any(r['angle'].get().strip()
+                            for r in getattr(self, '_stage_rows', []))
+                    and not messagebox.askyesno(
+                        "Simple pitch profile",
+                        "Switching to Simple clears the per-stage pitch table "
+                        "for this plan on the next run or save.\n\nContinue?",
+                        parent=self)):
+                self._sync_ascent_mode_display(self._guidance_var.get(),
+                                               self._adv_pitch_var.get())
+                return
             self._guidance_var.set("pitch_program")
             self._adv_pitch_var.set(False)
             self._on_adv_pitch_toggled()
@@ -6656,6 +6687,14 @@ class BoosterFlyoutApp(tk.Tk):
             else:
                 self._loft_angle_lbl.config(text="Burnout Angle:")
                 self._loft_angle_unit_lbl.config(text="°  (Wheelon ε*)")
+            # Wheelon ε* estimates the optimal pitch-program burnout angle; in
+            # gravity turn the field is the η kick and in orbital the boost
+            # angle comes from Plan Orbit — the estimator is meaningless there.
+            if hasattr(self, '_wheelon_main_btn'):
+                if guidance == "pitch_program":
+                    self._wheelon_main_btn.pack(side=tk.LEFT, padx=(4, 0))
+                else:
+                    self._wheelon_main_btn.pack_forget()
             # Quick strip: burnout angle + turn stop only.  Launch elevation,
             # turn start, coast, and cutoff are set-once fields edited in the
             # Flight Plan dialog; their widgets stay hidden here (grid_remove so
@@ -7036,6 +7075,104 @@ class BoosterFlyoutApp(tk.Tk):
         except Exception as exc:
             print(f"Warning: could not save flight plan for '{booster_name}': {exc}")
 
+    # ------------------------------------------------------------------
+    # Reentry plan — the down-leg analogue of the flight plan.  The sidebar
+    # glider controls are a live view of the active reentry object's
+    # .reentryplan.json; every run writes them through, exactly like the
+    # flight plan (single-store model).
+    # ------------------------------------------------------------------
+    def _reentry_plan_kwargs(self) -> dict:
+        """Read the sidebar glider controls into the reentry-plan mission-time
+        fields.  The SINGLE source of what the run flies AND what is persisted,
+        so the reentry object on disk can never disagree with the flight."""
+        label = self._main_guidance_var.get().lower()
+        key = ("ballistic"                 if "ballistic"    in label else
+               "damped_glide"              if "damped"       in label else
+               "dynamic_equilibrium_glide" if "dynamic"      in label else
+               "skip_to_equilibrium"       if "auto-handoff" in label else
+               "skip_glide"                if "skip"         in label else
+               "equilibrium_glide_acton"   if "acton"        in label else
+               "equilibrium_glide")
+        if key == "ballistic":
+            return {'glider_enabled': False}   # no lift, regardless of RV config
+        try:
+            dalt = float(self._main_dive_alt_var.get())
+        except (ValueError, AttributeError):
+            dalt = 0.0                          # blank = glide to impact
+        skip = 1
+        if key == "skip_to_equilibrium":
+            try:    skip = int(self._main_skip_count_var.get())
+            except (ValueError, AttributeError): skip = 1
+        zeta = 0.7
+        if key in ("damped_glide", "dynamic_equilibrium_glide"):
+            try:    zeta = max(0.0, float(self._main_zeta_var.get()))
+            except (ValueError, AttributeError): zeta = 0.7
+        bank = []
+        if self._main_bank_sched_var.get():
+            for bv in self._main_bank_vars:
+                try:
+                    bank.append((float(bv['start'].get()), float(bv['end'].get()),
+                                 float(bv['bank'].get())))
+                except (ValueError, AttributeError):
+                    pass
+        aero = ("polar" if "polar" in self._main_aero_var.get().lower()
+                else "constant_LD")
+        dt_lat = dt_lon = dt_rad = 0.0
+        if (getattr(self, '_main_dive_target_var', None)
+                and self._main_dive_target_var.get()):
+            try:    dt_lat = float(self._main_dt_lat_var.get())
+            except (ValueError, AttributeError): pass
+            try:    dt_lon = float(self._main_dt_lon_var.get())
+            except (ValueError, AttributeError): pass
+            try:    dt_rad = float(self._main_dt_radius_var.get())
+            except (ValueError, AttributeError): pass
+        return dict(
+            glider_enabled=True, glider_guidance=key, glider_skip_count=skip,
+            glider_damping_zeta=zeta, glider_terminal_dive=True,
+            glider_terminal_alt_km=dalt, glider_bank_schedule=bank,
+            glider_aero_model=aero, glider_dive_target_lat_deg=dt_lat,
+            glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad)
+
+    def _active_reentry_object(self):
+        """(name, plan-applied base ROParams) for the effective reentry object
+        given the current sidebar selection, or (None, None) if there is none.
+
+        A library object selected in the sidebar wins; otherwise the booster's
+        own reentry object, with any saved reentry plan applied so the base
+        already reflects the store."""
+        sel = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
+        if sel in RO_DB:
+            ro = RO_DB[sel]()
+            return ro.name or sel, ro
+        try:
+            booster = get_booster(self._booster_var.get())
+        except Exception:
+            return None, None
+        ro = effective_ro(booster)
+        if ro is None or not ro.name:
+            return None, None
+        rp = load_reentry_plan(ro.name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
+        if rp is not None:
+            ro = apply_reentry_plan(ro, rp)
+        return ro.name, ro
+
+    def _snapshot_reentry_plan(self) -> None:
+        """Persist the sidebar glider controls into the active reentry object's
+        reentry plan (write-through, mirror of _snapshot_traj_profile)."""
+        name, base_ro = self._active_reentry_object()
+        if base_ro is None:
+            return
+        plan = extract_reentry_plan(base_ro)          # full keyset + commanded_LD
+        plan.update(self._reentry_plan_kwargs())      # panel mission-time fields
+        try:
+            save_reentry_plan(name, plan, _REENTRY_PLAN_LIBRARY_PATH)
+        except Exception as exc:
+            print(f"Warning: could not save reentry plan for '{name}': {exc}")
+            return
+        # Refresh the library entry so re-selecting the object reflects the save.
+        if name in RO_DB:
+            RO_DB[name] = lambda _r=apply_reentry_plan(base_ro, plan): _r
+
     def _reset_traj_profile(self) -> None:
         """Revert the active flight plan to the shipped/bundled default by
         removing the user override, then repopulate the panel."""
@@ -7127,21 +7264,45 @@ class BoosterFlyoutApp(tk.Tk):
         try:
             with open(path) as fh:
                 data = json.load(fh)
+            # Import lands as a NEW named variant, never overwriting the active
+            # plan — an imported plan carries its own guidance law, and the law
+            # is plan identity, so it must arrive as its own artifact.
+            _stem = os.path.basename(path).split('.')[0]
+            variant = self._unique_plan_name(
+                name, str(data.get('name') or _stem or 'imported'))
             if data.get('_type') == 'guidance_program':
-                # Legacy snapshot: apply to the panel fields, then persist
-                # through the normal write-through path.
+                # Legacy snapshot: apply to the panel, switch to the new
+                # variant, then persist the panel through write-through.
                 self._apply_trajectory_metadata(data)
+                mm.ACTIVE_FLIGHT_PLANS[name] = variant
+                self._fp_var.set(variant)
                 self._snapshot_traj_profile(name)
             else:
-                for k in ('_type', 'booster', 'name'):
+                for k in ('_type', 'booster', 'name', 'base_plan'):
                     data.pop(k, None)
-                save_flight_plan(name, data, _FLIGHT_PLAN_LIBRARY_PATH,
-                                 plan=self._active_plan_name())
-                self._on_booster_changed()
+                save_flight_plan(name, data, _FLIGHT_PLAN_LIBRARY_PATH, plan=variant)
+                mm.ACTIVE_FLIGHT_PLANS[name] = variant
+            self._save_active_plans()
+            self._refresh_flight_plan_list(select=variant)
+            self._on_booster_changed()
             self._status_var.set(
-                f"Flight plan loaded: {os.path.basename(path)}")
+                f"Flight plan imported as '{variant}': {os.path.basename(path)}")
         except Exception as exc:
             messagebox.showerror("Import error", str(exc), parent=self)
+
+    def _unique_plan_name(self, booster_name, desired):
+        """A flight-plan variant name derived from `desired` that is neither
+        reserved nor already in use (appends ' (2)', ' (3)', … as needed)."""
+        desired = (desired or 'imported').strip() or 'imported'
+        reserved = set(mm.RESERVED_PLAN_NAMES)
+        existing = set(mm.list_flight_plans(
+            booster_name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS))
+        if desired not in reserved and desired not in existing:
+            return desired
+        i = 2
+        while f"{desired} ({i})" in existing or f"{desired} ({i})" in reserved:
+            i += 1
+        return f"{desired} ({i})"
 
     # ------------------------------------------------------------------
     # Scenario save / load (bundle: booster + RV + site + guidance)
@@ -7263,7 +7424,30 @@ class BoosterFlyoutApp(tk.Tk):
             messagebox.showerror("Load scenario",
                                  f"Could not apply scenario:\n{exc}", parent=self)
             return
-        self._status_var.set(f"Scenario loaded: {os.path.basename(path)}")
+        _isolated = self._isolate_scenario_law_if_needed()
+        _msg = f"Scenario loaded: {os.path.basename(path)}"
+        if _isolated:
+            _msg += " (guidance isolated into the 'scenario' flight plan)"
+        self._status_var.set(_msg)
+
+    def _isolate_scenario_law_if_needed(self):
+        """If a just-loaded scenario's guidance law differs from the active
+        plan's, retarget to the reserved 'scenario' variant so the subsequent
+        write-through can't rewrite the curated plan's law (which is its
+        identity).  Returns True if isolation happened."""
+        name = self._booster_var.get()
+        if name not in BOOSTER_DB:
+            return False
+        panel_law = self._guidance_var.get()
+        active_law = get_booster(name).guidance
+        if panel_law == active_law:
+            return False
+        mm.ACTIVE_FLIGHT_PLANS[name] = mm.SCENARIO_PLAN_LABEL
+        self._fp_var.set(mm.SCENARIO_PLAN_LABEL)
+        self._snapshot_traj_profile(name)   # persist panel (scenario law) here
+        self._save_active_plans()
+        self._refresh_flight_plan_list(select=mm.SCENARIO_PLAN_LABEL)
+        return True
 
     def _update_params_display(self, p=None):
         """Rebuild the Booster Parameters tab with structured label rows."""
@@ -8160,8 +8344,7 @@ class BoosterFlyoutApp(tk.Tk):
         new_name, law = self._ask_new_plan_name_and_law(name)
         if not new_name:
             return
-        if new_name in (mm.DEFAULT_PLAN_LABEL, mm.MAX_RANGE_PLAN_LABEL,
-                        mm.ORBITAL_PLAN_LABEL):
+        if new_name in mm.RESERVED_PLAN_NAMES:
             messagebox.showerror("Flight Plan",
                                  f"'{new_name}' is reserved.", parent=self)
             return
@@ -8451,76 +8634,7 @@ class BoosterFlyoutApp(tk.Tk):
         if _g_ero is not None:
             import dataclasses as _dc
             booster = copy.deepcopy(booster)
-            try:
-                _g_dalt = float(self._main_dive_alt_var.get())
-            except ValueError:
-                _g_dalt = 0.0   # blank/garbage = glide to impact
-            _g_guid_label = self._main_guidance_var.get()
-            _g_guid_lower = _g_guid_label.lower()
-            _g_guid_key = (
-                "ballistic"                 if "ballistic"    in _g_guid_lower else
-                "damped_glide"              if "damped"       in _g_guid_lower else
-                "dynamic_equilibrium_glide" if "dynamic"      in _g_guid_lower else
-                "skip_to_equilibrium"       if "auto-handoff" in _g_guid_lower else
-                "skip_glide"                if "skip"         in _g_guid_lower else
-                "equilibrium_glide_acton"   if "acton"        in _g_guid_lower else
-                "equilibrium_glide"
-            )
-            if _g_guid_key == "ballistic":
-                # User wants no lift: override glider_enabled regardless of RV config
-                _g_new_ro = _dc.replace(_g_ero, glider_enabled=False)
-            else:
-                _g_skip_count = 1
-                if _g_guid_key == "skip_to_equilibrium":
-                    try:
-                        _g_skip_count = int(self._main_skip_count_var.get())
-                    except (ValueError, AttributeError):
-                        _g_skip_count = 1
-                _g_zeta = 0.7
-                if _g_guid_key in ("damped_glide", "dynamic_equilibrium_glide"):
-                    try:
-                        _g_zeta = max(0.0, float(self._main_zeta_var.get()))
-                    except (ValueError, AttributeError):
-                        _g_zeta = 0.7
-                _g_bank = []
-                if self._main_bank_sched_var.get():
-                    for _bv in self._main_bank_vars:
-                        try:
-                            _g_bank.append((float(_bv['start'].get()),
-                                            float(_bv['end'].get()),
-                                            float(_bv['bank'].get())))
-                        except ValueError:
-                            pass
-                _g_aero_label = self._main_aero_var.get()
-                _g_aero_key = ("polar"
-                               if "polar" in _g_aero_label.lower()
-                               else "constant_LD")
-                # Dive-at-target trigger (radius = 0 ⇒ disabled)
-                _g_dt_lat = 0.0
-                _g_dt_lon = 0.0
-                _g_dt_rad = 0.0
-                if (hasattr(self, '_main_dive_target_var')
-                        and self._main_dive_target_var.get()):
-                    try:    _g_dt_lat = float(self._main_dt_lat_var.get())
-                    except (ValueError, AttributeError): pass
-                    try:    _g_dt_lon = float(self._main_dt_lon_var.get())
-                    except (ValueError, AttributeError): pass
-                    try:    _g_dt_rad = float(self._main_dt_radius_var.get())
-                    except (ValueError, AttributeError): pass
-                _replace_kw = dict(
-                    glider_enabled=True,
-                    glider_guidance=_g_guid_key,
-                    glider_skip_count=_g_skip_count,
-                    glider_damping_zeta=_g_zeta,
-                    glider_terminal_dive=True,
-                    glider_terminal_alt_km=_g_dalt,
-                    glider_bank_schedule=_g_bank,
-                    glider_aero_model=_g_aero_key,
-                    glider_dive_target_lat_deg=_g_dt_lat,
-                    glider_dive_target_lon_deg=_g_dt_lon,
-                    glider_dive_target_radius_km=_g_dt_rad,
-                )
-                _g_new_ro = _dc.replace(_g_ero, **_replace_kw)
+            _g_new_ro = _dc.replace(_g_ero, **self._reentry_plan_kwargs())
             # Write back into wherever the ro currently lives in the stack
             _g_node = booster
             _g_saved = False
@@ -8575,6 +8689,13 @@ class BoosterFlyoutApp(tk.Tk):
     def _run_flyout(self):
         if self._running:
             return
+        # Write-through FIRST: the plan you fly is the plan on disk.  The
+        # sidebar is a live view of the active flight plan, so every run
+        # persists it, and _get_inputs below builds the booster from the
+        # just-persisted file — file and flight can never disagree (e.g.
+        # Simple mode clears per-stage angles before they could fly).
+        self._snapshot_traj_profile(self._booster_var.get())
+        self._snapshot_reentry_plan()
         try:
             (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
@@ -8582,10 +8703,6 @@ class BoosterFlyoutApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("Input error", str(e))
             return
-        # Write-through: the plan you fly is the plan on disk.  The sidebar is
-        # a live view of the active flight plan, so every run persists it (the
-        # Reset button still reverts to the shipped default).
-        self._snapshot_traj_profile(self._booster_var.get())
         self._running = True
         self._status_var.set("Running simulation…")
         threading.Thread(
@@ -8627,6 +8744,11 @@ class BoosterFlyoutApp(tk.Tk):
                 "booster's maximum range, switch to (or create) a pitch-program "
                 "or gravity-turn flight plan.", parent=self)
             return
+        # Write-through before optimising: panel tweaks are persisted to the
+        # active plan (same as Run / Plan Orbit) so nothing is lost when the
+        # dropdown switches to the max-range variant afterwards.
+        self._snapshot_traj_profile(self._booster_var.get())
+        self._snapshot_reentry_plan()
         try:
             (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
@@ -8727,6 +8849,8 @@ class BoosterFlyoutApp(tk.Tk):
         """
         if self._running:
             return
+        self._snapshot_traj_profile(self._booster_var.get())   # write-through first
+        self._snapshot_reentry_plan()
         try:
             (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
@@ -8738,7 +8862,6 @@ class BoosterFlyoutApp(tk.Tk):
             messagebox.showerror("Input error",
                                  "Enter a target orbit altitude (km) first.")
             return
-        self._snapshot_traj_profile(self._booster_var.get())   # write-through
         self._plan_orbit_base_plan = self._resolve_generator_base(
             self._active_plan_name())
         self._plan_orbit_context = (
