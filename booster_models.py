@@ -346,6 +346,15 @@ class ROParams:
     #                   assume constant L/D.  At its trim point (C_L = C_L*)
     #                   the polar reproduces this model exactly.
     glider_aero_model:      str   = "polar"
+    # Reentry attitude — how the reentering body is flown, a plan property:
+    #   'trim'     : stable, controlled, at a trim angle of attack (aeroshell β
+    #                as given; L/D from geometry for a body, or the designed
+    #                value for a separating RV).  The Iskander / MaRV case.
+    #   'tumbling' : uncontrolled, no attitude hold — L/D = 0 and the ballistic
+    #                coefficient is DERIVED from geometry as a tumbling cylinder
+    #                (Hoerner two-orientation form), not the aeroshell's β.  The
+    #                spent-stage / failed-RV case.
+    reentry_attitude:       str   = "trim"
     # Target-based dive trigger.  When glider_dive_target_radius_km > 0 the
     # vehicle starts the terminal dive (bank = π) as soon as its great-circle
     # distance to the target (lat/lon) drops below the radius — in addition
@@ -518,6 +527,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'glider_flap_area_ratio':    ro.glider_flap_area_ratio,
         'glider_flap_deflection_deg':ro.glider_flap_deflection_deg,
         'separation_mode':       ro.separation_mode,
+        'reentry_attitude':      ro.reentry_attitude,
         'emissivity':            ro.emissivity,
         'tps_material':          ro.tps_material,
         'nose_tps_material':     ro.nose_tps_material,
@@ -571,6 +581,7 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_flap_area_ratio=float(d.get('glider_flap_area_ratio', 0.0)),
         glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
         separation_mode=_norm_sep_mode(d.get('separation_mode', 'separating_ro')),
+        reentry_attitude=str(d.get('reentry_attitude', 'trim')),
         emissivity=float(d.get('emissivity', 0.85)),
         tps_material=str(d.get('tps_material', '')),
         nose_tps_material=str(d.get('nose_tps_material', '')),
@@ -601,6 +612,7 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     """
     if params.ro is not None:
         ro = params.ro
+        import dataclasses as _dc
         if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
             # The vehicle IS the booster body — inherit mass and geometry
             # from the last stage's burnout state.  β remains user-specified
@@ -609,15 +621,23 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
             _last = params
             while _last.stage2 is not None:
                 _last = _last.stage2
-            import dataclasses as _dc
             _body_mass = (_last.mass_initial - _last.mass_propellant
                           if _last.mass_propellant > 0 else _last.mass_final)
-            return _dc.replace(ro,
+            ro = _dc.replace(ro,
                 mass_kg=float(_body_mass) if _body_mass > 0 else ro.mass_kg,
                 diameter_m=(float(_last.diameter_m)
                             if _last.diameter_m > 0 else ro.diameter_m),
                 length_m=(float(_last.length_m)
                           if _last.length_m > 0 else ro.length_m))
+        # Reentry attitude: an uncontrolled (tumbling) body generates no lift
+        # and its ballistic coefficient is DERIVED from geometry as a tumbling
+        # cylinder (Hoerner two-orientation form) rather than the aeroshell's β.
+        if getattr(ro, 'reentry_attitude', 'trim') == 'tumbling':
+            _bt = tumbling_cylinder_beta(ro.mass_kg, ro.diameter_m,
+                                         ro.length_m, cd=None)
+            if _bt > 0:
+                ro = _dc.replace(ro, beta_kg_m2=float(_bt),
+                                 glider_enabled=False, glider_LD=0.0)
         return ro
     # No reentry object configured.  (Old JSON that stored reentry fields inline
     # is migrated to a synthesised params.ro in booster_from_dict, so by the time
@@ -1854,27 +1874,65 @@ def booster_from_dict(d: dict) -> BoosterParams:
 # Physics helper functions
 # ---------------------------------------------------------------------------
 
+def _hoerner_cp_impact(mach: float) -> float:
+    """Hypersonic stagnation (impact) pressure coefficient C_p• of a blunt face.
+
+    Hoerner, *Fluid-Dynamic Drag* (1965), Ch. XVIII eq. (41):
+
+        C_p• = 1.84 − 0.76 / M²          (M ≳ 3; → 1.84 as M → ∞)
+
+    Below M ≈ 3 the hypersonic form is not valid; the value is floored at the
+    incompressible bluff-body level (~1.2) so callers get a sane number.
+    """
+    if mach is None or mach < 3.0:
+        return 1.2
+    return 1.84 - 0.76 / (mach * mach)
+
+
 def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
-                           cd: float = 1.0) -> float:
+                           cd: float = 1.0, mach: float = None) -> float:
     """
     Ballistic coefficient β (kg/m²) for a tumbling cylinder.
 
-    The effective reference area is the mean of the end-on and broadside
-    projected areas, which approximates the time-averaged area for a cylinder
-    tumbling in the pitch plane:
+    Two forms are available:
 
-        A_eff = (π d² / 4  +  d · L) / 2
-        β     = m / (Cd · A_eff)
+    * **Legacy single-Cd** (``cd`` given, the default ``cd = 1.0``): one drag
+      coefficient on the mean of the end-on and broadside projected areas,
 
-    Default Cd = 1.0 is representative of bluff-body turbulent flow.
+          A_eff = (π d² / 4  +  d · L) / 2 ,   β = m / (Cd · A_eff)
+
+      Cd = 1.0 is representative of a subsonic/transonic tumbling bluff body.
+      This is what the spent-casing / shroud debris arcs use, so those callers
+      are unchanged.
+
+    * **Hoerner two-orientation** (``cd = None``): each orientation carries its
+      OWN drag coefficient, referenced to its own projected area —
+
+          (Cd·A)_eff = ½ [ Cd_broadside · d·L  +  Cd_end · π d²/4 ]
+          β          = m / (Cd·A)_eff
+
+      with primary hypersonic coefficients from Hoerner, *Fluid-Dynamic Drag*
+      (1965):
+        - broadside (cross-flow cylinder): Cd = ⅔·C_p•    (Ch. XVIII eq. 44, Fig. 24)
+        - end-on (blunt cylinder face):    Cd = 0.89·C_p•  (Ch. XVIII Fig. 22)
+      and C_p• = 1.84 − 0.76/M² (eq. 41).  At hypersonic M: ≈ 1.2 broadside,
+      ≈ 1.6 end-on.  ``mach`` selects the coefficients (default: the M → ∞
+      limit, C_p• = 1.84).  This is the form for an uncontrolled reentry body.
+
     Returns 0 if length or diameter is zero.
     """
     A_end  = np.pi * diameter_m ** 2 / 4.0
     A_side = diameter_m * length_m
-    A_eff  = (A_end + A_side) / 2.0
-    if A_eff <= 0:
+    if A_end + A_side <= 0:
         return 0.0
-    return mass_kg / (cd * A_eff)
+    if cd is not None:
+        A_eff = (A_end + A_side) / 2.0
+        return mass_kg / (cd * A_eff) if A_eff > 0 else 0.0
+    cp = _hoerner_cp_impact(mach if mach is not None else 1e9)
+    cd_broadside = (2.0 / 3.0) * cp        # cross-flow cylinder (eq. 44)
+    cd_end       = 0.89 * cp               # blunt cylinder face (Fig. 22)
+    cdA_eff = 0.5 * (cd_broadside * A_side + cd_end * A_end)
+    return mass_kg / cdA_eff if cdA_eff > 0 else 0.0
 
 
 def _eff_burn(s: BoosterParams) -> float:
@@ -2576,7 +2634,7 @@ _REENTRY_PLAN_KEYS = (
     'glider_dive_target_lat_deg', 'glider_dive_target_lon_deg',
     'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
     'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
-    'glider_aero_model', 'separation_mode',
+    'glider_aero_model', 'reentry_attitude', 'separation_mode',
 )
 
 
