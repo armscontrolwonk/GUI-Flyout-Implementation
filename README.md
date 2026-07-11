@@ -91,8 +91,8 @@ variant, so restoring a bundle never silently rewrites a curated plan's law.
 The down-leg has the same single-store model, **including named variants**. A
 reentry object's **hardware** (mass, β, shape, TPS, L/D capability) lives in its
 `.ro.json`; **how it is flown** — glide law, commanded L/D, ζ damping, skip
-count, bank schedule, terminal-dive altitude, dive-at-target, separation mode —
-lives in a `.reentryplan.json` (object-named for the default,
+count, bank schedule, terminal-dive altitude, dive-at-target, separation mode,
+reentry attitude (trim vs. tumbling) — lives in a `.reentryplan.json` (object-named for the default,
 `<object>__<name>.reentryplan.json` for a variant that carries only its diffs).
 The **Reentry Plan** dropdown in the sidebar switches between an object's plans
 (default plus New/Edit…/Delete variants), mirroring the Flight Plan dropdown.
@@ -463,8 +463,13 @@ cylinder crossflow drag coefficient `C_dn(M_n)` is read from **Gowen-Perkins**
 decaying to ~1.34 at `M_n = 2.9`.  `A_p` is the body's true side-projected
 planform (nose `fill·L_nose·d` + cylinder `(L−L_nose)·d`; cone fill 0.5, ogive
 ~0.67).  For a no-sep body left at `glider_LD = 0`, the trajectory auto-derives
-this value once at setup; existing objects with an explicit `glider_LD > 0` are
-untouched.
+this value at setup; existing objects with an explicit `glider_LD > 0` are
+untouched.  The derivation is **Mach-varying**: at setup a `(L/D)_max(M)` table
+is sampled over `M ∈ {1.5…12}` (capped by the trim gate below) and interpolated
+per step on local Mach in the numerical glide modes (below M1.5 the M1.5 value
+is held; analytical Tracy/Acton modes keep a constant L/D at the M5 value). The
+airframe swing is ~12–16 % over M1.5→M5; for total range it is sub-1 % on a
+non-separating (aeroballistic) body, biggest for terminal-phase quantities.
 
 This build-up is **validated against Digital DATCOM** (USAF, public-domain) for a
 finless slender body at M2/3/5: L/D agrees to within ~10% (and zero-lift drag and
@@ -482,6 +487,20 @@ about the CG (`SM` from the static margin above, `C_Nδ = control_eff·C_Nα,fin
 Outcomes: `SM ≤ 0` → unstable → tumbles → ballistic (no glide); `SM > 0` with
 `α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
 control-limited → the (lower) L/D at `α_trim,max`.
+
+**Reentry attitude — trimmed vs. tumbling.** The reentry plan carries
+`reentry_attitude ∈ {trim, tumbling}`. *Trim* (default) is the stable controlled
+body above. *Tumbling* is an uncontrolled body (spent stage, failed RV, or any
+body the gate flags `SM ≤ 0`): it makes **no lift**, and its β is *derived* from
+geometry as a tumbling cylinder rather than inherited from the aeroshell —
+grafting the aeroshell's low-drag β onto a tumbling body would be physically
+wrong (a tumbler presents a huge mean area, i.e. low β). The derived β uses a
+two-orientation **Hoerner** form (*Fluid-Dynamic Drag* 1965, Ch. XVIII), each
+orientation with its own hypersonic coefficient: broadside cross-flow cylinder
+`C_D = ⅔·C_p•` ≈ 1.2 (eq. 44/Fig. 24) on `d·L`, end-on blunt face
+`C_D = 0.89·C_p•` ≈ 1.6 (Fig. 22) on `πd²/4`, with `C_p• = 1.84 − 0.76/M²`
+(eq. 41). The same `tumbling_cylinder_beta` computes spent-casing debris arcs,
+which keep the legacy single-`C_D = 1.0` form.
 
 **L/D in a pull-up.** `L/D_max` is the *peak*, reached only at the best-glide
 angle of attack. A non-separating reentry object that pulls up commands a load
