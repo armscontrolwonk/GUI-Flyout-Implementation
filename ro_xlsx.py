@@ -5,6 +5,15 @@ The reentry-object counterpart to booster_xlsx.py: edit a reentry object in a
 familiar spreadsheet grid instead of hand-editing ro.json.  Reuses that
 module's low-level cell writers/readers so the two stay visually consistent.
 
+Scope note: this is a self-contained full-object exchange format — one sheet
+carries both the hardware (mass, β, TPS, L/D capability) AND the reentry-plan
+fields (glide law, commanded L/D, pull-up g, βₛ, dives, separation), even
+though the live app now stores those in separate .ro.json / .reentryplan.json
+files.  Keeping them together here is deliberate: a spreadsheet is a portable
+snapshot of a whole vehicle, not the live store.  An imported object therefore
+arrives with its plan fields as defaults on the object, which the reentry-plan
+library then owns; re-export round-trips them.
+
 Sheet layout
 ------------
   Sheet 1 "RO"        — every ROParams field, fields-as-rows, values in col D

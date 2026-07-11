@@ -95,13 +95,16 @@ count, bank schedule, terminal-dive altitude, dive-at-target, separation mode �
 lives in a `.reentryplan.json` (object-named for the default,
 `<object>__<name>.reentryplan.json` for a variant that carries only its diffs).
 The **Reentry Plan** dropdown in the sidebar switches between an object's plans
-(default plus New/Delete variants), mirroring the Flight Plan dropdown, and the
-glider controls below it are the live editor: **running writes them through to
-the active plan**, and selecting the object or a variant repopulates from it, so
-a dive-altitude tweak (or a switch to Ballistic) survives switching boosters and
-sessions. Commanded L/D is clamped to the vehicle's aerodynamic capability — a
-plan can fly an object *worse* than its hardware allows, never better. The
-active variant per object is remembered in
+(default plus New/Edit…/Delete variants), mirroring the Flight Plan dropdown.
+The glider controls below it are the live strip editor (glide law, dive, banks,
+ζ, dive-at-target); **Edit…** opens the full Reentry Plan dialog for the fields
+that aren't hot (commanded L/D, pull-up g, βₛ, flap, provenance). **Running
+writes the strip through to the active plan**, and selecting the object or a
+variant repopulates from it, so a dive-altitude tweak (or a switch to Ballistic)
+survives switching boosters and sessions. The airframe's **L/D capability** is
+hardware (object editor); the plan's **commanded L/D** is clamped to it — a plan
+can fly an object *worse* than its hardware allows, never better. The active
+variant per object is remembered in
 `~/.gui_missile_flyout/active_reentry_plans.json`.
 
 ---
@@ -212,11 +215,17 @@ tabbed notebook**.
   Suggest estimator), Isp, nozzle exit area (with Estimate tool), burn time
   (computed), coast time, and a solid-motor flag with grain type selection.
   The payload is throw-weight: bus mass + the selected reentry object.
-- **Reentry-object editor** — define a reentry object: mass, ballistic
-  coefficient β (with a Newtonian β Calculator), nose shape/geometry, separation
-  mode, glide/HGV parameters (L/D, pull-up g, guidance mode, damping ζ), TPS
-  materials (nose and body, from a catalog or bespoke values), and provenance
-  (source / notes).
+- **Reentry-object editor** — define a reentry object's **hardware**: mass,
+  ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
+  separation mode, the airframe's **L/D capability**, TPS materials (nose and
+  body, from a catalog or bespoke values), and provenance. How it is *flown* —
+  commanded L/D (≤ capability), pull-up g, βₛ, glide law, dives, banks — lives
+  in the Reentry Plan, not here.
+- **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
+  (Reentry Plan ▸ Edit…): commanded L/D clamped to the airframe capability
+  ("fly it worse, never better"), pull-up g-limit, re-entry βₛ, flap
+  deflection, and plan source/notes. The hot mission-time fields (glide law,
+  terminal-dive altitude, ζ, banks, dive-at-target) stay on the sidebar strip.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone
