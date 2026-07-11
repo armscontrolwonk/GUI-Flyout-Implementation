@@ -2457,6 +2457,17 @@ MAX_RANGE_PLAN_LABEL = "max-range"
 # Max Range): regenerated on every run, launch context stamped in the notes.
 ORBITAL_PLAN_LABEL = "orbital"
 
+# Reserved variant name for a loaded scenario whose guidance law differs from
+# the active plan's.  A scenario is a full-state bundle (booster + reentry
+# object + site + guidance); rather than silently rewriting the active plan's
+# law via write-through, a law-changing scenario is isolated into this slot.
+SCENARIO_PLAN_LABEL = "scenario"
+
+# All reserved (auto-generated / non-user-creatable) plan names.
+RESERVED_PLAN_NAMES = frozenset({
+    DEFAULT_PLAN_LABEL, MAX_RANGE_PLAN_LABEL, ORBITAL_PLAN_LABEL,
+    SCENARIO_PLAN_LABEL})
+
 # Active named flight plan per booster, set by the GUI (booster name -> plan
 # name).  Consulted by get_booster when no explicit plan is passed; headless
 # callers that never populate it always get the default plan.
@@ -2565,7 +2576,7 @@ _REENTRY_PLAN_KEYS = (
     'glider_dive_target_lat_deg', 'glider_dive_target_lon_deg',
     'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
     'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
-    'separation_mode',
+    'glider_aero_model', 'separation_mode',
 )
 
 

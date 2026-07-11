@@ -79,7 +79,26 @@ toggling:
 Both reserved variants are scratch artifacts: regenerated on every run, launch
 context (site, azimuth, reentry object / target altitude) stamped into their
 notes — because the optimum shifts with all of it — and never worth
-hand-curating. The names `max-range` and `orbital` are reserved.
+hand-curating. The names `max-range`, `orbital`, and `scenario` are reserved.
+An imported flight plan (File ▸ Load Flight Plan) always lands as a **new named
+variant** rather than overwriting the active plan — an imported plan carries its
+own law, and the law is identity. A loaded **scenario** whose guidance law
+differs from the active plan is likewise isolated into the reserved `scenario`
+variant, so restoring a bundle never silently rewrites a curated plan's law.
+
+### Reentry plans mirror flight plans
+
+The down-leg has the same single-store model. A reentry object's **hardware**
+(mass, β, shape, TPS, L/D capability) lives in its `.ro.json`; **how it is
+flown** — glide law, commanded L/D, ζ damping, skip count, bank schedule,
+terminal-dive altitude, dive-at-target, separation mode — lives in its
+`.reentryplan.json`. The sidebar's reentry controls are a live view of the
+active reentry object's plan: **running writes them through to that file**, and
+selecting the object repopulates from it, so a dive-altitude tweak (or a switch
+to Ballistic) survives switching boosters and sessions, exactly like a
+flight-plan edit. Commanded L/D is clamped to the vehicle's aerodynamic
+capability — a plan can fly an object *worse* than its hardware allows, never
+better.
 
 ---
 
@@ -128,7 +147,11 @@ kept for back-compatibility):
 Reentry objects are stored as a first-class library in `ro_library/*.ro.json`
 (shipped defaults next to the code; user-saved objects under
 `~/Documents/Thrusty/ro_library/`). Legacy `rv_library/*.rv.json` files are still
-read.
+read. How each object is *flown* is stored separately in
+`~/Documents/Thrusty/reentry_plans/*.reentryplan.json` (the down-leg analogue of
+`flight_plans/*.flightplan.json`), written through from the sidebar on every run.
+Flight-plan variants live in `~/Documents/Thrusty/flight_plans/`, and the active
+variant per booster in `~/.gui_missile_flyout/active_flight_plans.json`.
 
 ---
 
