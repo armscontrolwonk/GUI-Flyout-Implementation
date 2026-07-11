@@ -2619,36 +2619,86 @@ _BUNDLED_REENTRY_PLANS = _Path(__file__).resolve().parent / "reentry_plans"
 USER_REENTRY_PLAN_DIRS: list = []
 
 
-def reentry_plan_filename(name: str) -> str:
-    """Canonical reentry-plan filename for a reentry-object name."""
+def reentry_plan_filename(name: str, plan: str = None) -> str:
+    """Canonical reentry-plan filename: object-named for the default plan,
+    ``<object>__<plan>.reentryplan.json`` for a named variant (mirrors
+    :func:`flight_plan_filename`)."""
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        return f"{_re_safe(name)}__{_re_safe(plan)}.reentryplan.json"
     return f"{_re_safe(name)}.reentryplan.json"
 
 
-def load_reentry_plan(name: str, extra_dirs=()):
-    """Load a reentry object's plan by name; None if none found.
+# Active named reentry plan per reentry object (object name -> plan name), set
+# by the GUI; consulted when RO_DB is (re)built and by the write-through path.
+ACTIVE_REENTRY_PLANS: dict = {}
 
-    Bundled dir first, then each of ``extra_dirs`` merged over it (later wins),
-    so a user plan need only carry the fields it overrides.
-    """
+
+def list_reentry_plans(name: str, extra_dirs=()) -> list:
+    """Names of the reentry plans available for reentry object ``name``.
+
+    Always starts with DEFAULT_PLAN_LABEL; named variants follow in sorted
+    order, discovered by the ``<object>__<plan>.reentryplan.json`` convention."""
     from pathlib import Path as _P
-    safe = _re_safe(name)
-    result = None
+    prefix = f"{_re_safe(name)}__"
+    suffix = ".reentryplan.json"
+    plans = set()
     for d in [_BUNDLED_REENTRY_PLANS, *[_P(x) for x in extra_dirs]]:
-        fp = d / f"{safe}.reentryplan.json"
-        if fp.exists():
+        if not d.exists():
+            continue
+        for fp in d.glob(f"{prefix}*{suffix}"):
+            token = fp.name[len(prefix):-len(suffix)]
+            if not token:
+                continue
             try:
                 data = _json.loads(fp.read_text())
+                label = str(data.get('name', '')) or token
             except Exception:
-                continue
-            result = data if result is None else {**result, **data}
-    return result
+                label = token
+            plans.add(label)
+    return [DEFAULT_PLAN_LABEL, *sorted(plans)]
 
 
-def save_reentry_plan(name: str, rp: dict, out_dir) -> str:
-    """Write reentry plan ``rp`` for ``name`` into ``out_dir``; return the path."""
+def load_reentry_plan(name: str, extra_dirs=(), plan: str = None):
+    """Load a reentry object's plan by name; None if none found.
+
+    With ``plan=None`` loads the (default) plan: bundled dir first, then each of
+    ``extra_dirs`` merged over it (later wins), so a user plan need only carry
+    the fields it overrides.  With a ``plan`` name, the named variant is merged
+    ON TOP of the default (a variant carries only its diffs), mirroring
+    :func:`load_flight_plan`.
+    """
+    from pathlib import Path as _P
+
+    def _merge_dirs(fname):
+        result = None
+        for d in [_BUNDLED_REENTRY_PLANS, *[_P(x) for x in extra_dirs]]:
+            fp = d / fname
+            if fp.exists():
+                try:
+                    data = _json.loads(fp.read_text())
+                except Exception:
+                    continue
+                result = data if result is None else {**result, **data}
+        return result
+
+    base = _merge_dirs(reentry_plan_filename(name))
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        variant = _merge_dirs(reentry_plan_filename(name, plan))
+        if variant is not None:
+            return {**(base or {}), **variant}
+    return base
+
+
+def save_reentry_plan(name: str, rp: dict, out_dir, plan: str = None) -> str:
+    """Write reentry plan ``rp`` for ``name`` into ``out_dir``; return the path.
+
+    ``plan`` names a variant (stamped into the file so it is self-describing);
+    None writes the default plan."""
     from pathlib import Path as _P
     d = _P(out_dir)
     d.mkdir(parents=True, exist_ok=True)
-    path = d / reentry_plan_filename(name)
+    if plan and plan != DEFAULT_PLAN_LABEL:
+        rp = {**rp, 'name': plan, 'reentry_object': name}
+    path = d / reentry_plan_filename(name, plan)
     path.write_text(_json.dumps(rp, indent=2) + "\n")
     return str(path)

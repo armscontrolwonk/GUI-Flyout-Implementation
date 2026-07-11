@@ -88,17 +88,21 @@ variant, so restoring a bundle never silently rewrites a curated plan's law.
 
 ### Reentry plans mirror flight plans
 
-The down-leg has the same single-store model. A reentry object's **hardware**
-(mass, β, shape, TPS, L/D capability) lives in its `.ro.json`; **how it is
-flown** — glide law, commanded L/D, ζ damping, skip count, bank schedule,
-terminal-dive altitude, dive-at-target, separation mode — lives in its
-`.reentryplan.json`. The sidebar's reentry controls are a live view of the
-active reentry object's plan: **running writes them through to that file**, and
-selecting the object repopulates from it, so a dive-altitude tweak (or a switch
-to Ballistic) survives switching boosters and sessions, exactly like a
-flight-plan edit. Commanded L/D is clamped to the vehicle's aerodynamic
-capability — a plan can fly an object *worse* than its hardware allows, never
-better.
+The down-leg has the same single-store model, **including named variants**. A
+reentry object's **hardware** (mass, β, shape, TPS, L/D capability) lives in its
+`.ro.json`; **how it is flown** — glide law, commanded L/D, ζ damping, skip
+count, bank schedule, terminal-dive altitude, dive-at-target, separation mode —
+lives in a `.reentryplan.json` (object-named for the default,
+`<object>__<name>.reentryplan.json` for a variant that carries only its diffs).
+The **Reentry Plan** dropdown in the sidebar switches between an object's plans
+(default plus New/Delete variants), mirroring the Flight Plan dropdown, and the
+glider controls below it are the live editor: **running writes them through to
+the active plan**, and selecting the object or a variant repopulates from it, so
+a dive-altitude tweak (or a switch to Ballistic) survives switching boosters and
+sessions. Commanded L/D is clamped to the vehicle's aerodynamic capability — a
+plan can fly an object *worse* than its hardware allows, never better. The
+active variant per object is remembered in
+`~/.gui_missile_flyout/active_reentry_plans.json`.
 
 ---
 
@@ -166,6 +170,11 @@ tabbed notebook**.
   New / Edit… / Delete buttons open `BoosterDialog`.
 - **Reentry Object** — select the object carried to burnout (the payload). New /
   Edit… open the reentry-object editor; objects live in a shared library.
+- **Reentry Plan** — the down-leg analogue of Flight Plan: a dropdown of the
+  active object's reentry plans (`(default)` plus New/Delete variants) over the
+  glider mission controls (glide law, terminal-dive altitude, ζ, banks,
+  dive-at-target). The controls are the live editor and write through on every
+  run.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).

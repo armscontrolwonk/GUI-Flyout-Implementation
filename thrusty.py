@@ -186,6 +186,7 @@ _CUSTOM_PATH_LEGACY = Path.home() / ".gui_missile_flyout" / "custom_missiles.jso
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
 # Which named flight plan is active per booster (booster name -> plan name).
 _ACTIVE_PLANS_PATH = Path.home() / ".gui_missile_flyout" / "active_flight_plans.json"
+_ACTIVE_REENTRY_PLANS_PATH = Path.home() / ".gui_missile_flyout" / "active_reentry_plans.json"
 # ── Export folder layout (visible under ~/Documents for Finder access) ───
 _THRUSTY_ROOT     = Path.home() / "Documents" / "Thrusty"
 _DIR_BOOSTERS     = _THRUSTY_ROOT / "boosters"
@@ -4811,6 +4812,13 @@ class BoosterFlyoutApp(tk.Tk):
                     json.loads(_ACTIVE_PLANS_PATH.read_text()))
         except Exception as exc:
             print(f"Warning: could not load active flight plans: {exc}")
+        # Restore per-object named reentry-plan selections.
+        try:
+            if _ACTIVE_REENTRY_PLANS_PATH.exists():
+                mm.ACTIVE_REENTRY_PLANS.update(
+                    json.loads(_ACTIVE_REENTRY_PLANS_PATH.read_text()))
+        except Exception as exc:
+            print(f"Warning: could not load active reentry plans: {exc}")
         _extract_ros_from_boosters() # migrate: pull embedded RVs into the library
 
         self._build_menu()
@@ -5341,14 +5349,35 @@ class BoosterFlyoutApp(tk.Tk):
         self._reentry_frame = rf
         rf.columnconfigure(1, weight=1)
 
-        # Row 0: status line — terminal vehicle summary (L/D, separation type)
+        # Row 0: reentry-plan variant selector + New/Delete — the down-leg
+        # analogue of the Flight Plan dropdown.  A reentry object can carry
+        # many named reentry plans (default + variants); this switches between
+        # them, and the glider controls below are the live editor (write-through
+        # on every run, like the flight-plan sidebar strip).
+        _rpbar = ttk.Frame(rf)
+        _rpbar.grid(row=0, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=(4, 0))
+        self._rp_var = tk.StringVar(value=mm.DEFAULT_PLAN_LABEL)
+        self._rp_cb = ttk.Combobox(_rpbar, textvariable=self._rp_var,
+                                   values=[mm.DEFAULT_PLAN_LABEL],
+                                   state="readonly", width=16)
+        self._rp_cb.pack(side=tk.LEFT)
+        self._rp_cb.bind("<<ComboboxSelected>>", self._on_reentry_plan_selected)
+        _bind_typeahead(self._rp_cb)
+        ttk.Button(_rpbar, text="New", width=5,
+                   command=self._new_reentry_plan).pack(side=tk.LEFT, padx=(4, 2))
+        self._rp_del_btn = ttk.Button(_rpbar, text="Delete", width=6,
+                                      command=self._delete_reentry_plan,
+                                      state=tk.DISABLED)
+        self._rp_del_btn.pack(side=tk.LEFT)
+
+        # Row 1: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
             value="Reentry object not configured for maneuvering"
             " — set L/D in Edit Reentry Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
-        self._glider_status_lbl.grid(row=0, column=0, columnspan=2,
-                                      sticky=tk.W, padx=8, pady=(4, 2))
+        self._glider_status_lbl.grid(row=1, column=0, columnspan=2,
+                                      sticky=tk.W, padx=8, pady=(2, 2))
 
         # Row 1: reentry-mode detail frame.  Always visible; combobox at the
         # top selects the mode, rest of rows show/hide per selection.
@@ -5490,7 +5519,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_main_bank_toggled()
         self._on_main_dive_target_toggled()
         self._on_glider_guidance_changed()
-        self._glider_main_frame.grid(row=1, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=2, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
         # ── Engine cutoff ─────────────────────────────────────────────
@@ -6140,13 +6169,6 @@ class BoosterFlyoutApp(tk.Tk):
         # glider_enabled, populate self._ro so the status line and the
         # mission-control frame appear automatically.
         _p_ero = effective_ro(p)
-        # Apply the saved reentry plan so the sidebar reflects the store (the
-        # booster's own object is hardware-only; get_booster doesn't apply the
-        # reentry plan the way it applies the flight plan).
-        if _p_ero is not None and _p_ero.name:
-            _rp = load_reentry_plan(_p_ero.name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
-            if _rp is not None:
-                _p_ero = apply_reentry_plan(_p_ero, _rp)
         # If the booster carries a named RV that we have in the library, point
         # the main-panel combobox at it.  Otherwise leave the user's current
         # selection (or the sentinel) alone — they may want the same RV across
@@ -6156,66 +6178,16 @@ class BoosterFlyoutApp(tk.Tk):
                 and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
             self._ro_main_var.set(_p_ero.name)
             self._ro_del_btn.config(state=tk.NORMAL)
-        # When a LIBRARY reentry object is the active selection, it — not the
-        # booster's embedded object — is the source of truth for the glider
-        # panel, the run, and the reentry-plan write-through.  (Its RO_DB entry
-        # is refreshed on save, so it reflects the store.)
-        _sel_ro = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
-        if _sel_ro in RO_DB:
-            _p_ero = RO_DB[_sel_ro]()
+        # Refresh the reentry-plan dropdown for the now-current object, then take
+        # the variant-applied object as the single source of truth for the
+        # glider panel, the run, and the write-through (mirror of get_booster
+        # applying the active flight-plan variant).
+        self._refresh_reentry_plan_list()
+        _rp_name, _rp_ero = self._active_reentry_object()
+        if _rp_ero is not None:
+            _p_ero = _rp_ero
         if _p_ero is not None:
-            # Sync self._ro so _refresh_glider_status_line picks it up.
-            # Reentry mode is always loaded, regardless of glider_enabled.
-            self._ro = _p_ero
-            _guid = (_p_ero.glider_guidance
-                     if _p_ero.glider_enabled else "ballistic")
-            self._main_guidance_var.set(
-                "Phugoid / skip-glide"
-                if _guid in ("skip_glide", "azimuth_command")
-                else "Damped phugoid glide"
-                if _guid == "damped_glide"
-                else "Dynamic equilibrium glide"
-                if _guid == "dynamic_equilibrium_glide"
-                else "Skip → equilibrium (auto-handoff)"
-                if _guid == "skip_to_equilibrium"
-                else "Non-oscillatory glide (Acton)"
-                if _guid == "equilibrium_glide_acton"
-                else "Equilibrium glide (Tracy)"
-                if _guid == "equilibrium_glide"
-                else "Ballistic (drag · gravity · rotation)")
-            self._main_dive_alt_var.set(f"{_p_ero.glider_terminal_alt_km:.0f}")
-            _sched = _p_ero.glider_bank_schedule or []
-            self._main_bank_sched_var.set(bool(_sched))
-            for _i, _bvars in enumerate(self._main_bank_vars):
-                if _i < len(_sched):
-                    _bs, _be, _bk = _sched[_i]
-                    _bvars['start'].set(f"{_bs:.0f}")
-                    _bvars['end'].set(f"{_be:.0f}")
-                    _bvars['bank'].set(f"{_bk:.0f}")
-                else:
-                    _bvars['start'].set('')
-                    _bvars['end'].set('')
-                    _bvars['bank'].set('')
-            if hasattr(self, '_main_aero_var'):
-                self._main_aero_var.set(
-                    "Drag polar (realistic)"
-                    if getattr(_p_ero, 'glider_aero_model', 'polar') == 'polar'
-                    else "Fixed L/D (idealized)")
-            if hasattr(self, '_main_dive_target_var'):
-                _dt_r = float(getattr(_p_ero, 'glider_dive_target_radius_km', 0.0) or 0.0)
-                self._main_dive_target_var.set(_dt_r > 0.0)
-                self._main_dt_lat_var.set(
-                    f"{getattr(_p_ero, 'glider_dive_target_lat_deg', 0.0):.4f}")
-                self._main_dt_lon_var.set(
-                    f"{getattr(_p_ero, 'glider_dive_target_lon_deg', 0.0):.4f}")
-                self._main_dt_radius_var.set(
-                    f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
-            if hasattr(self, '_main_skip_count_var'):
-                self._main_skip_count_var.set(
-                    str(getattr(_p_ero, 'glider_skip_count', 1)))
-            if hasattr(self, '_main_zeta_var'):
-                self._main_zeta_var.set(
-                    f"{getattr(_p_ero, 'glider_damping_zeta', 0.7):g}")
+            self._populate_glider_panel(_p_ero)
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             self._on_main_bank_toggled()
@@ -6270,7 +6242,7 @@ class BoosterFlyoutApp(tk.Tk):
                 "Reentry object not configured for maneuvering"
                 " — set L/D in Edit Reentry Object…")
         # Reentry mode combobox is always visible regardless of glider config.
-        self._glider_main_frame.grid(row=1, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=2, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
     def _is_glider_active(self) -> bool:
@@ -6856,6 +6828,15 @@ class BoosterFlyoutApp(tk.Tk):
                 self._ro = effective_ro(p)
             except Exception:
                 self._ro = None
+        # The reentry object changed, so its reentry-plan variants and the
+        # active selection change too — repopulate the dropdown and the glider
+        # controls from the variant-applied object.
+        if hasattr(self, '_rp_cb'):
+            self._refresh_reentry_plan_list()
+            _n, _ero = self._active_reentry_object()
+            if _ero is not None:
+                self._ro = _ero
+                self._populate_glider_panel(_ero)
         if hasattr(self, '_glider_status_var'):
             self._refresh_glider_status_line()
             if hasattr(self, '_main_bank_sched_var'):
@@ -7133,28 +7114,89 @@ class BoosterFlyoutApp(tk.Tk):
             glider_aero_model=aero, glider_dive_target_lat_deg=dt_lat,
             glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad)
 
+    def _populate_glider_panel(self, ro):
+        """Fill the sidebar glider controls from reentry object ``ro`` (with its
+        reentry plan already applied).  Shared by booster-change and
+        reentry-object/plan-change population so all paths agree."""
+        self._ro = ro           # _refresh_glider_status_line picks this up
+        _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
+        self._main_guidance_var.set(
+            "Phugoid / skip-glide"
+            if _guid in ("skip_glide", "azimuth_command")
+            else "Damped phugoid glide"
+            if _guid == "damped_glide"
+            else "Dynamic equilibrium glide"
+            if _guid == "dynamic_equilibrium_glide"
+            else "Skip → equilibrium (auto-handoff)"
+            if _guid == "skip_to_equilibrium"
+            else "Non-oscillatory glide (Acton)"
+            if _guid == "equilibrium_glide_acton"
+            else "Equilibrium glide (Tracy)"
+            if _guid == "equilibrium_glide"
+            else "Ballistic (drag · gravity · rotation)")
+        self._main_dive_alt_var.set(f"{ro.glider_terminal_alt_km:.0f}")
+        _sched = ro.glider_bank_schedule or []
+        self._main_bank_sched_var.set(bool(_sched))
+        for _i, _bvars in enumerate(self._main_bank_vars):
+            if _i < len(_sched):
+                _bs, _be, _bk = _sched[_i]
+                _bvars['start'].set(f"{_bs:.0f}")
+                _bvars['end'].set(f"{_be:.0f}")
+                _bvars['bank'].set(f"{_bk:.0f}")
+            else:
+                _bvars['start'].set('')
+                _bvars['end'].set('')
+                _bvars['bank'].set('')
+        if hasattr(self, '_main_aero_var'):
+            self._main_aero_var.set(
+                "Drag polar (realistic)"
+                if getattr(ro, 'glider_aero_model', 'polar') == 'polar'
+                else "Fixed L/D (idealized)")
+        if hasattr(self, '_main_dive_target_var'):
+            _dt_r = float(getattr(ro, 'glider_dive_target_radius_km', 0.0) or 0.0)
+            self._main_dive_target_var.set(_dt_r > 0.0)
+            self._main_dt_lat_var.set(
+                f"{getattr(ro, 'glider_dive_target_lat_deg', 0.0):.4f}")
+            self._main_dt_lon_var.set(
+                f"{getattr(ro, 'glider_dive_target_lon_deg', 0.0):.4f}")
+            self._main_dt_radius_var.set(
+                f"{_dt_r:.0f}" if _dt_r > 0.0 else "20")
+        if hasattr(self, '_main_skip_count_var'):
+            self._main_skip_count_var.set(str(getattr(ro, 'glider_skip_count', 1)))
+        if hasattr(self, '_main_zeta_var'):
+            self._main_zeta_var.set(f"{getattr(ro, 'glider_damping_zeta', 0.7):g}")
+
+    def _active_reentry_plan_name(self):
+        """Name of the active reentry-plan variant, or None for the default."""
+        sel = self._rp_var.get() if hasattr(self, '_rp_var') else mm.DEFAULT_PLAN_LABEL
+        return None if sel == mm.DEFAULT_PLAN_LABEL else sel
+
     def _active_reentry_object(self):
         """(name, plan-applied base ROParams) for the effective reentry object
         given the current sidebar selection, or (None, None) if there is none.
 
         A library object selected in the sidebar wins; otherwise the booster's
-        own reentry object, with any saved reentry plan applied so the base
-        already reflects the store."""
+        own reentry object.  The active reentry-plan VARIANT (default + the
+        selected variant's diffs) is applied on top, so the base already
+        reflects the store — the down-leg analogue of get_booster."""
         sel = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
         if sel in RO_DB:
             ro = RO_DB[sel]()
-            return ro.name or sel, ro
-        try:
-            booster = get_booster(self._booster_var.get())
-        except Exception:
-            return None, None
-        ro = effective_ro(booster)
-        if ro is None or not ro.name:
-            return None, None
-        rp = load_reentry_plan(ro.name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
+            name = ro.name or sel
+        else:
+            try:
+                booster = get_booster(self._booster_var.get())
+            except Exception:
+                return None, None
+            ro = effective_ro(booster)
+            if ro is None or not ro.name:
+                return None, None
+            name = ro.name
+        rp = load_reentry_plan(name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS,
+                               plan=self._active_reentry_plan_name())
         if rp is not None:
             ro = apply_reentry_plan(ro, rp)
-        return ro.name, ro
+        return name, ro
 
     def _snapshot_reentry_plan(self) -> None:
         """Persist the sidebar glider controls into the active reentry object's
@@ -7164,14 +7206,107 @@ class BoosterFlyoutApp(tk.Tk):
             return
         plan = extract_reentry_plan(base_ro)          # full keyset + commanded_LD
         plan.update(self._reentry_plan_kwargs())      # panel mission-time fields
+        _pv = self._active_reentry_plan_name()
         try:
-            save_reentry_plan(name, plan, _REENTRY_PLAN_LIBRARY_PATH)
+            save_reentry_plan(name, plan, _REENTRY_PLAN_LIBRARY_PATH, plan=_pv)
         except Exception as exc:
             print(f"Warning: could not save reentry plan for '{name}': {exc}")
             return
-        # Refresh the library entry so re-selecting the object reflects the save.
-        if name in RO_DB:
+        # Refresh the library entry so re-selecting the object reflects the save
+        # (only the DEFAULT plan is baked into RO_DB; a variant is applied on
+        # top at read time by _active_reentry_object, so don't bake it here).
+        if _pv is None and name in RO_DB:
             RO_DB[name] = lambda _r=apply_reentry_plan(base_ro, plan): _r
+
+    # ── Reentry-plan variant management (mirror of the flight-plan dropdown) ──
+    def _save_active_reentry_plans(self):
+        try:
+            _ACTIVE_REENTRY_PLANS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _ACTIVE_REENTRY_PLANS_PATH.write_text(
+                json.dumps(mm.ACTIVE_REENTRY_PLANS, indent=2))
+        except Exception as exc:
+            print(f"Warning: could not save active reentry plans: {exc}")
+
+    def _refresh_reentry_plan_list(self, select=None):
+        """Repopulate the Reentry Plan combobox for the active reentry object."""
+        if not hasattr(self, '_rp_cb'):
+            return
+        name, _ = self._active_reentry_object()
+        if name is None:
+            self._rp_cb.config(values=[mm.DEFAULT_PLAN_LABEL])
+            self._rp_var.set(mm.DEFAULT_PLAN_LABEL)
+            self._rp_del_btn.config(state=tk.DISABLED)
+            return
+        plans = mm.list_reentry_plans(name, extra_dirs=mm.USER_REENTRY_PLAN_DIRS)
+        self._rp_cb.config(values=plans)
+        active = select or mm.ACTIVE_REENTRY_PLANS.get(name, mm.DEFAULT_PLAN_LABEL)
+        if active not in plans:
+            active = mm.DEFAULT_PLAN_LABEL
+        self._rp_var.set(active)
+        self._rp_del_btn.config(
+            state=tk.NORMAL if active != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
+
+    def _on_reentry_plan_selected(self, _event=None):
+        name, _ = self._active_reentry_object()
+        sel = self._rp_var.get()
+        if name is not None:
+            if sel == mm.DEFAULT_PLAN_LABEL:
+                mm.ACTIVE_REENTRY_PLANS.pop(name, None)
+            else:
+                mm.ACTIVE_REENTRY_PLANS[name] = sel
+            self._save_active_reentry_plans()
+        self._rp_del_btn.config(
+            state=tk.NORMAL if sel != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
+        self._on_booster_changed()   # repopulate glider controls from the variant
+
+    def _new_reentry_plan(self):
+        """Create a reentry-plan variant seeded from the active plan."""
+        name, _ = self._active_reentry_object()
+        if name is None:
+            messagebox.showinfo("Reentry Plan",
+                                "Select a maneuvering reentry object first.",
+                                parent=self)
+            return
+        new_name = simpledialog.askstring(
+            "New Reentry Plan",
+            f"Name for the new reentry plan for '{name}':", parent=self)
+        if not new_name or not new_name.strip():
+            return
+        new_name = new_name.strip()
+        if new_name == mm.DEFAULT_PLAN_LABEL:
+            messagebox.showerror("Reentry Plan",
+                                 f"'{new_name}' is reserved.", parent=self)
+            return
+        # Seed the variant from the current panel state (write it through).
+        mm.ACTIVE_REENTRY_PLANS[name] = new_name
+        self._rp_var.set(new_name)
+        self._snapshot_reentry_plan()
+        self._save_active_reentry_plans()
+        self._refresh_reentry_plan_list(select=new_name)
+        self._on_booster_changed()
+        self._status_var.set(f"Reentry plan '{new_name}' created for '{name}'.")
+
+    def _delete_reentry_plan(self):
+        name, _ = self._active_reentry_object()
+        sel = self._rp_var.get()
+        if name is None or sel == mm.DEFAULT_PLAN_LABEL:
+            return
+        if not messagebox.askyesno(
+                "Delete Reentry Plan",
+                f"Delete reentry plan '{sel}' for '{name}'?", parent=self):
+            return
+        fp = Path(_REENTRY_PLAN_LIBRARY_PATH) / mm.reentry_plan_filename(name, sel)
+        try:
+            fp.unlink(missing_ok=True)
+        except Exception as exc:
+            messagebox.showerror("Reentry Plan",
+                                 f"Could not delete reentry plan:\n{exc}", parent=self)
+            return
+        mm.ACTIVE_REENTRY_PLANS.pop(name, None)
+        self._save_active_reentry_plans()
+        self._refresh_reentry_plan_list(select=mm.DEFAULT_PLAN_LABEL)
+        self._on_booster_changed()
+        self._status_var.set(f"Reentry plan '{sel}' deleted.")
 
     def _reset_traj_profile(self) -> None:
         """Revert the active flight plan to the shipped/bundled default by
