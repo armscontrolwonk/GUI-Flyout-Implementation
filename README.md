@@ -53,16 +53,33 @@ Plan dialog are two views of the *same* active plan; **running a trajectory
 writes the panel through to that plan file** ("the plan you fly is the plan on
 disk"), and *Reset trajectory to defaults* reverts to the shipped default.
 
-**Max Range never edits the plan you loaded.** It optimises the simple pitch
-profile — sweeping burnout angle and turn-stop with full trajectory
-integrations — then writes the result to a reserved **`max-range`** variant and
-switches to it. Your curated plan is untouched, one dropdown click away, so you
-can A/B toggle "as flown" vs. "as optimised" freely. The `max-range` variant is
-regenerated on every run and stamps the launch context (site, azimuth, reentry
-object) into its notes, because the optimum shifts with all three — it is a
-scratch artifact, always regenerable, not a plan to hand-curate. Max Range is
-disabled on Advanced-pitch plans, whose per-stage angles would mask the global
-knobs it sweeps; switch Mode to *Simple pitch profile* to use it.
+**The guidance law is the plan's identity.** When you create a plan (New) you
+name it *and* choose its law — pitch program, gravity turn, or orbital
+insertion — and that law is fixed for the life of the plan. Neither the sidebar
+Mode selector nor the editor can change it; they only toggle **Simple vs.
+Advanced pitch**, which is the same pitch-program law with per-stage overrides,
+not a different law. Switching laws means switching (or creating) a plan — an
+"orbital insertion plan" and a "max-range pitch plan" are different artifacts,
+not two states of one. New seeds the non-law fields (launch elevation,
+deployment events, yaw program) from the active plan, so choosing a new law
+never means re-entering the fairing altitude.
+
+**The optimisers are generators, not editors.** Neither Max Range nor Plan
+Orbit ever edits the plan you loaded; each writes its result to a reserved
+variant and switches to it, leaving your plan one dropdown click away for A/B
+toggling:
+
+- **Max Range → `max-range`**: sweeps burnout angle and turn-stop (full
+  trajectory integrations) under the active plan's law. Refused on
+  Advanced-pitch plans (per-stage angles mask the swept globals — switch to
+  Simple) and on orbital plans (that goal belongs to Plan Orbit).
+- **Plan Orbit → `orbital`**: solves the two-phase boost program for the
+  target orbit altitude; available when an orbital-insertion plan is active.
+
+Both reserved variants are scratch artifacts: regenerated on every run, launch
+context (site, azimuth, reentry object / target altitude) stamped into their
+notes — because the optimum shifts with all of it — and never worth
+hand-curating. The names `max-range` and `orbital` are reserved.
 
 ---
 
@@ -130,10 +147,12 @@ tabbed notebook**.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
 - **Flight Plan** — the dropdown selects among the booster's flight plans
-  (`(default)` plus named variants and the auto-generated `max-range`); New /
+  (`(default)` plus named variants and the auto-generated `max-range` /
+  `orbital`); New (name **and** guidance law — the law is fixed at creation) /
   Edit… / Delete manage variants, and the sidebar strip below edits the active
-  plan's mode, burnout angle, turn start/stop, and (in Advanced pitch) per-stage
-  rows. Yaw / doglegs and deployment events are edited in the Flight Plan dialog.
+  plan's burnout angle, turn start/stop, Simple↔Advanced pitch, and (in
+  Advanced) per-stage rows. Yaw / doglegs and deployment events are edited in
+  the Flight Plan dialog.
 - Engine cutoff moved to **Analysis ▸ Engine Cutoff (liquid)…** — optional early
   cutoff time (s), liquid engines only; blank = full burn. Aim-at-Target writes
   its computed cutoff to the same setting.

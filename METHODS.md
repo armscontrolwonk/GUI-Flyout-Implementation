@@ -2071,10 +2071,15 @@ the reentry object's drag. The GUI therefore treats Max Range as a
 *generator*, not an editor: it writes the optimised `(burnout_angle,
 turn_stop)` to a reserved `max-range` flight-plan variant (stamped with
 the launch context it is valid for) and switches to it, leaving the
-loaded plan untouched. Conceptually this is the numeric rung between the
-closed-form Wheelon estimate (Section 10.2) that seeds its search window
-and a future full per-stage-profile optimisation that would seed from
-*its* result in turn.
+loaded plan untouched. Plan Orbit follows the same contract, writing its
+solved two-phase boost program to a reserved `orbital` variant. Both sit
+within the law-as-identity model: a flight plan's guidance law is chosen
+at creation and never changed in place (only the Simple/Advanced
+parameterisation of a pitch plan toggles), so each generated variant
+carries the law it was optimised under. Conceptually Max Range is the
+numeric rung between the closed-form Wheelon estimate (Section 10.2)
+that seeds its search window and a future full per-stage-profile
+optimisation that would seed from *its* result in turn.
 
 ### 10.4 Aim at target
 

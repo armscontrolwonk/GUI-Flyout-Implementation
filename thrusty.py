@@ -3050,6 +3050,11 @@ class FlightPlanDialog(tk.Toplevel):
         r = 0
 
         # ── Mode ─────────────────────────────────────────────────────────
+        # The guidance LAW is the plan's identity, fixed when the plan was
+        # created (New Flight Plan) — it cannot be changed here.  For a
+        # pitch-program plan the combobox still toggles Simple/Advanced (same
+        # law, different parameterisation); for gravity-turn / orbital plans it
+        # is a fixed, disabled display.
         ttk.Label(frm, text="Mode:").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._mode_var = tk.StringVar()
         _g = str(plan.get('guidance', 'pitch_program'))
@@ -3062,12 +3067,18 @@ class FlightPlanDialog(tk.Toplevel):
             "Gravity turn"           if _g == 'true_gravity_turn' else
             "Orbital insertion"      if _g == 'orbital_insertion' else
             "Simple pitch profile")
+        _law_choices = (["Simple pitch profile", "Advanced pitch profile"]
+                        if _g not in ("true_gravity_turn", "orbital_insertion")
+                        else [self._mode_var.get()])
         self._mode_cb = ttk.Combobox(
-            frm, textvariable=self._mode_var, state="readonly", width=22,
-            values=["Simple pitch profile", "Advanced pitch profile",
-                    "Gravity turn", "Orbital insertion"])
+            frm, textvariable=self._mode_var, width=22,
+            state=("readonly" if len(_law_choices) > 1 else "disabled"),
+            values=_law_choices)
         self._mode_cb.grid(row=r, column=1, sticky=tk.W, pady=3)
         self._mode_cb.bind("<<ComboboxSelected>>", self._on_mode_changed)
+        ttk.Label(frm, text="(law fixed when the plan was created)",
+                  foreground="#888888").grid(row=r, column=2, sticky=tk.W,
+                                             padx=(6, 0), pady=3)
         r += 1
 
         # ── Launch elevation (always shown) ──────────────────────────────
@@ -4782,7 +4793,10 @@ class BoosterFlyoutApp(tk.Tk):
         # variant instead of mutating the active plan (see _write_max_range_variant).
         self._max_range_pending   = False
         self._max_range_base_plan = None
+        self._max_range_base_law  = "pitch_program"
         self._max_range_context   = ""
+        self._plan_orbit_base_plan = None
+        self._plan_orbit_context   = ""
         self._notam_overlay  = None   # list of GeoJSON-style polygon rings, or None
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
@@ -5178,12 +5192,13 @@ class BoosterFlyoutApp(tk.Tk):
         gmode_frame.grid(row=0, column=0, columnspan=2, sticky=tk.EW,
                          padx=6, pady=(4, 2))
         ttk.Label(gmode_frame, text="Mode:").pack(side=tk.LEFT, padx=(0, 4))
+        # Values are restricted to the active plan's guidance law by
+        # _sync_ascent_mode_display — the law is plan identity and cannot be
+        # switched here; only Simple/Advanced (same law) toggles in place.
         self._guidance_cb = ttk.Combobox(
             gmode_frame,
             values=["Simple pitch profile",
-                    "Advanced pitch profile",
-                    "Gravity turn",
-                    "Orbital insertion"],
+                    "Advanced pitch profile"],
             state="readonly",
             width=22,
         )
@@ -6047,6 +6062,9 @@ class BoosterFlyoutApp(tk.Tk):
         cutoff = _gk('cutoff_time_s')
         self._cutoff_var.set(str(int(cutoff)) if cutoff is not None
                              else str(int(total_burn_time(p))))
+        _orb_alt = _gk('target_orbit_km')
+        if hasattr(self, '_orbit_alt_var'):
+            self._orbit_alt_var.set(f"{float(_orb_alt):g}" if _orb_alt else "400")
 
         # Fairing jettison altitude (from the applied plan); <=0 = heating
         # default.  Kept in a hidden StringVar so _get_inputs applies it; it is
@@ -6607,16 +6625,29 @@ class BoosterFlyoutApp(tk.Tk):
         self._update_guidance_labels(self._guidance_var.get())
 
     def _sync_ascent_mode_display(self, guidance: str, adv_pitch: bool):
-        """Keep the ascent-mode combobox in sync with backend state."""
+        """Keep the ascent-mode combobox in sync with backend state.
+
+        The guidance LAW is the flight plan's identity, chosen when the plan is
+        created and never changed in place — so the combobox only offers the
+        entries valid for the active plan's law: Simple/Advanced for a
+        pitch-program plan (same law, different parameterisation), and a single
+        fixed entry for gravity-turn / orbital plans.  Switching laws means
+        switching (or creating) a flight plan.
+        """
         if guidance == "pitch_program":
             display = "Advanced pitch profile" if adv_pitch else "Simple pitch profile"
+            choices = ["Simple pitch profile", "Advanced pitch profile"]
         elif guidance == "true_gravity_turn":
             display = "Gravity turn"
+            choices = ["Gravity turn"]
         elif guidance == "orbital_insertion":
             display = "Orbital insertion"
+            choices = ["Orbital insertion"]
         else:
             display = "Simple pitch profile"
+            choices = ["Simple pitch profile", "Advanced pitch profile"]
         if hasattr(self, '_guidance_cb'):
+            self._guidance_cb.config(values=choices)
             self._guidance_cb.set(display)
 
     # ------------------------------------------------------------------
@@ -6914,6 +6945,8 @@ class BoosterFlyoutApp(tk.Tk):
             pass
         # GUI-only run-args (extra keys; apply_flight_plan ignores them).
         base['gt_turn_start_s'] = self._fnum(self._gt_turn_start_var) or 0.0
+        base['target_orbit_km'] = self._fnum(getattr(self, '_orbit_alt_var',
+                                                     tk.StringVar()))
         # Turn stop autopopulates with the booster burn time; while it is still
         # the untouched auto-default, persist None so it keeps reading as
         # "optimize me" for Max Range rather than locking in the burn time.
@@ -8041,24 +8074,75 @@ class BoosterFlyoutApp(tk.Tk):
                             if p.shroud_jettison_alt_km > 0 else "heating"))
         self._fp_summary_var.set(" · ".join(parts))
 
+    def _ask_new_plan_name_and_law(self, booster_name):
+        """Modal prompt for a new flight plan's name AND its guidance law.
+
+        The law is the plan's identity — chosen here, immutable afterwards
+        (the editor and sidebar only toggle Simple/Advanced within a pitch
+        plan).  Returns (name, law_key) or (None, None) on cancel.
+        """
+        dlg = tk.Toplevel(self)
+        dlg.title("New Flight Plan")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frm, text=f"Name for the new flight plan for '{booster_name}':").grid(
+            row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 4))
+        name_var = tk.StringVar()
+        ent = ttk.Entry(frm, textvariable=name_var, width=32)
+        ent.grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=(0, 10))
+        ttk.Label(frm, text="Guidance law (fixed for the life of the plan):").grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, pady=(0, 4))
+        law_var = tk.StringVar(value=get_booster(booster_name).guidance)
+        for i, (key, lbl, hint) in enumerate((
+                ("pitch_program", "Pitch program",
+                 "commanded pitch to a burnout angle; Simple or Advanced per-stage"),
+                ("true_gravity_turn", "Gravity turn",
+                 "thrust along velocity from the launch elevation; η kick"),
+                ("orbital_insertion", "Orbital insertion",
+                 "two-phase boost to a target orbit; solve with Plan Orbit"))):
+            ttk.Radiobutton(frm, text=lbl, variable=law_var, value=key).grid(
+                row=3 + 2 * i, column=0, columnspan=2, sticky=tk.W, padx=(4, 0))
+            ttk.Label(frm, text=hint, foreground="#888888").grid(
+                row=4 + 2 * i, column=0, columnspan=2, sticky=tk.W, padx=(24, 0))
+        out = {}
+        def _ok(*_):
+            out['name'] = name_var.get().strip()
+            out['law'] = law_var.get()
+            dlg.destroy()
+        bf = ttk.Frame(frm)
+        bf.grid(row=9, column=0, columnspan=2, sticky=tk.E, pady=(12, 0))
+        ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(bf, text="Create", command=_ok).pack(side=tk.RIGHT)
+        ent.bind("<Return>", _ok)
+        ent.focus_set()
+        self.wait_window(dlg)
+        return (out.get('name') or None, out.get('law'))
+
     def _new_flight_plan(self):
-        """Duplicate the active plan under a new name (a variant of this booster)."""
+        """Create a plan variant: name + guidance law, seeded from the active
+        plan's non-law fields (events, yaw, launch elevation carry over)."""
         name = self._booster_var.get()
         if name not in BOOSTER_DB:
             messagebox.showinfo("Flight Plan", "Select a booster first.", parent=self)
             return
-        new_name = simpledialog.askstring(
-            "New Flight Plan",
-            f"Name for the new flight plan for '{name}':", parent=self)
-        if not new_name or not new_name.strip():
+        new_name, law = self._ask_new_plan_name_and_law(name)
+        if not new_name:
             return
-        new_name = new_name.strip()
-        if new_name in (mm.DEFAULT_PLAN_LABEL, mm.MAX_RANGE_PLAN_LABEL):
+        if new_name in (mm.DEFAULT_PLAN_LABEL, mm.MAX_RANGE_PLAN_LABEL,
+                        mm.ORBITAL_PLAN_LABEL):
             messagebox.showerror("Flight Plan",
                                  f"'{new_name}' is reserved.", parent=self)
             return
         booster = get_booster(name)          # active plan as the starting point
         plan = extract_flight_plan(booster)
+        if law != plan.get('guidance'):
+            # Crossing laws: per-stage pitch angles from the old law would be
+            # wrong-valued (pitch angle vs η) or masked — start those clean.
+            plan['guidance'] = law
+            for st in plan.get('stages', []):
+                st['stage_burnout_angle_deg'] = None
         dlg = FlightPlanDialog(self, f"{name} — {new_name}", plan, booster)
         self.wait_window(dlg)
         if dlg.result is None:
@@ -8496,6 +8580,16 @@ class BoosterFlyoutApp(tk.Tk):
                 "cannot improve it.\n\nSwitch Mode to “Simple pitch profile” to "
                 "run Max Range.", parent=self)
             return
+        # Orbital-insertion plans have a goal (a target orbit), not a range to
+        # maximise — that's Plan Orbit's job.
+        if self._guidance_var.get() == "orbital_insertion":
+            messagebox.showinfo(
+                "Max Range",
+                "The active flight plan is an orbital-insertion plan; use "
+                "Plan Orbit to solve it for a target orbit.\n\nTo find the "
+                "booster's maximum range, switch to (or create) a pitch-program "
+                "or gravity-turn flight plan.", parent=self)
+            return
         try:
             (booster, guidance, lat, lon, az, cutoff, la,
              gt_start_s, gt_stop_s, target_orbit_km,
@@ -8508,6 +8602,7 @@ class BoosterFlyoutApp(tk.Tk):
         # the loaded plan is preserved one click away.  Record the base plan and
         # the context the optimum is valid for (stamped into the variant notes).
         self._max_range_base_plan = self._active_plan_name()
+        self._max_range_base_law = self._guidance_var.get()   # law carries to the variant
         self._max_range_context = (
             f"site={self._site_var.get() or f'{lat:.3f},{lon:.3f}'}, "
             f"az={az:.1f}°, reentry object={self._ro_main_var.get() or '(booster default)'}")
@@ -8554,8 +8649,9 @@ class BoosterFlyoutApp(tk.Tk):
                                           plan=base) or {})
         plan = dict(plan)
         plan['stages'] = [dict(s) for s in plan.get('stages', [])]
-        # Simple pitch profile: the global angle + turn-stop are what flew.
-        plan['guidance'] = 'pitch_program'
+        # Simple profile under the base plan's own law (pitch program or
+        # gravity turn — the optimiser swept that law's global knobs).
+        plan['guidance'] = getattr(self, '_max_range_base_law', 'pitch_program')
         plan['adv_pitch_on'] = False
         if r.get('optimal_burnout_angle_deg') is not None:
             plan['burnout_angle_deg'] = float(r['optimal_burnout_angle_deg'])
@@ -8581,7 +8677,12 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_booster_changed()
 
     def _plan_orbit(self):
-        """Handler for the Plan Orbit button."""
+        """Handler for the Plan Orbit button.
+
+        Same generator-not-editor contract as Max Range: the solved two-phase
+        boost program is written to the reserved 'orbital' plan variant and the
+        dropdown switches to it — the plan the user loaded is never mutated.
+        """
         if self._running:
             return
         try:
@@ -8596,6 +8697,10 @@ class BoosterFlyoutApp(tk.Tk):
                                  "Enter a target orbit altitude (km) first.")
             return
         self._snapshot_traj_profile(self._booster_var.get())   # write-through
+        self._plan_orbit_base_plan = self._active_plan_name()
+        self._plan_orbit_context = (
+            f"target {target_orbit_km:g} km orbit, "
+            f"site={self._site_var.get() or f'{lat:.3f},{lon:.3f}'}, az={az:.1f}°")
         self._running = True
         self._status_var.set(
             f"Planning orbital trajectory to {target_orbit_km:.0f} km…")
@@ -8604,6 +8709,46 @@ class BoosterFlyoutApp(tk.Tk):
             args=(booster, lat, lon, az, target_orbit_km, gt_start_s),
             daemon=True,
         ).start()
+
+    def _write_orbital_variant(self, boost_angle, turn_stop, gt_start_s,
+                               target_orbit_km, perigee_km, apogee_km):
+        """Save a Plan Orbit solution to the reserved 'orbital' plan variant
+        and switch to it (mirror of _write_max_range_variant)."""
+        name = self._booster_var.get()
+        base = getattr(self, '_plan_orbit_base_plan', None)
+        plan = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        if base and base not in (mm.ORBITAL_PLAN_LABEL,):
+            plan = mm._merge_flight_plans(
+                plan, mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS,
+                                          plan=base) or {})
+        plan = dict(plan)
+        plan['stages'] = [dict(s) for s in plan.get('stages', [])]
+        plan['guidance'] = 'orbital_insertion'
+        plan['adv_pitch_on'] = False
+        plan['burnout_angle_deg'] = float(boost_angle)
+        plan['gt_turn_start_s'] = float(gt_start_s)
+        plan['gt_turn_stop_s'] = float(turn_stop)
+        plan['target_orbit_km'] = float(target_orbit_km)
+        # The two-phase program is fully described by the globals above; clear
+        # per-stage pitch overrides carried over from the base plan.
+        for st in plan['stages']:
+            st['stage_burnout_angle_deg'] = None
+        plan['source'] = 'Auto-generated by Plan Orbit'
+        plan['notes'] = (
+            f"Solution for {getattr(self, '_plan_orbit_context', 'the last run')} "
+            f"→ {perigee_km:.0f}×{apogee_km:.0f} km. Regenerated on every "
+            f"Plan Orbit run; the solution shifts with launch site, azimuth, "
+            f"and target altitude.")
+        try:
+            save_flight_plan(name, plan, _FLIGHT_PLAN_LIBRARY_PATH,
+                             plan=mm.ORBITAL_PLAN_LABEL)
+        except Exception as exc:
+            self._status_var.set(f"Plan Orbit: could not save variant: {exc}")
+            return
+        mm.ACTIVE_FLIGHT_PLANS[name] = mm.ORBITAL_PLAN_LABEL
+        self._save_active_plans()
+        self._refresh_flight_plan_list(select=mm.ORBITAL_PLAN_LABEL)
+        self._on_booster_changed()
 
     def _plan_orbit_thread(self, booster, lat, lon, az,
                            target_orbit_km, gt_start_s):
@@ -8627,56 +8772,26 @@ class BoosterFlyoutApp(tk.Tk):
         boost_angle = plan['boost_angle_deg']
         turn_stop   = plan['turn_stop_s']
 
-        # Update GUI fields on the main thread, then run the simulation.
+        # On the main thread: persist the solution to the reserved 'orbital'
+        # variant (switching the dropdown to it — the loaded plan is untouched),
+        # then fly it.
         def _apply_and_run():
-            self._loft_angle_var.set(f"{boost_angle:.1f}")
-            self._gt_turn_stop_var.set(f"{turn_stop:.1f}")
+            self._write_orbital_variant(boost_angle, turn_stop, gt_start_s,
+                                        target_orbit_km,
+                                        plan['perigee_km'], plan['apogee_km'])
             self._status_var.set(
                 f"Plan found: boost {boost_angle:.0f}°  →  "
                 f"{plan['perigee_km']:.0f}×{plan['apogee_km']:.0f} km  "
                 f"— running simulation…")
 
-            # If advanced pitch mode is active, populate per-stage rows to
-            # exactly replicate the two-phase orbital insertion program that
-            # Plan Orbit found:
-            #   • Pre-final stages: pitch from 90° to boost_angle over
-            #     [gt_start_s, turn_stop], then hold boost_angle.
-            #   • Final stage: horizontal (0°) from ignition onwards.
-            if self._adv_pitch_var.get() and self._stage_rows:
-                p = get_booster(self._booster_var.get())
-                # Walk stage chain to find ignition/burnout times
-                times, node, t_ign = [], p, 0.0
-                while node is not None:
-                    t_burn = t_ign + node.burn_time_s
-                    times.append({'t_ign': t_ign, 't_burn': t_burn})
-                    t_ign = t_burn + node.coast_time_s
-                    node = node.stage2
-                n_stages = len(self._stage_rows)
-                for i, row in enumerate(self._stage_rows):
-                    is_last = (i == n_stages - 1)
-                    t_i = times[i]['t_ign'] if i < len(times) else 0.0
-                    if is_last:
-                        # Final stage burns horizontally — stop pitch just before
-                        # ignition so the stage is already at 0° when it lights.
-                        row['start'].set(f"{max(0.0, t_i - 5.0):.1f}")
-                        row['stop'].set(f"{max(0.0, t_i - 1.0):.1f}")
-                        row['angle'].set("0.0")
-                    else:
-                        # Pre-final stages: use the same global pitch program
-                        # Plan Orbit found (start → turn_stop → boost_angle).
-                        row['start'].set(f"{gt_start_s:.1f}")
-                        row['stop'].set(f"{turn_stop:.1f}")
-                        row['angle'].set(f"{boost_angle:.1f}")
-
-            # Use _get_inputs() so per-stage overrides (when advanced is active)
-            # are applied to the booster before running the simulation.
+            # The panel now shows the orbital variant; fly exactly that.
             try:
                 (m_run, guidance_run, lat_run, lon_run, az_run,
                  cutoff_run, la_run,
                  gts_run, gtstp_run, orb_run,
                  yaw_maneuvers_run, el_run) = self._get_inputs()
             except ValueError:
-                # Fallback: use the original plan parameters without per-stage overrides.
+                # Fallback: use the solved parameters directly.
                 m_run, guidance_run = booster, "orbital_insertion"
                 lat_run, lon_run, az_run = lat, lon, az
                 cutoff_run, la_run = None, boost_angle

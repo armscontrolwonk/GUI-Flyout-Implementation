@@ -2451,6 +2451,12 @@ DEFAULT_PLAN_LABEL = "(default)"
 # object, so the file stamps that context into its notes.
 MAX_RANGE_PLAN_LABEL = "max-range"
 
+# Reserved variant name for the auto-generated orbital-insertion plan.  The
+# GUI's Plan Orbit button solves the two-phase boost program for a target
+# orbit altitude and writes it here (same generator-not-editor contract as
+# Max Range): regenerated on every run, launch context stamped in the notes.
+ORBITAL_PLAN_LABEL = "orbital"
+
 # Active named flight plan per booster, set by the GUI (booster name -> plan
 # name).  Consulted by get_booster when no explicit plan is passed; headless
 # callers that never populate it always get the default plan.
