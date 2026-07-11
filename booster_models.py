@@ -2443,6 +2443,14 @@ def _merge_flight_plans(base: dict, over: dict) -> dict:
 # named after the booster itself).
 DEFAULT_PLAN_LABEL = "(default)"
 
+# Reserved variant name for the auto-generated maximum-range plan.  The GUI's
+# Max Range button writes its optimised (burnout angle, turn-stop) here instead
+# of mutating the active plan, so the user can toggle between "as flown" and
+# "as optimised".  Regenerated on every Max Range run; users cannot hand-create
+# a plan with this name.  The optimum depends on launch site / azimuth / reentry
+# object, so the file stamps that context into its notes.
+MAX_RANGE_PLAN_LABEL = "max-range"
+
 # Active named flight plan per booster, set by the GUI (booster name -> plan
 # name).  Consulted by get_booster when no explicit plan is passed; headless
 # callers that never populate it always get the default plan.

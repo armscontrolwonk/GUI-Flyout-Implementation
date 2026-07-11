@@ -44,6 +44,26 @@ number). So: boost is *hardware + flight plan*, midcourse is *physics*, reentry 
 the *reentry object's own hardware*. Guidance and coast are flight-plan choices,
 never booster hardware.
 
+### Flight plans are named, switchable artifacts
+
+A booster can fly many flight plans. Each is a file (`<booster>.flightplan.json`
+for the default, `<booster>__<name>.flightplan.json` for a named variant), and
+the **Flight Plan** dropdown switches between them. The sidebar and the Flight
+Plan dialog are two views of the *same* active plan; **running a trajectory
+writes the panel through to that plan file** ("the plan you fly is the plan on
+disk"), and *Reset trajectory to defaults* reverts to the shipped default.
+
+**Max Range never edits the plan you loaded.** It optimises the simple pitch
+profile — sweeping burnout angle and turn-stop with full trajectory
+integrations — then writes the result to a reserved **`max-range`** variant and
+switches to it. Your curated plan is untouched, one dropdown click away, so you
+can A/B toggle "as flown" vs. "as optimised" freely. The `max-range` variant is
+regenerated on every run and stamps the launch context (site, azimuth, reentry
+object) into its notes, because the optimum shifts with all three — it is a
+scratch artifact, always regenerable, not a plan to hand-curate. Max Range is
+disabled on Advanced-pitch plans, whose per-stage angles would mask the global
+knobs it sweeps; switch Mode to *Simple pitch profile* to use it.
+
 ---
 
 ## Source files
@@ -109,8 +129,11 @@ tabbed notebook**.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
-- **Guidance** — three powered-flight modes (see below), with loft angle, pitch
-  rate, turn start/stop, and optional advanced per-stage pitch and yaw programs.
+- **Flight Plan** — the dropdown selects among the booster's flight plans
+  (`(default)` plus named variants and the auto-generated `max-range`); New /
+  Edit… / Delete manage variants, and the sidebar strip below edits the active
+  plan's mode, burnout angle, turn start/stop, and (in Advanced pitch) per-stage
+  rows. Yaw / doglegs and deployment events are edited in the Flight Plan dialog.
 - Engine cutoff moved to **Analysis ▸ Engine Cutoff (liquid)…** — optional early
   cutoff time (s), liquid engines only; blank = full burn. Aim-at-Target writes
   its computed cutoff to the same setting.
@@ -488,12 +511,22 @@ range-maximisation search.
 
 ### Range maximisation (`maximize_range`, `trajectory.py:3286`)
 
-Two-phase parallel search:
+Two-phase parallel search over the **simple** pitch profile (global burnout
+angle × turn-stop); each candidate is a full trajectory integration:
 
-1. **Coarse grid** — evaluate candidate loft angle / pitch-rate pairs on a
-   thread pool; search window is ±10° of the Wheelon optimum.
-2. **Fine optimisation** — `scipy.optimize.minimize_scalar` (Brent) polishes
-   the best coarse result.
+1. **Coarse grid** — evaluate (burnout angle × turn-stop) candidates on a thread
+   pool; the angle window is ±10° of the Wheelon optimum, and turn-stop is
+   sampled densely over the early window where the range peak is narrow.
+2. **Fine optimisation** — `scipy.optimize.minimize_scalar` (Brent) polishes the
+   burnout angle at the coarse-best turn-stop.
+
+The optimum depends on launch site, azimuth, and reentry-object drag, so it is
+not a property of the booster. The GUI writes the result to a reserved
+`max-range` flight-plan variant (see *Flight plans are named, switchable
+artifacts*) rather than editing the active plan, and refuses to run on an
+Advanced-pitch plan whose per-stage angles would mask the swept globals. This is
+the numeric rung between the closed-form **Wheelon ε\*** estimator (instant,
+idealised) and any future full per-stage profile optimisation.
 
 ### Aim at target (`aim_booster`, `trajectory.py:3051`)
 
