@@ -231,3 +231,144 @@ code dive:
 | hot-structure anchor | ~1,900 °C surface / 1,090 °C · 3,600 s structure | HTV-2 |
 | family-honesty factor | analytic peak ×(2–4) low | this session's C-HGB runs |
 | acreage flux fraction | 0.13 × body-scale stagnation | Lu/Shi & Zhang 2024 |
+
+## 11. Living survivability envelope (UHTC hot-structure gliders)
+
+The screening constants in §10 are point values.  For the UHTC sharp-tip / hot-
+structure case (Form B gliders), the flight and arc-jet record is too sparse and
+too *one-sided* to support a single pass/fail number — it can only support a
+statement about how much of a trajectory lies **inside what has been
+demonstrated**.  This section defines that model.  It supersedes the single
+`oxidation_dwell_s` cliff for the `uhtc` material; the other Form A / Form C
+bands in §10 are unaffected.
+
+### 11.1 The data is a floor, not a fence
+
+Every UHTC survivability datum we have (BENCHMARKING.md §UHTC) is a **survival**:
+the arc-jet or flight test *stopped*, it did not *fail*.  So each point is a
+**lower bound** — "at least this hot, this long, with this tip radius, is fine" —
+and the demonstrated region is a floor with **no ceiling**.  We know where it is
+safe; we are guessing where it breaks.
+
+The two outcomes bound the envelope from opposite sides:
+
+* **Survival → lower bound** (extends the floor).  All current anchors.
+* **Failure → upper bound** (caps the ceiling).  We have essentially none:
+  SHARP-B2 segment failures were **material-quality**, not a temperature/dwell
+  limit, so they do not cleanly cap anything.  One clean failure datum — a
+  recovered tip that burned through at a known (T, dwell) — is worth more than
+  several survivals, because it is the half we lack.
+
+The report must therefore never say "survives" beyond the floor.  It says
+"within the demonstrated envelope" up to the floor, and "beyond validated
+data — extrapolation" past it.
+
+### 11.2 The envelope is derived from an anchor dataset, not hardcoded
+
+So that "a new flight strengthens the dataset" is a **data edit, not a code
+change**, the anchors live in a structured, extensible table (BENCHMARKING.md
+§UHTC seeds it; long-term it becomes a JSON/CSV the report reads).  One record
+per flight/arc-jet/plasma-torch datum:
+
+| Field | Meaning |
+|---|---|
+| `id` | e.g. `Monteverde-2012-ZS`, `SHARP-B2` |
+| `material_class` | `zrb2_sic`, `hfb2_sic`, `carbide_boride`, … (the class, not an exact recipe) |
+| `kind` | `flight` \| `arcjet` \| `plasma_torch` \| `furnace` |
+| `tip_radius_m` | leading-edge / nose radius (sharp vs blunt matters) |
+| `flux_MW_m2`, `flux_kind` | `cold_wall` \| `hot_wall_net`; enthalpy `MJ_kg`; `stag_pressure_Pa` |
+| `peak_T_C`, `T_source` | `measured` \| `cfd` (Monteverde's 2450 °C tip is CFD, not pyrometer) |
+| `dwell_s` | time held above the 1650 °C glass ceiling |
+| `recession_um`, `mass_change_pct` | observed degradation (negative recession = net oxide growth) |
+| `outcome` | `survived` \| `degraded` \| `failed` + `failure_mode` |
+| `source` | exact citation (never paraphrased) |
+
+The envelope for a class is then the bounding region of its points in
+(peak_T, dwell) space — survivals as the reachable floor, failures as the cap.
+The report cites *which* anchor(s) bound the current verdict.
+
+### 11.3 Envelope-coverage report model (Form B)
+
+The model already produces `T_eq(t)` along the glide arc (radiative-equilibrium
+from Sutton-Graves q̇).  Against the class envelope it shades the trajectory:
+
+* **Green — protected.**  `T_eq ≤ continuous_K` (the 1650 °C / 1923 K silica-
+  glass ceiling; §11.4).  No dwell clock runs; indefinite for any glide length.
+* **Amber — demonstrated-with-recession.**  `continuous_K < T_eq ≤ peak
+  demonstrated tip temperature`, while cumulative dwell above the ceiling is
+  within the demonstrated floor.  Inside the envelope, consuming recession
+  margin.
+* **Red — extrapolation.**  Left the envelope by **one of two named exits**,
+  reported distinctly because they have different fixes:
+  * **too hot** — peak `T_eq` exceeds the hottest demonstrated point for the
+    class (≈2450 °C sharp ZrB₂-SiC; ≈2600 °C carbide-boride) → loft / blunt tip.
+  * **too long** — dwell above the ceiling outruns the demonstrated floor at
+    that temperature → shorten exposure.
+
+The verdict is a **coverage fraction plus the beyond-envelope segment**, not a
+boolean.  Example: *"Nose above 1650 °C for 420 s: first ~300 s within the
+demonstrated ZrB₂-SiC envelope (Monteverde 2013, 1973 K · 300 s), remaining
+~120 s at 1900–2050 °C is beyond validated dwell — extrapolation."*  On the
+flux/load plot this is a green/amber/red band along the arc.
+
+### 11.4 The dwell floor, defined precisely
+
+The `uhtc` §10 numbers become:
+
+* **`continuous_K` = 1650 °C (1923 K)** — the borosilicate-glass protective
+  ceiling, now confirmed by ≥5 independent sources (Monteverde 2012, Peters
+  2024, Fahrenholtz & Hilmas, Marschall, Li).  Below it, no clock.  (Was 1900 °C
+  / a single rough value.)
+* **`oxidation_dwell_s` = the demonstrated floor**, conservatively the low
+  anchor (~300 s at 1973 K, zero recession — Monteverde 2013; sharp-tip
+  survival extends to ~575 s at 2450 °C — Monteverde 2012).  Re-annotated as a
+  **conservative floor, not a cliff**: within it → inside the envelope; past it
+  → the report flags extrapolation, it does not assert failure.  (Was `120`,
+  used as a hard fail line.)
+
+The honest sharp-tip criterion is ultimately a **flux-normalized recession
+rate** (≈0.07 µm/s at 7 MW/m² sharp; ≈3.6 µm/s at 26 MW/m² blunt) that blunts
+the tip and degrades sharpness/accuracy — mapping onto the Form A δ/R_n ladder
+applied to the tip radius.  That rework is a later step; the floor + coverage
+shading is the near-term model.
+
+### 11.5 Guessing the material, and the update loop
+
+When something new flies, the exact TPS is usually unknown.  The tool brackets
+by **material class** and shows where the observed (peak_T, dwell, outcome)
+lands against that class's envelope.  The outcome then does one of three things,
+and the report names which:
+
+* **extends** the floor — survived past the current envelope → "this observation
+  grows the demonstrated envelope; add the record."
+* **caps** the ceiling — failed → the first real upper bound for the class.
+* **contradicts** — failed *inside* the demonstrated envelope → a surprise:
+  wrong material guess, or a regime effect (see §11.6) worth flagging.
+
+Either way the dataset gets stronger, which is the whole point of keeping the
+anchors as data.
+
+### 11.6 The standing asterisk: pressure
+
+The entire demonstrated envelope is **low-pressure ground testing** (~0.08–0.2
+atm stagnation).  The SiC active/passive oxidation transition is pressure-
+sensitive, so a real flight stagnation can sit on the other side of it.  Even
+green/amber coverage carries a "demonstrated at ground-facility pressure"
+footnote — it is not a clean guarantee.  The one regime none of the anchors
+reaches is the actual HGV case: a sharp UHTC tip held at **1700–2000 °C for
+1000 s+ at flight pressure**.  The data brackets it (1973 K · 300 s survived;
+2450 °C · 575 s survived) but does not contain it; the report should say so
+rather than interpolate silently.
+
+### 11.7 Implementation steps (code, next)
+
+1. `heating.py`: retune the `uhtc` entry per §11.4 (`continuous_K` 1900→1650 °C;
+   `oxidation_dwell_s` re-annotated as a floor with the anchor citations).
+   Verdict-affecting → re-baseline the shipped-object survivability runs.
+2. Anchor dataset: seed from BENCHMARKING.md §UHTC (inline dict first; promote
+   to a read-at-startup file once the schema settles).
+3. `survivability_report.py` Form B: replace the boolean dwell verdict with the
+   green/amber/red coverage shading (§11.3), the two named exits, the coverage
+   fraction headline, and inline anchor citation.
+4. Reentry Survivability tab: shade the flux/load plot band; render the coverage
+   line + pressure asterisk.
