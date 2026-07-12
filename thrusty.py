@@ -4018,9 +4018,18 @@ class ParametricSweepDialog(tk.Toplevel):
         ttk.Label(opts, text="Show:").pack(side=tk.LEFT)
         self._show_range  = tk.BooleanVar(value=True)
         self._show_apogee = tk.BooleanVar(value=True)
+        # Heating axes (SURVIVABILITY_REPORT_DESIGN.md §7): peak stagnation
+        # flux q̇ and integrated load Q per sweep point — checking either
+        # switches the plot to the heating view, where the loft/depress trade
+        # is the crossing of the two curves (flux rises with burnout angle
+        # while load falls).
+        self._show_qpeak  = tk.BooleanVar(value=False)
+        self._show_load   = tk.BooleanVar(value=False)
         self._overplot    = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="Range",  variable=self._show_range ).pack(side=tk.LEFT, padx=4)
         ttk.Checkbutton(opts, text="Apogee", variable=self._show_apogee).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(opts, text="Peak flux q̇", variable=self._show_qpeak).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(opts, text="Heat load Q", variable=self._show_load).pack(side=tk.LEFT, padx=4)
         ttk.Separator(opts, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8, pady=2)
         ttk.Checkbutton(opts, text="Overplot trajectory profiles (≤ 20 pts)",
                         variable=self._overplot).pack(side=tk.LEFT, padx=4)
@@ -4050,13 +4059,16 @@ class ParametricSweepDialog(tk.Toplevel):
         tf = ttk.LabelFrame(self, text="Results Table")
         tf.pack(fill=tk.X, padx=8, pady=(4, 8))
         self._tree = ttk.Treeview(tf,
-                                  columns=("param", "range", "apogee"),
+                                  columns=("param", "range", "apogee",
+                                           "qpeak", "load"),
                                   show="headings", height=6)
         self._tree.heading("param",  text="Parameter")
         self._tree.heading("range",  text="Range (km)")
         self._tree.heading("apogee", text="Apogee (km)")
-        for col in ("param", "range", "apogee"):
-            self._tree.column(col, width=120, anchor=tk.CENTER)
+        self._tree.heading("qpeak",  text="q̇ peak (MW/m²)")
+        self._tree.heading("load",   text="Q load (MJ/m²)")
+        for col in ("param", "range", "apogee", "qpeak", "load"):
+            self._tree.column(col, width=105, anchor=tk.CENTER)
         vsb = ttk.Scrollbar(tf, orient=tk.VERTICAL, command=self._tree.yview)
         self._tree.configure(yscrollcommand=vsb.set)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -4168,11 +4180,17 @@ class ParametricSweepDialog(tk.Toplevel):
                     gt_turn_stop_s=run_gt_stop,
                     launch_elevation_deg=launch_elevation_deg,
                 )
+                # Heating axes come free: integrate_trajectory computes the
+                # survivability FOM per run (result['heating_fom']).
+                _fom = r.get("heating_fom") or {}
                 row  = (val, r["range_km"] if r["range_km"] is not None else float("nan"),
-                        r["apogee_km"])
+                        r["apogee_km"],
+                        float(_fom.get("q_peak_MW_m2") or float("nan")),
+                        float(_fom.get("integrated_load_MJ_m2") or float("nan")))
                 traj = (val, r) if store_trajs else None
             except Exception:
-                row  = (val, float("nan"), float("nan"))
+                row  = (val, float("nan"), float("nan"),
+                        float("nan"), float("nan"))
                 traj = None
             self.after(0, self._add_point, row, traj, i + 1, len(points))
         self.after(0, self._sweep_done)
@@ -4182,11 +4200,13 @@ class ParametricSweepDialog(tk.Toplevel):
         self._results.append(row)
         if traj is not None:
             self._traj_store.append(traj)
-        val, rng, apo = row
+        val, rng, apo, qpk, qld = row
         self._tree.insert("", tk.END, values=(
             f"{val:.2f}",
             f"{rng:.1f}"  if np.isfinite(rng) else "—",
             f"{apo:.1f}"  if np.isfinite(apo) else "—",
+            f"{qpk:.1f}"  if np.isfinite(qpk) else "—",
+            f"{qld:.0f}"  if np.isfinite(qld) else "—",
         ))
         self._tree.yview_moveto(1.0)
         self._progressbar["value"] = done
@@ -4201,6 +4221,17 @@ class ParametricSweepDialog(tk.Toplevel):
         cancelled = self._stop_evt.is_set()
         self._prog_lbl.set(
             f"{'Cancelled after' if cancelled else 'Done —'} {n} point{'s' if n != 1 else ''}.")
+        # Stash the sweep for the Reentry Survivability report's Form A
+        # loft/depress context line (design decision 2: sweep-fed only).
+        if n >= 2:
+            try:
+                self._app._last_heating_sweep = dict(
+                    param=self._param_var.get(),
+                    unit=self._PARAM_INFO[self._param_var.get()]["unit"],
+                    booster=self._app._booster_var.get(),
+                    rows=list(self._results))
+            except Exception:
+                pass
         self._redraw()
 
     # ------------------------------------------------------------------
@@ -4218,8 +4249,46 @@ class ParametricSweepDialog(tk.Toplevel):
         xs          = [r[0] for r in self._results]
         ys_range    = [r[1] for r in self._results]
         ys_apogee   = [r[2] for r in self._results]
+        ys_qpeak    = [r[3] for r in self._results]
+        ys_load     = [r[4] for r in self._results]
 
         self._fig.clf()
+
+        # ── Heating view (flux/load vs parameter) ─────────────────────
+        # Takes precedence over range/apogee when either heating box is
+        # checked (and overplot is off): the loft/depress trade IS the
+        # crossing of the two curves.
+        _sq, _sQ = self._show_qpeak.get(), self._show_load.get()
+        if (_sq or _sQ) and not self._traj_store:
+            ax = self._fig.add_subplot(111)
+            ax.set_xlabel(xlabel, fontsize=8)
+            ax.grid(True, alpha=0.35)
+            ax.tick_params(labelsize=7)
+            if _sq and _sQ:
+                ax2 = ax.twinx()
+                ax .plot(xs, ys_qpeak, "-o", color="#aa2222", markersize=3,
+                         linewidth=1.5, label="Peak flux q̇")
+                ax2.plot(xs, ys_load,  "--s", color="#2255aa", markersize=3,
+                         linewidth=1.5, label="Heat load Q")
+                ax .set_ylabel("q̇ peak (MW/m²)", fontsize=8, color="#aa2222")
+                ax2.set_ylabel("Q load (MJ/m²)", fontsize=8, color="#2255aa")
+                ax2.tick_params(labelsize=7)
+                ax.set_title("Heating vs trajectory shaping — "
+                             "flux rises where load falls (the loft/depress "
+                             "trade)", fontsize=9)
+            elif _sq:
+                ax.plot(xs, ys_qpeak, "-o", color="#aa2222", markersize=3,
+                        linewidth=1.5)
+                ax.set_ylabel("q̇ peak (MW/m²)", fontsize=8, color="#aa2222")
+                ax.set_title("Peak stagnation flux vs parameter", fontsize=9)
+            else:
+                ax.plot(xs, ys_load, "--s", color="#2255aa", markersize=3,
+                        linewidth=1.5)
+                ax.set_ylabel("Q load (MJ/m²)", fontsize=8, color="#2255aa")
+                ax.set_title("Integrated heat load vs parameter", fontsize=9)
+            self._fig.tight_layout(pad=2.5)
+            self._canvas.draw()
+            return
 
         if self._traj_store:
             # ── Overplot trajectory profiles ──────────────────────────
@@ -4297,7 +4366,8 @@ class ParametricSweepDialog(tk.Toplevel):
         if not path:
             return
         info   = self._PARAM_INFO[self._param_var.get()]
-        header = f"{self._param_var.get()}_{info['unit']},Range_km,Apogee_km"
+        header = (f"{self._param_var.get()}_{info['unit']},Range_km,Apogee_km,"
+                  f"qpeak_MW_m2,Qload_MJ_m2")
         np.savetxt(path, np.array(self._results),
                    delimiter=",", header=header, comments="")
         self._app._status_var.set(f"Sweep exported: {path}")
@@ -6065,9 +6135,31 @@ class BoosterFlyoutApp(tk.Tk):
         """Fill the Reentry Survivability tab from the trajectory result."""
         import survivability_report as _sr
         rep = _sr.build_report(r or {})
+        body = rep['body']
+        # Form A loft/depress context — fed ONLY from the most recent sweep
+        # (design decision 2), when it swept this booster with heating data.
+        _sw = getattr(self, '_last_heating_sweep', None)
+        if (rep.get('form') == 'A' and _sw
+                and _sw.get('booster') == self._booster_var.get()
+                and len(_sw.get('rows') or []) >= 2):
+            rows = [row for row in _sw['rows']
+                    if np.isfinite(row[3]) and np.isfinite(row[4])]
+            if len(rows) >= 2:
+                q_lo = min(rows, key=lambda w: w[3]); q_hi = max(rows, key=lambda w: w[3])
+                l_lo = min(rows, key=lambda w: w[4]); l_hi = max(rows, key=lambda w: w[4])
+                u = _sw.get('unit', '')
+                body += (
+                    f"\n─── Sweep context ({_sw['param']}, "
+                    f"{rows[0][0]:g}–{rows[-1][0]:g} {u}) ─────────────\n"
+                    f"  Peak flux spans {q_lo[3]:.1f} → {q_hi[3]:.1f} MW/m² "
+                    f"(min at {q_lo[0]:g}{u}, max at {q_hi[0]:g}{u})\n"
+                    f"  Heat load spans {l_lo[4]:.0f} → {l_hi[4]:.0f} MJ/m² "
+                    f"(min at {l_lo[0]:g}{u}, max at {l_hi[0]:g}{u})\n"
+                    f"  Trajectory shaping trades flux against load "
+                    f"(lofted = flux-stressed, depressed = load-stressed).\n")
         self._surv_set_text(
             rep['status'] if rep.get('form') else 'none',
-            rep['headline'], rep['body'])
+            rep['headline'], body)
 
         self._surv_fig.clf()
         pl = rep.get('plot')
