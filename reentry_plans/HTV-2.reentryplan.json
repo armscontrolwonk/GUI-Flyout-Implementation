@@ -1,6 +1,6 @@
 {
   "glider_enabled": true,
-  "glider_guidance": "equilibrium_glide",
+  "glider_guidance": "dynamic_equilibrium_glide",
   "glider_pullup_g_max": 10.0,
   "glider_terminal_dive": false,
   "glider_terminal_alt_km": 0.0,

@@ -7433,19 +7433,23 @@ class BoosterFlyoutApp(tk.Tk):
             state=tk.NORMAL if sel != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
         self._on_booster_changed()   # repopulate glider controls from the variant
 
-    # Reentry-mode picklist: (guidance key, label) — the strip's glide-law
-    # choices, shared by the New Reentry Plan dialog.  Unlike a flight-plan
-    # law (fixed for the plan's life), a reentry mode is the plan's STARTING
-    # law and stays switchable on the sidebar strip afterward (the hybrid).
-    _REENTRY_MODE_CHOICES = (
+    # Reentry-mode picklist, split exactly like the sidebar strip: CORE modes
+    # first, then the analytic LEGACY/comparison laws below a non-selectable
+    # divider.  Shared by the New Reentry Plan dialog.  Unlike a flight-plan law
+    # (fixed for the plan's life), a reentry mode is the plan's STARTING law and
+    # stays switchable on the strip afterward (the hybrid).
+    _REENTRY_MODE_CORE = (
         ("ballistic",                  "Ballistic (drag · gravity · rotation)"),
         ("skip_glide",                 "Phugoid / skip-glide"),
         ("damped_glide",               "Damped phugoid glide"),
         ("dynamic_equilibrium_glide",  "Dynamic equilibrium glide"),
         ("equilibrium_glide_acton",    "Non-oscillatory glide (Acton)"),
+    )
+    _REENTRY_MODE_LEGACY = (
         ("equilibrium_glide",          "Equilibrium glide (Tracy)"),
         ("skip_to_equilibrium",        "Skip → equilibrium (auto-handoff)"),
     )
+    _REENTRY_MODE_CHOICES = _REENTRY_MODE_CORE + _REENTRY_MODE_LEGACY
 
     def _current_reentry_mode_key(self) -> str:
         """The guidance key the strip is currently showing (its default seed)."""
@@ -7478,17 +7482,23 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(frm, text="Starting reentry mode (switchable later on the strip):"
                   ).grid(row=2, column=0, sticky=tk.W, pady=(0, 4))
         _cur = self._current_reentry_mode_key()
-        _labels = [lbl for _k, lbl in self._REENTRY_MODE_CHOICES]
+        # core modes, the divider, then legacy — mirroring the strip combobox.
+        _values = ([lbl for _k, lbl in self._REENTRY_MODE_CORE]
+                   + [_GUIDANCE_SEPARATOR]
+                   + [lbl for _k, lbl in self._REENTRY_MODE_LEGACY])
         _cur_lbl = next((lbl for k, lbl in self._REENTRY_MODE_CHOICES if k == _cur),
-                        _labels[0])
+                        _values[0])
         mode_var = tk.StringVar(value=_cur_lbl)
-        ttk.Combobox(frm, textvariable=mode_var, values=_labels,
+        ttk.Combobox(frm, textvariable=mode_var, values=_values,
                      state="readonly", width=32).grid(
             row=3, column=0, sticky=tk.EW, pady=(0, 4))
         out = {}
         def _ok(*_):
+            _m = mode_var.get()
+            if _m == _GUIDANCE_SEPARATOR:      # the divider isn't a real mode
+                return
             out['name'] = name_var.get().strip()
-            out['mode'] = mode_var.get()
+            out['mode'] = _m
             dlg.destroy()
         bf = ttk.Frame(frm)
         bf.grid(row=4, column=0, sticky=tk.E, pady=(12, 0))
