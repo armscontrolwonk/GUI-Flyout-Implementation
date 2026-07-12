@@ -7433,25 +7433,94 @@ class BoosterFlyoutApp(tk.Tk):
             state=tk.NORMAL if sel != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
         self._on_booster_changed()   # repopulate glider controls from the variant
 
+    # Reentry-mode picklist: (guidance key, label) — the strip's glide-law
+    # choices, shared by the New Reentry Plan dialog.  Unlike a flight-plan
+    # law (fixed for the plan's life), a reentry mode is the plan's STARTING
+    # law and stays switchable on the sidebar strip afterward (the hybrid).
+    _REENTRY_MODE_CHOICES = (
+        ("ballistic",                  "Ballistic (drag · gravity · rotation)"),
+        ("skip_glide",                 "Phugoid / skip-glide"),
+        ("damped_glide",               "Damped phugoid glide"),
+        ("dynamic_equilibrium_glide",  "Dynamic equilibrium glide"),
+        ("equilibrium_glide_acton",    "Non-oscillatory glide (Acton)"),
+        ("equilibrium_glide",          "Equilibrium glide (Tracy)"),
+        ("skip_to_equilibrium",        "Skip → equilibrium (auto-handoff)"),
+    )
+
+    def _current_reentry_mode_key(self) -> str:
+        """The guidance key the strip is currently showing (its default seed)."""
+        label = self._main_guidance_var.get().lower()
+        return ("ballistic"                 if "ballistic"    in label else
+                "damped_glide"              if "damped"       in label else
+                "dynamic_equilibrium_glide" if "dynamic"      in label else
+                "skip_to_equilibrium"       if "auto-handoff" in label else
+                "skip_glide"                if "skip"         in label else
+                "equilibrium_glide_acton"   if "acton"        in label else
+                "equilibrium_glide")
+
+    def _ask_new_reentry_plan_name_and_mode(self, object_name):
+        """Modal prompt for a new reentry plan's name AND its starting reentry
+        mode, seeded from the object's current mode.  Unlike the flight-plan
+        law the mode is NOT fixed — it stays switchable on the strip; this just
+        gives the plan a coherent starting law tied to the vehicle.  Returns
+        (name, mode_label) or (None, None) on cancel."""
+        dlg = tk.Toplevel(self)
+        dlg.title("New Reentry Plan")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frm, text=f"Name for the new reentry plan for '{object_name}':"
+                  ).grid(row=0, column=0, sticky=tk.W, pady=(0, 4))
+        name_var = tk.StringVar()
+        ent = ttk.Entry(frm, textvariable=name_var, width=32)
+        ent.grid(row=1, column=0, sticky=tk.EW, pady=(0, 10))
+        ttk.Label(frm, text="Starting reentry mode (switchable later on the strip):"
+                  ).grid(row=2, column=0, sticky=tk.W, pady=(0, 4))
+        _cur = self._current_reentry_mode_key()
+        _labels = [lbl for _k, lbl in self._REENTRY_MODE_CHOICES]
+        _cur_lbl = next((lbl for k, lbl in self._REENTRY_MODE_CHOICES if k == _cur),
+                        _labels[0])
+        mode_var = tk.StringVar(value=_cur_lbl)
+        ttk.Combobox(frm, textvariable=mode_var, values=_labels,
+                     state="readonly", width=32).grid(
+            row=3, column=0, sticky=tk.EW, pady=(0, 4))
+        out = {}
+        def _ok(*_):
+            out['name'] = name_var.get().strip()
+            out['mode'] = mode_var.get()
+            dlg.destroy()
+        bf = ttk.Frame(frm)
+        bf.grid(row=4, column=0, sticky=tk.E, pady=(12, 0))
+        ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(bf, text="Create", command=_ok).pack(side=tk.RIGHT)
+        ent.bind("<Return>", _ok)
+        ent.focus_set()
+        self.wait_window(dlg)
+        return (out.get('name') or None, out.get('mode'))
+
     def _new_reentry_plan(self):
-        """Create a reentry-plan variant seeded from the active plan."""
+        """Create a reentry-plan variant: name + starting mode, seeded from the
+        active plan's other fields (write-through)."""
         name, _ = self._active_reentry_object()
         if name is None:
             messagebox.showinfo("Reentry Plan",
                                 "Select a maneuvering reentry object first.",
                                 parent=self)
             return
-        new_name = simpledialog.askstring(
-            "New Reentry Plan",
-            f"Name for the new reentry plan for '{name}':", parent=self)
-        if not new_name or not new_name.strip():
+        new_name, mode_lbl = self._ask_new_reentry_plan_name_and_mode(name)
+        if not new_name:
             return
-        new_name = new_name.strip()
         if new_name == mm.DEFAULT_PLAN_LABEL:
             messagebox.showerror("Reentry Plan",
                                  f"'{new_name}' is reserved.", parent=self)
             return
-        # Seed the variant from the current panel state (write it through).
+        # Stamp the chosen starting mode onto the strip, then write the variant
+        # through from the current panel state.  The strip dropdown still
+        # switches it afterward — the mode is a coherent seed, not a lock.
+        if mode_lbl:
+            self._main_guidance_var.set(mode_lbl)
+            self._on_glider_guidance_changed()
         mm.ACTIVE_REENTRY_PLANS[name] = new_name
         self._rp_var.set(new_name)
         self._snapshot_reentry_plan()
