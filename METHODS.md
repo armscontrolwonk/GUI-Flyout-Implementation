@@ -2417,8 +2417,15 @@ on the trim solution rather than a precise aerodynamic limit.
 ### 12.3 Guidance modes
 
 The `glider_guidance` field on each RV selects the reentry law, exposed by the
-GUI dropdown. The laws split by **how the trajectory is integrated** — the
-dropdown groups them the same way:
+GUI dropdown. The laws split by **how the trajectory is integrated**, and that
+family is the reentry plan's **identity**: chosen when the plan is created (New
+Reentry Plan asks family first, then the starting law), fixed for the plan's
+life, and the sidebar dropdown lists only the active plan's family — the law is
+switchable *within* the family, never across it (mirroring the flight-plan
+law-as-identity rule; see `REENTRY_FAMILY_DESIGN.md`). Cross-family comparison
+(the analytic laws' main purpose) is done by keeping one plan per family and
+flipping the Reentry Plan dropdown. The family is derived from the law — no
+stored field:
 
 **Numerical (EOM)** — `_eom` is integrated step by step with the lift/drag
 command below; supports banking, dive-at-target, and the Mach-varying L/D table
@@ -2433,8 +2440,12 @@ command below; supports banking, dive-at-target, and the Mach-varying L/D table
 
 **Closed-form analytic** — Tracy/Acton pull-up arc + equilibrium-glide range
 formula; constant L/D, always captures (the arc is imposed). Cannot bank or
-dive-at-target (those force a numerical fallback), and cannot take the
-Mach-varying L/D table (the closed form needs a constant L/D):
+dive-at-target — those are numerical-family capabilities, and the plan editor
+does not offer them on an analytic plan (the old *silent* fallback that swapped
+in the numerical EOM when banking appeared on an analytic run is deleted; any
+such fields in legacy data are ignored, and a one-shot migration rewrites those
+plans to the numerical family). Cannot take the Mach-varying L/D table (the
+closed form needs a constant L/D):
 
 | GUI label | `glider_guidance` value | Origin | Phugoid |
 |---|---|---|---|
