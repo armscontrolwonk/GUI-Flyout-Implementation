@@ -6093,6 +6093,20 @@ class BoosterFlyoutApp(tk.Tk):
                  "not a TPS design verdict)")
         rf.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
+        # Toolbar: one-click loft/depress heating sweep (ballistic RVs) — opens
+        # the Parametric Sweep preset to Burnout Angle with the flux/load axes
+        # checked, so the shaping trade is reachable from where the report is
+        # read.  Its result feeds the Form A "Sweep context" block.
+        _tb = ttk.Frame(rf)
+        _tb.pack(fill=tk.X, padx=4, pady=(4, 0))
+        ttk.Button(_tb, text="Loft / Depress heating sweep…",
+                   command=lambda: self._open_sweep(param="Burnout Angle",
+                                                    heating=True)
+                   ).pack(side=tk.LEFT)
+        ttk.Label(_tb, text="  sweeps burnout angle → peak flux vs integrated "
+                            "load (the loft/depress trade)",
+                  foreground="#888888").pack(side=tk.LEFT)
+
         # Top: flux(t) / load(t) plot — the mode's signature pulse shape.
         self._surv_fig = Figure(figsize=(6.0, 2.4), dpi=96)
         self._surv_canvas = FigureCanvasTkAgg(self._surv_fig, master=rf)
@@ -9427,8 +9441,19 @@ class BoosterFlyoutApp(tk.Tk):
                 gt_start_s, gt_stop_s, target_orbit_km,
                 yaw_maneuvers, launch_elevation_deg)
 
-    def _open_sweep(self):
-        ParametricSweepDialog(self)
+    def _open_sweep(self, param=None, heating=False):
+        """Open the Parametric Sweep.  Optional param preselects the swept
+        variable (e.g. 'Burnout Angle') and heating=True checks the flux/load
+        Show boxes — used by the Reentry Survivability tab's loft/depress
+        shortcut so the heating sweep is one click from where it's read."""
+        dlg = ParametricSweepDialog(self)
+        if param and param in dlg._PARAM_INFO:
+            dlg._param_var.set(param)
+            dlg._on_param_changed()
+        if heating:
+            dlg._show_qpeak.set(True)
+            dlg._show_load.set(True)
+        return dlg
 
     def _open_footprint(self):
         FootprintDialog(self)
