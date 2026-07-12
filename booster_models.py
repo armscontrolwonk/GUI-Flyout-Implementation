@@ -311,7 +311,12 @@ class ROParams:
     #                              See DAMPED_GLIDE.md.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
-    glider_guidance:        str   = "equilibrium_glide"
+    # Default reentry mode for a freshly-built maneuvering object is a CORE
+    # glide law (the smooth numerical equilibrium glide), not the legacy
+    # analytic Tracy `equilibrium_glide`.  Legacy .json files that omit the key
+    # keep loading as `equilibrium_glide` via ro_from_dict's explicit fallback,
+    # so old data is unchanged; only new ROParams() default to the core law.
+    glider_guidance:        str   = "dynamic_equilibrium_glide"
     glider_pullup_g_max:    float = 10.0
     # Terminal dive: 0 km = glide to impact (no altitude-triggered dive; the
     # target-proximity trigger still fires if armed).  A positive value

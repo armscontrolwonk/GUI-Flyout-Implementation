@@ -181,8 +181,12 @@ tabbed notebook**.
   New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
   altitude, aero model, skip count). The controls are the live editor and write
   through on every run. The **reentry mode** (glide law) is a *hybrid*: each
-  object ships with a default tied to its type (e.g. C-HGB and Hwasong-11
-  default to their characterized damped-glide), and **New Reentry Plan** lets a
+  object ships with a default tied to its type — always a **core** mode, never a
+  legacy one (C-HGB/Hwasong-11 → their characterized damped-glide; the other
+  gliders → the core dynamic equilibrium glide; ballistic RVs → Ballistic). The
+  mode picklist (on the strip and in **New Reentry Plan**) keeps the core modes
+  above a divider and the analytic **legacy** laws (Tracy equilibrium-glide,
+  skip→equilibrium) below it as comparison picks. **New Reentry Plan** lets a
   variant be born with a chosen starting mode — but unlike the flight-plan law,
   the mode stays switchable on the strip afterward, so a one-click A/B between
   glide laws needs no new plan. A **Separation** control (*Separates at burnout* /
