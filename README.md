@@ -95,10 +95,13 @@ count, bank schedule, terminal-dive altitude, dive-at-target, separation mode,
 reentry attitude (trim vs. tumbling) — lives in a `.reentryplan.json` (object-named for the default,
 `<object>__<name>.reentryplan.json` for a variant that carries only its diffs).
 The **Reentry Plan** dropdown in the sidebar switches between an object's plans
-(default plus New/Edit…/Delete variants), mirroring the Flight Plan dropdown.
-The glider controls below it are the live strip editor (glide law, dive, banks,
-ζ, dive-at-target); **Edit…** opens the full Reentry Plan dialog for the fields
-that aren't hot (commanded L/D, pull-up g, βₛ, flap, provenance). **Running
+(default plus New/Edit…/Delete variants), mirroring the Flight Plan dropdown —
+the dropdown sits above its own New/Edit…/Delete row, like every other library
+section. The glider controls below it are the live strip editor for the quick
+run-to-run picks (glide law, separation, terminal-dive altitude, aero model,
+skip count); **Edit…** opens the full Reentry Plan dialog for the tuning fields
+(commanded L/D, pull-up g, βₛ, flap, reentry attitude, ζ damping with its
+estimator, bank schedule, dive-at-target, provenance). **Running
 writes the strip through to the active plan**, and selecting the object or a
 variant repopulates from it, so a dive-altitude tweak (or a switch to Ballistic)
 survives switching boosters and sessions. The airframe's **L/D capability** is
@@ -174,17 +177,19 @@ tabbed notebook**.
 - **Reentry Object** — select the object carried to burnout (the payload). New /
   Edit… open the reentry-object editor; objects live in a shared library.
 - **Reentry Plan** — the down-leg analogue of Flight Plan: a dropdown of the
-  active object's reentry plans (`(default)` plus New/Delete variants) over the
-  glider mission controls (glide law, terminal-dive altitude, ζ, banks,
-  dive-at-target). The controls are the live editor and write through on every
-  run. A **Separation** control (*Separates at burnout* / *Non-separating —
-  body reenters*) sits here too: separation is a run-level mission choice, not
-  a stored property of the object, so the same aeroshell can be A/B'd
-  separating vs. integrated in two clicks (and any object flies on any
+  active object's reentry plans (`(default)` plus New/Delete variants) above its
+  New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
+  altitude, aero model, skip count). The controls are the live editor and write
+  through on every run. A **Separation** control (*Separates at burnout* /
+  *Non-separating — body reenters*) sits here too: separation is a run-level
+  mission choice, not a stored property of the object, so the same aeroshell can
+  be A/B'd separating vs. integrated in two clicks (and any object flies on any
   booster — no compatibility refusal). Non-separating inherits the last stage's
   burnout mass and geometry; the casing debris on a separating run carries the
-  burnout mass minus the object, so nothing is double-counted. Edit… also
-  exposes the **reentry attitude** (trimmed vs. tumbling).
+  burnout mass minus the object, so nothing is double-counted. **Edit…** opens
+  the full plan editor for the tuning fields — commanded L/D, pull-up g, βₛ,
+  flap, **reentry attitude** (trimmed vs. tumbling), **ζ damping** (with its
+  estimator), the **bank schedule**, and **dive-at-target**.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
@@ -200,8 +205,9 @@ tabbed notebook**.
   its computed cutoff to the same setting.
 - **Target / Range** — optional target lat/lon or slant range for the
   *Aim at Target* function.
-- **Reentry Query Altitude** — altitude at which reentry speed and angle are
-  reported in the Flight Timeline.
+- Re-entry query moved to **Analysis ▸ Re-entry Query…** — a per-run diagnostic
+  that reports reentry speed and angle at a chosen descent altitude in the
+  Flight Timeline; blank disables it.
 - Action buttons: **Run**, **Maximize Range**, **Aim at Target**,
   **Parametric Sweep**, **Plan Orbit**.
 
@@ -232,9 +238,10 @@ tabbed notebook**.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
   (Reentry Plan ▸ Edit…): commanded L/D clamped to the airframe capability
   ("fly it worse, never better"), pull-up g-limit, re-entry βₛ, flap
-  deflection, **reentry attitude** (trimmed vs. tumbling), and plan
-  source/notes. The hot mission-time fields (glide law, terminal-dive altitude,
-  ζ, banks, dive-at-target, separation) stay on the sidebar strip.
+  deflection, **reentry attitude** (trimmed vs. tumbling), **ζ damping** (with
+  its estimator), the **bank schedule**, **dive-at-target**, and plan
+  source/notes. The quick run-to-run picks (glide law, separation, terminal-dive
+  altitude, aero model, skip count) stay on the sidebar strip.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone

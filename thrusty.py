@@ -3025,11 +3025,13 @@ class ROEditorDialog(tk.Toplevel):
 # ---------------------------------------------------------------------------
 # Reentry-plan editor dialog — the "how it's flown" half of a reentry object,
 # the down-leg analogue of FlightPlanDialog.  It edits the reentry-plan FILE
-# fields that are NOT on the sidebar strip: the commanded L/D (clamped to the
-# airframe's L/D capability — fly it worse, never better), the pull-up g-limit
-# and re-entry βₛ (moved out of the object editor), the control-flap
-# deflection, and provenance.  The hot mission-time fields (glide law, dive,
-# banks, dive-target, ζ, skip, aero) stay on the sidebar strip.
+# fields that are NOT quick picks on the strip: the commanded L/D (clamped to
+# the airframe's L/D capability — fly it worse, never better), the pull-up
+# g-limit and re-entry βₛ, the control-flap deflection, the reentry attitude,
+# the ζ damping/tracking knob (with its estimator), the bank schedule, the
+# dive-at-target trigger, and provenance.  The sidebar strip keeps the quick
+# run-to-run picks: glide law, separation, terminal-dive altitude, aero model
+# and skip count.
 # ---------------------------------------------------------------------------
 
 class ReentryPlanDialog(tk.Toplevel):
@@ -3038,6 +3040,7 @@ class ReentryPlanDialog(tk.Toplevel):
 
     def __init__(self, parent, title, plan, ld_capability):
         super().__init__(parent)
+        self._app = parent          # for the ζ estimator and target picker
         self._result = None
         self._cap = float(ld_capability or 0.0)
         self.title(f"Reentry Plan — {title}")
@@ -3102,8 +3105,73 @@ class ReentryPlanDialog(tk.Toplevel):
                             "\n   unstable bodies tumble regardless — SM gate)",
                   foreground="#888888", justify=tk.LEFT).pack(side=tk.LEFT); r += 1
 
-        ttk.Label(frm, text="(Glide law, dive, banks, dive-target, ζ, skip and\n"
-                            "aero model are edited on the sidebar strip.)",
+        # ζ — damping ratio (damped_glide) or tracking gain (dynamic_equilibrium
+        # _glide); its meaning follows the plan's glide law.  Estimator applies
+        # only to the phugoid-damping case.
+        _guid = str(plan.get('glider_guidance', '') or '')
+        _is_dyn = 'dynamic' in _guid
+        ttk.Label(frm, text=("Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
+                  ).grid(row=r, column=0, sticky=tk.W, pady=3)
+        self._z_var = tk.StringVar(value=f"{float(_f('glider_damping_zeta', 0.7)):g}")
+        _zf = ttk.Frame(frm); _zf.grid(row=r, column=1, sticky=tk.W, pady=3)
+        ttk.Entry(_zf, textvariable=self._z_var, width=8).pack(side=tk.LEFT)
+        if not _is_dyn:
+            ttk.Button(_zf, text="Estimate…", width=10,
+                       command=self._estimate_zeta).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Label(_zf, text=("  feedback gain on altitude-rate error"
+                             if _is_dyn else
+                             "  0 = undamped skip-glide; ~0.7 = a few skips"),
+                  foreground="#888888").pack(side=tk.LEFT); r += 1
+
+        # Bank schedule — up to three (start s, end s, bank °) segments.
+        ttk.Label(frm, text="Bank schedule:").grid(row=r, column=0, sticky=tk.NW, pady=3)
+        _bkf = ttk.Frame(frm); _bkf.grid(row=r, column=1, sticky=tk.W, pady=3)
+        _sched = list(_f('glider_bank_schedule', []) or [])
+        self._bank_vars = [{'start': tk.StringVar(), 'end': tk.StringVar(),
+                            'bank': tk.StringVar()} for _ in range(3)]
+        for _mc, _hdr in enumerate(["start s", "end s", "bank °"], start=1):
+            ttk.Label(_bkf, text=_hdr, foreground="#888888").grid(
+                row=0, column=_mc, padx=3, pady=(0, 1))
+        for _i, _bv in enumerate(self._bank_vars):
+            ttk.Label(_bkf, text=f"#{_i+1}").grid(row=_i+1, column=0, sticky=tk.W, padx=(0, 4))
+            if _i < len(_sched):
+                try:
+                    _s, _e, _b = _sched[_i]
+                    _bv['start'].set(f"{float(_s):g}"); _bv['end'].set(f"{float(_e):g}")
+                    _bv['bank'].set(f"{float(_b):g}")
+                except (ValueError, TypeError):
+                    pass
+            for _mc, _k in enumerate(['start', 'end', 'bank'], start=1):
+                ttk.Entry(_bkf, textvariable=_bv[_k], width=7).grid(
+                    row=_i+1, column=_mc, padx=3, pady=1)
+        r += 1
+
+        # Dive-at-target — steer to a lat/lon then dive (radius km = trigger).
+        _dt_on = float(_f('glider_dive_target_radius_km', 0.0) or 0.0) > 0.0
+        self._dt_on_var = tk.BooleanVar(value=_dt_on)
+        ttk.Checkbutton(frm, text="Dive at target (lat/lon)",
+                        variable=self._dt_on_var).grid(
+            row=r, column=0, sticky=tk.W, pady=(6, 1)); r += 1
+        _dtf = ttk.Frame(frm); _dtf.grid(row=r, column=0, columnspan=2,
+                                         sticky=tk.W, padx=(16, 0), pady=(0, 3))
+        self._dt_lat_var = tk.StringVar(value=f"{float(_f('glider_dive_target_lat_deg', 0.0)):g}")
+        self._dt_lon_var = tk.StringVar(value=f"{float(_f('glider_dive_target_lon_deg', 0.0)):g}")
+        self._dt_rad_var = tk.StringVar(
+            value=f"{float(_f('glider_dive_target_radius_km', 20.0)) or 20.0:g}")
+        ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
+        ttk.Entry(_dtf, textvariable=self._dt_lat_var, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="°  Lon:").pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Entry(_dtf, textvariable=self._dt_lon_var, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="°  Radius:").pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Entry(_dtf, textvariable=self._dt_rad_var, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
+        ttk.Button(_dtf, text="Find…", width=7,
+                   command=lambda: self._app._pick_location(
+                       self._dt_lat_var, self._dt_lon_var)).pack(side=tk.LEFT, padx=(6, 0))
+        r += 1
+
+        ttk.Label(frm, text="(Glide law, separation, terminal dive, aero model\n"
+                            "and skip count are on the sidebar strip.)",
                   foreground="#888888", justify=tk.LEFT).grid(
             row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 4)); r += 1
 
@@ -3121,6 +3189,11 @@ class ReentryPlanDialog(tk.Toplevel):
         ttk.Button(bf, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=(4, 0))
         ttk.Button(bf, text="Save", command=self._save).pack(side=tk.RIGHT)
 
+    def _estimate_zeta(self):
+        """Open the damping estimator, writing its result into THIS dialog's ζ
+        field (not the sidebar), so Cancel still discards it."""
+        DampingEstimatorDialog(self._app, zeta_var=self._z_var)
+
     def _save(self):
         def _num(sv, default):
             try:
@@ -3130,6 +3203,18 @@ class ReentryPlanDialog(tk.Toplevel):
         cmd = _num(self._cmd_ld_var, self._cap)
         if self._cap > 0:
             cmd = min(cmd, self._cap)          # clamp: fly it worse, never better
+        # Bank schedule: keep only fully-filled rows.
+        _banks = []
+        for _bv in self._bank_vars:
+            _s, _e, _b = (_bv['start'].get().strip(), _bv['end'].get().strip(),
+                          _bv['bank'].get().strip())
+            if _s and _e and _b:
+                try:
+                    _banks.append([float(_s), float(_e), float(_b)])
+                except ValueError:
+                    pass
+        # Dive-at-target: radius 0 disables it.
+        _dt_rad = _num(self._dt_rad_var, 0.0) if self._dt_on_var.get() else 0.0
         self._result = {
             'commanded_LD':             cmd,
             'glider_pullup_g_max':      _num(self._pullup_var, 10.0),
@@ -3139,6 +3224,11 @@ class ReentryPlanDialog(tk.Toplevel):
                                  if self._att_var.get()
                                  == self._ATT_LABELS['tumbling']
                                  else 'trim'),
+            'glider_damping_zeta':      max(0.0, _num(self._z_var, 0.7)),
+            'glider_bank_schedule':     _banks,
+            'glider_dive_target_lat_deg':   _num(self._dt_lat_var, 0.0),
+            'glider_dive_target_lon_deg':   _num(self._dt_lon_var, 0.0),
+            'glider_dive_target_radius_km': _dt_rad,
             'source': self._source_var.get().strip(),
             'notes':  self._notes_text.get("1.0", "end-1c").strip(),
         }
@@ -4448,9 +4538,13 @@ class DampingEstimatorDialog(tk.Toplevel):
     free design choice, inside it the authority limit, above it unphysical.
     """
 
-    def __init__(self, app):
+    def __init__(self, app, zeta_var=None):
         super().__init__(app)
         self._app = app
+        # Where to write the applied ζ: a caller-supplied var (the Reentry Plan
+        # dialog's field) or, by default, the sidebar strip's var.
+        self._zeta_target = zeta_var if zeta_var is not None else getattr(
+            app, '_main_zeta_var', None)
         self.title("Estimate damping ratio ζ")
         self.resizable(False, False)
         self._result = None
@@ -4583,7 +4677,8 @@ class DampingEstimatorDialog(tk.Toplevel):
             self._compute()
         r = self._result
         try:
-            self._app._main_zeta_var.set(f"{r.zeta:.2f}")
+            if self._zeta_target is not None:
+                self._zeta_target.set(f"{r.zeta:.2f}")
         except Exception:
             pass
         ro = getattr(self._app, "_ro", None)
@@ -5014,6 +5109,7 @@ class BoosterFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Parametric Sweep…",        command=self._open_sweep)
         analysis_menu.add_command(label="Aim at Target (liquid)…",  command=self._aim_at_target)
         analysis_menu.add_command(label="Engine Cutoff (liquid)…",  command=self._set_engine_cutoff)
+        analysis_menu.add_command(label="Re-entry Query…",          command=self._set_reentry_query)
         analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
 
         # Reference Data — swap the empirical source behind a model term.
@@ -5483,36 +5579,37 @@ class BoosterFlyoutApp(tk.Tk):
         self._reentry_frame = rf
         rf.columnconfigure(1, weight=1)
 
-        # Row 0: reentry-plan variant selector + New/Delete — the down-leg
-        # analogue of the Flight Plan dropdown.  A reentry object can carry
-        # many named reentry plans (default + variants); this switches between
-        # them, and the glider controls below are the live editor (write-through
-        # on every run, like the flight-plan sidebar strip).
-        _rpbar = ttk.Frame(rf)
-        _rpbar.grid(row=0, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=(4, 0))
+        # Row 0/1: reentry-plan variant selector, then its New/Edit…/Delete on
+        # the row below — the down-leg analogue of the Flight Plan dropdown, laid
+        # out like every other library section (combo on its own line, buttons
+        # under it).  A reentry object can carry many named reentry plans
+        # (default + variants); this switches between them, and the glider
+        # controls below are the live editor (write-through on every run).
         self._rp_var = tk.StringVar(value=mm.DEFAULT_PLAN_LABEL)
-        self._rp_cb = ttk.Combobox(_rpbar, textvariable=self._rp_var,
+        self._rp_cb = ttk.Combobox(rf, textvariable=self._rp_var,
                                    values=[mm.DEFAULT_PLAN_LABEL],
-                                   state="readonly", width=16)
-        self._rp_cb.pack(side=tk.LEFT)
+                                   state="readonly", width=24)
+        self._rp_cb.grid(row=0, column=0, columnspan=2, padx=6, pady=(4, 2))
         self._rp_cb.bind("<<ComboboxSelected>>", self._on_reentry_plan_selected)
         _bind_typeahead(self._rp_cb)
-        ttk.Button(_rpbar, text="New", width=5,
-                   command=self._new_reentry_plan).pack(side=tk.LEFT, padx=(4, 2))
-        ttk.Button(_rpbar, text="Edit…", width=6,
-                   command=self._edit_reentry_plan_main).pack(side=tk.LEFT, padx=(0, 2))
-        self._rp_del_btn = ttk.Button(_rpbar, text="Delete", width=6,
+        _rpbar = ttk.Frame(rf)
+        _rpbar.grid(row=1, column=0, columnspan=2, pady=(0, 2))
+        ttk.Button(_rpbar, text="New", width=7,
+                   command=self._new_reentry_plan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(_rpbar, text="Edit…", width=7,
+                   command=self._edit_reentry_plan_main).pack(side=tk.LEFT, padx=2)
+        self._rp_del_btn = ttk.Button(_rpbar, text="Delete", width=7,
                                       command=self._delete_reentry_plan,
                                       state=tk.DISABLED)
-        self._rp_del_btn.pack(side=tk.LEFT)
+        self._rp_del_btn.pack(side=tk.LEFT, padx=2)
 
-        # Row 1: Separation — the run-level choice of whether the reentry
+        # Row 2: Separation — the run-level choice of whether the reentry
         # object separates at burnout or the last stage reenters whole
         # (Hwasong-11 / MaRV class).  A reentry-PLAN field like the glide law:
         # live here, written through to the active plan on every run, so the
         # same aeroshell can be A/B'd separating vs. integrated in two clicks.
         _sepbar = ttk.Frame(rf)
-        _sepbar.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(3, 0))
+        _sepbar.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(3, 0))
         ttk.Label(_sepbar, text="Separation:").pack(side=tk.LEFT)
         self._SEP_LABELS = {
             'separating_ro': "Separates at burnout",
@@ -5529,13 +5626,13 @@ class BoosterFlyoutApp(tk.Tk):
             "<<ComboboxSelected>>",
             lambda _e: self._refresh_glider_status_line())
 
-        # Row 2: status line — terminal vehicle summary (L/D, separation type)
+        # Row 3: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
             value="Reentry object not configured for maneuvering"
             " — set L/D in Edit Reentry Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
                                              foreground="#555555")
-        self._glider_status_lbl.grid(row=2, column=0, columnspan=2,
+        self._glider_status_lbl.grid(row=3, column=0, columnspan=2,
                                       sticky=tk.W, padx=8, pady=(2, 2))
 
         # Row 1: reentry-mode detail frame.  Always visible; combobox at the
@@ -5575,27 +5672,11 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(_skf, text="(1 = first upward crossing)",
                   foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
 
-        # ζ knob — shared by damped_glide (phugoid DAMPING RATIO) and
-        # dynamic_equilibrium_glide (a TRACKING GAIN); the label, hint and the
-        # damping-estimator button are retargeted by _on_glider_guidance_changed
-        # since the knob means different things in the two modes.
-        _zf = ttk.Frame(_gmf)
-        _zf.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=(8, 0), pady=1)
-        self._main_zeta_frame = _zf
-        _zr = ttk.Frame(_zf)
-        _zr.pack(fill=tk.X, anchor=tk.W)
-        self._main_zeta_label = ttk.Label(_zr, text="Damping ratio ζ:")
-        self._main_zeta_label.pack(side=tk.LEFT)
+        # ζ damping is a tuning parameter (with its own estimator), so it lives
+        # in the Reentry Plan editor (Edit…), not on the strip.  The var stays
+        # here as the in-memory conduit: populate sets it from the active plan,
+        # the run reads it, and the dialog edits it through the plan file.
         self._main_zeta_var = tk.StringVar(value="0.7")
-        ttk.Entry(_zr, textvariable=self._main_zeta_var, width=5).pack(
-            side=tk.LEFT, padx=4)
-        self._main_zeta_est_btn = ttk.Button(
-            _zr, text="Estimate…", width=10,
-            command=self._open_damping_estimator)
-        self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(2, 0))
-        self._main_zeta_hint = self._mk_hint(
-            _zf, "0 = undamped skip-glide; ~0.7 = a few decaying skips")
-        self._main_zeta_hint.pack(fill=tk.X, anchor=tk.W, pady=(1, 0))
 
         # Terminal dive altitude + aero-model selector on one row
         _r2 = ttk.Frame(_gmf)
@@ -5613,72 +5694,30 @@ class BoosterFlyoutApp(tk.Tk):
                              "Fixed L/D (idealized)"],
                      state="readonly", width=20).pack(side=tk.LEFT, padx=2)
 
-        # Bank schedule separator + checkbox
-        self._main_glide_sep = ttk.Separator(_gmf, orient=tk.HORIZONTAL)
-        self._main_glide_sep.grid(row=3, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+        # Bank schedule and dive-at-target are detail (a 3×3 grid and a
+        # lat/lon/radius block) that clutter the strip and are rarely re-tuned,
+        # so they move into the Reentry Plan editor (Edit…).  Their vars stay
+        # here as the in-memory conduit (populate ← plan, run → reads them,
+        # dialog edits them via the plan file).  A one-line pointer replaces the
+        # widgets, shown for any glide mode.
         self._main_bank_sched_var = tk.BooleanVar(value=False)
-        self._main_bank_chk = ttk.Checkbutton(_gmf, text="Bank schedule",
-                        variable=self._main_bank_sched_var,
-                        command=self._on_main_bank_toggled)
-        self._main_bank_chk.grid(
-            row=4, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=(2, 0))
-        _mbf = ttk.Frame(_gmf)
-        _mbf.grid(row=5, column=0, columnspan=2, sticky=tk.W)
-        self._main_bank_frm = _mbf
         self._main_bank_vars = [{'start': tk.StringVar(value=""),
                                   'end':   tk.StringVar(value=""),
                                   'bank':  tk.StringVar(value="")}
                                  for _ in range(3)]
-        for _mc, _hdr in enumerate(["#1", "#2", "#3"], start=1):
-            ttk.Label(_mbf, text=_hdr, foreground="#555555").grid(
-                row=0, column=_mc, padx=4, pady=(4, 1))
-        for _yr, _lbl, _key, _unit in [
-                (1, "Bank start:", "start", "s"),
-                (2, "Bank end:",   "end",   "s"),
-                (3, "Angle:",      "bank",  "°")]:
-            ttk.Label(_mbf, text=_lbl).grid(
-                row=_yr, column=0, sticky=tk.W, padx=(8, 2), pady=1)
-            for _mc, _bvars in enumerate(self._main_bank_vars, start=1):
-                ttk.Entry(_mbf, textvariable=_bvars[_key], width=6).grid(
-                    row=_yr, column=_mc, padx=3, pady=1)
-            ttk.Label(_mbf, text=_unit).grid(
-                row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
-
-        # Dive-at-target trigger (optional)
         self._main_dive_target_var = tk.BooleanVar(value=False)
-        self._main_dive_target_chk = ttk.Checkbutton(_gmf, text="Dive at target (lat/lon)",
-                        variable=self._main_dive_target_var,
-                        command=self._on_main_dive_target_toggled)
-        self._main_dive_target_chk.grid(
-            row=6, column=0, columnspan=2,
-            sticky=tk.W, padx=(8, 0), pady=(4, 0))
-        _dtf = ttk.Frame(_gmf)
-        _dtf.grid(row=7, column=0, columnspan=2,
-                  sticky=tk.W, padx=(24, 0), pady=1)
-        self._main_dive_target_frm = _dtf
-        ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
         self._main_dt_lat_var = tk.StringVar(value="0.0")
-        ttk.Entry(_dtf, textvariable=self._main_dt_lat_var, width=8).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="°  Lon:").pack(side=tk.LEFT, padx=(4, 0))
         self._main_dt_lon_var = tk.StringVar(value="0.0")
-        ttk.Entry(_dtf, textvariable=self._main_dt_lon_var, width=8).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="°  Radius:").pack(side=tk.LEFT, padx=(4, 0))
         self._main_dt_radius_var = tk.StringVar(value="20")
-        ttk.Entry(_dtf, textvariable=self._main_dt_radius_var, width=6).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
-        ttk.Button(_dtf, text="Find…", width=7,
-                   command=lambda: self._pick_location(
-                       self._main_dt_lat_var, self._main_dt_lon_var)
-                   ).pack(side=tk.LEFT, padx=(6, 0))
 
-        # Sync initial hidden state and grid _glider_main_frame in its parent (rf)
-        self._on_main_bank_toggled()
-        self._on_main_dive_target_toggled()
+        self._main_edit_hint = self._mk_hint(
+            _gmf, "Damping ζ, bank schedule and dive-at-target: Reentry Plan ▸ Edit…")
+        self._main_edit_hint.grid(row=3, column=0, columnspan=2,
+                                  sticky=tk.W, padx=(8, 0), pady=(6, 1))
+
+        # Grid _glider_main_frame in its parent (rf); set mode-driven visibility.
         self._on_glider_guidance_changed()
-        self._glider_main_frame.grid(row=3, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=4, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
         # ── Engine cutoff ─────────────────────────────────────────────
@@ -5689,19 +5728,12 @@ class BoosterFlyoutApp(tk.Tk):
         self._cutoff_var = tk.StringVar(value="")
 
         # ── Re-entry query altitude ────────────────────────────────────
-        rq = ttk.LabelFrame(parent, text="Re-entry Query")
-        rq.pack(fill=tk.X, padx=6, pady=3)
-        rq_inner = ttk.Frame(rq)
-        rq_inner.pack(padx=6, pady=4)
+        # A per-run diagnostic ("report the state vector at N km on descent"),
+        # not a plan field — it lives under Analysis ▸ Re-entry Query… (like
+        # Engine Cutoff) instead of taking sidebar space.  The variables stay:
+        # the run path reads them, and scenarios save/restore them.
         self._query_alt_enable = tk.BooleanVar(value=False)
         self._query_alt_km_var = tk.StringVar(value="50")
-        ttk.Checkbutton(rq_inner, text="Report state at:",
-                        variable=self._query_alt_enable,
-                        command=self._toggle_query_alt).pack(side=tk.LEFT)
-        self._query_alt_entry = ttk.Entry(
-            rq_inner, textvariable=self._query_alt_km_var, width=6, state="disabled")
-        self._query_alt_entry.pack(side=tk.LEFT, padx=4)
-        ttk.Label(rq_inner, text="km (descent)").pack(side=tk.LEFT)
 
         # ── Run buttons ───────────────────────────────────────────────
         btn_frame = ttk.Frame(parent)
@@ -6407,7 +6439,7 @@ class BoosterFlyoutApp(tk.Tk):
                 "Reentry object not configured for maneuvering"
                 " — set L/D in Edit Reentry Object…")
         # Reentry mode combobox is always visible regardless of glider config.
-        self._glider_main_frame.grid(row=3, column=0, columnspan=2,
+        self._glider_main_frame.grid(row=4, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
 
     def _is_glider_active(self) -> bool:
@@ -6416,16 +6448,27 @@ class BoosterFlyoutApp(tk.Tk):
         return bool(ro and ro.glider_enabled and ro.glider_LD > 0)
 
     def _on_main_bank_toggled(self):
+        # Bank schedule lives in the Reentry Plan editor now; its sidebar frame
+        # is gone.  Retained (with a guard) because populate/guidance-changed
+        # still call it — a harmless no-op when the widget is absent.
+        _frm = getattr(self, '_main_bank_frm', None)
+        if _frm is None:
+            return
         if self._is_glider_active() and self._main_bank_sched_var.get():
-            self._main_bank_frm.grid()
+            _frm.grid()
         else:
-            self._main_bank_frm.grid_remove()
+            _frm.grid_remove()
 
     def _on_main_dive_target_toggled(self):
+        # Dive-at-target lives in the Reentry Plan editor now; guarded no-op if
+        # the sidebar frame is absent (same as _on_main_bank_toggled).
+        _frm = getattr(self, '_main_dive_target_frm', None)
+        if _frm is None:
+            return
         if self._is_glider_active() and self._main_dive_target_var.get():
-            self._main_dive_target_frm.grid()
+            _frm.grid()
         else:
-            self._main_dive_target_frm.grid_remove()
+            _frm.grid_remove()
 
     def _on_glider_guidance_changed(self):
         raw = self._main_guidance_var.get()
@@ -6448,59 +6491,18 @@ class BoosterFlyoutApp(tk.Tk):
                 self._main_skip_frame.grid()
             else:
                 self._main_skip_frame.grid_remove()
-        # ζ row: damped_glide (damping ratio) and dynamic_equilibrium_glide
-        # (tracking gain) both use it — but the knob means different things, so
-        # retarget the label, hint and estimator button by mode.
-        if hasattr(self, '_main_zeta_frame'):
-            if is_damped or is_dynamic:
-                self._main_zeta_frame.grid()
-                if is_dynamic:
-                    # Tracking gain on the altitude-rate error — NOT a phugoid
-                    # damping ratio (this mode captures smoothly, it does not
-                    # oscillate), so the phugoid-damping estimator does not
-                    # apply; hide it.
-                    self._main_zeta_label.configure(text="Tracking gain ζ:")
-                    self._main_zeta_hint.configure(
-                        text="feedback gain on altitude-rate error; "
-                             "~0.4 captures, ≳1 saturates (no extra range). "
-                             "A distinct equilibrium-trim capture maneuver — "
-                             "~2–3% shorter than damped glide, not just damped "
-                             "at high ζ.")
-                    self._main_zeta_est_btn.pack_forget()
-                else:
-                    self._main_zeta_label.configure(text="Damping ratio ζ:")
-                    self._main_zeta_hint.configure(
-                        text="0 = undamped skip-glide; ~0.7 = a few decaying "
-                             "skips. Damps the phugoid toward the glide; range "
-                             "stays ~2–3% above dynamic equilibrium glide at any "
-                             "usable ζ (different capture maneuver).")
-                    # idempotent: re-packing keeps it last in the row
-                    self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(2, 0))
-            else:
-                self._main_zeta_frame.grid_remove()
 
-        # Glide-specific controls: hidden for pure ballistic reentry
+        # Glide-specific controls: hidden for pure ballistic reentry.  ζ, bank
+        # schedule and dive-at-target now live in the Reentry Plan editor; the
+        # strip shows the terminal-dive/aero row and a one-line pointer to Edit…
         for _w in (getattr(self, '_main_glide_detail_frm', None),
-                   getattr(self, '_main_glide_sep',         None),
-                   getattr(self, '_main_bank_chk',          None),
-                   getattr(self, '_main_dive_target_chk',   None)):
+                   getattr(self, '_main_edit_hint',        None)):
             if _w is None:
                 continue
             if is_ballistic:
                 _w.grid_remove()
             else:
                 _w.grid()
-
-        if is_ballistic:
-            # Collapse any expanded inner frames so they don't orphan
-            if hasattr(self, '_main_bank_frm'):
-                self._main_bank_frm.grid_remove()
-            if hasattr(self, '_main_dive_target_frm'):
-                self._main_dive_target_frm.grid_remove()
-        else:
-            # Restore inner frame visibility per their checkbox state
-            self._on_main_bank_toggled()
-            self._on_main_dive_target_toggled()
 
     def _estimate_body_LD(self):
         """Derive the terminal/glide vehicle's max L/D from geometry, via the
@@ -6753,8 +6755,12 @@ class BoosterFlyoutApp(tk.Tk):
         self._status_var.set(f"Site '{name}' deleted.")
 
     def _toggle_query_alt(self):
-        state = "normal" if self._query_alt_enable.get() else "disabled"
-        self._query_alt_entry.config(state=state)
+        # The sidebar Re-entry Query panel moved to Analysis ▸ Re-entry Query…;
+        # kept as a guarded no-op for any stale caller.
+        _e = getattr(self, '_query_alt_entry', None)
+        if _e is not None:
+            _e.config(state="normal" if self._query_alt_enable.get()
+                      else "disabled")
 
     def _on_guidance_changed(self):
         """Called when the user selects an ascent mode from the dropdown."""
@@ -8811,6 +8817,37 @@ class BoosterFlyoutApp(tk.Tk):
         self._cutoff_var.set(s)
         self._status_var.set(f"Engine cutoff: {s} s" if s
                              else "Engine cutoff cleared — full burn.")
+
+    def _set_reentry_query(self):
+        """Analysis ▸ Re-entry Query… — report the state vector at an altitude
+        on descent.  A per-run diagnostic (formerly a sidebar panel); blank
+        disables the query."""
+        from tkinter import simpledialog
+        cur = (self._query_alt_km_var.get().strip()
+               if self._query_alt_enable.get() else "")
+        s = simpledialog.askstring(
+            "Re-entry Query",
+            "Report the trajectory state at this altitude on descent (km).\n"
+            "Adds a milestone row with speed, angle and time at that height.\n"
+            "Leave blank to disable.",
+            initialvalue=cur, parent=self)
+        if s is None:
+            return                              # cancelled
+        s = s.strip()
+        if s:
+            try:
+                self._field_float("Re-entry query altitude (km)", s,
+                                  required=True)
+            except ValueError as e:
+                messagebox.showerror("Re-entry Query", str(e), parent=self)
+                return
+            self._query_alt_km_var.set(s)
+            self._query_alt_enable.set(True)
+            self._status_var.set(f"Re-entry query: report state at {s} km "
+                                 f"(descent).")
+        else:
+            self._query_alt_enable.set(False)
+            self._status_var.set("Re-entry query disabled.")
 
     def _field_float(self, label, s, default=None, required=False):
         """Parse one sidebar numeric field, naming the field in any error.
