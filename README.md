@@ -175,7 +175,11 @@ tabbed notebook**.
 - **Booster Type** — select from built-in or user-defined boosters;
   New / Edit… / Delete buttons open `BoosterDialog`.
 - **Reentry Object** — select the object carried to burnout (the payload). New /
-  Edit… open the reentry-object editor; objects live in a shared library.
+  Edit… open the reentry-object editor; objects live in a shared library. A
+  **Loadout: N ×** spinbox sets how many of the object the stack carries through
+  boost: the launch mass composes as bus + N × object mass, so more objects (or
+  a heavier one) honestly cost boost range, while **one** object is modeled on
+  the way back. Non-separating (body) runs pin N = 1.
 - **Reentry Plan** — the down-leg analogue of Flight Plan: a dropdown of the
   active object's reentry plans (`(default)` plus New/Delete variants) above its
   New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
@@ -238,11 +242,16 @@ tabbed notebook**.
 
 ### Dialogs
 
-- **BoosterDialog** — define a booster with up to three stages plus payload /
-  shroud. Each stage has: fueled mass, dry mass, diameter, length, thrust (with
-  Suggest estimator), Isp, nozzle exit area (with Estimate tool), burn time
-  (computed), coast time, and a solid-motor flag with grain type selection.
-  The payload is throw-weight: bus mass + the selected reentry object.
+- **BoosterDialog** — define a booster with up to three stages plus its own
+  front-end hardware. Each stage has: fueled mass, dry mass, diameter, length,
+  thrust (with Suggest estimator), Isp, nozzle exit area (with Estimate tool),
+  burn time (computed), coast time, and a solid-motor flag with grain type
+  selection. The *Front End* panel holds only what the booster owns — the
+  bus/PBV mass (carried as dead mass for now) and the fairing. It does **not**
+  reference the reentry object: which object and how many is the sidebar's
+  **Loadout** choice, composed onto the stage masses at run time (bus + N ×
+  object mass). Stage masses are stored stack-only; throw weight is a computed
+  tally shown on the Booster-Parameters tab, not an input here.
 - **Reentry-object editor** — define a reentry object's **hardware**: mass,
   ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
   the airframe's **L/D capability**, TPS materials (nose and body, from a
@@ -322,15 +331,19 @@ upper stages).  Key fields on the top-level node:
   `shroud_nose_length_m` — aerodynamics before jettison
 
 **Payload / reentry object (top-level)**
-- `payload_kg` — total payload (throw-weight) carried to burnout = bus + object
-- `ro_separates` — a **build-time** descriptor of how the booster's stage
-  masses were entered (whether the last stage's `mass_final` excludes the
-  payload). It seeds the ascent-drag geometry and the throw-weight bookkeeping,
-  but it is **no longer the run authority** for separation: whether the object
-  separates at burnout is a run-level plan choice (the sidebar Separation
-  control → `separation_mode` on the reentry plan)
-- `bus_mass_kg`, `num_ros` — payload decomposition (bus plus N reentry objects)
-- `ro_beta_kg_m2`, `ro_mass_kg`, `ro_shape`, `ro_diameter_m`, `ro_length_m` —
+- `payload_kg` — throw weight AS COMPOSED for the run = bus + N × object mass.
+  Stage masses are built stack-only; `compose_loadout(booster, ro, N)` adjusts
+  every stage's launch mass by the delta against the built payload at run time,
+  so a heavier object or more objects honestly cost boost range while one
+  object is modeled on the way back
+- `ro_separates` — a **deprecated** build-era record (stage masses entered
+  stack-only, `mass_final = dry`). Consumed only by the no-object debris
+  fallback and legacy-file migration; every physics path derives burnout mass
+  from `mass_initial − mass_propellant`. It is **not** the separation authority
+  — that is the sidebar Separation control → `separation_mode` on the plan
+- `bus_mass_kg` — the bus/PBV mass (booster hardware). `num_ros`, `ro_mass_kg`
+  — run-level loadout bookkeeping stamped by `compose_loadout`
+- `ro_beta_kg_m2`, `ro_shape`, `ro_diameter_m`, `ro_length_m` —
   *deprecated* inline fields, superseded by the linked `ro` object
   (`ROParams`); kept only so old saved files still load. The reentry object's
   own β, mass, and geometry now live on `params.ro`.
