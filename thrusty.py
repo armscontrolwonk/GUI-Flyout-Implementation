@@ -2992,8 +2992,16 @@ class ReentryPlanDialog(tk.Toplevel):
         # damp a phugoid — there isn't one).  Vars always exist so _save can
         # read them; the widgets are built only for a numerical plan.
         _guid = str(plan.get('glider_guidance', '') or '')
-        _is_dyn = 'dynamic' in _guid
-        self._z_var = tk.StringVar(value=f"{float(_f('glider_damping_zeta', 0.7)):g}")
+        # Terminal-dive altitude and aero model are set-once tuning that live
+        # in this editor; ζ (the per-run knob) is on the sidebar strip and is
+        # NOT edited here — _save omits it so the merge preserves the strip's
+        # value.  Vars init from the plan.
+        self._dive_alt_var = tk.StringVar(
+            value=f"{float(_f('glider_terminal_alt_km', 0.0)):g}")
+        self._aero_var = tk.StringVar(
+            value=("Drag polar (realistic)"
+                   if str(_f('glider_aero_model', 'polar')) == 'polar'
+                   else "Fixed L/D (idealized)"))
         _sched = list(_f('glider_bank_schedule', []) or [])
         self._bank_vars = [{'start': tk.StringVar(), 'end': tk.StringVar(),
                             'bank': tk.StringVar()} for _ in range(3)]
@@ -3013,20 +3021,24 @@ class ReentryPlanDialog(tk.Toplevel):
             value=f"{float(_f('glider_dive_target_radius_km', 20.0)) or 20.0:g}")
 
         if self._family == 'numerical':
-            # ζ — damping ratio (damped_glide) or tracking gain
-            # (dynamic_equilibrium_glide); its meaning follows the glide law.
-            # Estimator applies only to the phugoid-damping case.
-            ttk.Label(frm, text=("Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
-                      ).grid(row=r, column=0, sticky=tk.W, pady=3)
-            _zf = ttk.Frame(frm); _zf.grid(row=r, column=1, sticky=tk.W, pady=3)
-            ttk.Entry(_zf, textvariable=self._z_var, width=8).pack(side=tk.LEFT)
-            if not _is_dyn:
-                ttk.Button(_zf, text="Estimate…", width=10,
-                           command=self._estimate_zeta).pack(side=tk.LEFT, padx=(4, 0))
-            ttk.Label(_zf, text=("  feedback gain on altitude-rate error"
-                                 if _is_dyn else
-                                 "  0 = undamped skip-glide; ~0.7 = a few skips"),
+            # Terminal dive — glide until this altitude, then pitch into a
+            # steep terminal dive (0 = glide all the way to impact).  A
+            # numerical-EOM capability; the closed-form laws fly their arc.
+            ttk.Label(frm, text="Terminal dive below:").grid(
+                row=r, column=0, sticky=tk.W, pady=3)
+            _tf = ttk.Frame(frm); _tf.grid(row=r, column=1, sticky=tk.W, pady=3)
+            ttk.Entry(_tf, textvariable=self._dive_alt_var, width=8).pack(side=tk.LEFT)
+            ttk.Label(_tf, text="  km  (0 = glide to impact)",
                       foreground="#888888").pack(side=tk.LEFT); r += 1
+
+            # Aero model — realistic drag polar vs an idealized fixed L/D.
+            ttk.Label(frm, text="Aero model:").grid(
+                row=r, column=0, sticky=tk.W, pady=3)
+            _ef = ttk.Frame(frm); _ef.grid(row=r, column=1, sticky=tk.W, pady=3)
+            ttk.Combobox(_ef, textvariable=self._aero_var,
+                         values=["Drag polar (realistic)",
+                                 "Fixed L/D (idealized)"],
+                         state="readonly", width=22).pack(side=tk.LEFT); r += 1
 
             # Bank schedule — up to three (start s, end s, bank °) segments.
             ttk.Label(frm, text="Bank schedule:").grid(row=r, column=0, sticky=tk.NW, pady=3)
@@ -3065,8 +3077,8 @@ class ReentryPlanDialog(tk.Toplevel):
                       foreground="#888888", justify=tk.LEFT).grid(
                 row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 1)); r += 1
 
-        ttk.Label(frm, text="(Glide law, separation, terminal dive and aero\n"
-                            "model are on the sidebar strip.)",
+        ttk.Label(frm, text="(Glide law, separation and the ζ damping/tracking\n"
+                            "knob are on the sidebar strip.)",
                   foreground="#888888", justify=tk.LEFT).grid(
             row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 4)); r += 1
 
@@ -3083,11 +3095,6 @@ class ReentryPlanDialog(tk.Toplevel):
         bf.grid(row=r, column=0, columnspan=2, sticky=tk.E, pady=(10, 0))
         ttk.Button(bf, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=(4, 0))
         ttk.Button(bf, text="Save", command=self._save).pack(side=tk.RIGHT)
-
-    def _estimate_zeta(self):
-        """Open the damping estimator, writing its result into THIS dialog's ζ
-        field (not the sidebar), so Cancel still discards it."""
-        DampingEstimatorDialog(self._app, zeta_var=self._z_var)
 
     def _save(self):
         def _num(sv, default):
@@ -3119,7 +3126,12 @@ class ReentryPlanDialog(tk.Toplevel):
                                  if self._att_var.get()
                                  == self._ATT_LABELS['tumbling']
                                  else 'trim'),
-            'glider_damping_zeta':      max(0.0, _num(self._z_var, 0.7)),
+            # ζ is owned by the sidebar strip — deliberately omitted so the
+            # merge over the (strip-snapshotted) plan preserves it.
+            'glider_terminal_alt_km':   max(0.0, _num(self._dive_alt_var, 0.0)),
+            'glider_aero_model': ('polar'
+                                  if 'polar' in self._aero_var.get().lower()
+                                  else 'constant_LD'),
             'glider_bank_schedule':     _banks,
             'glider_dive_target_lat_deg':   _num(self._dt_lat_var, 0.0),
             'glider_dive_target_lon_deg':   _num(self._dt_lon_var, 0.0),
@@ -5665,27 +5677,31 @@ class BoosterFlyoutApp(tk.Tk):
         # defaulting to 1) so nothing downstream needs to change.
         self._main_skip_count_var = tk.StringVar(value="1")
 
-        # ζ damping is a tuning parameter (with its own estimator), so it lives
-        # in the Reentry Plan editor (Edit…), not on the strip.  The var stays
-        # here as the in-memory conduit: populate sets it from the active plan,
-        # the run reads it, and the dialog edits it through the plan file.
+        # ζ is the one glide knob you iterate per-run for a damped or
+        # dynamic-equilibrium plan (damping ratio / tracking gain), so it lives
+        # on the strip with its estimator.  Terminal-dive altitude and the aero
+        # model are set-once tuning and live in the Reentry Plan editor (Edit…);
+        # their vars stay here as the in-memory conduit (populate ← plan, run →
+        # reads them, dialog edits them through the plan file).
         self._main_zeta_var = tk.StringVar(value="0.7")
+        self._main_dive_alt_var = tk.StringVar(value="0")
+        self._main_aero_var = tk.StringVar(value="Drag polar (realistic)")
 
-        # Terminal dive altitude + aero-model selector on one row
+        # ζ row — shown only for the ζ-using glide laws (damped / dynamic).
         _r2 = ttk.Frame(_gmf)
         _r2.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
         self._main_glide_detail_frm = _r2
-        ttk.Label(_r2, text="Terminal dive below").pack(side=tk.LEFT)
-        self._main_dive_alt_var = tk.StringVar(value="0")
-        ttk.Entry(_r2, textvariable=self._main_dive_alt_var, width=5).pack(
+        self._main_zeta_lbl = ttk.Label(_r2, text="Damping ratio ζ:")
+        self._main_zeta_lbl.pack(side=tk.LEFT)
+        ttk.Entry(_r2, textvariable=self._main_zeta_var, width=6).pack(
             side=tk.LEFT, padx=2)
-        ttk.Label(_r2, text="km (0 = glide to impact)").pack(side=tk.LEFT)
-        ttk.Label(_r2, text="   Aero:").pack(side=tk.LEFT, padx=(8, 0))
-        self._main_aero_var = tk.StringVar(value="Drag polar (realistic)")
-        ttk.Combobox(_r2, textvariable=self._main_aero_var,
-                     values=["Drag polar (realistic)",
-                             "Fixed L/D (idealized)"],
-                     state="readonly", width=20).pack(side=tk.LEFT, padx=2)
+        self._main_zeta_est_btn = ttk.Button(
+            _r2, text="Estimate…", width=10, command=self._estimate_main_zeta)
+        self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._main_zeta_hint = ttk.Label(
+            _r2, text="  0 = undamped skip; ~0.7 = a few skips",
+            foreground="#888888")
+        self._main_zeta_hint.pack(side=tk.LEFT)
 
         # Bank schedule and dive-at-target are detail (a 3×3 grid and a
         # lat/lon/radius block) that clutter the strip and are rarely re-tuned,
@@ -5704,7 +5720,8 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_dt_radius_var = tk.StringVar(value="20")
 
         self._main_edit_hint = self._mk_hint(
-            _gmf, "Damping ζ, bank schedule and dive-at-target: Reentry Plan ▸ Edit…")
+            _gmf, "Terminal dive, aero model, bank schedule and dive-at-target: "
+                  "Reentry Plan ▸ Edit…")
         self._main_edit_hint.grid(row=3, column=0, columnspan=2,
                                   sticky=tk.W, padx=(8, 0), pady=(6, 1))
 
@@ -6542,6 +6559,11 @@ class BoosterFlyoutApp(tk.Tk):
         StringVars remain live so _get_inputs still applies the program."""
         self._adv_yaw_frame.grid_remove()
 
+    def _estimate_main_zeta(self):
+        """Open the damping estimator, writing its result into the strip's ζ
+        field (its default target is self._main_zeta_var)."""
+        DampingEstimatorDialog(self)
+
     def _update_loadout_state(self):
         """Loadout N is a separating-run concept: a non-separating (body)
         vehicle IS its single warhead, so body mode pins N = 1 and greys
@@ -6637,18 +6659,36 @@ class BoosterFlyoutApp(tk.Tk):
         self._scope_mode_choices()
         label = raw.lower()
         is_ballistic  = "ballistic"    in label
+        key = self._current_reentry_mode_key()
+        _uses_zeta = key in ("damped_glide", "dynamic_equilibrium_glide")
+        _is_dyn    = key == "dynamic_equilibrium_glide"
 
-        # Glide-specific controls: hidden for pure ballistic reentry.  ζ, bank
-        # schedule and dive-at-target now live in the Reentry Plan editor; the
-        # strip shows the terminal-dive/aero row and a one-line pointer to Edit…
-        for _w in (getattr(self, '_main_glide_detail_frm', None),
-                   getattr(self, '_main_edit_hint',        None)):
-            if _w is None:
-                continue
-            if is_ballistic:
-                _w.grid_remove()
+        # The Edit… pointer shows for every glide mode (terminal dive, aero,
+        # banks and dive-at-target all live in the editor now); it is hidden
+        # only for pure ballistic reentry.
+        if getattr(self, '_main_edit_hint', None) is not None:
+            (self._main_edit_hint.grid_remove() if is_ballistic
+             else self._main_edit_hint.grid())
+
+        # The ζ row is the only per-mode strip knob: shown for the ζ-using glide
+        # laws (damped ratio / dynamic tracking gain), hidden otherwise.  The
+        # phugoid-damping estimator applies only to the damped case.
+        _zr = getattr(self, '_main_glide_detail_frm', None)
+        if _zr is not None:
+            if _uses_zeta:
+                self._main_zeta_lbl.config(
+                    text="Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
+                self._main_zeta_hint.config(
+                    text=("  feedback gain on altitude-rate error" if _is_dyn
+                          else "  0 = undamped skip; ~0.7 = a few skips"))
+                # Estimator applies only to phugoid damping (damped case).
+                self._main_zeta_est_btn.pack_forget()
+                if not _is_dyn:
+                    self._main_zeta_est_btn.pack(
+                        side=tk.LEFT, padx=(4, 0), before=self._main_zeta_hint)
+                _zr.grid()
             else:
-                _w.grid()
+                _zr.grid_remove()
 
     def _estimate_body_LD(self):
         """Derive the terminal/glide vehicle's max L/D from geometry, via the
