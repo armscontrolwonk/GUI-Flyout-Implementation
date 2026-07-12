@@ -71,22 +71,32 @@ class BoosterParams:
     # Ignored (irrelevant) for the last / only stage.
     coast_time_s: float = 0.0
 
-    # Payload (kg) — total mass carried to burnout (bus + all RVs).
-    # Stored on the top-level stage only so _prefill can round-trip correctly.
+    # Payload (kg) — total front-end mass carried to burnout (bus + all RVs),
+    # i.e. the throw weight as CURRENTLY COMPOSED.  Stored on the top-level
+    # stage only.  For legacy files this is the design payload baked into the
+    # stage masses at build time; compose_loadout() re-derives it at run time
+    # from the selected reentry object (bus + N × object mass) and adjusts the
+    # stage launch masses by the delta.
     payload_kg: float = 0.0
 
     # Payload decomposition (throw-weight): bus (post-boost vehicle) + N reentry
     # objects.  bus_mass_kg + num_ros * ro_mass_kg should equal payload_kg.
-    # These are booster-level payload bookkeeping — NOT reentry-object hardware
-    # (beta, L/D, TPS, glide law all live on params.ro).
+    # bus_mass_kg is booster hardware (the PBV, carried as dead mass for now);
+    # num_ros / ro_mass_kg are run-level loadout bookkeeping stamped by
+    # compose_loadout — NOT reentry-object hardware (beta, L/D, TPS, glide law
+    # all live on params.ro).
     ro_mass_kg:    float = 0.0   # per-object mass, for the throw-weight breakdown
     bus_mass_kg:   float = 0.0
     num_ros:       int   = 1
 
-    # When True the RV/payload separates from the last-stage body at burnout.
-    # The empty stage body then follows a tumbling-cylinder debris arc.
-    # When False (default) the stage body stays attached to the warhead
-    # (e.g. Scud-B) and no separate stage debris is computed.
+    # DEPRECATED build-era record: True means the stage masses were entered
+    # stack-only (payload kept separate; mass_final = dry), False means the
+    # builder baked the payload into the last stage's masses (Scud-class
+    # legacy files).  It is NOT the separation event — that is the reentry
+    # plan's separation_mode, a run-level choice.  Consumed only by (a) the
+    # no-reentry-object debris fallback in trajectory.py and (b) legacy-file
+    # migration; every physics path derives burnout mass from
+    # mass_initial − mass_propellant instead of trusting this flag.
     ro_separates:  bool  = False
 
     # When True this stage uses a solid rocket motor that cannot be shut off.
@@ -686,6 +696,62 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     # is migrated to a synthesised params.ro in booster_from_dict, so by the time
     # we get here params.ro is the single source of truth.)
     return None
+
+
+def compose_loadout(params: 'BoosterParams', ro=None,
+                    num_ros: int = 1) -> 'BoosterParams':
+    """Apply a run-level front-end loadout to a booster stage chain.
+
+    The modeling contract: the stack carries the WHOLE front end through
+    boost — bus + N × reentry object (+ fairing until jettison) — but only
+    ONE object is modeled on the way back (the PBV is not maneuvering, so a
+    single object's arc represents the pattern).
+
+    The chain was built (or loaded from file) carrying ``params.payload_kg``:
+    zero for stack-only builds, or a baked-in design payload for legacy
+    files.  Every stage's launch mass is adjusted by the DELTA between the
+    new loadout (bus_mass_kg + N × ro.mass_kg) and that built payload, so
+    both file generations compose correctly, a chain composed twice is
+    idempotent, and a legacy booster flown with the object it was built
+    around at N = 1 is numerically unchanged.
+
+    Body-mode objects (separation_mode == 'body') force N = 1 — the object
+    IS the last stage; a multi-object non-separating loadout is meaningless.
+
+    Returns a deep copy; the input chain is never mutated.  When ro is None
+    or carries no usable mass the chain is returned as built.
+    """
+    import copy as _copy
+    p = _copy.deepcopy(params)
+    if ro is None:
+        return p
+    n = max(1, int(num_ros))
+    if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
+        n = 1
+    ro_mass = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
+    if ro_mass <= 0:
+        return p          # nothing meaningful to compose; fly as built
+    bus = float(getattr(p, 'bus_mass_kg', 0.0) or 0.0)
+    loadout = bus + n * ro_mass
+    delta = loadout - (p.payload_kg if p.payload_kg > 0 else 0.0)
+    # Every stage's launch mass includes the whole stack above it, payload
+    # included, so the delta applies to every node in the chain.
+    _node = p
+    _last = p
+    while _node is not None:
+        _node.mass_initial += delta
+        _last = _node
+        _node = _node.stage2
+    # Legacy body-baked builds (ro_separates False) also baked the payload
+    # into the last stage's mass_final; keep that convention consistent.
+    # Stack-only builds (mass_final = dry) are left alone.  Physics paths
+    # derive burnout mass from mass_initial − mass_propellant either way.
+    if not p.ro_separates and p.payload_kg > 0:
+        _last.mass_final += delta
+    p.payload_kg = loadout
+    p.ro_mass_kg = ro_mass
+    p.num_ros    = n
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -2114,6 +2180,15 @@ def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> fl
             return mass
         t_rem -= s.burn_time_s
         if s.stage2 is None:
+            # Post-burnout mass follows the run-level separation: a
+            # separating loadout coasts on as the payload alone, while a
+            # body-mode vehicle (V2 / Scud class) keeps the empty stage
+            # fused to the warhead and coasts at full burnout mass.
+            _ro = getattr(params, 'ro', None)
+            if (_ro is not None and getattr(_ro, 'separation_mode',
+                                            'separating_ro') == 'body'):
+                return (s.mass_initial - s.mass_propellant
+                        if s.mass_propellant > 0 else s.mass_final)
             return params.payload_kg if params.payload_kg > 0 else s.mass_final
         if t_rem < s.coast_time_s:
             return s.stage2.mass_initial
@@ -2179,9 +2254,18 @@ def _boost_front_geometry(top_params: 'BoosterParams', params: BoosterParams,
             and not _shroud_jettisoned(top_params, altitude_m)):
         return (top_params.shroud_nose_shape, top_params.shroud_diameter_m,
                 top_params.shroud_nose_length_m, top_params.shroud_length_m, True)
+    # Multi-object loadout: with no fairing (or after jettison) the exposed
+    # front is a bus face carrying a cluster of RVs — a blunt cylinder, not a
+    # single clean cone.  Keep the blunt/default nose drag rather than crediting
+    # one RV's slender shape.  Conservative (more drag) exactly where it matters:
+    # a low fairing-jettison altitude on a depressed trajectory, in thick air.
+    # A single-object loadout (V2 / KN-23 / Scud) IS a lone nose, so it keeps
+    # the RV shape below.
+    _multi = (top_params is not None and getattr(top_params, 'num_ros', 1) > 1)
     ro = effective_ro(top_params) if top_params is not None else None
     if ro is not None and ro.diameter_m > 0:
-        return (ro.shape, max(ro.diameter_m, params.diameter_m),
+        _shape = 'blunt_cylinder' if _multi else ro.shape
+        return (_shape, max(ro.diameter_m, params.diameter_m),
                 ro.length_m, params.length_m, False)
     if top_params is not None and top_params.payload_diameter_m > 0:
         return (top_params.nose_shape,

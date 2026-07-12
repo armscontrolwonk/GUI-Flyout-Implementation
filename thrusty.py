@@ -1471,93 +1471,28 @@ class BoosterDialog(tk.Toplevel):
             ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
             return _var, _ent
 
-        # ── Row 0: Throw weight ──────────────────────────────────────────────
-        ttk.Label(pl, text="Throw weight (kg):").grid(
-            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._throw_weight_var = tk.StringVar(value="1000")
-        _tw_inner = ttk.Frame(pl)
-        _tw_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._throw_weight_entry = ttk.Entry(
-            _tw_inner, textvariable=self._throw_weight_var, width=10)
-        self._throw_weight_entry.pack(side=tk.LEFT)
-        ttk.Label(_tw_inner, text="kg").pack(side=tk.LEFT, padx=(2, 0))
+        # The booster owns only its own front-end hardware: the bus (PBV,
+        # carried as dead mass for now) and the fairing.  The loadout — which
+        # reentry object and how many — is a run-level choice made in the
+        # sidebar; boost carries bus + N × object mass, composed at run time.
+        ttk.Label(pl,
+                  text="Loadout (reentry object × N) is chosen in the sidebar "
+                       "at run time; boost carries bus + N × object mass.",
+                  foreground="gray", wraplength=340).grid(
+            row=0, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 2))
 
-        # ── Rows 1-3: Payload nose shape/size (hidden when Reentry object separates) ────────
-        self._payload_shape_frame = ttk.Frame(pl)
-        self._payload_shape_frame.grid(row=1, column=0, columnspan=2,
-                                       sticky=tk.EW, pady=0)
-        self._payload_shape_frame.columnconfigure(1, weight=1)
-
-        ttk.Label(self._payload_shape_frame, text="Payload shape:").grid(
-            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._payload_shape_var = tk.StringVar(value=NOSE_SHAPE_LABELS["cone"])
-        self._payload_shape_cb = ttk.Combobox(
-            self._payload_shape_frame, textvariable=self._payload_shape_var,
-            values=_ns_labels, state="readonly", width=18)
-        self._payload_shape_cb.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-
-        self._payload_diameter_var, self._payload_diameter_entry = _fe_entry(
-            self._payload_shape_frame, "Payload diameter (m):", 1, "0", "m")
-        self._payload_length_var, self._payload_length_entry = _fe_entry(
-            self._payload_shape_frame, "Payload length (m):", 2, "0", "m", pady=(2, 4))
-
-        # Keep legacy aliases so _calc_ro_beta pre-fill still resolves
-        self._nose_shape_var    = self._payload_shape_var
-        self._nose_length_var   = self._payload_length_var
-        self._nose_shape_cb     = self._payload_shape_cb
-        self._nose_length_entry = self._payload_length_entry
-
-        # ── Row 2: Reentry object separates toggle (row numbering continues in pl) ────────
-        self._ro_separates_var = tk.BooleanVar(value=False)
-        self._ro_separates_check = ttk.Checkbutton(
-            pl, text="Reentry object separates",
-            variable=self._ro_separates_var,
-            command=self._update_ro_separates_state)
-        self._ro_separates_check.grid(
-            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
-
-        # ── Row 3: RV section (hidden until checkbox ticked) ─────────────────
-        self._ro_section = ttk.Frame(pl)
-        self._ro_section.grid(row=3, column=0, columnspan=2,
-                              sticky=tk.EW, padx=(16, 0))
-        self._ro_section.columnconfigure(1, weight=1)
-        self._ro_section.grid_remove()
-
-        # No. of RVs (per-Object mass is a property of the loaded RV)
-        ttk.Label(self._ro_section, text="No. of reentry objects:").grid(
-            row=0, column=0, sticky=tk.W, padx=(6, 2), pady=2)
-        self._num_ros_var = tk.StringVar(value="1")
-        _ron_inner = ttk.Frame(self._ro_section)
-        _ron_inner.grid(row=0, column=1, sticky=tk.W, padx=(0, 6), pady=2)
-        self._num_ros_spinbox = ttk.Spinbox(
-            _ron_inner, textvariable=self._num_ros_var, from_=1, to=24, width=4)
-        self._num_ros_spinbox.pack(side=tk.LEFT)
-
-        # RV identity is owned by the sidebar's Reentry Object library
-        # (since the recent refactor).  The dialog shows a read-only
-        # summary of whatever is selected there, so the user can verify
-        # the loadout without re-editing it from here.
-        self._ro_summary_var = tk.StringVar(value="")
-        ttk.Label(self._ro_section, textvariable=self._ro_summary_var,
-                  wraplength=320, foreground="navy").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
-        ttk.Label(self._ro_section,
-                  text="(choose the reentry object in the sidebar's Reentry Object panel)",
-                  foreground="gray").grid(
-            row=2, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
-
-        # Has PBV toggle
+        # ── Row 1: Has PBV toggle ─────────────────────────────────────────────
         self._has_pbv_var = tk.BooleanVar(value=False)
         self._has_pbv_check = ttk.Checkbutton(
-            self._ro_section, text="Has PBV (post-boost bus)",
+            pl, text="Has PBV (post-boost bus)",
             variable=self._has_pbv_var,
             command=self._update_pbv_state)
         self._has_pbv_check.grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
+            row=1, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(4, 0))
 
-        # PBV sub-section
-        self._pbv_section = ttk.Frame(self._ro_section)
-        self._pbv_section.grid(row=4, column=0, columnspan=2,
+        # ── Row 2: PBV sub-section (hidden until checkbox ticked) ────────────
+        self._pbv_section = ttk.Frame(pl)
+        self._pbv_section.grid(row=2, column=0, columnspan=2,
                                sticky=tk.EW, padx=(16, 0))
         self._pbv_section.columnconfigure(1, weight=1)
         self._pbv_section.grid_remove()
@@ -1626,11 +1561,6 @@ class BoosterDialog(tk.Toplevel):
         self._aerospike_dD_var, self._aerospike_dD_entry = _fe_entry(
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
-
-        # Live throw-weight update when RV-count or PBV mass changes.
-        # Object mass per unit comes from the sidebar selection via _current_main_ro().
-        for _v in (self._num_ros_var, self._pbv_mass_var):
-            _v.trace_add("write", self._update_throw_weight)
 
         # ── Fins ─────────────────────────────────────────────────────────
         ff = ttk.LabelFrame(body, text="Fins")
@@ -1785,15 +1715,7 @@ class BoosterDialog(tk.Toplevel):
             sf.set_readonly(True)
         self._name_entry.config(state="readonly")
         self._stages_cb.config(state="disabled")
-        # Payload / throw weight
-        self._throw_weight_entry.config(state="disabled")
-        self._payload_shape_cb.config(state="disabled")
-        self._payload_diameter_entry.config(state="disabled")
-        self._payload_length_entry.config(state="disabled")
-        # RV section (RV identity is owned by the sidebar — nothing to
-        # disable in the dialog itself; the summary label is non-editable.)
-        self._ro_separates_check.config(state="disabled")
-        self._num_ros_spinbox.config(state="disabled")
+        # Front End (PBV)
         self._has_pbv_check.config(state="disabled")
         self._pbv_mass_entry.config(state="disabled")
         self._pbv_diameter_entry.config(state="disabled")
@@ -1826,43 +1748,12 @@ class BoosterDialog(tk.Toplevel):
         self._save_as_btn.pack_forget()
 
     # ------------------------------------------------------------------
-    def _update_throw_weight(self, *_):
-        """Recompute throw weight = N × RV.mass_kg + PBV when Reentry object separates is active."""
-        if not self._ro_separates_var.get():
-            return
-        ro = self._current_main_ro()
-        if ro is None:
-            return  # No reentry object selected in sidebar; leave throw weight untouched.
-        try:
-            n   = max(1, int(self._num_ros_var.get()))
-            bus = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
-            total = n * ro.mass_kg + bus
-            self._throw_weight_entry.config(state="normal")
-            self._throw_weight_var.set(f"{total:.0f}")
-            self._throw_weight_entry.config(state="readonly")
-        except (ValueError, tk.TclError):
-            pass
-
-    def _update_ro_separates_state(self):
-        """Show/hide the RV sub-section; toggle payload-shape rows and throw weight."""
-        if self._ro_separates_var.get():
-            self._ro_section.grid()
-            self._payload_shape_frame.grid_remove()   # RV geometry takes over
-            self._throw_weight_entry.config(state="readonly")
-            self._update_ro_summary()
-            self._update_throw_weight()
-        else:
-            self._ro_section.grid_remove()
-            self._payload_shape_frame.grid()
-            self._throw_weight_entry.config(state="normal")
-
     def _update_pbv_state(self):
-        """Show/hide PBV sub-section; refresh throw weight."""
+        """Show/hide PBV sub-section."""
         if self._has_pbv_var.get():
             self._pbv_section.grid()
         else:
             self._pbv_section.grid_remove()
-        self._update_throw_weight()
 
     def _update_shroud_state(self):
         """Show/hide the shroud sub-section."""
@@ -1970,36 +1861,6 @@ class BoosterDialog(tk.Toplevel):
         dlg.geometry(f"+{px}+{py}")
 
     # ------------------------------------------------------------------
-    def _current_main_ro(self):
-        """Return the ROParams currently selected in the parent app's
-        sidebar combobox, or None if the sentinel is active."""
-        app = self.master
-        name = app._ro_main_var.get() if hasattr(app, '_ro_main_var') else ""
-        return RO_DB[name]() if name in RO_DB else None
-
-    def _update_ro_summary(self):
-        """Refresh the summary label from the main panel's RV selection."""
-        ro = self._current_main_ro()
-        if ro is None:
-            self._ro_summary_var.set("No reentry object selected in sidebar")
-        else:
-            parts = [ro.name,
-                     f"{ro.mass_kg:,.0f} kg",
-                     f"β {ro.beta_kg_m2:,.0f} kg/m²"]
-            if ro.glider_enabled and ro.glider_LD > 0:
-                _g = ro.glider_guidance
-                guid = ("Tracy"        if _g == "equilibrium_glide"
-                        else "Acton"   if _g == "equilibrium_glide_acton"
-                        else "skip→eq" if _g == "skip_to_equilibrium"
-                        else "damped"  if _g == "damped_glide"
-                        else "dyn-eq"  if _g == "dynamic_equilibrium_glide"
-                        else "skip")
-                parts.append(f"L/D {ro.glider_LD:.2f} ({guid})")
-            self._ro_summary_var.set(" — ".join(parts))
-        if hasattr(self, '_glider_status_var'):
-            self._refresh_glider_status_line()
-
-    # ------------------------------------------------------------------
     def _update_booster_frame(self, *_):
         """Show or hide the booster parameter panel based on booster count."""
         try:
@@ -2084,32 +1945,13 @@ class BoosterDialog(tk.Toplevel):
         for i, sd in enumerate(stage_data):
             self._stage_frames[i].populate(sd)
 
-        # Throw weight and RV decomposition
-        self._ro_separates_var.set(p.ro_separates)
-        self._throw_weight_var.set(f"{payload:.0f}")
-        if p.ro_separates and p.ro_mass_kg > 0:
-            self._num_ros_var.set(str(p.num_ros))
-            has_pbv = p.bus_mass_kg > 0
-            self._has_pbv_var.set(has_pbv)
-            self._pbv_mass_var.set(f"{p.bus_mass_kg:.0f}")
-            self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
-            self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
-        else:
-            self._num_ros_var.set("1")
-            self._has_pbv_var.set(False)
-            self._pbv_mass_var.set("0")
-            self._pbv_diameter_var.set("0")
-            self._pbv_length_var.set("0")
-        # RV identity comes from the sidebar library, not from the booster;
-        # just refresh the read-only summary to reflect that selection.
-        self._update_ro_summary()
-
-        # Payload shape / diameter / length
-        self._payload_shape_var.set(
-            NOSE_SHAPE_LABELS.get(p.nose_shape, NOSE_SHAPE_LABELS["cone"]))
-        self._payload_diameter_var.set(
-            f"{getattr(p, 'payload_diameter_m', 0.0):.2f}")
-        self._payload_length_var.set(f"{p.nose_length_m:.2f}")
+        # PBV (bus) — the only front-end mass the booster owns; the loadout
+        # (object × N) is composed at run time from the sidebar selection.
+        has_pbv = p.bus_mass_kg > 0
+        self._has_pbv_var.set(has_pbv)
+        self._pbv_mass_var.set(f"{p.bus_mass_kg:.0f}" if has_pbv else "0")
+        self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
+        self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
 
         # Aerospike
         _aero_LD = float(getattr(p, 'aerospike_LD', 0.0) or 0.0)
@@ -2174,7 +2016,6 @@ class BoosterDialog(tk.Toplevel):
         self._update_booster_frame()
 
         # Apply show/hide state for all sections
-        self._update_ro_separates_state()
         self._update_pbv_state()
         self._update_shroud_state()
 
@@ -2192,39 +2033,26 @@ class BoosterDialog(tk.Toplevel):
 
         n = int(self._n_stages_var.get())
 
-        # Throw weight / payload decomposition
-        ro_separates = self._ro_separates_var.get()
-        if ro_separates:
-            main_ro = self._current_main_ro()
-            if main_ro is None:
-                raise ValueError(
-                    "No reentry object selected in the sidebar's Reentry Object panel. "
-                    "Pick or create a reentry object there before saving this booster.")
-            try:
-                num_ros  = max(1, int(self._num_ros_var.get()))
-                bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
-            except ValueError:
-                raise ValueError("No. of reentry objects and PBV mass must be numbers.")
-            ro_mass = float(main_ro.mass_kg)
-            payload = num_ros * ro_mass + bus_mass
-        else:
-            try:
-                payload = float(self._throw_weight_var.get())
-            except ValueError:
-                raise ValueError("Throw weight must be a number.")
-            num_ros = 1
-            ro_mass = payload
-            bus_mass = 0.0
-
-        # Payload shape / diameter / length
-        _ps_label = self._payload_shape_var.get()
-        nose_shape = next((k for k, v in NOSE_SHAPE_LABELS.items() if v == _ps_label),
-                          "")
+        # Front-end hardware the booster owns: the bus (PBV) only.  The
+        # loadout — which reentry object and how many — is a run-level
+        # sidebar choice composed onto the chain by compose_loadout(), so
+        # the stage masses are built STACK-ONLY (payload = 0, never baked
+        # in) and the booster no longer references the reentry object.
         try:
-            payload_diameter_m = float(self._payload_diameter_var.get())
-            nose_length_m      = float(self._payload_length_var.get())
+            bus_mass = float(self._pbv_mass_var.get()) if self._has_pbv_var.get() else 0.0
         except ValueError:
-            raise ValueError("Payload diameter and length must be numbers.")
+            raise ValueError("PBV mass must be a number.")
+        payload  = 0.0
+        num_ros  = 1
+        ro_mass  = 0.0
+        ro_separates = True   # build-era record: stack-only masses (mass_final = dry)
+
+        # Front-end ascent shape now follows the run-level object (or the
+        # fairing while attached) via _boost_front_geometry; the booster
+        # keeps no hand-entered payload shape of its own.
+        nose_shape         = ""
+        payload_diameter_m = 0.0
+        nose_length_m      = 0.0
 
         # Aerospike (drag-reduction probe)
         if self._aerospike_var.get():
@@ -2272,9 +2100,9 @@ class BoosterDialog(tk.Toplevel):
         # PBV geometry
         try:
             pbv_diameter_m = (float(self._pbv_diameter_var.get())
-                              if (ro_separates and self._has_pbv_var.get()) else 0.0)
+                              if self._has_pbv_var.get() else 0.0)
             pbv_length_m   = (float(self._pbv_length_var.get())
-                              if (ro_separates and self._has_pbv_var.get()) else 0.0)
+                              if self._has_pbv_var.get() else 0.0)
         except ValueError:
             raise ValueError("PBV diameter and length must be numbers.")
 
@@ -2318,13 +2146,13 @@ class BoosterDialog(tk.Toplevel):
             is_first = (idx == n - 1)    # first stage of booster (last in reversed loop)
             prop = sd["fueled"] - sd["dry"]
             if is_last and is_first:
-                # Single-stage booster
-                m0     = sd["fueled"] + payload + shroud_mass
-                mfinal = sd["dry"] if ro_separates else sd["dry"] + payload
+                # Single-stage booster (stack-only: loadout composed at run)
+                m0     = sd["fueled"] + shroud_mass
+                mfinal = sd["dry"]
             elif is_last:
-                # Last of multiple stages: payload present, shroud is on stage 1
-                m0     = sd["fueled"] + payload
-                mfinal = sd["dry"] if ro_separates else sd["dry"] + payload
+                # Last of multiple stages: shroud is on stage 1
+                m0     = sd["fueled"]
+                mfinal = sd["dry"]
             elif is_first:
                 # First of multiple stages: add shroud here
                 m0     = sd["fueled"] + shroud_mass + upper_mass
@@ -5518,6 +5346,22 @@ class BoosterFlyoutApp(tk.Tk):
                                       state=tk.DISABLED)
         self._ro_del_btn.pack(side=tk.LEFT, padx=2)
 
+        # Loadout: how many of the selected object the stack carries through
+        # boost (throw weight = bus + N × object mass, composed onto the
+        # stage chain at run time).  One object is modeled on the way back —
+        # its arc represents the pattern.  Non-separating (body) runs force
+        # N = 1: a multi-object integrated warhead is meaningless.
+        _lo = ttk.Frame(rf)
+        _lo.pack(padx=6, pady=(0, 4))
+        ttk.Label(_lo, text="Loadout:").pack(side=tk.LEFT)
+        self._loadout_n_var = tk.StringVar(value="1")
+        self._loadout_spin = ttk.Spinbox(
+            _lo, textvariable=self._loadout_n_var, from_=1, to=24, width=4,
+            command=lambda: self._update_params_display())
+        self._loadout_spin.pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Label(_lo, text="× object carried through boost").pack(
+            side=tk.LEFT, padx=(4, 0))
+
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
         lf.pack(fill=tk.X, padx=6, pady=3)
@@ -5770,7 +5614,9 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_sep_cb.pack(side=tk.LEFT, padx=(6, 0))
         self._main_sep_cb.bind(
             "<<ComboboxSelected>>",
-            lambda _e: self._refresh_glider_status_line())
+            lambda _e: (self._refresh_glider_status_line(),
+                        self._update_loadout_state(),
+                        self._update_params_display()))
 
         # Row 3: status line — terminal vehicle summary (L/D, separation type)
         self._glider_status_var = tk.StringVar(
@@ -6696,6 +6542,20 @@ class BoosterFlyoutApp(tk.Tk):
         StringVars remain live so _get_inputs still applies the program."""
         self._adv_yaw_frame.grid_remove()
 
+    def _update_loadout_state(self):
+        """Loadout N is a separating-run concept: a non-separating (body)
+        vehicle IS its single warhead, so body mode pins N = 1 and greys
+        the spinbox.  compose_loadout enforces the same rule model-side."""
+        if not hasattr(self, '_loadout_spin'):
+            return
+        body = (getattr(self, '_main_sep_var', None) is not None
+                and self._main_sep_var.get() == self._SEP_LABELS['body'])
+        if body:
+            self._loadout_n_var.set("1")
+            self._loadout_spin.config(state="disabled")
+        else:
+            self._loadout_spin.config(state="normal")
+
     def _refresh_glider_status_line(self):
         """Update the Glider/HGV status label.  The reentry-mode combobox is
         always shown; this line summarises the terminal vehicle's properties."""
@@ -7291,6 +7151,8 @@ class BoosterFlyoutApp(tk.Tk):
             if hasattr(self, '_main_dive_target_var'):
                 self._on_main_dive_target_toggled()
             self._on_glider_guidance_changed()
+        # Loadout tally + composed launch mass follow the selected object.
+        self._update_params_display()
 
     def _new_ro_main(self):
         """Create an RV in the editor; on Save, write it to the library."""
@@ -7575,6 +7437,7 @@ class BoosterFlyoutApp(tk.Tk):
                 'body' if getattr(ro, 'separation_mode',
                                   'separating_ro') == 'body'
                 else 'separating_ro'])
+            self._update_loadout_state()
         _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
         # skip_to_equilibrium is retired (aliased to damped_glide on load), so
         # it never reaches here; azimuth_command still maps to skip-glide.
@@ -8204,9 +8067,29 @@ class BoosterFlyoutApp(tk.Tk):
         return True
 
     def _update_params_display(self, p=None):
-        """Rebuild the Booster Parameters tab with structured label rows."""
+        """Rebuild the Booster Parameters tab with structured label rows.
+
+        The tab shows the stack AS IT WILL FLY: the sidebar's reentry object
+        and Loadout N are composed onto a display copy (raw library boosters
+        carry no object and — for stack-only builds — no payload at all), so
+        launch mass, T/W and the throw-weight tally track the run setup."""
+        if not hasattr(self, '_params_inner'):
+            return          # sidebar init may fire before the tab exists
         if p is None:
-            p = get_booster(self._booster_var.get())
+            try:
+                p = get_booster(self._booster_var.get())
+            except (KeyError, ValueError):
+                return
+        _ro_name = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
+        if _ro_name in RO_DB:
+            _uro = RO_DB[_ro_name]()
+            try:
+                _n = max(1, int(self._loadout_n_var.get())) \
+                    if hasattr(self, '_loadout_n_var') else 1
+            except (ValueError, tk.TclError):
+                _n = 1
+            p = mm.compose_loadout(p, _uro, _n)
+            p.ro = _uro
 
         _G0 = 9.80665
         pad = dict(padx=8, pady=4)
@@ -8271,8 +8154,16 @@ class BoosterFlyoutApp(tk.Tk):
         _row2(sf, r, "Total propellant:", f"{total_prop:,.0f} kg",
               "Liftoff T/W:", f"{liftoff_tw:.2f}"); r += 1
         if p.payload_kg > 0:
-            _tw_lbl = "Throw weight:" if p.ro_separates else "Payload:"
-            _row2(sf, r, _tw_lbl, f"{p.payload_kg:,.0f} kg"); r += 1
+            # Throw weight is a computed tally of the composed loadout:
+            # bus + N × object mass, carried through boost.
+            if p.ro_mass_kg > 0:
+                _lo = f"{p.num_ros} × {p.ro_mass_kg:,.0f} kg"
+                if p.bus_mass_kg > 0:
+                    _lo += f" + PBV {p.bus_mass_kg:,.0f} kg"
+                _row2(sf, r, "Throw weight:", f"{p.payload_kg:,.0f} kg",
+                      "Loadout:", _lo); r += 1
+            else:
+                _row2(sf, r, "Throw weight:", f"{p.payload_kg:,.0f} kg"); r += 1
 
         # ── Per-stage blocks ──────────────────────────────────────────
         sn = 1
@@ -8327,10 +8218,24 @@ class BoosterFlyoutApp(tk.Tk):
             _row(left, r, "Dry mass %:",         f"{dry_pct:.1f}%");              r += 1
             if not is_last:
                 _row(left, r, "Coast (s):",      f"{node.coast_time_s:.0f}");     r += 1
-            # Debris β for jettisoned stage bodies.
-            _body_jettisoned = (not is_last) or p.ro_separates
+            # Debris β for jettisoned stage bodies.  Whether the LAST stage
+            # body becomes debris is the run-level separation choice (the
+            # sidebar Separation control), not a booster property.
+            _sep_body = (getattr(self, '_main_sep_var', None) is not None
+                         and self._main_sep_var.get()
+                         == self._SEP_LABELS['body'])
+            _body_jettisoned = (not is_last) or not _sep_body
             if _body_jettisoned:
-                beta = tumbling_cylinder_beta(node.mass_final,
+                if is_last:
+                    # Casing = burnout mass minus the departing loadout
+                    # (mirrors the debris-arc arithmetic in trajectory.py).
+                    _m_bo = (node.mass_initial - node.mass_propellant
+                             if node.mass_propellant > 0 else node.mass_final)
+                    _cas = (_m_bo - p.payload_kg
+                            if _m_bo > p.payload_kg > 0 else node.mass_final)
+                else:
+                    _cas = node.mass_final
+                beta = tumbling_cylinder_beta(_cas,
                                               node.diameter_m, node.length_m)
                 if beta > 0:
                     _row(left, r, "Empty β (kg/m²):", f"{beta:,.0f}");            r += 1
@@ -8355,16 +8260,19 @@ class BoosterFlyoutApp(tk.Tk):
         af.columnconfigure(1, weight=1)
         af.columnconfigure(3, weight=1)
 
+        r = 0
+        # Legacy hand-entered payload shape (older saved boosters only; new
+        # builds derive ascent shape from the fairing or the run's object).
         _pd_m     = getattr(p, 'payload_diameter_m', 0.0)
         _pl_m     = p.nose_length_m
         _fe_shape = NOSE_SHAPE_LABELS.get(p.nose_shape, p.nose_shape)
-        r = 0
-        _row2(af, r, "Payload shape:", _fe_shape,
-              "Payload diameter:", f"{_pd_m:.2f} m" if _pd_m > 0 else "—"); r += 1
-        if _pl_m > 0:
-            _ref_d = _pd_m if _pd_m > 0 else p.diameter_m
-            _ld_str = f"  (L/D {_pl_m / _ref_d:.2f})" if _ref_d > 0 else ""
-            _row2(af, r, "Payload length:", f"{_pl_m:.2f} m{_ld_str}"); r += 1
+        if _fe_shape or _pd_m > 0:
+            _row2(af, r, "Payload shape:", _fe_shape if _fe_shape else "—",
+                  "Payload diameter:", f"{_pd_m:.2f} m" if _pd_m > 0 else "—"); r += 1
+            if _pl_m > 0:
+                _ref_d = _pd_m if _pd_m > 0 else p.diameter_m
+                _ld_str = f"  (L/D {_pl_m / _ref_d:.2f})" if _ref_d > 0 else ""
+                _row2(af, r, "Payload length:", f"{_pl_m:.2f} m{_ld_str}"); r += 1
 
         _aero_LD = float(getattr(p, 'aerospike_LD', 0.0) or 0.0)
         _aero_dD = float(getattr(p, 'aerospike_dD', 0.0) or 0.0)
@@ -8373,34 +8281,24 @@ class BoosterFlyoutApp(tk.Tk):
                   "Aerodisk d/D:",
                   f"{_aero_dD:.2f}" if _aero_dD > 0 else "— (pointed)"); r += 1
 
-        if p.ro_separates:
-            _row2(af, r, "No. of reentry objects:", str(p.num_ros),
-                  "Per-object mass:", f"{p.ro_mass_kg:,.0f} kg"); r += 1
-            _ero     = effective_ro(p)
-            # ro_beta_kg_m2 was removed from BoosterParams (reentry hardware now
-            # lives on the reentry object); fall back to 0 ("—") when there is
-            # no reentry object to read beta from.
-            _ro_beta = _ero.beta_kg_m2 if _ero else getattr(p, 'ro_beta_kg_m2', 0.0)
+        _ero = effective_ro(p)
+        if _ero is not None:
+            _row2(af, r, "Loadout:", f"{p.num_ros} × {_ero.name}",
+                  "Per-object mass:", f"{_ero.mass_kg:,.0f} kg"); r += 1
+            _ro_beta = _ero.beta_kg_m2
             _pbv_m   = p.bus_mass_kg
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
                       "Object β:", f"{_ro_beta:,.0f} kg/m²" if _ro_beta > 0 else "—"); r += 1
             elif _ro_beta > 0:
                 _row2(af, r, "Object β:", f"{_ro_beta:,.0f} kg/m²"); r += 1
-            if _ero:
-                _ro_shape_s = NOSE_SHAPE_LABELS.get(_ero.shape, NOSE_SHAPE_LABELS['cone'])
-                _ro_d = _ero.diameter_m
-                _ro_l = _ero.length_m
-            else:
-                _ro_shape_s = NOSE_SHAPE_LABELS.get(
-                    getattr(p, 'ro_shape', ''), NOSE_SHAPE_LABELS['cone'])
-                _ro_d = getattr(p, 'ro_diameter_m', 0.0)
-                _ro_l = getattr(p, 'ro_length_m', 0.0)
+            _ro_shape_s = NOSE_SHAPE_LABELS.get(_ero.shape, NOSE_SHAPE_LABELS['cone'])
             _row2(af, r, "Reentry object shape:", _ro_shape_s,
-                  "Object diameter:", f"{_ro_d:.2f} m" if _ro_d > 0 else "—"); r += 1
-            if _ro_l > 0:
-                _row2(af, r, "Object length:", f"{_ro_l:.2f} m"); r += 1
-            if _ero and _ero.glider_enabled:
+                  "Object diameter:",
+                  f"{_ero.diameter_m:.2f} m" if _ero.diameter_m > 0 else "—"); r += 1
+            if _ero.length_m > 0:
+                _row2(af, r, "Object length:", f"{_ero.length_m:.2f} m"); r += 1
+            if _ero.glider_enabled:
                 _guid_lbl = (
                     "Equilibrium glide (Tracy)"
                         if _ero.glider_guidance == "equilibrium_glide"
@@ -9278,26 +9176,24 @@ class BoosterFlyoutApp(tk.Tk):
                 _n.stage_yaw_stop_s = None
                 _n.stage_yaw_final_az_deg = None
 
-        # Override / supply the booster's RV from the sidebar library.
-        # A body-mode object (separation_mode='body') describes how the
-        # attached airframe reenters (pull-up, L/D, TPS) with no mass
-        # implications, so it applies to ANY booster.  A separating object is
-        # a physical payload swap and only makes sense on a booster configured
-        # with a separating payload; on a non-separating booster it is refused
-        # with a visible warning (previously: silently ignored).
+        # Supply the reentry object from the sidebar library and COMPOSE the
+        # run-level loadout onto the stage chain.  Any library object flies
+        # on any booster — separation is a plan choice, not a compatibility
+        # constraint.  The stack carries the whole front end through boost
+        # (bus + N × object mass; compose_loadout adjusts every stage's
+        # launch mass by the delta against whatever payload the chain was
+        # built with), while one object is modeled on the way back.  Casing
+        # debris strips the full loadout so nothing is counted twice.
         _ro_sel = getattr(self, '_ro_main_var', None)
         _ro_name = _ro_sel.get() if _ro_sel is not None else ""
         if _ro_name in RO_DB:
-            # Any library object can fly on any booster: separation is a
-            # run-level plan choice (the sidebar Separation control), not a
-            # compatibility constraint.  A separating object on a booster
-            # whose stage masses embed the warhead (Scud-class) sheds a
-            # casing of (burnout mass − object mass) — the debris arc code
-            # strips the object mass so nothing is counted twice.  A
-            # body-mode selection reenters attached (effective_ro inherits
-            # the last stage's burnout mass and geometry).
             _user_ro = RO_DB[_ro_name]()
-            booster = copy.deepcopy(booster)
+            try:
+                _n_load = max(1, int(self._loadout_n_var.get())) \
+                    if hasattr(self, '_loadout_n_var') else 1
+            except (ValueError, tk.TclError):
+                _n_load = 1
+            booster = mm.compose_loadout(booster, _user_ro, _n_load)
             _node, _placed = booster, False
             while _node is not None:
                 if _node.ro is not None:
@@ -9307,20 +9203,6 @@ class BoosterFlyoutApp(tk.Tk):
                 _node = getattr(_node, 'stage2', None)
             if not _placed:
                 booster.ro = _user_ro
-            # Mass bookkeeping follows the run-level separation (the strip
-            # value, stamped onto the object below).  booster.ro_separates
-            # itself is NOT rewritten: it stays what the builder recorded
-            # about how the stage masses were entered.
-            if (getattr(self, '_main_sep_var', None) is None
-                    or self._main_sep_var.get()
-                    != self._SEP_LABELS['body']):
-                # Payload carried through boost = throw-weight minus the shroud
-                # (jettisoned mid-boost, tracked separately): the PBV/bus mass
-                # plus the selected object's mass.  Derived here so payload
-                # follows the object you pick rather than a stale hand-entered
-                # number.
-                booster.payload_kg = (getattr(booster, 'bus_mass_kg', 0.0) or 0.0) \
-                    + _user_ro.mass_kg
 
         guidance = self._guidance_var.get()
         lat      = self._field_float("Launch latitude (°)",  self._launch_lat.get(),  required=True)

@@ -18,6 +18,54 @@ Implemented deltas from the plan below:
 * The separating/non-separating A/B is a two-click sidebar flip; the object
   editor shows separation read-only.
 
+### Front-end restructure (loadout as a run-level composition)
+
+A later pass finished the split the separation work started, resolving the
+"conceptual mismatch between the booster and the reentry object": the booster
+editor's *Front End* panel had a "Reentry object separates" checkbox that
+actually controlled the front-end **mass model**, echoed the sidebar object,
+and validated against it — the booster half-owned a concept it had already
+handed to the sidebar.
+
+The doctrine now:
+
+* **There is always a reentry object.**  A V2 or a KN-23 *has* a warhead — it
+  simply doesn't separate.  So there is no "booster with no reentry object,"
+  only an object that separates (`separating_ro`) or reenters attached
+  (`body`).  The thought experiment that fixes ownership: *what if the Germans
+  had added a separating warhead to the V2?*  Same hardware, different mission
+  → separation is a run-level plan choice, never a booster property.
+* **Loadout is composed at run time.**  The stack carries the whole front end
+  through boost — bus + N × object mass (+ fairing until jettison) — but only
+  **one** object is modeled on the way back (the PBV is not maneuvering, so one
+  object's arc represents the pattern).  `compose_loadout(booster, ro, N)`
+  deep-copies the stage chain and adjusts every stage's launch mass by the
+  delta between the new loadout and whatever payload the chain was built with,
+  so legacy baked-in files and new stack-only files both compose correctly and
+  a re-composition is idempotent.  A heavier object, or more objects, now
+  honestly costs boost range (six RVs shorten a No-dong shot by ~400 km).
+* **Throw weight is a computed tally, not an input.**  The booster editor's
+  *Front End* keeps only what the booster owns — the bus/PBV mass (carried as
+  dead mass for now) and the fairing.  "How many of which object" is a
+  **Loadout: N ×** spinbox in the sidebar *Reentry Object* panel (body mode
+  pins N = 1: a multi-object integrated warhead is meaningless).  The
+  Booster-Parameters tab shows the composed launch mass and a throw-weight
+  tally (`N × object + PBV = total`).
+* **Ascent nose drag follows the front end.**  Fairing present → the fairing
+  governs until jettison; no fairing → the single object's shape is the nose
+  (V2/KN-23/Scud).  For **N > 1** the exposed front is a bus face with a
+  cluster of cones, so `_boost_front_geometry` keeps the blunt-cylinder nose
+  rather than crediting one RV's slender shape — conservative (more drag)
+  exactly where a low fairing-jettison altitude on a depressed trajectory
+  would otherwise under-count it.
+* **`BoosterParams.ro_separates` is now a deprecated build-era record** (stage
+  masses entered stack-only, `mass_final = dry`).  It is consumed only by the
+  no-object debris fallback and legacy-file migration; every physics path
+  derives burnout mass from `mass_initial − mass_propellant`.  Fairing stays a
+  booster component; a parts-library where a fairing is a first-class
+  selectable component (so "Atlas V + 4 m fairing" and "+ 5 m fairing" are two
+  configurations of one booster, not two boosters) is noted as a later project.
+
 ---
 
 ## 1. Problems being solved

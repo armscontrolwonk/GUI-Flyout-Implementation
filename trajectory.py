@@ -2556,9 +2556,14 @@ def integrate_trajectory(params: BoosterParams,
             # the casing instead of counting it twice.
             _m_bo = (_node.mass_initial - _node.mass_propellant
                      if _node.mass_propellant > 0 else _node.mass_final)
-            _m_ro = (float(getattr(_ro_run, 'mass_kg', 0.0) or 0.0)
-                     if _ro_run is not None else
-                     (params.payload_kg if params.payload_kg > 0 else 0.0))
+            # What departs at burnout is the WHOLE front-end loadout —
+            # bus + N × object, i.e. payload_kg as composed by
+            # compose_loadout — not just the single object modeled on the
+            # way back.  Fall back to the object's own mass for chains
+            # that never went through composition.
+            _m_ro = (params.payload_kg if params.payload_kg > 0 else
+                     (float(getattr(_ro_run, 'mass_kg', 0.0) or 0.0)
+                      if _ro_run is not None else 0.0))
             _cas_mass = _m_bo - _m_ro if _m_bo > _m_ro else _node.mass_final
         else:
             _body_jettisoned = True   # non-last stages always shed their body
