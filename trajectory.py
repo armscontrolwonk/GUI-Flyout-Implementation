@@ -2776,6 +2776,7 @@ def integrate_trajectory(params: BoosterParams,
     # it would skip the very case the survivability FOM most needs to score.
     _ero_ms = effective_ro(params)
     _heating_fom = None
+    _heating_arc = None      # reentry-arc arrays + profile (survivability report)
     if _ero_ms is not None:
         _is_glider = bool(_ero_ms.glider_enabled and _ero_ms.glider_LD > 0)
         # For trajectories that reach space use the 100 km descent crossing;
@@ -2888,6 +2889,44 @@ def integrate_trajectory(params: BoosterParams,
             _glide_v = speeds[_re_idx:]
             _rho_g   = np.array([atmosphere(a)[2] for a in _glide_a])
             _q_dot   = 1.7415e-4 * np.sqrt(_rho_g / _RN) * _glide_v ** 3
+            # Stash the arc + a minimal reentry profile for the survivability
+            # report (survivability_report.py): the EXACT arrays the FOM sees,
+            # so the report's flux/load plot is apples-to-apples with the
+            # verdict, plus entry conditions and the plan/mode identity the
+            # report keys its form on.  Entry flight-path angle from the ECEF
+            # state at the arc start (names the loft/MET shaping).
+            _p0 = pos_arr[_re_idx]; _v0 = vel_arr[_re_idx]
+            _v0m = float(np.linalg.norm(_v0))
+            _gam0 = (float(np.degrees(np.arcsin(
+                float(np.dot(_v0, _p0 / np.linalg.norm(_p0))) / _v0m)))
+                     if _v0m > 1e-6 else 0.0)
+            _heating_arc = {
+                't':       t_arr[_re_idx:],
+                'rho':     _rho_g,
+                'V':       _glide_v,
+                'alt':     _glide_a,
+                'range':   ranges[_re_idx:],
+                'q_dot':   _q_dot,          # nose-stagnation reference flux
+                'entry_V_ms':      _v0m,
+                'entry_gamma_deg': _gam0,
+                'profile': {
+                    'name':        str(getattr(_ero_ms, 'name', '') or ''),
+                    'guidance':    str(getattr(_ero_ms, 'glider_guidance', '') or ''),
+                    'glider':      bool(_ero_ms.glider_enabled and _ero_ms.glider_LD > 0),
+                    'nose_radius_m':   float(_RN),
+                    'diameter_m':      float(getattr(_ero_ms, 'diameter_m', 0.0) or 0.0),
+                    'mass_kg':         float(getattr(_ero_ms, 'mass_kg', 0.0) or 0.0),
+                    'emissivity':      float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85),
+                    'nose_material':   (_ero_ms.nose_material()
+                                        if hasattr(_ero_ms, 'nose_material') else ''),
+                    'body_material':   (_ero_ms.body_material()
+                                        if hasattr(_ero_ms, 'body_material') else ''),
+                    'body_thickness_m': float(getattr(_ero_ms, 'body_tps_thickness_m', 0.0) or 0.0),
+                    'terminal_alt_km': (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0)
+                                        if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0),
+                    'dive_target_radius_km': float(getattr(_ero_ms, 'glider_dive_target_radius_km', 0.0) or 0.0),
+                },
+            }
             if len(_q_dot) and np.max(_q_dot) > 0:
                 _ipk = int(np.argmax(_q_dot))
                 _row = _milestone(t_arr[_re_idx + _ipk])
@@ -3132,6 +3171,7 @@ def integrate_trajectory(params: BoosterParams,
         'lon':                lons,
         'alt':                alts,
         'heating_fom':        _heating_fom,     # heating survivability (heating.py)
+        'heating_arc':        _heating_arc,     # reentry-arc arrays + profile (survivability report)
         'speed':              speeds,          # ECEF-frame (ground speed), m/s
         'inertial_speed':     inertial_speeds, # ECI-frame (inertial speed), m/s
         'accel':              accels,

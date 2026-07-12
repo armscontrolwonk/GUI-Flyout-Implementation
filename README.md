@@ -233,6 +233,7 @@ tabbed notebook**.
 | **Flight Timeline** | Tabular milestone events (ignition, burnout, apogee, shroud jettison, reentry, impact) with lat/lon/alt/speed/range |
 | **Booster Parameters** | Read-only summary of the active booster's mass, geometry, propulsion, and payload |
 | **Heating Survivability** | Reentry aerothermal screening estimate for the reentry object (Sutton-Graves + radiative-equilibrium) |
+| **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs on the nose-recession accuracy ladder (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C) |
 | **SLV Performance** | Algebraic payload-to-orbit analysis (circular or elliptical orbit) |
 
 ### Dialogs
