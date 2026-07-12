@@ -180,7 +180,12 @@ tabbed notebook**.
   active object's reentry plans (`(default)` plus New/Delete variants) above its
   New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
   altitude, aero model, skip count). The controls are the live editor and write
-  through on every run. A **Separation** control (*Separates at burnout* /
+  through on every run. The **reentry mode** (glide law) is a *hybrid*: each
+  object ships with a default tied to its type (e.g. C-HGB and Hwasong-11
+  default to their characterized damped-glide), and **New Reentry Plan** lets a
+  variant be born with a chosen starting mode — but unlike the flight-plan law,
+  the mode stays switchable on the strip afterward, so a one-click A/B between
+  glide laws needs no new plan. A **Separation** control (*Separates at burnout* /
   *Non-separating — body reenters*) sits here too: separation is a run-level
   mission choice, not a stored property of the object, so the same aeroshell can
   be A/B'd separating vs. integrated in two clicks (and any object flies on any
