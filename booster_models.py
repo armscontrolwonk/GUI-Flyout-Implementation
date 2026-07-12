@@ -515,6 +515,28 @@ def _norm_glide_mode(v) -> str:
             'skip_to_equilibrium': 'damped_glide'}.get(s, s)
 
 
+# Integration families.  The reentry laws divide by HOW the trajectory is
+# integrated, and that boundary is a capability fork (banking, dive-at-target
+# and the Mach-varying L/D table exist only in the numerical family; the
+# analytic family is constant-L/D and always captures).  The family is a pure
+# function of the glide law — no stored field — and it is the reentry plan's
+# IDENTITY: the sidebar strip only offers in-family laws, and New Reentry Plan
+# chooses the family up front (see REENTRY_FAMILY_DESIGN.md).  Ballistic lives
+# inside the numerical family (numerically integrated, lift off), so
+# ballistic <-> glide stays an in-family tweak.
+GLIDE_FAMILY_NUMERICAL = ('ballistic', 'skip_glide', 'damped_glide',
+                          'dynamic_equilibrium_glide')
+GLIDE_FAMILY_ANALYTIC  = ('equilibrium_glide_acton', 'equilibrium_glide')
+
+
+def glide_family(guidance) -> str:
+    """'numerical' | 'analytic' for a glider_guidance value (after aliasing
+    retired modes).  Unknown values fall to 'numerical' — the EOM is the
+    default integrator, so that is always a safe answer."""
+    g = _norm_glide_mode(guidance)
+    return 'analytic' if g in GLIDE_FAMILY_ANALYTIC else 'numerical'
+
+
 def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
     """Serialise an ROParams to a JSON-compatible dict.
 

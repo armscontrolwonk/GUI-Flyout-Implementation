@@ -180,18 +180,21 @@ tabbed notebook**.
   active object's reentry plans (`(default)` plus New/Delete variants) above its
   New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
   altitude, aero model). The controls are the live editor and write
-  through on every run. The **reentry mode** (glide law) is a *hybrid*: each
-  object ships with a default tied to its type (C-HGB/Hwasong-11 → their
-  characterized damped-glide; the other gliders → dynamic equilibrium glide;
-  ballistic RVs → Ballistic). The mode picklist (on the strip and in **New
-  Reentry Plan**) is grouped by how the trajectory is integrated: the
-  **numerical (EOM)** modes (Ballistic, phugoid/skip, damped, dynamic
-  equilibrium) above a divider, and the **closed-form analytic** comparison laws
-  (Acton, Tracy) below it. **New Reentry Plan** lets a variant be born with a
-  chosen starting mode — but unlike the flight-plan law, the mode stays
-  switchable on the strip afterward, so a one-click A/B between glide laws needs
-  no new plan. (The old discrete `skip→equilibrium` mode is retired — it now
-  flies the equivalent damped-phugoid glide.) A **Separation** control (*Separates at burnout* /
+  through on every run. The reentry laws divide into two **integration
+  families** — **numerical (EOM)** (Ballistic, phugoid/skip, damped phugoid,
+  dynamic equilibrium; step-by-step integration, banking, dive-at-target,
+  Mach-varying L/D, honest capture) and **closed-form analytic** (Acton, Tracy;
+  pull-up arc + range formula, constant L/D, always captures) — and the family
+  is the plan's **identity**: **New Reentry Plan** asks for the family first,
+  then the starting law; the strip dropdown lists only the active plan's
+  family, so the law is switchable *within* the family, never across it. To
+  compare across families, keep one plan per family and flip the Reentry Plan
+  dropdown. Each object ships with a default law tied to its type
+  (C-HGB/Hwasong-11 → their characterized damped-glide; the other gliders →
+  dynamic equilibrium glide; ballistic RVs → Ballistic, which lives inside the
+  numerical family so glide on/off is an in-family tweak). (The old discrete
+  `skip→equilibrium` mode is retired — it now flies the equivalent
+  damped-phugoid glide.) A **Separation** control (*Separates at burnout* /
   *Non-separating — body reenters*) sits here too: separation is a run-level
   mission choice, not a stored property of the object, so the same aeroshell can
   be A/B'd separating vs. integrated in two clicks (and any object flies on any
@@ -247,12 +250,15 @@ tabbed notebook**.
   commanded L/D (≤ capability), pull-up g, βₛ, glide law, dives, banks,
   separation, attitude — lives in the Reentry Plan, not here.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
-  (Reentry Plan ▸ Edit…): commanded L/D clamped to the airframe capability
-  ("fly it worse, never better"), pull-up g-limit, re-entry βₛ, flap
-  deflection, **reentry attitude** (trimmed vs. tumbling), **ζ damping** (with
-  its estimator), the **bank schedule**, **dive-at-target**, and plan
-  source/notes. The quick run-to-run picks (glide law, separation, terminal-dive
-  altitude, aero model, skip count) stay on the sidebar strip.
+  (Reentry Plan ▸ Edit…), **family-aware**: commanded L/D clamped to the
+  airframe capability ("fly it worse, never better"), pull-up g-limit, flap
+  deflection, **reentry attitude** (trimmed vs. tumbling), and plan
+  source/notes always; a **numerical** plan adds **ζ damping** (with its
+  estimator), the **bank schedule**, and **dive-at-target**; an **analytic**
+  plan adds **re-entry βₛ** (Acton Phase 3) instead — the closed form cannot
+  bank, steer to a target, or damp a phugoid. The quick run-to-run picks (glide
+  law within the family, separation, terminal-dive altitude, aero model) stay
+  on the sidebar strip.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone

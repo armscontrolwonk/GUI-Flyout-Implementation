@@ -1921,16 +1921,16 @@ def integrate_trajectory(params: BoosterParams,
                        if (_ero_full.glider_terminal_dive
                            and _ero_full.glider_terminal_alt_km > 0)
                        else 30_000.0)
-            _bank_sched = getattr(_ero_full, 'glider_bank_schedule', None) or []
-            _bank_active = any(
-                (s is not None and e is not None and float(s) < float(e)
-                 and float(b) != 0.0)
-                for (s, e, b) in _bank_sched)
-            # The analytical equilibrium-glide formula has no notion of a
-            # ground target, so when the target-proximity dive trigger is
-            # armed we have to drop to the numerical EOM (same fallback
-            # path as for non-trivial banking).
-            _need_numerical = _bank_active or _target_trigger_active
+            # The analytic family is purely analytic: banking and dive-at-
+            # target are NUMERICAL-family capabilities (the closed-form turn
+            # rate ∝ g − V²/r → 0 hypersonically, and the formula has no
+            # ground-target concept), so the family-scoped plan editor never
+            # offers them on an analytic plan.  The old silent fallback that
+            # swapped in the numerical EOM when a bank schedule or dive
+            # trigger appeared on an analytic run is deleted; any such fields
+            # left in legacy data are ignored here (a one-shot migration
+            # rewrites those plans to the numerical family).
+            # See REENTRY_FAMILY_DESIGN.md.
 
             # When the analytical pull-up arc returned no samples (shallow
             # pierce angle below 3° → degenerate arc geometry), the
@@ -1944,7 +1944,7 @@ def integrate_trajectory(params: BoosterParams,
             _bridge_t = np.empty(0)
             _bridge_pos = np.empty((0, 3))
             _bridge_vel = np.empty((0, 3))
-            if (len(arc_samples) == 0 and not _need_numerical):
+            if len(arc_samples) == 0:
                 # Estimate target equilibrium altitude h_eq from V_pierce.
                 _vp_mag = float(np.linalg.norm(state_pierce[3:]))
                 _r_mag  = float(np.linalg.norm(state_pierce[:3]))
@@ -1982,40 +1982,20 @@ def integrate_trajectory(params: BoosterParams,
                         _t_ms_pullup_start = float(t_pierce)
                         _t_ms_glide_start  = float(t_glide_start)
 
-            if _need_numerical:
-                # A non-trivial bank schedule is present.  The analytical
-                # equilibrium-glide formula gives turn rate ∝ (g − V²/r),
-                # which → 0 at hypersonic speeds, so it cannot represent
-                # banked maneuvers.  Switch to numerical solve_ivp with the
-                # full lifting EOM from the post-arc state — this is the
-                # same physics as skip-glide, but starting from the
-                # equilibrium-glide initial conditions produced by the
-                # analytical pull-up arc.
-                _s0_gl = np.concatenate([state_post[:3], state_post[3:]])
-                _sol_gl = solve_ivp(
-                    _eom, (t_glide_start, max_time_s), _s0_gl,
-                    method='RK45', events=_hit_ground, args=eom_args,
-                    rtol=_rtol, atol=_atol,
-                    dense_output=False, max_step=_maxstep)
-                _t_gl_abs = _sol_gl.t
-                _pos_gl   = _sol_gl.y[:3].T
-                _vel_gl   = _sol_gl.y[3:].T
-                _glide_degenerate = False
-            else:
-                _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
-                    state_post[:3], state_post[3:], beta_L, LD, _h_term,
-                    bank_schedule=None,
-                    t_offset=t_glide_start)
-                _t_gl_abs = _t_gl_rel + t_glide_start
+            _t_gl_rel, _pos_gl, _vel_gl = _analytical_equil_glide(
+                state_post[:3], state_post[3:], beta_L, LD, _h_term,
+                bank_schedule=None,
+                t_offset=t_glide_start)
+            _t_gl_abs = _t_gl_rel + t_glide_start
 
-                # _analytical_equil_glide returns a single point when the
-                # pierce speed is below the equilibrium-glide terminal speed
-                # — e.g. a quasi-ballistic booster (Hwasong-11 class) that just
-                # clipped 100 km rather than arriving at hypersonic glide
-                # conditions.  Fall back to the full EOM with lift so we get
-                # a physically correct skip-glide trajectory rather than a
-                # no-lift ballistic plunge.
-                _glide_degenerate = (len(_t_gl_rel) <= 1)
+            # _analytical_equil_glide returns a single point when the
+            # pierce speed is below the equilibrium-glide terminal speed
+            # — e.g. a quasi-ballistic booster (Hwasong-11 class) that just
+            # clipped 100 km rather than arriving at hypersonic glide
+            # conditions.  Fall back to the full EOM with lift so we get
+            # a physically correct skip-glide trajectory rather than a
+            # no-lift ballistic plunge.
+            _glide_degenerate = (len(_t_gl_rel) <= 1)
 
             # ---- Terminal dive / fallback from glide endpoint to ground ------
             _, _, _h_gl_end = ecef_to_geodetic(_pos_gl[-1])

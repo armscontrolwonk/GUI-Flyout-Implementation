@@ -3,8 +3,20 @@
 Design document for elevating the **numerical-EOM vs. closed-form-analytic**
 distinction from a *visual grouping* (shipped) to a *structural boundary* — the
 "no switching modes" rule from flight-plan law, applied at the family level
-instead of the individual-mode level.  Status: **plan, pre-implementation**.
-Companion to `GLIDE_CAPTURE_DESIGN.md` and `BODY_REENTRY_DESIGN.md`.
+instead of the individual-mode level.  Status: **Level 2 implemented** (user's
+choice; iteration is largely within a mode — matching drop zones, apogees —
+with cross-mode comparison at the end, so family identity protects the common
+workflow).  Companion to `GLIDE_CAPTURE_DESIGN.md` and `BODY_REENTRY_DESIGN.md`.
+
+Implemented decisions on the §8 open questions: **no convert action** (New
+Reentry Plan seeds from the current panel state, so cross-family "conversion"
+is two clicks; a mutating convert would defeat identity); **ballistic stays
+inside the numerical dropdown** (glide on/off remains an in-family tweak).
+One correction to §6.4: the migration is *intent-preserving*, not
+byte-identical — the old fallback ran the numerical EOM from the post-arc
+state, a hybrid no longer constructible; migrated plans fly
+`dynamic_equilibrium_glide` end-to-end, which keeps their banking/dive-target
+functional and the equilibrium-glide intent.
 
 ---
 

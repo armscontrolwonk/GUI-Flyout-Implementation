@@ -467,6 +467,44 @@ def _migrate_terminal_dive_default():
         pass
 
 
+def _migrate_analytic_family():
+    """One-time migration for the family-identity split
+    (REENTRY_FAMILY_DESIGN.md): a user plan that names a CLOSED-FORM ANALYTIC
+    law (Tracy/Acton) but carries numerical-family capabilities — a non-trivial
+    bank schedule or an armed dive-at-target — was, under the old silent
+    fallback, actually being flown on the numerical EOM.  That fallback is
+    deleted, so rewrite such plans to the numerical family's equilibrium law
+    (dynamic_equilibrium_glide), which keeps their banking/dive-target
+    functional and preserves the equilibrium-glide intent.  Marker-gated."""
+    marker = _REENTRY_PLAN_LIBRARY_PATH / ".family_v1"
+    if marker.exists():
+        return
+    if _REENTRY_PLAN_LIBRARY_PATH.is_dir():
+        for fp in _REENTRY_PLAN_LIBRARY_PATH.glob("*.reentryplan.json"):
+            try:
+                d = json.loads(fp.read_text())
+                if mm.glide_family(d.get('glider_guidance')) != 'analytic':
+                    continue
+                _banks = any(
+                    (b and len(b) == 3 and float(b[0]) < float(b[1])
+                     and float(b[2]) != 0.0)
+                    for b in (d.get('glider_bank_schedule') or []))
+                _dt = float(d.get('glider_dive_target_radius_km') or 0.0) > 0.0
+                if _banks or _dt:
+                    d['glider_guidance'] = 'dynamic_equilibrium_glide'
+                    fp.write_text(json.dumps(d, indent=2))
+                    print(f"Reentry plan '{fp.name}': analytic law with "
+                          f"banking/dive-target — migrated to the numerical "
+                          f"family (dynamic_equilibrium_glide).")
+            except Exception as exc:
+                print(f"Warning: could not migrate reentry plan '{fp.name}': {exc}")
+    try:
+        _REENTRY_PLAN_LIBRARY_PATH.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except Exception:
+        pass
+
+
 _SITE_SEPARATOR = "──────────────────────────────"
 
 
@@ -2431,18 +2469,12 @@ class BoosterDialog(tk.Toplevel):
 # RV editor dialog
 # ---------------------------------------------------------------------------
 
-# Non-selectable group headers in the reentry-mode dropdown, dividing the modes
-# by HOW they are integrated: numerical EOM (drag/lift feedback integrated step
-# by step) vs. closed-form analytic (the Tracy/Acton pull-up arc + equilibrium-
-# glide range formula).  Module-level so both the main control panel and the RV
-# editor can reference them.  _GUIDANCE_SEPARATORS lists every non-selectable
-# row for the revert guard.
-_GUIDANCE_HDR_NUMERICAL = "──────  numerical (EOM)  ──────"
-_GUIDANCE_HDR_ANALYTIC  = "──────  closed-form (analytic)  ──────"
-_GUIDANCE_SEPARATORS = (_GUIDANCE_HDR_NUMERICAL, _GUIDANCE_HDR_ANALYTIC)
-# Back-compat alias (older references): the analytic header plays the role the
-# single legacy divider used to.
-_GUIDANCE_SEPARATOR = _GUIDANCE_HDR_ANALYTIC
+# Integration-family display names.  The reentry-mode dropdown is FAMILY-
+# SCOPED (it lists only the active plan's family — numerical EOM or closed-form
+# analytic — so the family is the plan's identity and cannot be crossed from
+# the strip; New Reentry Plan chooses the family).  See REENTRY_FAMILY_DESIGN.md.
+_FAMILY_LABELS = {'numerical': "numerical (EOM)",
+                  'analytic':  "closed-form analytic"}
 
 
 class ROEditorDialog(tk.Toplevel):
@@ -3052,6 +3084,10 @@ class ReentryPlanDialog(tk.Toplevel):
         self._app = parent          # for the ζ estimator and target picker
         self._result = None
         self._cap = float(ld_capability or 0.0)
+        # The plan's integration family (its identity) decides which tuning
+        # fields exist: ζ / banks / dive-at-target are NUMERICAL capabilities;
+        # β_S (Acton Phase 3) is ANALYTIC.  See REENTRY_FAMILY_DESIGN.md.
+        self._family = mm.glide_family(plan.get('glider_guidance'))
         self.title(f"Reentry Plan — {title}")
         self.transient(parent)
         self.resizable(False, False)
@@ -3061,6 +3097,12 @@ class ReentryPlanDialog(tk.Toplevel):
         frm.pack(fill=tk.BOTH, expand=True)
         frm.columnconfigure(1, weight=1)
         r = 0
+
+        ttk.Label(frm, text=f"Integration family: "
+                            f"{_FAMILY_LABELS[self._family]}  "
+                            f"(fixed for this plan)",
+                  foreground="#888888").grid(
+            row=r, column=0, columnspan=2, sticky=tk.W, pady=(0, 6)); r += 1
 
         def _f(key, default):
             v = plan.get(key)
@@ -3081,12 +3123,15 @@ class ReentryPlanDialog(tk.Toplevel):
         ttk.Entry(_pf, textvariable=self._pullup_var, width=10).pack(side=tk.LEFT)
         ttk.Label(_pf, text="  g", foreground="#888888").pack(side=tk.LEFT); r += 1
 
-        ttk.Label(frm, text="Re-entry βₛ:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        # β_S is the Acton Phase-3 direct-reentry ballistic coefficient — an
+        # ANALYTIC-family field; the numerical EOM never reads it.
         self._beta_s_var = tk.StringVar(value=f"{float(_f('glider_beta_entry_kg_m2', 0.0)):g}")
-        _bf = ttk.Frame(frm); _bf.grid(row=r, column=1, sticky=tk.W, pady=3)
-        ttk.Entry(_bf, textvariable=self._beta_s_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(_bf, text="  kg/m²  (Acton Phase 3; 0 = Tracy)",
-                  foreground="#888888").pack(side=tk.LEFT); r += 1
+        if self._family == 'analytic':
+            ttk.Label(frm, text="Re-entry βₛ:").grid(row=r, column=0, sticky=tk.W, pady=3)
+            _bf = ttk.Frame(frm); _bf.grid(row=r, column=1, sticky=tk.W, pady=3)
+            ttk.Entry(_bf, textvariable=self._beta_s_var, width=10).pack(side=tk.LEFT)
+            ttk.Label(_bf, text="  kg/m²  (Acton Phase 3; 0 = Tracy)",
+                      foreground="#888888").pack(side=tk.LEFT); r += 1
 
         ttk.Label(frm, text="Flap deflection:").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._flap_var = tk.StringVar(value=f"{float(_f('glider_flap_deflection_deg', 0.0)):g}")
@@ -3114,35 +3159,17 @@ class ReentryPlanDialog(tk.Toplevel):
                             "\n   unstable bodies tumble regardless — SM gate)",
                   foreground="#888888", justify=tk.LEFT).pack(side=tk.LEFT); r += 1
 
-        # ζ — damping ratio (damped_glide) or tracking gain (dynamic_equilibrium
-        # _glide); its meaning follows the plan's glide law.  Estimator applies
-        # only to the phugoid-damping case.
+        # ζ, bank schedule and dive-at-target are NUMERICAL-family capabilities
+        # (the closed-form analytic laws cannot bank, steer to a target, or
+        # damp a phugoid — there isn't one).  Vars always exist so _save can
+        # read them; the widgets are built only for a numerical plan.
         _guid = str(plan.get('glider_guidance', '') or '')
         _is_dyn = 'dynamic' in _guid
-        ttk.Label(frm, text=("Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
-                  ).grid(row=r, column=0, sticky=tk.W, pady=3)
         self._z_var = tk.StringVar(value=f"{float(_f('glider_damping_zeta', 0.7)):g}")
-        _zf = ttk.Frame(frm); _zf.grid(row=r, column=1, sticky=tk.W, pady=3)
-        ttk.Entry(_zf, textvariable=self._z_var, width=8).pack(side=tk.LEFT)
-        if not _is_dyn:
-            ttk.Button(_zf, text="Estimate…", width=10,
-                       command=self._estimate_zeta).pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Label(_zf, text=("  feedback gain on altitude-rate error"
-                             if _is_dyn else
-                             "  0 = undamped skip-glide; ~0.7 = a few skips"),
-                  foreground="#888888").pack(side=tk.LEFT); r += 1
-
-        # Bank schedule — up to three (start s, end s, bank °) segments.
-        ttk.Label(frm, text="Bank schedule:").grid(row=r, column=0, sticky=tk.NW, pady=3)
-        _bkf = ttk.Frame(frm); _bkf.grid(row=r, column=1, sticky=tk.W, pady=3)
         _sched = list(_f('glider_bank_schedule', []) or [])
         self._bank_vars = [{'start': tk.StringVar(), 'end': tk.StringVar(),
                             'bank': tk.StringVar()} for _ in range(3)]
-        for _mc, _hdr in enumerate(["start s", "end s", "bank °"], start=1):
-            ttk.Label(_bkf, text=_hdr, foreground="#888888").grid(
-                row=0, column=_mc, padx=3, pady=(0, 1))
         for _i, _bv in enumerate(self._bank_vars):
-            ttk.Label(_bkf, text=f"#{_i+1}").grid(row=_i+1, column=0, sticky=tk.W, padx=(0, 4))
             if _i < len(_sched):
                 try:
                     _s, _e, _b = _sched[_i]
@@ -3150,37 +3177,68 @@ class ReentryPlanDialog(tk.Toplevel):
                     _bv['bank'].set(f"{float(_b):g}")
                 except (ValueError, TypeError):
                     pass
-            for _mc, _k in enumerate(['start', 'end', 'bank'], start=1):
-                ttk.Entry(_bkf, textvariable=_bv[_k], width=7).grid(
-                    row=_i+1, column=_mc, padx=3, pady=1)
-        r += 1
-
-        # Dive-at-target — steer to a lat/lon then dive (radius km = trigger).
         _dt_on = float(_f('glider_dive_target_radius_km', 0.0) or 0.0) > 0.0
         self._dt_on_var = tk.BooleanVar(value=_dt_on)
-        ttk.Checkbutton(frm, text="Dive at target (lat/lon)",
-                        variable=self._dt_on_var).grid(
-            row=r, column=0, sticky=tk.W, pady=(6, 1)); r += 1
-        _dtf = ttk.Frame(frm); _dtf.grid(row=r, column=0, columnspan=2,
-                                         sticky=tk.W, padx=(16, 0), pady=(0, 3))
         self._dt_lat_var = tk.StringVar(value=f"{float(_f('glider_dive_target_lat_deg', 0.0)):g}")
         self._dt_lon_var = tk.StringVar(value=f"{float(_f('glider_dive_target_lon_deg', 0.0)):g}")
         self._dt_rad_var = tk.StringVar(
             value=f"{float(_f('glider_dive_target_radius_km', 20.0)) or 20.0:g}")
-        ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
-        ttk.Entry(_dtf, textvariable=self._dt_lat_var, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="°  Lon:").pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Entry(_dtf, textvariable=self._dt_lon_var, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="°  Radius:").pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Entry(_dtf, textvariable=self._dt_rad_var, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
-        ttk.Button(_dtf, text="Find…", width=7,
-                   command=lambda: self._app._pick_location(
-                       self._dt_lat_var, self._dt_lon_var)).pack(side=tk.LEFT, padx=(6, 0))
-        r += 1
 
-        ttk.Label(frm, text="(Glide law, separation, terminal dive, aero model\n"
-                            "and skip count are on the sidebar strip.)",
+        if self._family == 'numerical':
+            # ζ — damping ratio (damped_glide) or tracking gain
+            # (dynamic_equilibrium_glide); its meaning follows the glide law.
+            # Estimator applies only to the phugoid-damping case.
+            ttk.Label(frm, text=("Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
+                      ).grid(row=r, column=0, sticky=tk.W, pady=3)
+            _zf = ttk.Frame(frm); _zf.grid(row=r, column=1, sticky=tk.W, pady=3)
+            ttk.Entry(_zf, textvariable=self._z_var, width=8).pack(side=tk.LEFT)
+            if not _is_dyn:
+                ttk.Button(_zf, text="Estimate…", width=10,
+                           command=self._estimate_zeta).pack(side=tk.LEFT, padx=(4, 0))
+            ttk.Label(_zf, text=("  feedback gain on altitude-rate error"
+                                 if _is_dyn else
+                                 "  0 = undamped skip-glide; ~0.7 = a few skips"),
+                      foreground="#888888").pack(side=tk.LEFT); r += 1
+
+            # Bank schedule — up to three (start s, end s, bank °) segments.
+            ttk.Label(frm, text="Bank schedule:").grid(row=r, column=0, sticky=tk.NW, pady=3)
+            _bkf = ttk.Frame(frm); _bkf.grid(row=r, column=1, sticky=tk.W, pady=3)
+            for _mc, _hdr in enumerate(["start s", "end s", "bank °"], start=1):
+                ttk.Label(_bkf, text=_hdr, foreground="#888888").grid(
+                    row=0, column=_mc, padx=3, pady=(0, 1))
+            for _i, _bv in enumerate(self._bank_vars):
+                ttk.Label(_bkf, text=f"#{_i+1}").grid(row=_i+1, column=0, sticky=tk.W, padx=(0, 4))
+                for _mc, _k in enumerate(['start', 'end', 'bank'], start=1):
+                    ttk.Entry(_bkf, textvariable=_bv[_k], width=7).grid(
+                        row=_i+1, column=_mc, padx=3, pady=1)
+            r += 1
+
+            # Dive-at-target — steer to a lat/lon then dive (radius = trigger).
+            ttk.Checkbutton(frm, text="Dive at target (lat/lon)",
+                            variable=self._dt_on_var).grid(
+                row=r, column=0, sticky=tk.W, pady=(6, 1)); r += 1
+            _dtf = ttk.Frame(frm); _dtf.grid(row=r, column=0, columnspan=2,
+                                             sticky=tk.W, padx=(16, 0), pady=(0, 3))
+            ttk.Label(_dtf, text="Lat:").pack(side=tk.LEFT)
+            ttk.Entry(_dtf, textvariable=self._dt_lat_var, width=8).pack(side=tk.LEFT, padx=2)
+            ttk.Label(_dtf, text="°  Lon:").pack(side=tk.LEFT, padx=(4, 0))
+            ttk.Entry(_dtf, textvariable=self._dt_lon_var, width=8).pack(side=tk.LEFT, padx=2)
+            ttk.Label(_dtf, text="°  Radius:").pack(side=tk.LEFT, padx=(4, 0))
+            ttk.Entry(_dtf, textvariable=self._dt_rad_var, width=6).pack(side=tk.LEFT, padx=2)
+            ttk.Label(_dtf, text="km").pack(side=tk.LEFT)
+            ttk.Button(_dtf, text="Find…", width=7,
+                       command=lambda: self._app._pick_location(
+                           self._dt_lat_var, self._dt_lon_var)).pack(side=tk.LEFT, padx=(6, 0))
+            r += 1
+        else:
+            ttk.Label(frm, text="(Closed-form analytic: constant L/D, no banking,\n"
+                                "no dive-at-target, no phugoid ζ — the pull-up arc\n"
+                                "and glide are the Tracy/Acton formulas.)",
+                      foreground="#888888", justify=tk.LEFT).grid(
+                row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 1)); r += 1
+
+        ttk.Label(frm, text="(Glide law, separation, terminal dive and aero\n"
+                            "model are on the sidebar strip.)",
                   foreground="#888888", justify=tk.LEFT).grid(
             row=r, column=0, columnspan=2, sticky=tk.W, pady=(6, 4)); r += 1
 
@@ -5041,6 +5099,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._units_var      = tk.StringVar(value="km")  # plot display units
 
         _migrate_terminal_dive_default()  # migrate: dive default 30 km -> 0 (glide to impact)
+        _migrate_analytic_family()   # migrate: banked/targeted analytic plans -> numerical family
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
         _load_custom_boosters()      # restore any user-saved boosters
         # Restore per-booster named flight-plan selections.
@@ -5653,22 +5712,28 @@ class BoosterFlyoutApp(tk.Tk):
         # Reentry mode combobox — no label needed; the LabelFrame title suffices.
         # Primary modes first; the analytic equilibrium-glide laws are kept below
         # a (non-selectable) separator as legacy/comparison modes.
+        # FAMILY-SCOPED: the values list holds only the active plan's family
+        # (numerical EOM or closed-form analytic), set by _scope_mode_choices —
+        # the family is the plan's identity, chosen in New Reentry Plan and not
+        # crossable from the strip.  Initial values = numerical (the default
+        # family); populate re-scopes from the plan's mode.
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         self._main_guidance_cb = ttk.Combobox(
             _gmf, textvariable=self._main_guidance_var,
-            values=[_GUIDANCE_HDR_NUMERICAL,
-                    "Ballistic (drag · gravity · rotation)",
-                    "Phugoid / skip-glide",
-                    "Damped phugoid glide",
-                    "Dynamic equilibrium glide",
-                    _GUIDANCE_HDR_ANALYTIC,
-                    "Non-oscillatory glide (Acton)",
-                    "Equilibrium glide (Tracy)"],
+            values=[lbl for _k, lbl in self._REENTRY_MODE_NUMERICAL],
             state="readonly", width=32)
         self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
-                                     sticky=tk.W, padx=8, pady=(2, 1))
+                                     sticky=tk.W, padx=8, pady=(2, 0))
         self._main_guidance_cb.bind("<<ComboboxSelected>>",
                                      lambda _e: self._on_glider_guidance_changed())
+        # Family caption — the read-only identity line, mirroring the flight
+        # plan's "law fixed when the plan was created".
+        self._main_family_var = tk.StringVar(
+            value=f"family: {_FAMILY_LABELS['numerical']} — fixed for this "
+                  f"plan (New… to change)")
+        ttk.Label(_gmf, textvariable=self._main_family_var,
+                  foreground="#888888").grid(
+            row=1, column=0, columnspan=2, sticky=tk.W, padx=8, pady=(0, 1))
 
         # Skip count belonged only to the retired skip_to_equilibrium mode; the
         # control is gone.  The var stays as an inert conduit (scenario
@@ -6474,15 +6539,31 @@ class BoosterFlyoutApp(tk.Tk):
         else:
             _frm.grid_remove()
 
+    def _scope_mode_choices(self):
+        """Scope the strip's mode dropdown to the CURRENT mode's integration
+        family and refresh the family caption.  This single rule is the Level-2
+        identity mechanism (REENTRY_FAMILY_DESIGN.md): the dropdown never
+        offers a cross-family law, so the family is fixed for the plan's life
+        (New Reentry Plan chooses it); programmatic mode changes (scenario
+        restore) legitimately re-scope."""
+        _fam = mm.glide_family(self._current_reentry_mode_key())
+        _fam_modes = (self._REENTRY_MODE_ANALYTIC if _fam == 'analytic'
+                      else self._REENTRY_MODE_NUMERICAL)
+        _vals = [lbl for _k, lbl in _fam_modes]
+        try:
+            if list(self._main_guidance_cb['values']) != _vals:
+                self._main_guidance_cb.configure(values=_vals)
+        except tk.TclError:
+            pass
+        if hasattr(self, '_main_family_var'):
+            self._main_family_var.set(
+                f"family: {_FAMILY_LABELS[_fam]} — fixed for this plan "
+                f"(New… to change)")
+
     def _on_glider_guidance_changed(self):
         raw = self._main_guidance_var.get()
-        if raw in _GUIDANCE_SEPARATORS:
-            # A group header is not a real mode — revert to the previous choice.
-            self._main_guidance_var.set(
-                getattr(self, '_prev_guidance',
-                        "Ballistic (drag · gravity · rotation)"))
-            return
         self._prev_guidance = raw
+        self._scope_mode_choices()
         label = raw.lower()
         is_ballistic  = "ballistic"    in label
 
@@ -7452,11 +7533,11 @@ class BoosterFlyoutApp(tk.Tk):
                 "equilibrium_glide")
 
     def _ask_new_reentry_plan_name_and_mode(self, object_name):
-        """Modal prompt for a new reentry plan's name AND its starting reentry
-        mode, seeded from the object's current mode.  Unlike the flight-plan
-        law the mode is NOT fixed — it stays switchable on the strip; this just
-        gives the plan a coherent starting law tied to the vehicle.  Returns
-        (name, mode_label) or (None, None) on cancel."""
+        """Modal prompt for a new reentry plan's name, its INTEGRATION FAMILY
+        (the plan's identity — numerical EOM vs closed-form analytic, fixed for
+        the plan's life), and its starting law within that family (switchable
+        later on the strip, within the family).  Seeded from the object's
+        current mode.  Returns (name, mode_label) or (None, None) on cancel."""
         dlg = tk.Toplevel(self)
         dlg.title("New Reentry Plan")
         dlg.resizable(False, False)
@@ -7466,32 +7547,60 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(frm, text=f"Name for the new reentry plan for '{object_name}':"
                   ).grid(row=0, column=0, sticky=tk.W, pady=(0, 4))
         name_var = tk.StringVar()
-        ent = ttk.Entry(frm, textvariable=name_var, width=32)
+        ent = ttk.Entry(frm, textvariable=name_var, width=36)
         ent.grid(row=1, column=0, sticky=tk.EW, pady=(0, 10))
-        ttk.Label(frm, text="Starting reentry mode (switchable later on the strip):"
-                  ).grid(row=2, column=0, sticky=tk.W, pady=(0, 4))
+
         _cur = self._current_reentry_mode_key()
-        # numerical group, header, analytic group — mirroring the strip combobox.
-        _values = ([_GUIDANCE_HDR_NUMERICAL]
-                   + [lbl for _k, lbl in self._REENTRY_MODE_NUMERICAL]
-                   + [_GUIDANCE_HDR_ANALYTIC]
-                   + [lbl for _k, lbl in self._REENTRY_MODE_ANALYTIC])
-        _cur_lbl = next((lbl for k, lbl in self._REENTRY_MODE_CHOICES if k == _cur),
-                        self._REENTRY_MODE_NUMERICAL[0][1])
-        mode_var = tk.StringVar(value=_cur_lbl)
-        ttk.Combobox(frm, textvariable=mode_var, values=_values,
-                     state="readonly", width=32).grid(
-            row=3, column=0, sticky=tk.EW, pady=(0, 4))
+        _cur_fam = mm.glide_family(_cur)
+        ttk.Label(frm, text="Integration family (fixed for the life of the plan):"
+                  ).grid(row=2, column=0, sticky=tk.W, pady=(0, 4))
+        fam_var = tk.StringVar(value=_cur_fam)
+        mode_var = tk.StringVar()
+
+        def _fam_modes():
+            return (self._REENTRY_MODE_ANALYTIC if fam_var.get() == 'analytic'
+                    else self._REENTRY_MODE_NUMERICAL)
+
+        def _on_family(*_):
+            _modes = _fam_modes()
+            _labels = [lbl for _k, lbl in _modes]
+            mode_cb.configure(values=_labels)
+            # keep the current mode if it belongs to the family; else default
+            # to the family's first (numerical: Ballistic; analytic: Acton).
+            _keep = next((lbl for k, lbl in _modes if k == _cur), None)
+            mode_var.set(_keep if _keep is not None else _labels[0])
+
+        for _i, (_key, _lbl, _hint) in enumerate((
+                ('numerical', "Numerical (EOM)",
+                 "step-by-step integration; banking, dive-at-target, "
+                 "Mach-varying L/D; honest capture (lofted entries plunge)"),
+                ('analytic', "Closed-form analytic",
+                 "Tracy/Acton pull-up arc + range formula; constant L/D, "
+                 "always captures; fast comparison law"))):
+            ttk.Radiobutton(frm, text=_lbl, variable=fam_var, value=_key,
+                            command=_on_family).grid(
+                row=3 + 2 * _i, column=0, sticky=tk.W, padx=(4, 0))
+            ttk.Label(frm, text=_hint, foreground="#888888",
+                      wraplength=360, justify=tk.LEFT).grid(
+                row=4 + 2 * _i, column=0, sticky=tk.W, padx=(24, 0))
+
+        ttk.Label(frm, text="Starting law (switchable within the family):"
+                  ).grid(row=7, column=0, sticky=tk.W, pady=(8, 4))
+        mode_cb = ttk.Combobox(frm, textvariable=mode_var,
+                               state="readonly", width=34)
+        mode_cb.grid(row=8, column=0, sticky=tk.EW, pady=(0, 4))
+        _on_family()
+
         out = {}
         def _ok(*_):
             _m = mode_var.get()
-            if _m in _GUIDANCE_SEPARATORS:     # a group header isn't a mode
+            if not _m:
                 return
             out['name'] = name_var.get().strip()
             out['mode'] = _m
             dlg.destroy()
         bf = ttk.Frame(frm)
-        bf.grid(row=4, column=0, sticky=tk.E, pady=(12, 0))
+        bf.grid(row=9, column=0, sticky=tk.E, pady=(12, 0))
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.RIGHT, padx=(4, 0))
         ttk.Button(bf, text="Create", command=_ok).pack(side=tk.RIGHT)
         ent.bind("<Return>", _ok)
