@@ -5337,17 +5337,20 @@ class BoosterFlyoutApp(tk.Tk):
         params_tab   = ttk.Frame(self._right_nb)
         slv_tab      = ttk.Frame(self._right_nb)
         heat_tab     = ttk.Frame(self._right_nb)
+        surv_tab     = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
         self._right_nb.add(params_tab,   text="  Booster Parameters  ")
         self._right_nb.add(slv_tab,      text="  SLV Performance  ")
         self._right_nb.add(heat_tab,     text="  Heating Survivability  ")
+        self._right_nb.add(surv_tab,     text="  Reentry Survivability  ")
 
         self._build_plot_panel(plots_tab)
         self._build_timeline_panel(timeline_tab)
         self._build_params_tab(params_tab)
         self._build_slv_tab(slv_tab)
         self._build_heating_tab(heat_tab)
+        self._build_surv_tab(surv_tab)
 
         # Status bar
         self._status_var = tk.StringVar(value="Ready.")
@@ -6001,6 +6004,102 @@ class BoosterFlyoutApp(tk.Tk):
             body += "  • " + n + "\n"
 
         self._heat_set_text(s["status"], s["headline"], body)
+
+    # ------------------------------------------------------------------
+    # Reentry Survivability tab — the mode-keyed report + flux/load plot
+    # (SURVIVABILITY_REPORT_DESIGN.md; the down-leg Schilling panel).
+    # Assembled by survivability_report.build_report over the numbers the
+    # run already computed (result['heating_fom'] + ['heating_arc']).
+    # ------------------------------------------------------------------
+    def _build_surv_tab(self, parent):
+        rf = ttk.LabelFrame(
+            parent,
+            text="Reentry Survivability  (mode-keyed screening report — "
+                 "not a TPS design verdict)")
+        rf.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        # Top: flux(t) / load(t) plot — the mode's signature pulse shape.
+        self._surv_fig = Figure(figsize=(6.0, 2.4), dpi=96)
+        self._surv_canvas = FigureCanvasTkAgg(self._surv_fig, master=rf)
+        self._surv_canvas.get_tk_widget().pack(fill=tk.X, padx=4, pady=(4, 2))
+
+        # Bottom: the report text.
+        self._surv_text = tk.Text(
+            rf, state=tk.DISABLED, font=("TkFixedFont", 9),
+            wrap=tk.WORD, relief=tk.FLAT, background="#f8f8f8",
+            foreground="#222222", selectbackground="#c0d8f0")
+        vsb = ttk.Scrollbar(rf, orient=tk.VERTICAL,
+                            command=self._surv_text.yview)
+        self._surv_text.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._surv_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        for tag, colour in (("survive", "#006600"), ("fail", "#aa0000"),
+                            ("degraded", "#cc6600"), ("analysis", "#b8860b"),
+                            ("none", "#555555")):
+            self._surv_text.tag_configure(
+                tag, foreground=colour, font=("TkFixedFont", 11, "bold"))
+
+        self._surv_set_text(
+            None, "",
+            "Fly a trajectory (Launch / Max Range).  This panel then reports\n"
+            "the reentry object's heating survivability, keyed to its reentry\n"
+            "mode: a ballistic RV is judged on the nose-recession accuracy\n"
+            "ladder (Form A), a glider on survival-time vs glide-time and the\n"
+            "NRC-2008 TPS duration ladder (Form B), and a maneuvering vehicle\n"
+            "adds the terminal-dive transient (Form C).  The plot shows the\n"
+            "flux pulse q̇(t) and the running load Q(t) — the pulse shape is\n"
+            "the mode's signature.")
+
+    def _surv_set_text(self, status, headline, body):
+        self._surv_text.configure(state=tk.NORMAL)
+        self._surv_text.delete("1.0", tk.END)
+        if status is not None:
+            mark = {"survive": "✓  ", "fail": "✗  ", "degraded": "◑  ",
+                    "analysis": "⚠  ", "none": "•  "}.get(status, "")
+            self._surv_text.insert(tk.END, mark + headline + "\n\n", status)
+        self._surv_text.insert(tk.END, body)
+        self._surv_text.configure(state=tk.DISABLED)
+
+    def _populate_survivability(self, r):
+        """Fill the Reentry Survivability tab from the trajectory result."""
+        import survivability_report as _sr
+        rep = _sr.build_report(r or {})
+        self._surv_set_text(
+            rep['status'] if rep.get('form') else 'none',
+            rep['headline'], rep['body'])
+
+        self._surv_fig.clf()
+        pl = rep.get('plot')
+        if pl is not None and len(pl['t']) > 1:
+            ax = self._surv_fig.add_subplot(111)
+            ax2 = ax.twinx()
+            ax.plot(pl['t'], pl['q_MW'], color="#aa2222", linewidth=1.4,
+                    label="q̇ (MW/m²)")
+            ax2.plot(pl['t'], pl['Q_MJ'], color="#2255aa", linewidth=1.4,
+                     linestyle="--", label="Q (MJ/m²)")
+            ax.set_xlabel("time from reentry-arc start (s)", fontsize=8)
+            ax.set_ylabel("q̇  MW/m²", fontsize=8, color="#aa2222")
+            ax2.set_ylabel("Q  MJ/m²", fontsize=8, color="#2255aa")
+            ax.tick_params(labelsize=7)
+            ax2.tick_params(labelsize=7)
+            if pl.get('t_fail') is not None:
+                ax.axvline(pl['t_fail'], color="#aa0000", linewidth=1.0,
+                           linestyle=":", alpha=0.9)
+                ax.text(pl['t_fail'], ax.get_ylim()[1] * 0.95, " t_fail",
+                        fontsize=7, color="#aa0000", va="top")
+            # NRC duration ticks for gliders (300 / 800 / 3000 / 3600 s),
+            # only those inside the plotted span.
+            if pl.get('glide_s') and pl.get('tiers'):
+                _tmax = float(pl['t'][-1])
+                for _lbl, _sec, _mat, _tier in pl['tiers']:
+                    if _sec and _sec <= _tmax:
+                        ax.axvline(_sec, color="#888888", linewidth=0.7,
+                                   linestyle=":", alpha=0.6)
+                        ax.text(_sec, ax.get_ylim()[1] * 0.02, f" {_sec:g}s",
+                                fontsize=6, color="#888888", va="bottom")
+            self._surv_fig.tight_layout()
+        self._surv_canvas.draw_idle()
 
     def _slv_set_text(self, body: str, verdict=None):
         """Replace the SLV results text widget contents."""
@@ -9676,6 +9775,7 @@ class BoosterFlyoutApp(tk.Tk):
             self._plot_results(r, scale, ulbl)
             self._populate_timeline(r)
             self._populate_heating(r)
+            self._populate_survivability(r)
         except Exception as exc:
             import traceback as _tb
             _tb_str = _tb.format_exc()
