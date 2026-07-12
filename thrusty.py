@@ -4270,8 +4270,10 @@ class ParametricSweepDialog(tk.Toplevel):
                          linewidth=1.5, label="Peak flux q̇")
                 ax2.plot(xs, ys_load,  "--s", color="#2255aa", markersize=3,
                          linewidth=1.5, label="Heat load Q")
-                ax .set_ylabel("q̇ peak (MW/m²)", fontsize=8, color="#aa2222")
-                ax2.set_ylabel("Q load (MJ/m²)", fontsize=8, color="#2255aa")
+                ax .set_ylabel("q̇  peak flux  (MW/m²)", fontsize=8,
+                               color="#aa2222")
+                ax2.set_ylabel("Q  soak  (MJ/m²)", fontsize=8,
+                               color="#2255aa")
                 ax2.tick_params(labelsize=7)
                 ax.set_title("Heating vs trajectory shaping — "
                              "flux rises where load falls (the loft/depress "
@@ -4279,13 +4281,16 @@ class ParametricSweepDialog(tk.Toplevel):
             elif _sq:
                 ax.plot(xs, ys_qpeak, "-o", color="#aa2222", markersize=3,
                         linewidth=1.5)
-                ax.set_ylabel("q̇ peak (MW/m²)", fontsize=8, color="#aa2222")
+                ax.set_ylabel("q̇  peak flux  (MW/m²)", fontsize=8,
+                              color="#aa2222")
                 ax.set_title("Peak stagnation flux vs parameter", fontsize=9)
             else:
                 ax.plot(xs, ys_load, "--s", color="#2255aa", markersize=3,
                         linewidth=1.5)
-                ax.set_ylabel("Q load (MJ/m²)", fontsize=8, color="#2255aa")
-                ax.set_title("Integrated heat load vs parameter", fontsize=9)
+                ax.set_ylabel("Q  soak  (MJ/m²)", fontsize=8,
+                              color="#2255aa")
+                ax.set_title("Integrated heat load (soak) vs parameter",
+                             fontsize=9)
             self._fig.tight_layout(pad=2.5)
             self._canvas.draw()
             return
@@ -6171,8 +6176,8 @@ class BoosterFlyoutApp(tk.Tk):
             ax2.plot(pl['t'], pl['Q_MJ'], color="#2255aa", linewidth=1.4,
                      linestyle="--", label="Q (MJ/m²)")
             ax.set_xlabel("time from reentry-arc start (s)", fontsize=8)
-            ax.set_ylabel("q̇  MW/m²", fontsize=8, color="#aa2222")
-            ax2.set_ylabel("Q  MJ/m²", fontsize=8, color="#2255aa")
+            ax.set_ylabel("q̇  flux  (MW/m²)", fontsize=8, color="#aa2222")
+            ax2.set_ylabel("Q  soak  (MJ/m²)", fontsize=8, color="#2255aa")
             ax.tick_params(labelsize=7)
             ax2.tick_params(labelsize=7)
             if pl.get('t_fail') is not None:
