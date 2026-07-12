@@ -2431,10 +2431,18 @@ class BoosterDialog(tk.Toplevel):
 # RV editor dialog
 # ---------------------------------------------------------------------------
 
-# Non-selectable divider in the reentry-mode dropdown, separating the primary
-# modes from the legacy/comparison equilibrium-glide laws.  Module-level so both
-# the main control panel (BoosterFlyoutApp) and the RV editor can reference it.
-_GUIDANCE_SEPARATOR = "──────  legacy glider modes  ──────"
+# Non-selectable group headers in the reentry-mode dropdown, dividing the modes
+# by HOW they are integrated: numerical EOM (drag/lift feedback integrated step
+# by step) vs. closed-form analytic (the Tracy/Acton pull-up arc + equilibrium-
+# glide range formula).  Module-level so both the main control panel and the RV
+# editor can reference them.  _GUIDANCE_SEPARATORS lists every non-selectable
+# row for the revert guard.
+_GUIDANCE_HDR_NUMERICAL = "──────  numerical (EOM)  ──────"
+_GUIDANCE_HDR_ANALYTIC  = "──────  closed-form (analytic)  ──────"
+_GUIDANCE_SEPARATORS = (_GUIDANCE_HDR_NUMERICAL, _GUIDANCE_HDR_ANALYTIC)
+# Back-compat alias (older references): the analytic header plays the role the
+# single legacy divider used to.
+_GUIDANCE_SEPARATOR = _GUIDANCE_HDR_ANALYTIC
 
 
 class ROEditorDialog(tk.Toplevel):
@@ -2452,9 +2460,10 @@ class ROEditorDialog(tk.Toplevel):
         "equilibrium_glide":       "Equilibrium glide (Tracy)",
         "equilibrium_glide_acton": "Non-oscillatory glide (Acton)",
         "skip_glide":              "Phugoid / skip-glide",
-        "skip_to_equilibrium":     "Skip → equilibrium (auto-handoff)",
         "damped_glide":            "Damped phugoid glide",
         "dynamic_equilibrium_glide": "Dynamic equilibrium glide",
+        # skip_to_equilibrium retired -> aliased to damped_glide on load.
+        "skip_to_equilibrium":     "Damped phugoid glide",
     }
 
     def __init__(self, parent, ro=None, mass_kg=500.0):
@@ -5647,30 +5656,25 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         self._main_guidance_cb = ttk.Combobox(
             _gmf, textvariable=self._main_guidance_var,
-            values=["Ballistic (drag · gravity · rotation)",
+            values=[_GUIDANCE_HDR_NUMERICAL,
+                    "Ballistic (drag · gravity · rotation)",
                     "Phugoid / skip-glide",
                     "Damped phugoid glide",
                     "Dynamic equilibrium glide",
+                    _GUIDANCE_HDR_ANALYTIC,
                     "Non-oscillatory glide (Acton)",
-                    _GUIDANCE_SEPARATOR,
-                    "Equilibrium glide (Tracy)",
-                    "Skip → equilibrium (auto-handoff)"],
+                    "Equilibrium glide (Tracy)"],
             state="readonly", width=32)
         self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
                                      sticky=tk.W, padx=8, pady=(2, 1))
         self._main_guidance_cb.bind("<<ComboboxSelected>>",
                                      lambda _e: self._on_glider_guidance_changed())
 
-        # Skip count — only visible for "Skip → equilibrium (auto-handoff)"
-        _skf = ttk.Frame(_gmf)
-        _skf.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(8, 0), pady=1)
-        self._main_skip_frame = _skf
-        ttk.Label(_skf, text="Number of skips:").pack(side=tk.LEFT)
+        # Skip count belonged only to the retired skip_to_equilibrium mode; the
+        # control is gone.  The var stays as an inert conduit (scenario
+        # save/restore and the plan schema still carry glider_skip_count,
+        # defaulting to 1) so nothing downstream needs to change.
         self._main_skip_count_var = tk.StringVar(value="1")
-        ttk.Spinbox(_skf, textvariable=self._main_skip_count_var,
-                    from_=1, to=10, width=4).pack(side=tk.LEFT, padx=4)
-        ttk.Label(_skf, text="(1 = first upward crossing)",
-                  foreground="#555555").pack(side=tk.LEFT, padx=(2, 0))
 
         # ζ damping is a tuning parameter (with its own estimator), so it lives
         # in the Reentry Plan editor (Edit…), not on the strip.  The var stays
@@ -6472,8 +6476,8 @@ class BoosterFlyoutApp(tk.Tk):
 
     def _on_glider_guidance_changed(self):
         raw = self._main_guidance_var.get()
-        if raw == _GUIDANCE_SEPARATOR:
-            # The divider is not a real mode — revert to the previous selection.
+        if raw in _GUIDANCE_SEPARATORS:
+            # A group header is not a real mode — revert to the previous choice.
             self._main_guidance_var.set(
                 getattr(self, '_prev_guidance',
                         "Ballistic (drag · gravity · rotation)"))
@@ -6481,16 +6485,6 @@ class BoosterFlyoutApp(tk.Tk):
         self._prev_guidance = raw
         label = raw.lower()
         is_ballistic  = "ballistic"    in label
-        is_skip_to_eq = "auto-handoff" in label
-        is_damped     = "damped"       in label
-        is_dynamic    = "dynamic"      in label   # dynamic_equilibrium_glide
-
-        # Skip-count row: only for skip_to_equilibrium
-        if hasattr(self, '_main_skip_frame'):
-            if is_skip_to_eq and not is_damped:
-                self._main_skip_frame.grid()
-            else:
-                self._main_skip_frame.grid_remove()
 
         # Glide-specific controls: hidden for pure ballistic reentry.  ζ, bank
         # schedule and dive-at-target now live in the Reentry Plan editor; the
@@ -7231,7 +7225,6 @@ class BoosterFlyoutApp(tk.Tk):
         key = ("ballistic"                 if "ballistic"    in label else
                "damped_glide"              if "damped"       in label else
                "dynamic_equilibrium_glide" if "dynamic"      in label else
-               "skip_to_equilibrium"       if "auto-handoff" in label else
                "skip_glide"                if "skip"         in label else
                "equilibrium_glide_acton"   if "acton"        in label else
                "equilibrium_glide")
@@ -7248,10 +7241,7 @@ class BoosterFlyoutApp(tk.Tk):
             dalt = float(self._main_dive_alt_var.get())
         except (ValueError, AttributeError):
             dalt = 0.0                          # blank = glide to impact
-        skip = 1
-        if key == "skip_to_equilibrium":
-            try:    skip = int(self._main_skip_count_var.get())
-            except (ValueError, AttributeError): skip = 1
+        skip = 1                                # (retired skip_to_equilibrium N)
         zeta = 0.7
         if key in ("damped_glide", "dynamic_equilibrium_glide"):
             try:    zeta = max(0.0, float(self._main_zeta_var.get()))
@@ -7294,15 +7284,15 @@ class BoosterFlyoutApp(tk.Tk):
                                   'separating_ro') == 'body'
                 else 'separating_ro'])
         _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
+        # skip_to_equilibrium is retired (aliased to damped_glide on load), so
+        # it never reaches here; azimuth_command still maps to skip-glide.
         self._main_guidance_var.set(
             "Phugoid / skip-glide"
             if _guid in ("skip_glide", "azimuth_command")
             else "Damped phugoid glide"
-            if _guid == "damped_glide"
+            if _guid in ("damped_glide", "skip_to_equilibrium")
             else "Dynamic equilibrium glide"
             if _guid == "dynamic_equilibrium_glide"
-            else "Skip → equilibrium (auto-handoff)"
-            if _guid == "skip_to_equilibrium"
             else "Non-oscillatory glide (Acton)"
             if _guid == "equilibrium_glide_acton"
             else "Equilibrium glide (Tracy)"
@@ -7433,23 +7423,23 @@ class BoosterFlyoutApp(tk.Tk):
             state=tk.NORMAL if sel != mm.DEFAULT_PLAN_LABEL else tk.DISABLED)
         self._on_booster_changed()   # repopulate glider controls from the variant
 
-    # Reentry-mode picklist, split exactly like the sidebar strip: CORE modes
-    # first, then the analytic LEGACY/comparison laws below a non-selectable
-    # divider.  Shared by the New Reentry Plan dialog.  Unlike a flight-plan law
-    # (fixed for the plan's life), a reentry mode is the plan's STARTING law and
-    # stays switchable on the strip afterward (the hybrid).
-    _REENTRY_MODE_CORE = (
+    # Reentry-mode picklist, split exactly like the sidebar strip by HOW the
+    # trajectory is integrated: NUMERICAL (EOM, step-by-step lift/drag) vs.
+    # CLOSED-FORM ANALYTIC (Tracy/Acton pull-up arc + range formula).  Shared by
+    # the New Reentry Plan dialog.  Unlike a flight-plan law (fixed for the
+    # plan's life), a reentry mode is the plan's STARTING law and stays
+    # switchable on the strip afterward (the hybrid).
+    _REENTRY_MODE_NUMERICAL = (
         ("ballistic",                  "Ballistic (drag · gravity · rotation)"),
         ("skip_glide",                 "Phugoid / skip-glide"),
         ("damped_glide",               "Damped phugoid glide"),
         ("dynamic_equilibrium_glide",  "Dynamic equilibrium glide"),
+    )
+    _REENTRY_MODE_ANALYTIC = (
         ("equilibrium_glide_acton",    "Non-oscillatory glide (Acton)"),
-    )
-    _REENTRY_MODE_LEGACY = (
         ("equilibrium_glide",          "Equilibrium glide (Tracy)"),
-        ("skip_to_equilibrium",        "Skip → equilibrium (auto-handoff)"),
     )
-    _REENTRY_MODE_CHOICES = _REENTRY_MODE_CORE + _REENTRY_MODE_LEGACY
+    _REENTRY_MODE_CHOICES = _REENTRY_MODE_NUMERICAL + _REENTRY_MODE_ANALYTIC
 
     def _current_reentry_mode_key(self) -> str:
         """The guidance key the strip is currently showing (its default seed)."""
@@ -7457,7 +7447,6 @@ class BoosterFlyoutApp(tk.Tk):
         return ("ballistic"                 if "ballistic"    in label else
                 "damped_glide"              if "damped"       in label else
                 "dynamic_equilibrium_glide" if "dynamic"      in label else
-                "skip_to_equilibrium"       if "auto-handoff" in label else
                 "skip_glide"                if "skip"         in label else
                 "equilibrium_glide_acton"   if "acton"        in label else
                 "equilibrium_glide")
@@ -7482,12 +7471,13 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(frm, text="Starting reentry mode (switchable later on the strip):"
                   ).grid(row=2, column=0, sticky=tk.W, pady=(0, 4))
         _cur = self._current_reentry_mode_key()
-        # core modes, the divider, then legacy — mirroring the strip combobox.
-        _values = ([lbl for _k, lbl in self._REENTRY_MODE_CORE]
-                   + [_GUIDANCE_SEPARATOR]
-                   + [lbl for _k, lbl in self._REENTRY_MODE_LEGACY])
+        # numerical group, header, analytic group — mirroring the strip combobox.
+        _values = ([_GUIDANCE_HDR_NUMERICAL]
+                   + [lbl for _k, lbl in self._REENTRY_MODE_NUMERICAL]
+                   + [_GUIDANCE_HDR_ANALYTIC]
+                   + [lbl for _k, lbl in self._REENTRY_MODE_ANALYTIC])
         _cur_lbl = next((lbl for k, lbl in self._REENTRY_MODE_CHOICES if k == _cur),
-                        _values[0])
+                        self._REENTRY_MODE_NUMERICAL[0][1])
         mode_var = tk.StringVar(value=_cur_lbl)
         ttk.Combobox(frm, textvariable=mode_var, values=_values,
                      state="readonly", width=32).grid(
@@ -7495,7 +7485,7 @@ class BoosterFlyoutApp(tk.Tk):
         out = {}
         def _ok(*_):
             _m = mode_var.get()
-            if _m == _GUIDANCE_SEPARATOR:      # the divider isn't a real mode
+            if _m in _GUIDANCE_SEPARATORS:     # a group header isn't a mode
                 return
             out['name'] = name_var.get().strip()
             out['mode'] = _m

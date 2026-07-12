@@ -2298,26 +2298,28 @@ that bypasses exo-atmospheric defences.
 The HGV machinery in Thrusty has six interlocking pieces, each documented
 in its own subsection below: a state-machine latch that decides when the
 vehicle is in "glide mode"; two aerodynamic models (constant L/D and a
-drag polar); five guidance modes spanning a spectrum of phugoid
-suppression; a bank-to-turn cross-range model; an inverted terminal dive;
-and a JSON-based RV library for shipping or extending vehicle
-definitions.
+drag polar); the guidance modes, split by integration method into
+**numerical (EOM)** and **closed-form analytic** families; a bank-to-turn
+cross-range model; an inverted terminal dive; and a JSON-based RV library
+for shipping or extending vehicle definitions.
 
 The trajectory machinery and physical conventions follow
 [Tracy & Wright 2020](#16-references) and
-[Acton 2015](#16-references); the five guidance modes implement (i) the
-Tracy & Wright equilibrium-glide ansatz, (ii) the Acton three-phase
-analytic pull-up, (iii) a pure phugoid skip-glide, (iv) a Thrusty-original
-hybrid that lets the vehicle skip phugoidally for a user-set number of
-cycles before settling into equilibrium glide, and (v) a damped-phugoid
-glide ([Lu 2013](#16-references)) that fills the realistic physical middle
-of the spectrum with a single damping knob ζ. The four **core** models —
-ballistic, `skip_glide` (undamped phugoid, ζ = 0), `damped_glide` (a
-guided pull-up plus a few decaying skips, ζ ≈ 0.7), and
-`equilibrium_glide_acton` (Acton non-oscillatory capture, ζ → ∞) — form
-one physical spectrum in how strongly the re-entry phugoid is damped;
-`equilibrium_glide` (Tracy) and `skip_to_equilibrium` are retained as
-**legacy** comparison modes. See [`DAMPED_GLIDE.md`](DAMPED_GLIDE.md) and
+[Acton 2015](#16-references). The modes divide by how they are integrated.
+The **numerical (EOM)** family integrates the equations of motion with a
+per-step lift command and spans a phugoid-suppression spectrum: `ballistic`
+(no lift), `skip_glide` (undamped phugoid, ζ = 0), `damped_glide` (a guided
+pull-up plus a few decaying skips, ζ ≈ 0.7, [Lu 2013](#16-references)), and
+`dynamic_equilibrium_glide` (equilibrium-trim capture, ζ a tracking gain).
+The **closed-form analytic** family reaches the same equilibrium glide via an
+imposed pull-up arc + range formula: `equilibrium_glide_acton` (Acton 2015
+three-phase non-oscillatory capture) and `equilibrium_glide` (Tracy & Wright
+2020, single-arc). The analytic family exists mainly as a fast closed-form
+*comparison* against the numerical sim; it always captures and cannot bank,
+dive-at-target, or take the Mach-varying L/D table.
+(`skip_to_equilibrium`, a Thrusty-original discrete N-skip handoff, is
+**retired** — aliased to `damped_glide`, which covers it continuously.)
+See [`DAMPED_GLIDE.md`](DAMPED_GLIDE.md) and
 [`DAMPED_GLIDE_MEMO.md`](DAMPED_GLIDE_MEMO.md) for the full damped-glide
 derivation.
 
@@ -2414,26 +2416,44 @@ on the trim solution rather than a precise aerodynamic limit.
 
 ### 12.3 Guidance modes
 
-The `glider_guidance` field on each RV selects one of five guidance laws,
-exposed by the GUI dropdown labelled "Glider guidance":
+The `glider_guidance` field on each RV selects the reentry law, exposed by the
+GUI dropdown. The laws split by **how the trajectory is integrated** — the
+dropdown groups them the same way:
 
-| GUI label | `glider_guidance` value | Origin | Phugoid damping |
+**Numerical (EOM)** — `_eom` is integrated step by step with the lift/drag
+command below; supports banking, dive-at-target, and the Mach-varying L/D table
+(§8.10), and is honest about capturability (a lofted entry plunges):
+
+| GUI label | `glider_guidance` value | Origin | Lift command |
 |---|---|---|---|
-| Phugoid / skip-glide | `skip_glide` | Sänger / classical skip-glide | ζ = 0 (undamped) |
-| Damped-phugoid glide | `damped_glide` | Lu 2013 (Thrusty default) | ζ ≈ 0.7 |
-| Equilibrium glide (Acton) | `equilibrium_glide_acton` | Acton 2015 | ζ → ∞ (limit) |
-| Equilibrium glide (Tracy) | `equilibrium_glide` | Tracy & Wright 2020 | steady (legacy) |
-| Skip → equilibrium (auto-handoff) | `skip_to_equilibrium` | Lewis (Thrusty-original) | N skips then steady (legacy) |
+| Ballistic | `ballistic` (glider off) | — | none (drag + gravity only) |
+| Phugoid / skip-glide | `skip_glide` | Sänger / classical skip-glide | max-L/D α*, ζ = 0 (undamped) |
+| Damped-phugoid glide | `damped_glide` | Lu 2013 (Thrusty default) | α* + ζ phugoid damping (ζ ≈ 0.7) |
+| Dynamic equilibrium glide | `dynamic_equilibrium_glide` | Tracy Eq. 7 trim + Lu feedback | equilibrium trim + ζ tracking gain (smooth capture) |
 
-The modes form a spectrum of *how aggressively the guidance suppresses
-phugoid amplitude*, ordered above by damping ratio ζ: from "let it ride at
-max-L/D α*" (`skip_glide`, undamped phugoid, ζ = 0), through the tunable
-middle (`damped_glide`, a guided pull-up plus a few decaying skips,
-ζ ≈ 0.7), to "fully suppress it" (Acton and Tracy, analytic capture with
-mild or no residual phugoid, ζ → ∞). `skip_to_equilibrium` is the discrete
-cousin of `damped_glide` — "let it ride for N skips, then suppress."
-Atmospheric drag provides natural damping to all of these — they are
-bounded oscillations, not unbounded ones.
+**Closed-form analytic** — Tracy/Acton pull-up arc + equilibrium-glide range
+formula; constant L/D, always captures (the arc is imposed). Cannot bank or
+dive-at-target (those force a numerical fallback), and cannot take the
+Mach-varying L/D table (the closed form needs a constant L/D):
+
+| GUI label | `glider_guidance` value | Origin | Phugoid |
+|---|---|---|---|
+| Non-oscillatory glide (Acton) | `equilibrium_glide_acton` | Acton 2015 | none (analytic) |
+| Equilibrium glide (Tracy) | `equilibrium_glide` | Tracy & Wright 2020 | none (analytic) |
+
+The glide modes form a spectrum of *how aggressively the guidance suppresses
+phugoid amplitude*, ordered by ζ: from "let it ride at max-L/D α*"
+(`skip_glide`, undamped, ζ = 0), through the tunable middle (`damped_glide`, a
+guided pull-up plus a few decaying skips, ζ ≈ 0.7), to full suppression —
+either the numerical `dynamic_equilibrium_glide` (equilibrium-trim capture, ζ a
+tracking gain) or the analytic Acton/Tracy closed forms. Atmospheric drag damps
+all of these — bounded oscillations, not unbounded ones.
+
+> **Retired:** `skip_to_equilibrium` (Lewis, "let it ride for N skips, then
+> suppress") is aliased to `damped_glide` on load — the continuous damped
+> phugoid covers the same behaviour without the discrete N-skip handoff. Old
+> files/plans naming it fly `damped_glide`; the EOM path is retained but
+> unreachable.
 
 #### 12.3.1 Equilibrium glide (Tracy)
 
@@ -2577,7 +2597,14 @@ down-swing into denser air), and the amplitude decays over many cycles.
 Bounded does not mean small: the first-cycle peak-to-trough altitude
 swing can be tens of kilometres for a vehicle entering at v ≈ 6 km/s.
 
-#### 12.3.4 Skip-to-equilibrium (Lewis)
+#### 12.3.4 Skip-to-equilibrium (Lewis) — *retired*
+
+> **Retired.** `skip_to_equilibrium` is aliased to `damped_glide` on load
+> (`_norm_glide_mode`, `booster_models.py`) and is no longer offered in the
+> dropdown. The continuous damped phugoid glide produces the same "skip a
+> while, then settle" behaviour without the discrete N-skip handoff, so the
+> handoff and its `glider_skip_count` control are gone. The EOM path described
+> below is retained but unreachable; the description is kept for provenance.
 
 A Thrusty-original hybrid that bridges the gap between Acton's idealized
 smooth pull-up and the unsuppressed phugoid of skip-glide. The vehicle

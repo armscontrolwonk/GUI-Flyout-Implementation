@@ -298,11 +298,14 @@ class ROParams:
     #   "skip_glide":              no analytical pull-up; the vehicle re-
     #                              enters with whatever γ it had and the
     #                              natural EOM produces a phugoid.
-    #   "skip_to_equilibrium":     starts as skip_glide; after N upward
-    #                              crossings of the equilibrium curve the
-    #                              guidance switches one-way to
-    #                              equilibrium_glide.  N is set by
-    #                              glider_skip_count (default 1).
+    #   "skip_to_equilibrium":     RETIRED — aliased to "damped_glide" on load
+    #                              (_norm_glide_mode).  It started as skip_glide
+    #                              and after N upward crossings switched one-way
+    #                              to equilibrium_glide; the damped phugoid glide
+    #                              produces the same "skip a while, then settle"
+    #                              behaviour continuously, so the discrete
+    #                              handoff (and its glider_skip_count) is gone.
+    #                              The EOM path is retained but unreachable.
     #   "damped_glide":            skip_glide plus continuous altitude-rate
     #                              lift feedback (Lu 2013 / Yu & Chen 2011)
     #                              that damps the phugoid to a target ratio
@@ -496,6 +499,22 @@ def _norm_sep_mode(v) -> str:
             'non_separating': 'body'}.get(s, s)
 
 
+def _norm_glide_mode(v) -> str:
+    """Normalise a glider_guidance value to the current vocabulary.  Retired
+    modes are aliased to their live equivalent so old saved files/plans keep
+    working:
+      'constant_bank'       -> 'skip_glide'  (old bank-angle knob removed)
+      'azimuth_command'     -> 'skip_glide'  (proportional heading hold removed)
+      'skip_to_equilibrium' -> 'damped_glide' (the damped phugoid glide covers
+                               the same "skip a while, then settle" behaviour
+                               continuously, so the discrete N-skip handoff is
+                               retired)."""
+    s = str(v or 'equilibrium_glide')
+    return {'constant_bank': 'skip_glide',
+            'azimuth_command': 'skip_glide',
+            'skip_to_equilibrium': 'damped_glide'}.get(s, s)
+
+
 def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
     """Serialise an ROParams to a JSON-compatible dict.
 
@@ -554,12 +573,9 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
 def ro_from_dict(d: dict) -> ROParams:
     # Legacy mode aliases:
     #   "constant_bank"   → "skip_glide"   (old bank-angle knob is gone)
-    #   "azimuth_command" → "skip_glide"   (proportional heading hold removed
-    #                                       — saved boosters fall back to a
-    #                                       wings-level skip-glide)
-    _g = str(d.get('glider_guidance', 'equilibrium_glide'))
-    if _g in ('constant_bank', 'azimuth_command'):
-        _g = 'skip_glide'
+    #   "azimuth_command" → "skip_glide"   (proportional heading hold removed)
+    #   "skip_to_equilibrium" → "damped_glide"  (retired; damped covers it)
+    _g = _norm_glide_mode(d.get('glider_guidance', 'equilibrium_glide'))
     return ROParams(
         name=str(d.get('name', 'RV')),
         mass_kg=float(d['mass_kg']),
@@ -1847,9 +1863,7 @@ def booster_from_dict(d: dict) -> BoosterParams:
         # booster itself carries no reentry fields.  Gated on an inline β.
         _rb = float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0)) or 0.0)
         if _rb > 0:
-            _g = str(d.get('glider_guidance', 'equilibrium_glide'))
-            if _g == 'constant_bank':
-                _g = 'skip_glide'
+            _g = _norm_glide_mode(d.get('glider_guidance', 'equilibrium_glide'))
             _p.ro = ROParams(
                 name='(migrated)',
                 mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))
@@ -2667,9 +2681,11 @@ def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
     for k in _REENTRY_PLAN_KEYS:
         if k in rp:
             setattr(q, k, rp[k])
-    # Plan files bypass ro_from_dict, so legacy separation tokens are
-    # normalised here too ('non_separating' -> 'body', etc.).
+    # Plan files bypass ro_from_dict, so legacy separation tokens and retired
+    # glide modes are normalised here too ('non_separating' -> 'body';
+    # 'skip_to_equilibrium' -> 'damped_glide').
     q.separation_mode = _norm_sep_mode(q.separation_mode)
+    q.glider_guidance = _norm_glide_mode(q.glider_guidance)
     cmd = rp.get('commanded_LD')
     if cmd is not None:
         q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better

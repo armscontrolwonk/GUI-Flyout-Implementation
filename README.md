@@ -179,17 +179,19 @@ tabbed notebook**.
 - **Reentry Plan** — the down-leg analogue of Flight Plan: a dropdown of the
   active object's reentry plans (`(default)` plus New/Delete variants) above its
   New/Edit…/Delete row, over the quick glider picks (glide law, terminal-dive
-  altitude, aero model, skip count). The controls are the live editor and write
+  altitude, aero model). The controls are the live editor and write
   through on every run. The **reentry mode** (glide law) is a *hybrid*: each
-  object ships with a default tied to its type — always a **core** mode, never a
-  legacy one (C-HGB/Hwasong-11 → their characterized damped-glide; the other
-  gliders → the core dynamic equilibrium glide; ballistic RVs → Ballistic). The
-  mode picklist (on the strip and in **New Reentry Plan**) keeps the core modes
-  above a divider and the analytic **legacy** laws (Tracy equilibrium-glide,
-  skip→equilibrium) below it as comparison picks. **New Reentry Plan** lets a
-  variant be born with a chosen starting mode — but unlike the flight-plan law,
-  the mode stays switchable on the strip afterward, so a one-click A/B between
-  glide laws needs no new plan. A **Separation** control (*Separates at burnout* /
+  object ships with a default tied to its type (C-HGB/Hwasong-11 → their
+  characterized damped-glide; the other gliders → dynamic equilibrium glide;
+  ballistic RVs → Ballistic). The mode picklist (on the strip and in **New
+  Reentry Plan**) is grouped by how the trajectory is integrated: the
+  **numerical (EOM)** modes (Ballistic, phugoid/skip, damped, dynamic
+  equilibrium) above a divider, and the **closed-form analytic** comparison laws
+  (Acton, Tracy) below it. **New Reentry Plan** lets a variant be born with a
+  chosen starting mode — but unlike the flight-plan law, the mode stays
+  switchable on the strip afterward, so a one-click A/B between glide laws needs
+  no new plan. (The old discrete `skip→equilibrium` mode is retired — it now
+  flies the equivalent damped-phugoid glide.) A **Separation** control (*Separates at burnout* /
   *Non-separating — body reenters*) sits here too: separation is a run-level
   mission choice, not a stored property of the object, so the same aeroshell can
   be A/B'd separating vs. integrated in two clicks (and any object flies on any
@@ -577,12 +579,14 @@ burnout regardless.
 All three modes support optional advanced per-stage pitch and yaw programs that
 override the global schedule for a specific stage.
 
-> **Gliding reentry objects** carry a separate guidance axis (`glider_guidance`).
-> The four **core** reentry models span the phugoid-damping spectrum — `ballistic`
-> (no lift), `skip_glide` (undamped phugoid), `damped_glide` (the realistic guided
-> pull-up, default ζ≈0.7), and `equilibrium_glide_acton` (Acton non-oscillatory
-> capture) — plus two **legacy** models kept for comparison: `equilibrium_glide`
-> (Tracy) and `skip_to_equilibrium`.  The ζ≈0.7 default is the classical
+> **Gliding reentry objects** carry a separate guidance axis (`glider_guidance`),
+> grouped by integration method.  The **numerical (EOM)** modes span the
+> phugoid-damping spectrum — `ballistic` (no lift), `skip_glide` (undamped
+> phugoid), `damped_glide` (the realistic guided pull-up, default ζ≈0.7), and
+> `dynamic_equilibrium_glide` (equilibrium-trim capture) — plus two **closed-form
+> analytic** comparison laws: `equilibrium_glide_acton` (Acton non-oscillatory
+> capture) and `equilibrium_glide` (Tracy).  (`skip_to_equilibrium` is retired,
+> aliased to `damped_glide`.)  The ζ≈0.7 default is the classical
 > second-order control damping ratio — the desirable ζ=0.4–0.8 band (Ogata §5-3;
 > Franklin §3.4.2, ζ=0.7 → ~5% overshoot) and very nearly settling-time-optimal.
 > See `DAMPED_GLIDE.md` for details.
