@@ -204,10 +204,14 @@ tabbed notebook**.
   be A/B'd separating vs. integrated in two clicks (and any object flies on any
   booster — no compatibility refusal). Non-separating inherits the last stage's
   burnout mass and geometry; the casing debris on a separating run carries the
-  burnout mass minus the object, so nothing is double-counted. **Edit…** opens
-  the full plan editor for the tuning fields — commanded L/D, pull-up g, βₛ,
-  flap, **reentry attitude** (trimmed vs. tumbling), **ζ damping** (with its
-  estimator), the **bank schedule**, and **dive-at-target**.
+  burnout mass minus the object, so nothing is double-counted. Below the glide
+  law, the strip carries the one knob you iterate per-run: **ζ** (damping ratio
+  for damped phugoid, tracking gain for dynamic equilibrium — with its estimator
+  for the damped case), shown only for those two laws. **Edit…** opens the full
+  plan editor for the set-once tuning — commanded L/D, pull-up g, βₛ, flap,
+  **reentry attitude** (trimmed vs. tumbling), **terminal-dive altitude**, the
+  **aero model** (drag polar vs. fixed L/D), the **bank schedule**, and
+  **dive-at-target**.
 - **Display Units** — km / nmi / miles for all plots and timeline distances.
 - **Launch Site** — pick from a built-in list or define custom sites (lat/lon);
   azimuth is set manually (°, clockwise from North).
