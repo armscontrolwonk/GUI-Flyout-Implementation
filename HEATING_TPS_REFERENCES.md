@@ -264,13 +264,16 @@ These four were read directly and their key results confirmed:
   nose **recesses/blunts** from 2.54 mm during flight.  The stagnation q̇(t)
   curve lives in **NASA LWP-460** (Berry Fig. 6); a rough integration of the
   congested reproduction originally gave an order-of-magnitude **~1 GJ/m²**.
-  UPDATE: a clean full-resolution copy of the figure was later supplied
-  in-chat and digitized point-by-point
-  (`benchmarks/form_a/reentryf_nominal_qdot.csv`): **Q ≈ 2.85 GJ/m² ±25%**
-  cold-wall stagnation, peak read ≈ 324 MW/m² (confirming the 318 pin),
-  100→50 kft in ~8 s — superseding the ~1 GJ/m² estimate.  Q_MJ nonetheless
-  stays None in `_BENCHMARKS`: the curve is preflight-nominal, and per TM
-  X-2560 no flight-measured stagnation heating exists.  NASA TM
+  UPDATE: the figure was later pixel-traced (embedded scan extracted from the
+  Berry PDF, per-ruler tick calibration, apex-first curve tracking, overlay
+  QC — method + summary `benchmarks/form_a/reentryf_nominal_qdot.csv`, full
+  trace `reentryf_qdot_trace_full.csv`): **Q ≈ 3.87 GJ/m² ±20%** cold-wall
+  stagnation, apex ≈ 348 MW/m² at ~47 kft, 100→50 kft in ~8 s — superseding the
+  ~1 GJ/m² estimate (and an intermediate 2.85 GJ/m² eyeball table).  The 318
+  MW/m² pin = the LWP window-max quote (28×10³ Btu/ft²·s at the 50-kft edge);
+  the traced in-window range 10.2–30.2×10³ matches the quoted 9–28×10³.  Q_MJ
+  nonetheless stays None in `_BENCHMARKS`: the curve is preflight-nominal, and
+  per TM X-2560 no flight-measured stagnation heating exists.  NASA TM
   X-2560 (Stainback, Johnson, Boney & Wicker, 1972; NTRS 19790075398; read
   from primary) compares predicted vs measured laminar/transitional/turbulent
   heating — but its flight data are explicitly "downstream of the stagnation

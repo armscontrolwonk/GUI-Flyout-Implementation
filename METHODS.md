@@ -3154,17 +3154,22 @@ The anchors split by role, and the split is load-bearing:
   with the pressure-derived estimates mostly straddling the lower curve, and the
   worst case (reaching the ~0.39 in graphite-plug exposure radius at 458.7 s)
   refuted by the report itself.  The nominal stagnation
-  heat pulse is now *digitized point-by-point* from the clean nominal-trajectory
-  figure (γ_E 21.2°, V_E 20,300 ft/s; supplied in-chat; reads in
-  `benchmarks/form_a/reentryf_nominal_qdot.csv`): **Q ≈ 2.85 GJ/m² ±25%
-  cold-wall**, peak ≈ 324 MW/m² (confirming the 318 MW/m² benchmark pin),
-  100→50 kft window ≈ 8 s.  Against the 0.6–1.0 in axial-recession spread this
-  gives a flight-derived H_eff *bracket* of **50–135 MJ/kg (central ≈ 84)**; the
-  model's carbon-carbon nominal 40 sits below it and **over-predicts recession
-  ~2×** — the conservative side for a screen, and the same sign as the capsule
-  bounds.  (An earlier ~1 GJ/m² order-of-magnitude read, and the ~25%
-  under-prediction caveat that rested on it, are superseded by the digitized
-  integration.)  Still a bracket, never a single-point H_eff calibration, and
+  heat pulse is now *pixel-traced* from the nominal-trajectory figure
+  (γ_E 21.2°, V_E 20,300 ft/s; embedded scan extracted from the Berry PDF,
+  per-ruler tick calibration, apex-first slope tracking, overlay-QC'd; method +
+  summary in `benchmarks/form_a/reentryf_nominal_qdot.csv`, full trace in
+  `reentryf_qdot_trace_full.csv`): **Q ≈ 3.87 GJ/m² ±20% cold-wall**, apex
+  ≈ 348 MW/m² at ~47 kft (the 318 MW/m² benchmark pin equals LWP-460's
+  window-max quote; the traced in-window flux range 10–30×10³ Btu/ft²·s matches
+  the quoted 9–28×10³), 100→50 kft window ≈ 8 s.  Against the 0.6–1.0 in
+  axial-recession spread this gives a flight-derived H_eff *bracket* of
+  **70–175 MJ/kg (central ≈ 114)**; the model's carbon-carbon nominal 40 sits
+  below it and **over-predicts recession ~2.9×** — the conservative side for a
+  screen, and the same sign as the capsule bounds.  (Both the earlier ~1 GJ/m²
+  order-of-magnitude read — and its ~25% under-prediction caveat — and an
+  intermediate 2.85 GJ/m² eyeball table are superseded by the pixel trace; the
+  eyeball had followed a lower curve through the mid-rise, caught in overlay
+  QC.)  Still a bracket, never a single-point H_eff calibration, and
   `heating._BENCHMARKS` Q_MJ stays None: the pulse is a preflight prediction —
   no flight-measured stagnation heating exists (TM X-2560).
 - **Stardust** (PICA, recovered, 12.8 km/s) and **Hayabusa** (carbon-phenolic,
