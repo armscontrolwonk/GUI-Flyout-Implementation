@@ -3102,11 +3102,25 @@ run at two pressures, is direct evidence that the SiC active/passive transition
 is pressure-sensitive: survived 1700–1800 K at 3×10⁻³ atm, detached at 2700 K
 at 2.3×10⁻² atm.  A new flight or test strengthens the dataset as a data edit.  Two scoping rules carry
 citations: dopant effects invert with temperature (TaSi₂ best-in-class at
-1627 °C, destroyed at 1927 °C), so envelopes are built per material
-*class* and doped variants are never averaged into the parent; and every
-aero-convective anchor is low-pressure ground testing (~0.07–0.2 atm),
-so even in-envelope coverage carries a facility-pressure caveat — the SiC
-active/passive oxidation transition is pressure-sensitive.
+1627 °C, destroyed at 1927 °C — Levine 2003, low side corroborated by Gasch &
+Johnson 2010), so envelopes are built per material *class* and doped variants
+are never averaged into the parent; and the aero-convective anchors span a wide
+pressure range — 3×10⁻³ atm (De Prisco Mach 6) to ~1 atm (Savino et al. 2008,
+HfB₂/HfC-MoSi₂) — but the long-dwell points are low-pressure, so in-envelope
+coverage still carries a facility-pressure caveat since the SiC active/passive
+transition is pressure-sensitive.
+
+The **complete anchor dataset** (every flight/arc-jet/plasma-torch/furnace
+datum, with verified numbers and exact citations) lives in `BENCHMARKING.md`;
+the survival side of each material class is covered there — ZrB₂-SiC
+(Monteverde & Savino 2012 sharp, Scatteia et al. 2010 blunt, Monteverde 2013,
+Zhang 2008), HfB₂-SiC (Gasch & Johnson 2010; Sevastyanov et al. 2014 at
+2500–2700 °C for 15–18 min), HfB₂/HfC-MoSi₂ (Savino 2008), and carbide-boride
+(Xu et al. 2026) — alongside the review-level corroboration (Peters et al. 2024;
+Glass 2011, AIAA 2011-2304, which also confirms the literature UHTC *component*
+failures were mechanical/attachment, not oxidation).  METHODS names the
+threshold-setting sources inline; `BENCHMARKING.md` is the citation of record for
+the full set.
 
 *Status:* the envelope-coverage model is adopted and documented; the
 report currently implements the earlier peak/soak/heat-sink screening
