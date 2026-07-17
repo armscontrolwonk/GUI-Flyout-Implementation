@@ -52,7 +52,13 @@ NOTHING_SURVIVES_K = 4000.0       # T_eq above all usable materials → the
 #                  GUI-flyout dropdown grouping.
 #   is_ablator   : recedes (δ = Q/(ρ·H_eff)); else reradiative/heat-sink limited
 #   density_kg_m3: for the lumped heat-sink mass and ablator recession
-#   H_eff_MJ_kg  : effective heat of ablation (ablators only; None otherwise)
+#   H_eff_MJ_kg  : effective heat of ablation Q* (ablators only; None otherwise).
+#                  Q* is enthalpy-dependent, NOT a fixed constant; these nominals sit at the
+#                  conservative (low) end of the flight/handbook band (CP ~10-30, PICA higher,
+#                  C/C sublimation regime) so the recession screen OVER-predicts.  Bands +
+#                  provenance: BENCHMARKING.md "Form A anchors"; benchmarks/form_a/phase2-heff-bands.md.
+#                  Direction is bound-checked in test_form_a_bounds.py (predicted delta >= measured
+#                  for the recovered Stardust/Hayabusa capsules).  NOT tuned to those capsules.
 #   oxidation_dwell_s : representative oxidation-limited dwell life at its severe-use temperature
 #                  (UHTC ~60-140 s at 2700 °C, §10.4/Tului); None if not dwell-limited
 # NEW entries (carbon_carbon, carbon_phenolic, c_sic, cc_hot_structure, silica_phenolic, sirca,

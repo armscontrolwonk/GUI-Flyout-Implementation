@@ -3127,6 +3127,53 @@ report currently implements the earlier peak/soak/heat-sink screening
 (Sections 13.1–13.3) with the envelope shading as the next implementation
 step (`SURVIVABILITY_REPORT_DESIGN.md` §11.7).
 
+### 13.6 Ballistic-RV ablator recession: bounding vs. tuning anchors
+
+For ablative ballistic RVs (Form A) the survival question is recession, not a
+surface-temperature limit: an ablator sits *above* its onset temperature and
+survives by receding at its ablation temperature, so the screen integrates
+`δ = ∫q̇dt / (ρ·H_eff)` over the ablating portion and flags burn-through when δ
+exceeds the available depth (heating.py; grounded in Duffa §4.3/§4.7).  `H_eff`
+here is the **effective heat of ablation Q\***, which is *enthalpy-dependent*,
+not a fixed constant — so the catalog nominals (carbon-phenolic 15, PICA 35,
+carbon-carbon 40 MJ/kg) are deliberately set at the **conservative (low) end** of
+the flight/handbook band (CP ~10–30 MJ/kg; PICA higher; C/C in the sublimation
+regime), which makes the screen **over-predict** recession.  Uncertainty bands
+and provenance: `BENCHMARKING.md` ("Form A recession anchors");
+`benchmarks/form_a/phase2-heff-bands.md`.
+
+The anchors split by role, and the split is load-bearing:
+
+- **Reentry-F** (6.1 km/s graphite nosetip; NASA CR-154044 / Berry) is the
+  **in-envelope tuning anchor**, wired as the δ/R_n shape-change ladder (≈0.7 R_n
+  radial blunting survived, 7.7 R_n axial solid-tip length).  Its nosetip
+  recession history is uncertain after ~60,000 ft, so it is carried as a *spread*,
+  never a single-point H_eff calibration.
+- **Stardust** (PICA, recovered, ~12.9 km/s) and **Hayabusa** (carbon-phenolic,
+  recovered, ~12.2 km/s) are **bounding anchors, not fits**.  Post-flight
+  analysis found equilibrium ablation chemistry *over*-predicts their recession
+  (Hayabusa calc/measured ≈ 3×, Suzuki *J. Spacecraft & Rockets* DOI
+  10.2514/1.A32549; Stardust equilibrium models > 50% over the forebody cores,
+  Stackpoole AIAA 2008-1202).  That chemistry conservatism *exceeds* the
+  radiative-gas heating the convective-only screen omits above ~9 km/s, so the
+  net bias is over-prediction.  The capsules therefore validate the chain only as
+  a **lower bound** — the model must predict ≥ measured recession — enforced by
+  `test_form_a_bounds.py` (predicted/measured: Stardust 7.2×, Hayabusa 44×).
+  **Raising H_eff to shrink that ratio is the failure mode this design forbids.**
+
+Two limitations are logged rather than hidden: **P3-radiative** (convective-only
+above ~9 km/s under-counts by ~30%+, but no operational Form A trajectory in the
+current use set exceeds 9 km/s) and **P3-chemistry** (equilibrium recession is
+conservative vs. flight — the larger bias; a finite-rate Park/Milos option is the
+eventual fix, and until then the bound tests enforce the conservative sign).
+
+*Changelog (symmetry with the UHTC `oxidation_dwell_s` retirement, §13.5):* the
+Form A `H_eff_MJ_kg` values were promoted from bare screening guesses to
+**conservative-low nominals inside cited Q\* bands**, each independently
+bound-checked against the recovered Stardust and Hayabusa capsules.  No nominal
+changed value (verdict-stable); the epistemic status did.  H_eff was **not** tuned
+to the capsule measurements — by design (see above).
+
 ---
 
 ## 14. Outputs, events, and milestones

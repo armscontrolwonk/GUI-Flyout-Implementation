@@ -1,0 +1,2 @@
+location,delta_measured_mm,delta_calc_mm,calc_over_meas,peak_flux_MW_m2,pulse_s,virgin_density_kg_m3,char_density_kg_m3,notes,provenance
+stagnation,~0.3,~0.9,~3.0,~15,~30,1325,1125,"carbon-phenolic; surface-T agreement ~50 K vs airborne spectroscopy; calc overpredicts measured ~3x","calc/meas ~3x VERIFIED (Suzuki JSR 10.2514/1.A32549 + citing papers via search); densities VERIFIED (citing paper); measured ~0.3 mm + design env 15 MW/m2/30s = SECONDHAND (plan-restated, primary paywalled)"
