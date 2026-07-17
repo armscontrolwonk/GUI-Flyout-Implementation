@@ -6048,6 +6048,17 @@ class BoosterFlyoutApp(tk.Tk):
         if pl is not None and len(pl['t']) > 1:
             ax = self._surv_fig.add_subplot(111)
             ax2 = ax.twinx()
+            # UHTC envelope-coverage shading (SRD §11.3): green = protected
+            # (below the 1650 °C glass ceiling), amber = inside the
+            # demonstrated envelope consuming recession margin, red =
+            # extrapolation (too hot / too long).
+            if pl.get('bands'):
+                _band_col = {'green': "#2e8b57", 'amber': "#e0a020",
+                             'red': "#c03030"}
+                for _b0, _b1, _c in pl['bands']:
+                    if _b1 > _b0:
+                        ax.axvspan(_b0, _b1, color=_band_col[_c], alpha=0.12,
+                                   linewidth=0)
             ax.plot(pl['t'], pl['q_MW'], color="#aa2222", linewidth=1.4,
                     label="q̇ (MW/m²)")
             ax2.plot(pl['t'], pl['Q_MJ'], color="#2255aa", linewidth=1.4,

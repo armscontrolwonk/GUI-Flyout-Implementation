@@ -62,10 +62,10 @@ NOTHING_SURVIVES_K = 4000.0       # T_eq above all usable materials → the
 #   oxidation_dwell_s : representative oxidation-limited dwell life at its severe-use temperature
 #                  (UHTC ~60-140 s at 2700 °C, §10.4/Tului); None if not dwell-limited
 # NEW entries (carbon_carbon, carbon_phenolic, c_sic, cc_hot_structure, silica_phenolic, sirca,
-# pica) carry SCREENING-tier peak/continuous estimates pending a verification pass (§10.4); they
-# are not referenced by any existing ro.json, so they do not affect current verdicts.  The `uhtc`
-# temperature limits are the LEGACY screening values, kept for verdict stability; the grounded
-# regrade (recede >~2000 °C, dwell-limited) lands when the oxidation-dwell criterion is built.
+# pica) carry SCREENING-tier peak/continuous estimates pending a verification pass (§10.4).
+# The `uhtc` entry is RETUNED per SURVIVABILITY_REPORT_DESIGN.md §11.4 (grounded glass ceiling +
+# demonstrated dwell floor) — see the inline comment on the entry; the envelope-coverage verdict
+# that consumes it lives in survivability_report.py (green/amber/red, §11.3).
 TPS_MATERIALS = {
     # --- structural metals (heat-sink / bare hot structure) ---
     "aluminum":        dict(peak_K=775,  continuous_K=450,  melt_K=775,  c_J_kgK=900,  label="Aluminum",
@@ -81,8 +81,16 @@ TPS_MATERIALS = {
                             group="hot_structure", is_ablator=False, density_kg_m3=2000, H_eff_MJ_kg=None, oxidation_dwell_s=None),
     "cc_hot_structure":dict(peak_K=2170, continuous_K=2170, melt_K=None, c_J_kgK=1200, label="C/C hot structure (HTV-2)",
                             group="hot_structure", is_ablator=False, density_kg_m3=1800, H_eff_MJ_kg=None, oxidation_dwell_s=None),
-    "uhtc":            dict(peak_K=2700, continuous_K=1900, melt_K=3500, c_J_kgK=600,  label="UHTC (ZrB2/HfB2-SiC)",
-                            group="hot_structure", is_ablator=False, density_kg_m3=6000, H_eff_MJ_kg=None, oxidation_dwell_s=120),
+    # uhtc: retuned per SURVIVABILITY_REPORT_DESIGN.md §11.4 (was continuous_K 1900, dwell 120 s
+    # hard line).  continuous_K = 1923 K (1650 °C) — the borosilicate-glass PROTECTIVENESS
+    # ceiling, ≥5 sources (Monteverde 2012, Peters 2024, Fahrenholtz & Hilmas, Marschall, Li).
+    # oxidation_dwell_s = 300 s — the DEMONSTRATED FLOOR above the ceiling, conservatively the
+    # low anchor (Monteverde 2013: 300 s at 1973 K, zero recession; sharp-tip survival extends
+    # to ~575 s at 2450 °C, Monteverde 2012).  A floor, NOT a cliff: past it the report flags
+    # extrapolation, it does not assert failure (§11.1).  peak_K 2700 ≈ the demonstrated sharp
+    # ZrB2-SiC tip peak (2450 °C, CFD-sourced).  Anchor dataset: survivability_report.UHTC_ANCHORS.
+    "uhtc":            dict(peak_K=2700, continuous_K=1923, melt_K=3500, c_J_kgK=600,  label="UHTC (ZrB2/HfB2-SiC)",
+                            group="hot_structure", is_ablator=False, density_kg_m3=6000, H_eff_MJ_kg=None, oxidation_dwell_s=300),
     # --- reusable insulator (a layer over a separate structure) ---
     "silica_tile":     dict(peak_K=1811, continuous_K=1533, melt_K=None, c_J_kgK=1000, label="Silica tile (LI-900)",
                             group="insulative", is_ablator=False, density_kg_m3=144, H_eff_MJ_kg=None, oxidation_dwell_s=None),
@@ -349,18 +357,33 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
             # seconds later (τ ≈ ρcδ·ΔT/q̇).  Label accordingly.
             crossings.append((int(ex[0]), "flux above surface melt/ablation limit"))
 
-        # 2. Heat-soak: dwell above the continuous (oxidation) limit
+        # 2. Heat-soak: dwell above the continuous (oxidation) limit.
+        #    A material-supplied oxidation_dwell_s is a DEMONSTRATED FLOOR
+        #    (SURVIVABILITY_REPORT_DESIGN.md §11.4: within it → inside the
+        #    demonstrated envelope; past it → extrapolation, NOT asserted
+        #    failure — the report layer renders that distinction).  Materials
+        #    without one keep the generic 120-s screening surrogate.
+        _mat_dwell = mat.get("oxidation_dwell_s")
+        _dwell_lim = float(_mat_dwell) if _mat_dwell else float(soak_dwell_s)
+        _is_floor = bool(_mat_dwell)
         above = T_eq > mat["continuous_K"]
         cum_above = np.cumsum(np.where(above, dt, 0.0))
         time_above = float(cum_above[-1]) if cum_above.size else 0.0
         out["criteria"]["soak"] = {
-            "margin": time_above / soak_dwell_s, "time_above_s": time_above,
-            "limit_K": mat["continuous_K"], "dwell_s": soak_dwell_s,
-            "basis": "empirical dwell-above-continuous-limit damage surrogate "
-                     "(not an oxidation-kinetics closure)"}
-        js = np.where(cum_above >= soak_dwell_s)[0]
+            "margin": time_above / _dwell_lim, "time_above_s": time_above,
+            "limit_K": mat["continuous_K"], "dwell_s": _dwell_lim,
+            "floor": _is_floor,
+            "basis": ("demonstrated oxidation-dwell floor (anchor dataset; "
+                      "past it = extrapolation, not asserted failure)"
+                      if _is_floor else
+                      "empirical dwell-above-continuous-limit damage surrogate "
+                      "(not an oxidation-kinetics closure)")}
+        js = np.where(cum_above >= _dwell_lim)[0]
         if js.size:
-            crossings.append((int(js[0]), "TPS oxidation soak (glide)"))
+            crossings.append((int(js[0]),
+                              "past demonstrated oxidation-dwell floor "
+                              "(extrapolation)" if _is_floor
+                              else "TPS oxidation soak (glide)"))
 
         # 3. Lumped heat-sink burn-up (Reynerson): flux above the re-radiation cap
         #    soaks into the body mass; melt when accumulated heat ≥ m·c·(T_melt−T₀).
