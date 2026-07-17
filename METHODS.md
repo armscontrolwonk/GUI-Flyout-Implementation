@@ -3149,23 +3149,30 @@ The anchors split by role, and the split is load-bearing:
   radial blunting survived, 7.7 R_n axial solid-tip length).  Its nosetip
   recession history is uncertain after ~60,000 ft, so it is carried as a *spread*,
   never a single-point H_eff calibration.
-- **Stardust** (PICA, recovered, ~12.9 km/s) and **Hayabusa** (carbon-phenolic,
+- **Stardust** (PICA, recovered, 12.8 km/s) and **Hayabusa** (carbon-phenolic,
   recovered, ~12.2 km/s) are **bounding anchors, not fits**.  Post-flight
   analysis found equilibrium ablation chemistry *over*-predicts their recession
   (Hayabusa calc/measured ≈ 3×, Suzuki *J. Spacecraft & Rockets* DOI
-  10.2514/1.A32549; Stardust equilibrium models > 50% over the forebody cores,
-  Stackpoole AIAA 2008-1202).  That chemistry conservatism *exceeds* the
-  radiative-gas heating the convective-only screen omits above ~9 km/s, so the
-  net bias is over-prediction.  The capsules therefore validate the chain only as
-  a **lower bound** — the model must predict ≥ measured recession — enforced by
-  `test_form_a_bounds.py` (predicted/measured: Stardust 7.2×, Hayabusa 44×).
+  10.2514/1.A32549; Stardust 51–61% over at the near-stagnation core — measured
+  5.7±0.3 mm vs 8.6–9.2 mm calculated — and 22–25% at mid-flank: firsthand,
+  Kontinos & Stackpoole AIAA 2008-1197 Table 1, reproducing Stackpoole et al.
+  AIAA 2008-1202).  That chemistry conservatism *exceeds* the radiative-gas
+  heating the convective-only screen omits above ~9 km/s — for Stardust the
+  radiative part was only 9% of peak rate / 4% of load, and including it moved
+  the calculated recession just 9.6 → 10.4 mm — so the net bias is
+  over-prediction.  The capsules therefore validate the chain only as a
+  **lower bound** — the model must predict ≥ measured recession — enforced by
+  `test_form_a_bounds.py` (predicted/measured: Stardust 5.1×, Hayabusa 44×).
   **Raising H_eff to shrink that ratio is the failure mode this design forbids.**
 
 Two limitations are logged rather than hidden: **P3-radiative** (convective-only
-above ~9 km/s under-counts by ~30%+, but no operational Form A trajectory in the
-current use set exceeds 9 km/s) and **P3-chemistry** (equilibrium recession is
-conservative vs. flight — the larger bias; a finite-rate Park/Milos option is the
-eventual fix, and until then the bound tests enforce the conservative sign).
+above ~9 km/s; the omission is *size-dependent* — 9% of peak rate on the 0.827 m
+Stardust capsule but ~40% on a CEV-scale 5 m blunt body, both per Kontinos &
+Stackpoole AIAA 2008-1197 — and no operational Form A trajectory in the current
+use set exceeds 9 km/s) and **P3-chemistry** (equilibrium recession is
+conservative vs. flight — the larger bias at capsule scale; a finite-rate
+Park/Milos option is the eventual fix, and until then the bound tests enforce
+the conservative sign).
 
 *Changelog (symmetry with the UHTC `oxidation_dwell_s` retirement, §13.5):* the
 Form A `H_eff_MJ_kg` values were promoted from bare screening guesses to

@@ -23,11 +23,14 @@ Per benchmark vehicle, find:
 | survived? accuracy/dispersion notes | — | band placement |
 
 Candidates: **Hayabusa** (recovered; carbon-phenolic; ~12.0 km/s, γ≈−12°,
-R_n≈0.20 m — ABOVE the 9 km/s convective envelope: radiative adds ~30%+, so
-expect measured ≥ predicted; a bounding pair with **Stardust** (PICA,
-recovered, ~12.9 km/s)).  In-envelope anchor already wired: **Reentry-F**
-(6.1 km/s, measured recession, flew its mission).  Accuracy bands already
-anchored: PANT, Lin 1982.
+R_n≈0.20 m) and **Stardust** (PICA, recovered, ~12.9 km/s) — both ABOVE the
+9 km/s convective envelope, but post-flight data shows the model still
+*over*-predicts them (equilibrium-chemistry conservatism beats the missing
+radiative term — for Stardust the radiative part was only 9% of peak rate /
+4% of load, Kontinos & Stackpoole AIAA 2008-1197): they are **bounding**
+anchors, see "Form A recession anchors" below.  In-envelope anchor already
+wired: **Reentry-F** (6.1 km/s, measured recession, flew its mission).
+Accuracy bands already anchored: PANT, Lin 1982.
 
 ### Form B — Glider / HGV (the stopwatch)
 **Computed:** q̇ history; sustained T_eq; soak (dwell above `continuous_K`);
@@ -296,25 +299,39 @@ and the distinction is load-bearing — details in `benchmarks/form_a/`.
 | anchor | role | what it fixes |
 |---|---|---|
 | **Reentry-F** (6.1 km/s, graphite nosetip, NASA CR-154044 / Berry) | *tuning* — the in-envelope δ/R_n shape-change ladder (0.7 R_n radial blunting survived; 7.7 R_n axial solid-tip length) | the accuracy-band ladder, not a point H_eff (no wired Q+δ pair; recession history uncertain after ~60,000 ft — carried as spread, never a single-point calibration) |
-| **Stardust** (PICA, recovered, ~12.9 km/s; Q 276 MJ/m²) | *bounding* | model must predict ≥ measured 4.06 mm stagnation recession |
+| **Stardust** (PICA, recovered, 12.8 km/s inertial; Q 276 MJ/m² wired, design upper-bound ~360 MJ/m²) | *bounding* | model must predict ≥ the measured near-stagnation maximum, Core 1 = 5.7±0.3 mm (no core exists at the geometric stagnation point — the SRC impacted off-center) |
 | **Hayabusa** (carbon-phenolic, recovered, ~12.2 km/s) | *bounding* | model must predict ≥ measured ~0.3 mm |
 
 **Bounds, not fits (read before touching H_eff).**  Post-flight analysis found
 equilibrium-style ablation chemistry *over*-predicts capsule recession
 (Hayabusa calc/measured ≈ 3×, Suzuki *JSR* [DOI 10.2514/1.A32549](https://doi.org/10.2514/1.A32549);
-Stardust equilibrium models > 50% over the forebody cores, Stackpoole AIAA
-2008-1202).  That chemistry conservatism exceeds the radiative-gas heating the
-convective-only screen omits above ~9 km/s, so the net bias is over-prediction.
+Stardust 51–61% over at the near-stagnation core and 22–25% at mid-flank —
+**firsthand**, Kontinos & Stackpoole AIAA 2008-1197 Table 1, reproducing
+Stackpoole et al. AIAA 2008-1202).  That chemistry conservatism exceeds the
+radiative-gas heating the convective-only screen omits above ~9 km/s — for
+Stardust the radiative component was only **9% of peak heat rate and 4% of heat
+load** at stagnation (Kontinos auxiliary computations; including it moves the
+calculated recession just 9.6 → 10.4 mm) — so the net bias is over-prediction.
 The capsules therefore validate the chain only as a **lower bound**: predicted δ
 must exceed measured δ.  **Do not "fix" the over-prediction by raising H_eff** —
 that is the specific failure mode this bounding-vs-tuning split exists to prevent.
+
+**Stardust firsthand recession table** (Kontinos & Stackpoole AIAA 2008-1197,
+Table 1, from its Ref. 22 = Stackpoole et al. AIAA 2008-1202; full rows +
+environment in `benchmarks/form_a/stardust_recession.csv`):
+
+| location | measured | calc (conv-only) | calc (conv+rad) | over-prediction |
+|---|---|---|---|---|
+| stagnation point | — (no core; off-center impact) | 9.6 mm | 10.4 mm | — |
+| Core 1 (near-stagnation) | 5.7±0.3 mm | 8.6 mm | 9.2 mm | 51% / 61% |
+| Core 2 (mid-flank) | 3.2±0.2 mm | 3.9 mm | 4.0 mm | 22% / 25% |
 
 **Bound-test results** (`test_form_a_bounds.py`, run through the real
 `heating.heating_figure_of_merit` path at the documented entry environments):
 
 | case | material | predicted δ | measured δ | ratio | verdict |
 |---|---|---|---|---|---|
-| `stardust_bound` | PICA (ρ 270, H_eff 35) | 29.1 mm | 4.06 mm | **7.2×** | bound holds (≥1) |
+| `stardust_bound` | PICA (ρ 270, H_eff 35) | 29.1 mm | 5.7 mm (Core 1) | **5.1×** | bound holds (≥1) |
 | `hayabusa_bound` | carbon-phenolic (ρ 1450, H_eff 15) | 13.2 mm | ~0.3 mm | **44×** | bound holds (≥1) |
 
 The large ratios are *expected and safe*: the screening chain uses full-load Q ×
@@ -329,18 +346,22 @@ provenance: `benchmarks/form_a/phase2-heff-bands.md`.
 | material | ρ (kg/m³) | low | **nominal** | high | basis |
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (handbook; enthalpy-dependence per PICA/CP arc-jet lit, [DOI 10.2514/1.42949](https://arc.aiaa.org/doi/10.2514/1.42949)) |
-| pica | 270 | 25 | **35** | ~100+ | PICA Q\* higher than CP, rises sharply with enthalpy; nominal 35 conservative-low (over-predicts Stardust 7×) |
+| pica | 270 | 25 | **35** | ~100+ | PICA Q\* higher than CP, rises sharply with enthalpy; nominal 35 conservative-low (over-predicts Stardust 5×). **Cited arc-jet point:** Winter et al. AIAA 2014-1151 — 10.36 MW/m² flat-face, recession 0.5–1.0 mm/s → implied Q\* **38–77 MJ/kg**; nominal sits at/below the low edge |
 | carbon_carbon | 1800 | 25 | **40** | 60 | C/C oxidation→sublimation regime ([OSTI carbon/graphite RV-nosetip correlation](https://www.osti.gov/biblio/4729765); endpoints = engineering bracket, sources paywalled — flagged) |
 
 **Two P3 items surfaced honestly by the capsules (logged, not hidden):**
 - **P3-radiative:** the convective-only screen ends ~9 km/s; above it radiative
-  gas heating adds ~30%+ (the Stardust/Hayabusa regime).  Unmodeled, and
-  partially masked by P3-chemistry.  Affects only >9 km/s cases — no operational
-  Form A trajectory in the current use set exceeds this, which is why it is P3.
+  gas heating is unmodeled.  The magnitude is **size-dependent**: for the small
+  (0.827 m) Stardust capsule it was only 9% of peak rate / 4% of load, but for a
+  CEV-scale (5 m) blunt body ~40% of peak flux is radiative (both Kontinos &
+  Stackpoole AIAA 2008-1197) — larger shock volume, more radiant gas.  Partially
+  masked by P3-chemistry at capsule scale.  Affects only >9 km/s cases — no
+  operational Form A trajectory in the current use set exceeds this, which is
+  why it is P3.
 - **P3-chemistry:** equilibrium-style recession is conservative vs. flight
-  (Hayabusa ×3, Stardust >50%) — the *larger* bias.  A finite-rate option
-  (Park/Milos lineage) is the eventual fix; until then the model is honestly
-  conservative and the bound tests enforce the sign.
+  (Hayabusa ×3, Stardust 51–61% near-stagnation) — the *larger* bias at capsule
+  scale.  A finite-rate option (Park/Milos lineage) is the eventual fix; until
+  then the model is honestly conservative and the bound tests enforce the sign.
 
 ## Threshold provenance audit
 
@@ -370,8 +391,9 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
 | `uhtc` `oxidation_dwell_s` (current code) | 120 s | **uncited placeholder** — retired at §11 implementation in favor of the cited dwell floor above | ⚠ flagged for removal |
-| ablator `H_eff_MJ_kg` nominals | CP 15 / PICA 35 / C/C 40 | conservative-low within the flight/handbook effective-heat-of-ablation Q\* band (CP ~10–30 MJ/kg; PICA higher; C/C sublimation regime); Q\* is enthalpy-dependent, so a single value is regime-specific. Band endpoints = engineering brackets (authoritative Q\*-vs-enthalpy tables paywalled) | ⚠ nominal cited-band; endpoints labeled bracket |
-| Form A capsule bounds | Stardust 7.2×, Hayabusa 44× (predicted/measured) | Stardust measured 4.06 mm (NTRS); Hayabusa calc/meas ≈3× and ~0.3 mm measured (Suzuki *JSR* 10.2514/1.A32549) — measured values secondhand (primary paywalled), ratio direction verified | ✔ cited (measured δ secondhand-flagged) |
+| ablator `H_eff_MJ_kg` nominals | CP 15 / PICA 35 / C/C 40 | conservative-low within the flight/handbook effective-heat-of-ablation Q\* band (CP ~10–30 MJ/kg; C/C sublimation regime); Q\* is enthalpy-dependent, so a single value is regime-specific. **PICA band now carries a firsthand arc-jet point**: Winter et al. AIAA 2014-1151, implied Q\* 38–77 MJ/kg at 10.36 MW/m² — nominal 35 at/below its low edge. CP/C-C endpoints remain engineering brackets (tables paywalled) | ⚠ PICA cited; CP/C-C endpoints labeled bracket |
+| Form A capsule bounds | Stardust 5.1×, Hayabusa 44× (predicted/measured) | Stardust measured 5.7±0.3 mm near-stagnation Core 1 — **firsthand**, Kontinos & Stackpoole AIAA 2008-1197 Table 1 (from Stackpoole AIAA 2008-1202); Hayabusa calc/meas ≈3× and ~0.3 mm measured (Suzuki *JSR* 10.2514/1.A32549) — Hayabusa measured value still secondhand (primary paywalled) | ✔ cited (Stardust firsthand; Hayabusa δ secondhand-flagged) |
+| Stardust radiative fraction | 9% of peak rate / 4% of load (stagnation); CEV-scale ~40% of peak flux | Kontinos & Stackpoole AIAA 2008-1197 (auxiliary computations; §II for CEV comparison) — scales the P3-radiative item | ✔ cited |
 
 Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
 each is labeled with its true epistemic status in code and report text.  If a

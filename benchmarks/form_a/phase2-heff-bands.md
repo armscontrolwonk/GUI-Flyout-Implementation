@@ -54,13 +54,14 @@ spread. **These are conservative screening constants, NOT fits.**
 | material | ρ (kg/m³) | H_eff low | **nominal** | H_eff high | basis / provenance |
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (plan §Phase 2 handbook guidance; enthalpy-dependence corroborated by CP/PICA arc-jet literature above). Nominal 15 at the conservative low end. |
-| pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~7× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. |
+| pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~5× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. **Cited arc-jet point:** Winter et al. AIAA 2014-1151 (mArc, NASA Ames) — flat-face flux 1036 W/cm² (10.36 MW/m², ±10%, converted from a 2575 W/cm² hemispherical probe), PICA recession rate 0.05–0.06 cm/s by tracer spectroscopy, corroborated by typical large-facility rates 0.05–0.1 cm/s at similar conditions, surface T ≥ 2800 K. Implied Q\* = q̇/(ρ·ṡ) with ρ_virgin = 270: **38–77 MJ/kg at ~10 MW/m²** (77 at 0.5 mm/s ↔ 38 at 1.0 mm/s). The nominal 35 sits at/below the low edge of this cited band → conservative-low is now *cited*, not just argued. (Caveats: cold-wall calorimeter flux; feasibility-demo rate estimate.) |
 | carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765); [NTRS 19790010869, C/C nosetip ablative performance](https://ntrs.nasa.gov/search.jsp?R=19790010869)). Specific endpoint values NOT retrieved from a single table (sources paywalled/403) — band is engineering-judgement bracketing the sublimation regime, flagged as such. |
 
-**Provenance honesty:** the *band endpoints* are literature-informed engineering
-brackets, not values lifted from one retrieved table (the authoritative Q\*-vs-enthalpy
-curves — FIAT/PICAv3.3, the OSTI carbon-graphite correlation — are paywalled/403
-this session). The *direction* and *magnitude sanity* (CP ~10–30, PICA higher,
+**Provenance honesty:** the CP and C/C *band endpoints* are literature-informed
+engineering brackets, not values lifted from one retrieved table (the authoritative
+Q\*-vs-enthalpy curves — FIAT/PICAv3.3, the OSTI carbon-graphite correlation — are
+paywalled/403 this session).  The PICA band is the exception: the Winter 2014
+arc-jet point above is a firsthand, cited Q\* datum (38–77 MJ/kg at ~10 MW/m²). The *direction* and *magnitude sanity* (CP ~10–30, PICA higher,
 Q\* enthalpy-dependent) ARE literature-grounded. The nominals are unchanged from
 the prior screening values, now justified as conservative-low rather than
 arbitrary, and independently bound-checked in Phase 3.
@@ -69,7 +70,8 @@ arbitrary, and independently bound-checked in Phase 3.
 
 - Nominals within literature bands? **Yes** (CP 15 ∈ [10,30]; PICA 35 conservative-low;
   C/C 40 in sublimation-regime bracket).
-- Direction conservative (over-predict)? **Yes** — Phase 3 bounds: Stardust 7.2×,
+- Direction conservative (over-predict)? **Yes** — Phase 3 bounds: Stardust 5.1×
+  (vs firsthand Core 1 = 5.7±0.3 mm, Kontinos & Stackpoole AIAA 2008-1197),
   Hayabusa 44×, both predicted ≥ measured.
 - Reentry-F reproduced within radius-history spread? **N/A** — no wired Q+δ pair;
   documented above rather than fabricated.

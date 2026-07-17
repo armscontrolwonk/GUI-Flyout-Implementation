@@ -1,4 +1,12 @@
-core_id,location,s_over_R,delta_measured_mm,delta_predicted_mm,predictor,char_depth_mm,notes,provenance
-1,near_stagnation,0.0,4.06,~4.8,FEAR (within 0.78 mm),,"centerline stagnation; pre/post TPS thickness ±5%",NTRS (verified via search of 20110013222/20140005558 lineage; exact per-core table paywalled in Stackpoole AIAA 2008-1202)
-2,flank,~0.5,,,FIAT v2.44,,"3-core study: near-stag/flank/shoulder; equilibrium overpredicts >50%","Stackpoole AIAA 2008-1202 — SECONDHAND (per-core mm values not independently retrieved; method + >50% overpred confirmed via search)"
-3,shoulder,~0.9,,,FIAT v2.44,,"shoulder core",SECONDHAND (as above)
+core_id,location,s_over_R,delta_measured_mm,delta_calc_conv_mm,pct_over_conv,delta_calc_convrad_mm,pct_over_convrad,predictor,char_depth_mm,notes,provenance
+0,stagnation_point,0.0,,9.6,,10.4,,DPLR+FIAT v2.4 (loosely coupled),,"NO measured value — SRC impacted off-center from the nose, so no core at the geometric stagnation point; calculated only. Conv+rad adds ~8% to calculated recession (9.6 -> 10.4 mm).","FIRSTHAND: Kontinos & Stackpoole AIAA 2008-1197, Table 1 p.12 (reproducing its Ref. 22 = Stackpoole et al. AIAA 2008-1202)"
+1,near_stagnation (near apex; off-center from impact damage),~0.1,5.7±0.3,8.6,51,9.2,61,DPLR+FIAT v2.4,"~6-7 fully charred; transition to ~10","greater recession but LESS char depth than flank (higher peak rate -> char removal by ablation); conclusions: 'recession over-predicted by half near the stagnation point'","FIRSTHAND: Kontinos & Stackpoole AIAA 2008-1197, Table 1 p.12 + §V.E (from its Ref. 22); density profiles Fig. 13 (virgin ~0.27 g/cc)"
+2,mid_flank,~0.5,3.2±0.2,3.9,22,4.0,25,DPLR+FIAT v2.4,"~6-7 fully charred; transition to ~10 (char deeper than Core 1)","over-prediction smaller off-stagnation","FIRSTHAND: Kontinos & Stackpoole AIAA 2008-1197, Table 1 p.12 (from its Ref. 22)"
+# Entry/environment (all FIRSTHAND, Kontinos & Stackpoole AIAA 2008-1197):
+#   entry 12.8 km/s inertial (12.6 km/s relative); 60-deg sphere-cone forebody, max dia 0.827 m; ballistic, beta ~60 kg/m2.
+#   Expected upper-bound environment: peak ~1200 W/cm2 (12 MW/m2) stagnation, load ~36 kJ/cm2 (360 MJ/m2).
+#   Radiative component (auxiliary computations, §V.D): 9% of total peak heat rate, 4% of heat load at stagnation; less elsewhere.
+#   PICA stack 5.8 cm over HT-424 (0.14 cm) + Al 2024 (1.27 cm).
+# CORRECTION NOTE: an earlier revision of this file carried a search-derived "stagnation measured 4.06 mm"
+#   (SECONDHAND, FEAR-predictor lineage).  The firsthand Table 1 shows there is NO measured stagnation value;
+#   the near-stagnation measured maximum is Core 1 = 5.7±0.3 mm.  The bound test now uses the firsthand value.
