@@ -3057,6 +3057,46 @@ full `q̇(t)` time series is computed internally but not exposed to the
 user. Adding a CSV column for `q_dot_W_m2` would be a small extension
 if a user wanted the time series for plotting.
 
+### 13.5 Survivability judgements: the demonstrated-envelope model
+
+The Reentry Survivability report converts the `q̇(t)` / `T_eq(t)` history
+into a *judgement*, and for UHTC hot-structure gliders that judgement is
+deliberately **not** a pass/fail number.  The flight and arc-jet record
+for these materials is sparse and one-sided — nearly every published test
+is a *survival* (the test stopped; it did not fail) — so a single
+oxidation-dwell cliff would overclaim in both directions.  Instead the
+report states **coverage against a demonstrated envelope** (design:
+`SURVIVABILITY_REPORT_DESIGN.md` §11; anchor dataset:
+`BENCHMARKING.md`):
+
+- **Below the ~1650 °C borosilicate-glass ceiling** (multiply-sourced:
+  Monteverde 2012, Peters 2024, Fahrenholtz & Hilmas, Marschall, Li) the
+  material is silica-protected and no dwell clock runs.
+- **Above the ceiling but inside the demonstrated floor** (e.g. 300 s at
+  1973 K with zero recession; ~575 s at a 2450 °C sharp tip with
+  measurable blunting) the trajectory is *within the envelope*, consuming
+  recession margin.
+- **Beyond the envelope** — hotter than any demonstrated point, or
+  dwelling longer than the demonstrated floor — the report says
+  *extrapolation*, not *failure*: the data does not license either verdict.
+
+The envelope is **derived from a per-datum anchor table**, not hardcoded:
+survivals bound it from below, failures cap it from above (the first caps
+are 1-atm furnace failures — Levine et al. 2003, NTRS 20040033992 — which
+constrain the passive-oxidation regime only).  A new flight or test
+strengthens the dataset as a data edit.  Two scoping rules carry
+citations: dopant effects invert with temperature (TaSi₂ best-in-class at
+1627 °C, destroyed at 1927 °C), so envelopes are built per material
+*class* and doped variants are never averaged into the parent; and every
+aero-convective anchor is low-pressure ground testing (~0.07–0.2 atm),
+so even in-envelope coverage carries a facility-pressure caveat — the SiC
+active/passive oxidation transition is pressure-sensitive.
+
+*Status:* the envelope-coverage model is adopted and documented; the
+report currently implements the earlier peak/soak/heat-sink screening
+(Sections 13.1–13.3) with the envelope shading as the next implementation
+step (`SURVIVABILITY_REPORT_DESIGN.md` §11.7).
+
 ---
 
 ## 14. Outputs, events, and milestones
