@@ -80,12 +80,19 @@ _STARDUST_RN = 0.2286        # 60 deg sphere-cone, 0.827 m max dia (AIAA 2008-11
 # recession (the paper's own calc: 9.6 mm stagnation vs 8.6 mm Core 1).
 _STARDUST_MEAS_MM = 5.7
 
-# Hayabusa: design environment ~15 MW/m^2 peak for ~30 s (Suzuki JSR 10.2514/1.A32549,
-#   plan-restated / secondhand); half-sine Q ~= 286 MJ/m^2.
-_HAYABUSA_QPK_MW = 15.0
-_HAYABUSA_TAU = 30.0
+# Hayabusa: FIRSTHAND reconstructed environment (Suzuki et al., JSR 51(1) 2014,
+#   DOI 10.2514/1.A32549, PDF in repo data/): peak convective 5.3 MW/m^2 at 70 s
+#   (converged CFD/SCMA2; radiative ~1 MW/m^2 peak is additional but our model is
+#   convective-only — omitting it only SHRINKS predicted recession, i.e. makes the
+#   bound harder, so it is safe to leave out).  Sanity: T_eq at 5.3 MW/m^2 /
+#   eps 0.9 is ~3190 K vs the paper's calculated ~3200 K peak surface temperature.
+#   Pulse duration: LABELED ESTIMATE 60 s from the paper's heating window
+#   (temperature rise starts ~40 s, peak ~70 s, radiative-cooling decay after;
+#   CFD points span 55-80 s) — the bound also holds at tau 20-30 s.
+_HAYABUSA_QPK_MW = 5.3
+_HAYABUSA_TAU = 60.0
 _HAYABUSA_RN = 0.20          # ~0.4 m base dia sphere-cone
-_HAYABUSA_MEAS_MM = 0.3      # max measured recession (secondhand)
+_HAYABUSA_MEAS_MM = 0.3      # measured max recession, laser scan, error <10% (FIRSTHAND)
 
 
 def test_stardust_bound():

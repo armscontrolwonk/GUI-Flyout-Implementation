@@ -23,27 +23,50 @@ material constant:
   lower `H_eff` → *more* predicted recession → the model over-predicts, which is
   exactly the bounding direction the Phase 3 capsule tests enforce.
 
-## Why NO Reentry-F point back-out was performed
+## Reentry-F back-out: a derived BRACKET (source obtained), not a calibration
 
-The plan's Phase 2 step 1 suggests backing `H_eff` out of the Reentry-F graphite
-nosetip. **This was deliberately not done, for two rule-compliant reasons:**
+Initially declined for lack of a paired Q+δ source; the source then arrived:
+**Berry, "Deep Dive of Reentry F Nose Tip Step and Gap" white paper v2** (NASA
+Langley; in the project Google Drive, `ReentryF_White_Paper_v2.pdf`), which
+reproduces the primary-report numbers and figures (NASA CR-154044, LWP-460,
+TM X-1856 Fig. 11).
 
-1. Reentry-F is wired in the repo only as a **δ/R_n shape-change ladder** anchor
-   (survivability_report.py: ~0.7 R_n radial blunting survived, ~7.7 R_n axial
-   solid-tip length; NASA CR-154044 / Berry). There is **no wired
-   integrated-heat-load Q paired with a measured graphite recession δ** to invert
-   `H_eff = Q/(ρ·δ)` from.
-2. The plan §6 hazard is explicit that the Reentry-F nosetip recession history is
-   **uncertain after ~60,000 ft** (thermochemical-only vs. mechanical-erosion vs.
-   worst-case radius histories). Manufacturing a single-point back-out from
-   paywalled secondary numbers would violate the standing rule ("do not invent
-   citations; every number must trace to a source or be flagged"). A fabricated
-   precise calibration is worse than an honest band.
+**Cited inputs** (all via the white paper's quotes/figures):
+- Nosetip: ATJ graphite shell, initial R_n 0.1 in, 8.5 in long [white paper §intro].
+- Axial stagnation recession: **0.77 in = 19.6 mm at 49,000 ft** with nose radius
+  0.171 in [CR-154044 quote — preflight prediction, consistent with the
+  TM X-1856 postflight curve-1/curve-2 band, see below].
+- Test-window environment, 100,000→50,000 ft: stagnation heating **9,000–28,000
+  BTU/ft²·s = 102–318 MW/m²**, stagnation pressure 5–60 atm, enthalpy ~8,000
+  BTU/lbm ≈ 18.6 MJ/kg [LWP-460 nominal-trajectory figure].
+- Window duration: **~12–14 s** (TM X-1856 Fig. 11 time axis spans 448–462 s;
+  the 60,000 ft anomaly is at 458.7 s) — read from figure, flagged.
+- ATJ density ~1.73 g/cc (vendor-nominal, flagged; model's carbon_carbon uses 1800).
 
-The honest substitute is the literature cross-check below plus the Phase 3
-bounding tests, which together confirm the nominals are conservative and
-not wild — the actual acceptance criterion the plan names ("confirm the tuned
-value is not wild").
+**Bracket arithmetic** (ours, deliberately widest — no time-averaging assumption):
+`Q ∈ [102 MW/m² × 12 s, 318 MW/m² × 14 s] = [1.2, 4.5] GJ/m²`, so
+`H_eff = Q/(ρ·δ) ∈ [1.2e9, 4.5e9]/(1730 × 0.0196) ≈` **36–130 MJ/kg** for
+flight-regime graphite (oxidation + mechanical-erosion, 5–60 atm).
+
+**Reading:** the model's carbon_carbon nominal **40 sits at the low (conservative)
+edge** of the flight-derived bracket — the screen over-predicts recession
+in-envelope too, same sign as the capsule bounds.  ⚠ This is a *derived bracket*
+(inputs cited, arithmetic ours, spread carried); it is **not** a point
+calibration, and the nominal was not changed.
+
+**Radius-history spread, now quantified** (TM X-1856 Fig. 11, read from the
+white paper's reproduction): curve 1 (thermochemical-only) ends near
+R_n ≈ 0.17–0.2 in; curve 2 (mechanical-erosion-corrected) near ~0.3 in;
+curve 3 (worst case, monotonic growth to the 0.5 in plug-exposure radius at
+458.7 s) is **refuted** by the report itself (plug exposure would have shown in
+thermocouples, body motions, surface pressures); pressure-matching preliminary
+estimates (with uncertainty bars) fall between curves 1 and 2.  So the
+demonstrated-survival blunting spread is **R_n 0.10 → 0.17–0.30 in**
+(~0.7–2 R_n radial growth), worst-case 0.5 in excluded.
+Corroboration: Malta/Langley full-scale ablation tests measured graphite
+recession rates within **±15% of theory** at sublimation conditions
+(0.27/0.59 atm), with irregular stagnation shapes forming only at 6–10+ atm
+[LWP-460 summary].
 
 ## H_eff bands (replaces the bare point placeholders)
 
@@ -55,7 +78,7 @@ spread. **These are conservative screening constants, NOT fits.**
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (plan §Phase 2 handbook guidance; enthalpy-dependence corroborated by CP/PICA arc-jet literature above). Nominal 15 at the conservative low end. |
 | pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~5× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. **Cited arc-jet point:** Winter et al. AIAA 2014-1151 (mArc, NASA Ames) — flat-face flux 1036 W/cm² (10.36 MW/m², ±10%, converted from a 2575 W/cm² hemispherical probe), PICA recession rate 0.05–0.06 cm/s by tracer spectroscopy, corroborated by typical large-facility rates 0.05–0.1 cm/s at similar conditions, surface T ≥ 2800 K. Implied Q\* = q̇/(ρ·ṡ) with ρ_virgin = 270: **38–77 MJ/kg at ~10 MW/m²** (77 at 0.5 mm/s ↔ 38 at 1.0 mm/s). The nominal 35 sits at/below the low edge of this cited band → conservative-low is now *cited*, not just argued. (Caveats: cold-wall calorimeter flux; feasibility-demo rate estimate.) |
-| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765); [NTRS 19790010869, C/C nosetip ablative performance](https://ntrs.nasa.gov/search.jsp?R=19790010869)). Specific endpoint values NOT retrieved from a single table (sources paywalled/403) — band is engineering-judgement bracketing the sublimation regime, flagged as such. |
+| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765); [NTRS 19790010869, C/C nosetip ablative performance](https://ntrs.nasa.gov/search.jsp?R=19790010869)). Table endpoints remain engineering brackets, but the **Reentry-F flight-derived bracket 36–130 MJ/kg** (next section — inputs cited, arithmetic ours) now contains the nominal 40 at its conservative low edge. |
 
 **Provenance honesty:** the CP and C/C *band endpoints* are literature-informed
 engineering brackets, not values lifted from one retrieved table (the authoritative
@@ -73,5 +96,9 @@ arbitrary, and independently bound-checked in Phase 3.
 - Direction conservative (over-predict)? **Yes** — Phase 3 bounds: Stardust 5.1×
   (vs firsthand Core 1 = 5.7±0.3 mm, Kontinos & Stackpoole AIAA 2008-1197),
   Hayabusa 44×, both predicted ≥ measured.
-- Reentry-F reproduced within radius-history spread? **N/A** — no wired Q+δ pair;
-  documented above rather than fabricated.
+- Reentry-F honored within radius-history spread? **Yes, as a bracket** — the
+  Berry white paper (project Drive) supplied the paired environment + recession
+  numbers; the derived H_eff bracket 36–130 MJ/kg contains the C/C nominal 40 at
+  its conservative edge, and the TM X-1856 curve-1/2/3 spread is quantified
+  (0.17–0.30 in best-supported, 0.5 in worst case refuted) rather than collapsed
+  to a point.
