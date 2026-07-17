@@ -3151,10 +3151,15 @@ The anchors split by role, and the split is load-bearing:
   quantified from TM X-1856 Fig. 11: final radius 0.17–0.30 in best-supported
   (thermochemical and erosion-corrected curves plus pressure-derived estimates),
   the 0.5 in worst case refuted by the report itself.  A flight-derived H_eff
-  *bracket* of 36–130 MJ/kg (heating window 102–318 MW/m² × 12–14 s against
-  19.6 mm axial recession; every input cited, arithmetic ours) contains the
-  model's carbon-carbon nominal 40 at its conservative low edge — a bracket,
-  never a single-point H_eff calibration.
+  *bracket* of 29–130 MJ/kg (Q from the pre-existing LWP-460 curve integration
+  of ~1 GJ/m² — see `HEATING_TPS_REFERENCES.md`, whose Q_MJ-stays-None decision
+  stands — up to the constant-peak ceiling, against 19.6 mm axial recession)
+  contains the model's carbon-carbon nominal 40 in its lower third; at the
+  ~1 GJ/m² central estimate the screen under-predicts by ~25%, inside the
+  ±25%/1.6× ablation-model recession spread of Schneider et al. AIAA 72-705
+  (read from primary).  The spread — not a conservativeness claim — is what is
+  carried for the sharp-tip regime; a bracket, never a single-point H_eff
+  calibration.
 - **Stardust** (PICA, recovered, 12.8 km/s) and **Hayabusa** (carbon-phenolic,
   recovered, >12 km/s) are **bounding anchors, not fits** — both now firsthand.
   Post-flight analysis found equilibrium-style ablation chemistry *over*-predicts
