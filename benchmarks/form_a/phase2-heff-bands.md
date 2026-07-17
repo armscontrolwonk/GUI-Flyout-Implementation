@@ -85,12 +85,14 @@ heating exists).
 **Radius-history spread, now quantified** (TM X-1856 Fig. 11, read from the
 white paper's reproduction): curve 1 (thermochemical-only) ends near
 R_n ≈ 0.17–0.2 in; curve 2 (mechanical-erosion-corrected) near ~0.3 in;
-curve 3 (worst case, monotonic growth to the 0.5 in plug-exposure radius at
-458.7 s) is **refuted** by the report itself (plug exposure would have shown in
+curve 3 (worst case, monotonic growth to the plug-exposure radius at 458.7 s)
+is **refuted** by the report itself (plug exposure would have shown in
 thermocouples, body motions, surface pressures); pressure-matching preliminary
-estimates (with uncertainty bars) fall between curves 1 and 2.  So the
-demonstrated-survival blunting spread is **R_n 0.10 → 0.17–0.30 in**
-(~0.7–2 R_n radial growth), worst-case 0.5 in excluded.
+estimates (with uncertainty bars) mostly straddle curve 1.  Clean-figure
+correction (digitized: `reentryf_tmx1856_fig11.csv`): the exposure radius is
+**~0.39 in**, not 0.5 in (0.5 is the axis top), and the demonstrated-survival
+blunting spread is **R_n 0.105 → ~0.20–0.31 in** (1–2.1 R_n₀ radial growth),
+worst-case excluded.
 Corroboration: Malta/Langley full-scale ablation tests measured graphite
 recession rates within **±15% of theory** at sublimation conditions
 (0.27/0.59 atm), with irregular stagnation shapes forming only at 6–10+ atm
@@ -162,6 +164,7 @@ the screening envelope's blunt-RV cases sit well below this regime.
   heat pulse be digitized: Q ≈ 2.85 GJ/m² ±25%
   (`reentryf_nominal_qdot.csv`), giving H_eff 50–135 MJ/kg (central ≈84).  The
   C/C nominal 40 over-predicts ~2× (conservative); the TM X-1856 curve-1/2/3
-  spread is quantified (0.17–0.30 in best-supported, 0.5 in worst case refuted)
-  rather than collapsed to a point; `_BENCHMARKS` Q_MJ stays None (preflight
-  prediction, not flight measurement).
+  spread is quantified from the clean figure (~0.20–0.31 in best-supported,
+  worst case at the ~0.39 in exposure radius refuted) rather than collapsed to
+  a point; `_BENCHMARKS` Q_MJ stays None (preflight prediction, not flight
+  measurement).

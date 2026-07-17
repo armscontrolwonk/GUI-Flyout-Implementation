@@ -3148,9 +3148,12 @@ The anchors split by role, and the split is load-bearing:
   LWP-460, via Berry's nose-tip white paper in the project Drive) is the
   **in-envelope tuning anchor**, wired as the δ/R_n shape-change ladder.  Its
   nosetip recession history after ~60,000 ft is carried as a *spread*, now
-  quantified from TM X-1856 Fig. 11: final radius 0.17–0.30 in best-supported
-  (thermochemical and erosion-corrected curves plus pressure-derived estimates),
-  the 0.5 in worst case refuted by the report itself.  The nominal stagnation
+  quantified from the clean TM X-1856 Fig. 11 (digitized:
+  `benchmarks/form_a/reentryf_tmx1856_fig11.csv`): final radius ~0.20 in
+  (thermochemical) to ~0.31 in (erosion-corrected) — 1–2.1 R_n₀ radial growth —
+  with the pressure-derived estimates mostly straddling the lower curve, and the
+  worst case (reaching the ~0.39 in graphite-plug exposure radius at 458.7 s)
+  refuted by the report itself.  The nominal stagnation
   heat pulse is now *digitized point-by-point* from the clean nominal-trajectory
   figure (γ_E 21.2°, V_E 20,300 ft/s; supplied in-chat; reads in
   `benchmarks/form_a/reentryf_nominal_qdot.csv`): **Q ≈ 2.85 GJ/m² ±25%
