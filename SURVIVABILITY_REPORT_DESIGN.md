@@ -292,9 +292,13 @@ The two outcomes bound the envelope from opposite sides:
     quantified.
   * SHARP-B2 segment failures remain excluded: **material-quality**, not a
     temperature/dwell limit.
-  The remaining, narrower gap is a *total burn-through* of a plain tip (the PA
-  transition is runaway *onset*) and an aero-convective cap specifically for
-  HfB₂-SiC.
+  HfB₂-SiC now has a *protected-side* ground anchor (Gasch & Johnson 2010, AHF
+  arcjet: survived ~1690 °C / 2.5 MW/m² / 0.10 atm / 600 s), so its floor is no
+  longer purely inferred from ZrB₂-SiC.  The remaining, narrower gaps are a
+  *total burn-through* of a plain tip (the PA transition is runaway *onset*) and
+  the **HfB₂-SiC PA-transition cap** — where HfB₂-SiC goes active — which Hf
+  shifts higher than Zr (Peters 2024), so it cannot be borrowed from the ZrB₂
+  number.
 
   Two anchors **isolate the pressure axis** (§11.6), so it is not hypothetical:
   the De Prisco pair (same specimens survived 1700–1800 K at 3×10⁻³ atm but
