@@ -3076,17 +3076,23 @@ report states **coverage against a demonstrated envelope** (design:
   1973 K with zero recession; ~575 s at a 2450 °C sharp tip with
   measurable blunting) the trajectory is *within the envelope*, consuming
   recession margin.
-- **Beyond the envelope** — hotter than any demonstrated point, or
-  dwelling longer than the demonstrated floor — the report says
-  *extrapolation*, not *failure*: the data does not license either verdict.
+- **Beyond the envelope** — the surface crosses the **passive→active (PA)
+  oxidation boundary** (protective silica lost, heating runs away —
+  Marschall's +400 K jump), or dwell outruns the demonstrated floor — the
+  report says *extrapolation*/runaway, not a bare pass: the data does not
+  license a clean verdict.  The PA edge is a **flux/pressure surface, not a
+  fixed temperature** (plain ZrB₂-SiC went active at ~2215 K / 2 MW/m² /
+  10 kPa on a flat face, but stayed passive to 2450 °C at 7 MW/m² on a sharp
+  conducting tip), so it is evaluated at the run's own flux and pressure.
 
 The envelope is **derived from a per-datum anchor table**, not hardcoded:
 survivals bound it from below, failures cap it from above.  Caps come from the
 Levine et al. 2003 1-atm furnace failures (NTRS 20040033992, passive-oxidation
-regime only) and two convergent *aero-convective* caps — the Di Maso 2009
-HfB₂-TaSi₂ sharp cone and the De Prisco 2026 ZrB₂-TiB₂-SiC hemispheres (*J.
-Eur. Ceram. Soc.* 46, 118184) — which both fail by **oxide-scale detachment at
-~2700–2800 K** (not burn-through), across two labs and two classes.  All cap
+regime only); two convergent doped/complex *oxide-detachment* caps — the Di Maso
+2009 HfB₂-TaSi₂ sharp cone and the De Prisco 2026 ZrB₂-TiB₂-SiC hemispheres (*J.
+Eur. Ceram. Soc.* 46, 118184) at ~2700–2800 K; and the keystone **Marschall
+2012 PA transition** of *plain* ZrB₂-SiC (*J. Thermophys. Heat Transfer* 26(4)),
+a pressure-explicit, flight-corroborated (SHARP-B1) runaway threshold.  All cap
 doped/complex diborides, never plain ones.  The De Prisco pair, same specimens
 run at two pressures, is direct evidence that the SiC active/passive transition
 is pressure-sensitive: survived 1700–1800 K at 3×10⁻³ atm, detached at 2700 K

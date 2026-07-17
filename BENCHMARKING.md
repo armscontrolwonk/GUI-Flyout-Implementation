@@ -87,14 +87,18 @@ Seeds the anchor dataset behind the Form B envelope-coverage model
 plasma-torch / furnace datum for a ZrB₂-SiC-class, complex-boride, or
 carbide-boride UHTC.  Most aero-convective rows are SURVIVALS — those tests
 stopped, they did not fail — so on that side the demonstrated region is a
-*floor* (§11.1).  Caps now come from three places: the **Levine 2003 furnace**
+*floor* (§11.1).  Caps now come from three regimes: the **Levine 2003 furnace**
 rows (1-atm stagnant cyclic — they cap the passive-oxidation regime for *doped*
-classes only, not the aero-convective one), and two **aero-convective**
-degradation caps — the **Di Maso HfB₂-TaSi₂ sharp cone** and the **De Prisco
-2026 ZrB₂-TiB₂-SiC hemispheres** — which both fail by *oxide-scale detachment*
-at ~2700–2800 K (not burn-through).  A clean aero-convective **burn-through** of
-a *plain* ZrB₂-SiC / HfB₂-SiC tip at a known T/dwell/flux is still the
-highest-value missing point.
+classes only, not the aero-convective one); two doped/complex **oxide-detachment**
+caps (**Di Maso HfB₂-TaSi₂** cone, **De Prisco 2026 ZrB₂-TiB₂-SiC** hemispheres,
+both ~2700–2800 K); and — the keystone — the **Marschall 2012 PA transition**,
+a *plain* ZrB₂-SiC aero-convective runaway (loss of protective silica → active
+SiC oxidation → +400 K temperature jump) at a cited, pressure-explicit threshold
+(~2 MW/m² cold-wall, ~2215 K, 10 kPa), flight-corroborated by SHARP-B1.  The
+remaining, narrower gap is a *total burn-through / complete consumption* of a
+plain tip (the PA transition is runaway *onset*, not full loss), and an
+aero-convective cap specifically for **HfB₂-SiC** (only in telemetry-limited
+flight so far).
 
 Record schema (one per datum): `id · material_class · kind · tip_radius ·
 flux (+kind, enthalpy, stag pressure) · peak_T (+source) · dwell above 1650 °C ·
@@ -115,16 +119,33 @@ recession · mass change · outcome (+mode) · source`.
 | DePrisco-2026-ZTN-M6 | zrb2_tib2_sic (NbC) | arcjet (SPES, M=6) | 10 mm (hemi) | ~4 MW/m² stag | 4.5→20.3 MJ/kg / 3×10⁻³ atm | 1800 K (pyro) | ~300 s (stepped) | +0.31 % mass; tip white oxide, sides silica; 165 µm peak-valley | **survived** | De Prisco et al., *J. Eur. Ceram. Soc.* 46 (2026) 118184 |
 | DePrisco-2026-ZTV-M6 | zrb2_tib2_sic (VC) | arcjet (SPES, M=6) | 10 mm (hemi) | ~4 MW/m² stag | 4.5→20.3 MJ/kg / 3×10⁻³ atm | 1700 K (pyro) | >400 s (stepped) | +0.16 % mass; dark borosilicate glass (better than Nb); 100 µm | **survived** | ibid. |
 | **DePrisco-2026-ZT-M3-2700K** | zrb2_tib2_sic (NbC & VC) | arcjet (SPES, M=3) | 10 mm (hemi) | ~10 MW/m² stag | 5.1→14.4 MJ/kg / 2.3×10⁻² atm | **2700 K** (pyro) | stepped (30–120 s) | small net mass gain; **very tip of BOTH samples detached** (poor oxide adherence) | **DEGRADED — 2nd aero-convective cap** (oxide detachment on handling after 2700 K; not burn-through) | ibid. |
+| Marschall-2012-ZrB2-30SiC-protected | zrb2_sic | plasmatron (VKI 1.2 MW, subsonic) | flat "mushroom" face | 110 W/cm² (1.1 MW/m²) cold-wall | 10 kPa static | 1800–1900 K steady | held at power | small mass change; stable protective oxide | **survived (passive/protected)** | Marschall, Pejaković, Fahrenholtz, Hilmas, Panerai, Chazot, *J. Thermophys. Heat Transfer* 26(4) 2012, DOI 10.2514/1.T3798 |
+| **Marschall-2012-ZrB2-30SiC-jump** | zrb2_sic | plasmatron (VKI, subsonic) | flat "mushroom" face | **jump at q_cw ≈ 202 W/cm² (2.02 MW/m²)**; no jump at 185 W/cm² (1.85) | 10 kPa static; P_dyn 75–95 Pa | ~2215 K steady → **+400 K in 20–30 s** (after 30–45 s hold) | onset-defined | protective silica lost → active SiC oxidation → chemical heat-flux surge; accelerated mass loss / changing mold line | **DEGRADED/RUNAWAY — the plain-ZrB₂-SiC passive→active (PA) transition; first plain-diboride aero-convective cap** | ibid. |
 
-Review-level context (not a point datum): **Peters et al., *Nat. Commun.* 15,
-2024, DOI 10.1038/s41467-024-46753-3** — ZrB₂/HfB₂-SiC oxidation ceiling
-**~1650 °C** (the `continuous_K` anchor); an HfB₂-SiC nose cone at **80 min
-cumulative** arc-jet; carbides (HfC/ZrC) push service **>2000 °C**.  (Its
-14.75 MW/m² · 130 s point is a *coated C/C* X-43 edge — file under C/C, not
-UHTC.)
+Review-level context (not point data):
+- **Peters et al., *Nat. Commun.* 15, 2024, DOI 10.1038/s41467-024-46753-3** —
+  ZrB₂/HfB₂-SiC oxidation ceiling **~1650 °C** (the `continuous_K` anchor); an
+  HfB₂-SiC nose cone at **80 min cumulative** arc-jet; carbides (HfC/ZrC) push
+  service **>2000 °C**.  (Its 14.75 MW/m² · 130 s point is a *coated C/C* X-43
+  edge — file under C/C, not UHTC.)
+- **Glass, D. E., "Physical Challenges and Limitations Confronting the Use of
+  UHTCs on Hypersonic Vehicles," AIAA 2011-2304** (NASA Langley) — an
+  independent oxidation-regime map for ZrB₂-SiC (from its Ref [17]): ~700–1200 °C
+  B₂O₃-protected; **~1200–1600 °C SiO₂-protected** (the ceiling, 6th source);
+  **~1600–1800 °C SiO₂ lost to active oxidation** (SiO gas, ZrO₂ non-protective)
+  — the PA/PAT transition by temperature, consistent with Marschall's ~1942 °C
+  jump; >1800 °C recrystallized ZrO₂ "may prevent catastrophic failure."
+  Crucially, Glass reviews the literature UHTC *component* failures (SHARP-B2;
+  the CIRA ZrB₂-SiC nose tip) and attributes them to **mechanical / attachment
+  causes — a Ti retaining screw, thermocouple-drilling holes, processing
+  quality — NOT oxidation**.  A CIRA duplicate withstood 300 W/cm² (3 MW/m²) ×
+  108 s twice with only non-critical base damage; the stated bottleneck is
+  "design of mechanical interfaces with subtending structures."  This is why
+  the model excludes those component failures from the *thermal* envelope and
+  keeps Marschall's PA transition as the clean plain-material oxidation cap.
 
 **What the table pins:**
-- `continuous_K` (glass ceiling) = **1650 °C** — 5+ independent sources agree.
+- `continuous_K` (glass ceiling) = **1650 °C** — 6+ independent sources agree (Monteverde 2012, Peters 2024, Fahrenholtz & Hilmas, Marschall, Li, Glass 2011).
 - Demonstrated dwell floor: **≥300 s at 1973 K** (zero recession), extending to
   **~575 s at 2450 °C** (sharp, tip-blunting); plus **600 s at ~1800 °C**
   arc-jet (Levine ZSTS) and **100 min at 1927 °C** in 1-atm furnace air
@@ -194,6 +215,29 @@ to set a generic UHTC number.  Never edit a citation.
   (Mach 3, 2.3×10⁻² atm) — the same specimens, so it isolates the pressure
   axis: the SiC active/passive footnote (§11.6) is not hypothetical here.
   VC-doping out-performed NbC (darker, more-stable borosilicate glass).
+- **The plain-diboride cap we were missing — and it's the model's keystone.**
+  Marschall 2012 caught the **passive→active (PA) oxidation transition** of
+  *plain* ZrB₂-SiC in the act: at 10 kPa the surface holds a stable protective
+  silica scale up to a threshold, then at q_cw ≈ 202 W/cm² (2.02 MW/m², ~2215 K
+  steady) the glass is lost, SiC oxidises actively, the chemical heat flux
+  surges, and the surface **jumps +400 K in 20–30 s** — a self-amplifying
+  runaway, not a soft limit.  Just 185 W/cm² (1.85 MW/m²) did *not* trigger it:
+  the boundary is sharp.  This is:
+  1. the first **plain** (undoped) aero-convective cap — the exact gap the
+     additive-inversion rule said we could not fill from doped data;
+  2. **flight-corroborated** — SHARP-B1 saw the same jump on a ZrB₂-SiC
+     arcjet sample, 2360→2810 K in ~15 s (Kolodziej et al.); HyMETS arcjet
+     likewise;
+  3. **pressure- and flux-explicit** (10 kPa), so it feeds the §11.6 pressure
+     axis with a real number, not a caveat;
+  4. the **physical mechanism** under the whole envelope — the loss of the
+     borosilicate glass that the 1650 °C `continuous_K` ceiling is *about*.
+  Consequence for the model: the envelope's "too hot" upper edge is the **PA
+  transition, a flux/pressure surface — not a fixed temperature**.  It also
+  reconciles an apparent tension: Monteverde's sharp tip survived 2450 °C at
+  7 MW/m² because a sharp, conducting tip can stay locally passive, whereas
+  Marschall's flat face went active at ~2215 K / 2 MW/m² / 10 kPa.  Same
+  material, different (flux, geometry, pressure) → different PA crossing.
 - **The mid-ladder fills in**: sharp (0.5 mm!) ZrB₂-SiC survives ~1810 °C for
   ~224 s undamaged — between the 1700 °C/300 s and 2450 °C/575 s anchors, and at
   a tip radius 200× sharper than the Scatteia nose.
@@ -226,11 +270,12 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | glider tip flag | δ/R_n ≥ 0.05 | **internal inference** from Murbach 1993/AEOLUS (SWERVE C-C nose) + AHW's move to non-ablating tips; no literature number | ⚠ labeled inference |
 | NRC duration ladder | 300 / 800 / 3,000 / 3,600 s | NRC 2008, *U.S. Conventional Prompt Global Strike*, App. D Fig. D-2, pp. 119–121 (Mk-500, CSM-1 AMaRV, CSM-2 FALCON) | ✔ cited |
 | ablation↔reradiation crossover | ~1,000 s | **derived** from the NRC CSM-1 (800 s ablative) vs CSM-2 (3,000 s C-C) pair | ⚠ labeled derived |
-| UHTC glass ceiling | 1650 °C | Monteverde & Savino 2012; Peters 2024; Fahrenholtz & Hilmas 2012; Marschall 2009; Li 2008 | ✔ cited (5 sources) |
+| UHTC glass ceiling | 1650 °C (protective SiO₂ up to ~1600 °C; active oxidation above) | Monteverde & Savino 2012; Peters 2024; Fahrenholtz & Hilmas 2012; Marschall 2009/2012; Li 2008; Glass 2011 (AIAA 2011-2304) | ✔ cited (6 sources) |
 | silica melt / film loss | ~2100 K | Di Maso thesis concl. 5 (citing its [45]); mechanism distinct from the 1650 °C protectiveness ceiling | ✔ cited |
 | UHTC dwell floor | ≥300 s @ 1973 K; ~575 s @ 2450 °C | Monteverde 2013 (Corros. Sci. 75); Monteverde & Savino 2012 | ✔ cited |
 | UHTC demonstrated peaks | ~2450 °C sharp ZrB₂-SiC / ~2600 °C carbide-boride | Monteverde 2012 (CFD-source flagged); Xu 2026 | ✔ cited |
-| HfB₂-TaSi₂ cap | oxide detachment ~2800 K tip (CFD) | Di Maso thesis (sharp cone) | ✔ cited |
+| **PA (passive→active) transition** — the "too hot" edge (plain ZrB₂-SiC) | ~2215 K / 2.02 MW/m² cold-wall / 10 kPa (flux/pressure surface, not fixed T) | Marschall et al. 2012 (*J. Thermophys. Heat Transfer* 26(4), DOI 10.2514/1.T3798); flight-corroborated SHARP-B1 (Kolodziej et al.) | ✔ cited |
+| HfB₂-TaSi₂ / complex-boride oxide-detachment cap | ~2700–2800 K tip | Di Maso thesis (HfB₂-TaSi₂ cone, CFD tip); De Prisco 2026 (ZrB₂-TiB₂-SiC hemi, *JECS* 46 118184) | ✔ cited |
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); corroborated by the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
 | bondline limit | 250 °C | NASA NTRS 20060004824 (ablative TPS sizing); Orion 260 °C NTRS 20080013535 | ✔ cited |
