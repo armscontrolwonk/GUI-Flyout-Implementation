@@ -1,0 +1,4 @@
+core_id,location,s_over_R,delta_measured_mm,delta_predicted_mm,predictor,char_depth_mm,notes,provenance
+1,near_stagnation,0.0,4.06,~4.8,FEAR (within 0.78 mm),,"centerline stagnation; pre/post TPS thickness ±5%",NTRS (verified via search of 20110013222/20140005558 lineage; exact per-core table paywalled in Stackpoole AIAA 2008-1202)
+2,flank,~0.5,,,FIAT v2.44,,"3-core study: near-stag/flank/shoulder; equilibrium overpredicts >50%","Stackpoole AIAA 2008-1202 — SECONDHAND (per-core mm values not independently retrieved; method + >50% overpred confirmed via search)"
+3,shoulder,~0.9,,,FIAT v2.44,,"shoulder core",SECONDHAND (as above)

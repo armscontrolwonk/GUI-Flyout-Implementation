@@ -71,7 +71,7 @@ MSL 2.0 / 55; Shuttle 0.6 / 66.
 | severe blunting δ/R_n | 0.50–1.0 | more recovered/tracked RV data |
 | glider ablative-tip flag δ/R_n | 0.05 | any glider tip-recession tolerance data |
 | **UHTC `oxidation_dwell_s`** | **120 s (rough → retired)** | superseded by the cited dwell floor (≥300 s @ 1973 K, ~575 s @ 2450 °C) in the anchor table; still want a plain-diboride *aero-convective failure* to cap the top |
-| ablator `H_eff_MJ_kg` (CP 15, PICA 35, C/C 40) | screening values | recovered-capsule recession back-out (Hayabusa, Stardust) |
+| ablator `H_eff_MJ_kg` (CP 15, PICA 35, C/C 40) | ~~screening values~~ → **conservative-low nominals within cited Q\* bands; bound-tested** (see "Form A recession anchors") | a finite-rate chemistry option to retire the built-in equilibrium conservatism (P3-chemistry) |
 | analytic-honesty factor | 2–4× | more paired analytic/numerical runs |
 
 ## Caveats to carry into every comparison
@@ -286,6 +286,62 @@ to set a generic UHTC number.  Never edit a citation.
   ~2100 K and the film is lost to volatility/shear (the SiC-depletion onset);
   Ta₂O₅·6HfO₂ evaporates 2300–2800 K.
 
+## Form A recession anchors (the H_eff chain)
+
+The ballistic-RV recession chain is `δ = Q/(ρ·H_eff)`.  Its anchors split into a
+**tuning** anchor (in-envelope) and two **bounding** anchors (recovered capsules),
+and the distinction is load-bearing — details in `benchmarks/form_a/`.
+
+**Anchor roles**
+| anchor | role | what it fixes |
+|---|---|---|
+| **Reentry-F** (6.1 km/s, graphite nosetip, NASA CR-154044 / Berry) | *tuning* — the in-envelope δ/R_n shape-change ladder (0.7 R_n radial blunting survived; 7.7 R_n axial solid-tip length) | the accuracy-band ladder, not a point H_eff (no wired Q+δ pair; recession history uncertain after ~60,000 ft — carried as spread, never a single-point calibration) |
+| **Stardust** (PICA, recovered, ~12.9 km/s; Q 276 MJ/m²) | *bounding* | model must predict ≥ measured 4.06 mm stagnation recession |
+| **Hayabusa** (carbon-phenolic, recovered, ~12.2 km/s) | *bounding* | model must predict ≥ measured ~0.3 mm |
+
+**Bounds, not fits (read before touching H_eff).**  Post-flight analysis found
+equilibrium-style ablation chemistry *over*-predicts capsule recession
+(Hayabusa calc/measured ≈ 3×, Suzuki *JSR* [DOI 10.2514/1.A32549](https://doi.org/10.2514/1.A32549);
+Stardust equilibrium models > 50% over the forebody cores, Stackpoole AIAA
+2008-1202).  That chemistry conservatism exceeds the radiative-gas heating the
+convective-only screen omits above ~9 km/s, so the net bias is over-prediction.
+The capsules therefore validate the chain only as a **lower bound**: predicted δ
+must exceed measured δ.  **Do not "fix" the over-prediction by raising H_eff** —
+that is the specific failure mode this bounding-vs-tuning split exists to prevent.
+
+**Bound-test results** (`test_form_a_bounds.py`, run through the real
+`heating.heating_figure_of_merit` path at the documented entry environments):
+
+| case | material | predicted δ | measured δ | ratio | verdict |
+|---|---|---|---|---|---|
+| `stardust_bound` | PICA (ρ 270, H_eff 35) | 29.1 mm | 4.06 mm | **7.2×** | bound holds (≥1) |
+| `hayabusa_bound` | carbon-phenolic (ρ 1450, H_eff 15) | 13.2 mm | ~0.3 mm | **44×** | bound holds (≥1) |
+
+The large ratios are *expected and safe*: the screening chain uses full-load Q ×
+a single conservative H_eff, far cruder than FIAT (~1.5× on Stardust), and a
+lower bound wants headroom.  Ratio < 1 would signal a broken Q pipeline or bad
+H_eff — halt and investigate, not a radiative shortfall.
+
+**H_eff bands** (replacing the bare screening points; nominals unchanged so
+verdicts are stable, now justified as conservative-low within the literature Q\*
+band — Q\* is enthalpy-dependent, not a constant).  Full derivation +
+provenance: `benchmarks/form_a/phase2-heff-bands.md`.
+| material | ρ (kg/m³) | low | **nominal** | high | basis |
+|---|---|---|---|---|---|
+| carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (handbook; enthalpy-dependence per PICA/CP arc-jet lit, [DOI 10.2514/1.42949](https://arc.aiaa.org/doi/10.2514/1.42949)) |
+| pica | 270 | 25 | **35** | ~100+ | PICA Q\* higher than CP, rises sharply with enthalpy; nominal 35 conservative-low (over-predicts Stardust 7×) |
+| carbon_carbon | 1800 | 25 | **40** | 60 | C/C oxidation→sublimation regime ([OSTI carbon/graphite RV-nosetip correlation](https://www.osti.gov/biblio/4729765); endpoints = engineering bracket, sources paywalled — flagged) |
+
+**Two P3 items surfaced honestly by the capsules (logged, not hidden):**
+- **P3-radiative:** the convective-only screen ends ~9 km/s; above it radiative
+  gas heating adds ~30%+ (the Stardust/Hayabusa regime).  Unmodeled, and
+  partially masked by P3-chemistry.  Affects only >9 km/s cases — no operational
+  Form A trajectory in the current use set exceeds this, which is why it is P3.
+- **P3-chemistry:** equilibrium-style recession is conservative vs. flight
+  (Hayabusa ×3, Stardust >50%) — the *larger* bias.  A finite-rate option
+  (Park/Milos lineage) is the eventual fix; until then the model is honestly
+  conservative and the bound tests enforce the sign.
+
 ## Threshold provenance audit
 
 Standing rule: **every threshold the survivability model consumes is either
@@ -314,6 +370,8 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
 | `uhtc` `oxidation_dwell_s` (current code) | 120 s | **uncited placeholder** — retired at §11 implementation in favor of the cited dwell floor above | ⚠ flagged for removal |
+| ablator `H_eff_MJ_kg` nominals | CP 15 / PICA 35 / C/C 40 | conservative-low within the flight/handbook effective-heat-of-ablation Q\* band (CP ~10–30 MJ/kg; PICA higher; C/C sublimation regime); Q\* is enthalpy-dependent, so a single value is regime-specific. Band endpoints = engineering brackets (authoritative Q\*-vs-enthalpy tables paywalled) | ⚠ nominal cited-band; endpoints labeled bracket |
+| Form A capsule bounds | Stardust 7.2×, Hayabusa 44× (predicted/measured) | Stardust measured 4.06 mm (NTRS); Hayabusa calc/meas ≈3× and ~0.3 mm measured (Suzuki *JSR* 10.2514/1.A32549) — measured values secondhand (primary paywalled), ratio direction verified | ✔ cited (measured δ secondhand-flagged) |
 
 Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
 each is labeled with its true epistemic status in code and report text.  If a
