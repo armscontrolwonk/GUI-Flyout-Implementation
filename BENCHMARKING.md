@@ -300,7 +300,8 @@ and the distinction is load-bearing — details in `benchmarks/form_a/`.
 `kontinos-stackpoole-2008-stardust-postflight-entry-aiaa-2008-1197.pdf`,
 `winter-stackpoole-2014-remote-recession-sensing-pica-aiaa-2014-1151.pdf`,
 `schneider-teter-coleman-heath-1972-graphite-nosetip-design-aiaa-72-705.pdf`,
-`sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf`)
+`sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf`,
+`nestler-1979-carbon-carbon-nosetip-ablation-high-pressure-arcs-ntrs-19790010869.pdf`)
 and in the project Google Drive reentry library (Berry,
 `ReentryF_White_Paper_v2.pdf` — kept in Drive rather than the repo because its
 underlying postflight reports carry a "may still be CUI/ITAR" caveat; also
@@ -362,7 +363,7 @@ provenance: `benchmarks/form_a/phase2-heff-bands.md`.
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (handbook; enthalpy-dependence per PICA/CP arc-jet lit, [DOI 10.2514/1.42949](https://arc.aiaa.org/doi/10.2514/1.42949)) |
 | pica | 270 | 25 | **35** | ~100+ | PICA Q\* higher than CP, rises sharply with enthalpy; nominal 35 conservative-low (over-predicts Stardust 5×). **Cited arc-jet point:** Winter et al. AIAA 2014-1151 — 10.36 MW/m² flat-face, recession 0.5–1.0 mm/s → implied Q\* **38–77 MJ/kg**; nominal sits at/below the low edge |
-| carbon_carbon | 1800 | 25 | **40** | 60 | C/C oxidation→sublimation regime ([OSTI carbon/graphite RV-nosetip correlation](https://www.osti.gov/biblio/4729765); table endpoints = engineering bracket). **Reentry-F flight-derived bracket 29–130 MJ/kg** contains the nominal in its lower third — spread carried, not a sign claim (Berry white paper + pre-existing LWP-460 integration; `benchmarks/form_a/phase2-heff-bands.md`) |
+| carbon_carbon | 1800 | 25 | **40** | 60 | C/C oxidation→sublimation regime ([OSTI carbon/graphite RV-nosetip correlation](https://www.osti.gov/biblio/4729765); table endpoints = engineering bracket). **Reentry-F flight-derived bracket 29–130 MJ/kg** contains the nominal in its lower third — spread carried, not a sign claim (Berry white paper + pre-existing LWP-460 integration; `benchmarks/form_a/phase2-heff-bands.md`). **Validity floor:** Nestler 1979 (read from primary) shows the band does NOT apply at ≥80 atm stagnation pressure — severe-regime Q\* collapses to ~10–20 MJ/kg |
 
 **Two P3 items surfaced honestly by the capsules (logged, not hidden):**
 - **P3-radiative:** the convective-only screen ends ~9 km/s; above it radiative
@@ -409,6 +410,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | ablator `H_eff_MJ_kg` nominals | CP 15 / PICA 35 / C/C 40 | conservative-low within the flight/handbook effective-heat-of-ablation Q\* band (CP ~10–30 MJ/kg; C/C sublimation regime); Q\* is enthalpy-dependent, so a single value is regime-specific. **PICA band now carries a firsthand arc-jet point**: Winter et al. AIAA 2014-1151, implied Q\* 38–77 MJ/kg at 10.36 MW/m² — nominal 35 at/below its low edge. CP/C-C endpoints remain engineering brackets (tables paywalled) | ⚠ PICA cited; CP/C-C endpoints labeled bracket |
 | Form A capsule bounds | Stardust 5.1×, Hayabusa 31× (predicted/measured) | Stardust measured 5.7±0.3 mm near-stagnation Core 1 — **firsthand**, Kontinos & Stackpoole AIAA 2008-1197 Table 1 (from Stackpoole AIAA 2008-1202); Hayabusa measured ~0.3 mm (laser scan, error <10%), calc/meas ≈3×, peak convective 5.3 MW/m² — **firsthand**, Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549 (Hayabusa pulse duration in the bound test is a labeled 60 s estimate from the paper's heating window) | ✔ cited (both capsules firsthand) |
 | Reentry-F H_eff bracket | 29–130 MJ/kg (flight graphite, 5–60 atm) | derived: Q ∈ [~1 GJ/m² (LWP-460 curve integration, pre-existing in `HEATING_TPS_REFERENCES.md`; its Q_MJ-stays-None decision stands), 318 MW/m² × 14 s ceiling] ÷ (ρ 1.73 g/cc × 19.6 mm axial recession); inputs cited to CR-154044 / LWP-460 / TM X-1856 via the Berry white paper (project Drive), TM X-2584 (uploaded + Drive) confirming ~18 MJ/kg enthalpy; window duration + density flagged read-from-figure / vendor-nominal; at Q≈1 GJ/m² the screen under-predicts by ~25%, inside Schneider 72-705's ±25%/1.6× ablation-model spread | ⚠ labeled derived bracket (spread carried, no sign claim) |
+| C/C severe-regime Q\* cap | ~10–20 MJ/kg at 80–168 atm (band validity floor) | Nestler 1979 (NTRS 19790010869, read from primary, repo `data/`): measured 3-D C/C steady-state recession 0.508–0.787 cm/s at 80–168 atm / T_w 4,000–4,167 K / H_CL 6.9–11.6 MJ/kg, roughness-augmented heating 1.4–1.5×, gouging onset ~60–77 atm along 45° weave rays; Q\* derived via the paper's own energy balance with a flagged nominal ρ ≈ 1.9 g/cc and Fig.-5 H_w | ⚠ measured rates cited; Q\* labeled derived |
 | Stardust radiative fraction | 9% of peak rate / 4% of load (stagnation); CEV-scale ~40% of peak flux | Kontinos & Stackpoole AIAA 2008-1197 (auxiliary computations; §II for CEV comparison) — scales the P3-radiative item | ✔ cited |
 
 Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
