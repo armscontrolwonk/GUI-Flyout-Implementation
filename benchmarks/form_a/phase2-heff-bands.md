@@ -85,6 +85,24 @@ is withdrawn.  ⚠ Still a derived bracket (nominal-preflight environment,
 figure-traced Q, δ spread carried); **not** a point calibration; nominal
 unchanged; `_BENCHMARKS` Q_MJ stays None (preflight prediction — no
 flight-measured stagnation heating exists).
+
+**Independent theory corroboration (Perini 1971 — read from primary).**
+Perini, *Review of Graphite Ablation Theory and Experimental Data*, JHU/APL
+ANSP-M-1, Dec 1971 (OSTI 4286220; distribution unlimited; PDF in repo `data/`)
+gives Scala's CO-diffusion-limited oxidation result with blowing offset as
+**ṁ = 0.1725·ρₑuₑC_H₀** (its Eq. 28), i.e. a closed-form cold-wall effective
+heat of ablation **Q\* ≈ h_t/0.1725 ≈ 5.8 × total enthalpy** in the
+diffusion-limited regime.  At Reentry-F's ~18.6 MJ/kg total enthalpy this
+predicts **Q\* ≈ 108 MJ/kg — within ~6% of the flight-derived central 114** —
+two fully independent routes (figure-traced flight load ÷ predicted recession,
+vs. boundary-layer theory) landing on the same number.  Perini's data survey
+adds the spread honestly: diffusion-limit data scatter **+10% to −50%** about
+theory (less mass loss than theory → actual Q\* up to ~2× higher —
+conservative direction for our screen), and in the sublimation extreme
+(p = 4 atm, 4000 K) JANAF-based predictions **under**-estimate measured loss
+by up to 70%, attributed to mechanical erosion / higher-order carbon species
+(Lundell & Dickey correlation) — the same effective-heat collapse Nestler
+measures at 80–168 atm, so the two severe-regime caps corroborate each other.
 (TM X-2584 — uploaded in-chat and in the project Drive — firsthand-confirms the
 ~18 MJ/kg (8,000 Btu/lbm) total enthalpy and the Mach-20 edge conditions.)
 
@@ -114,7 +132,7 @@ spread. **These are conservative screening constants, NOT fits.**
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (plan §Phase 2 handbook guidance; enthalpy-dependence corroborated by CP/PICA arc-jet literature above). Nominal 15 at the conservative low end. |
 | pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~5× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. **Cited arc-jet point:** Winter et al. AIAA 2014-1151 (mArc, NASA Ames) — flat-face flux 1036 W/cm² (10.36 MW/m², ±10%, converted from a 2575 W/cm² hemispherical probe), PICA recession rate 0.05–0.06 cm/s by tracer spectroscopy, corroborated by typical large-facility rates 0.05–0.1 cm/s at similar conditions, surface T ≥ 2800 K. Implied Q\* = q̇/(ρ·ṡ) with ρ_virgin = 270: **38–77 MJ/kg at ~10 MW/m²** (77 at 0.5 mm/s ↔ 38 at 1.0 mm/s). The nominal 35 sits at/below the low edge of this cited band → conservative-low is now *cited*, not just argued. (Caveats: cold-wall calorimeter flux; feasibility-demo rate estimate.) |
-| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765), still unretrieved; **Nestler 1979, NTRS 19790010869 — now READ FROM PRIMARY**, PDF in repo `data/`, see "Severe-regime cap" below). Table endpoints remain engineering brackets for the moderate-pressure regime; the **Reentry-F flight-derived bracket 50–135 MJ/kg (central ≈84, digitized Q)** sits above the nominal 40, which over-predicts recession ~2× — conservative for a screen (next section). **Validity floor:** at stagnation pressures ≥80 atm the band does not apply — see the Nestler severe-regime cap. |
+| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime. **Theory anchor now cited (Perini 1971 / Scala, read from primary):** diffusion-limited Q\* ≈ h_t/0.1725 ≈ 5.8·h_t — the band 25–60 corresponds to h_t ≈ 4–10 MJ/kg, i.e. deliberately conservative-low for RV-class enthalpies (10–20 MJ/kg → Q\* 58–116); data scatter +10/−50% about theory.  Nestler 1979 (read from primary) sets the severe-regime validity floor.  ([OSTI 4729765 data-correlation sibling](https://www.osti.gov/biblio/4729765) remains unretrieved but is no longer load-bearing.)  The **Reentry-F flight-derived bracket 70–175 MJ/kg (central ≈114, pixel-traced Q)** sits above the nominal 40, which over-predicts recession ~2.9× — conservative for a screen. **Validity floor:** at stagnation pressures ≥80 atm the band does not apply — see the Nestler severe-regime cap. |
 
 **Provenance honesty:** the CP and C/C *band endpoints* are literature-informed
 engineering brackets, not values lifted from one retrieved table (the authoritative

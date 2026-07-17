@@ -3163,7 +3163,11 @@ The anchors split by role, and the split is load-bearing:
   window-max quote; the traced in-window flux range 10–30×10³ Btu/ft²·s matches
   the quoted 9–28×10³), 100→50 kft window ≈ 8 s.  Against the 0.6–1.0 in
   axial-recession spread this gives a flight-derived H_eff *bracket* of
-  **70–175 MJ/kg (central ≈ 114)**; the model's carbon-carbon nominal 40 sits
+  **70–175 MJ/kg (central ≈ 114)** — independently corroborated by
+  boundary-layer theory: Scala's CO-diffusion-limit correlation (via Perini,
+  JHU/APL ANSP-M-1, 1971, read from primary) gives Q\* ≈ h_t/0.1725, which at
+  Reentry-F's ~18.6 MJ/kg enthalpy predicts ≈ 108 MJ/kg, within ~6% of the
+  flight-derived central.  The model's carbon-carbon nominal 40 sits
   below it and **over-predicts recession ~2.9×** — the conservative side for a
   screen, and the same sign as the capsule bounds.  (Both the earlier ~1 GJ/m²
   order-of-magnitude read — and its ~25% under-prediction caveat — and an
