@@ -419,15 +419,19 @@ anchors as data.
 
 ### 11.6 The standing asterisk: pressure
 
-The entire demonstrated envelope is **low-pressure ground testing** (~0.08–0.2
-atm stagnation).  The SiC active/passive oxidation transition is pressure-
-sensitive, so a real flight stagnation can sit on the other side of it.  Even
-green/amber coverage carries a "demonstrated at ground-facility pressure"
-footnote — it is not a clean guarantee.  The one regime none of the anchors
-reaches is the actual HGV case: a sharp UHTC tip held at **1700–2000 °C for
-1000 s+ at flight pressure**.  The data brackets it (1973 K · 300 s survived;
-2450 °C · 575 s survived) but does not contain it; the report should say so
-rather than interpolate silently.
+Most of the demonstrated envelope is **low-pressure ground testing** (~0.08–0.2
+atm stagnation), and the SiC active/passive oxidation transition is
+pressure-sensitive, so a real flight stagnation can sit on the other side of it.
+The anchor set does now **span a wide pressure range** — from 3×10⁻³ atm
+(De Prisco Mach 6) up to **~1 atm** (Savino 2008, HfB₂/HfC-MoSi₂ hemispheres at
+114–122 kPa, survived >2000 °C) — so the pressure axis is no longer one-sided.
+But the ~1 atm points are **short** (~30–40 s); the combination that stays
+unfilled is the actual HGV case: a sharp UHTC tip held at **1700–2000 °C for
+1000 s+ at flight pressure**.  The data brackets it (1973 K · 300 s survived
+low-p; 2450 °C · 575 s survived; ~1 atm · 30 s survived) but does not contain
+that corner; green/amber coverage keeps a "demonstrated at ground-facility
+pressure" footnote and the report should say so rather than interpolate
+silently.
 
 ### 11.7 Implementation steps (code, next)
 
