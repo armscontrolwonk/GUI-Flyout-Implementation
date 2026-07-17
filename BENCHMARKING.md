@@ -84,11 +84,15 @@ MSL 2.0 / 55; Shuttle 0.6 / 66.
 
 Seeds the anchor dataset behind the Form B envelope-coverage model
 (SURVIVABILITY_REPORT_DESIGN.md §11).  Each row is one flight / arc-jet /
-plasma-torch datum for a ZrB₂-SiC-class or carbide-boride UHTC.  **Every row so
-far is a SURVIVAL** — the tests stopped, they did not fail — so the demonstrated
-region is a *floor with no ceiling* (§11.1).  A clean failure datum (a recovered
-tip that burned through at a known T/dwell) is the highest-value missing point;
-it would be the first real cap.
+plasma-torch / furnace datum for a ZrB₂-SiC-class or carbide-boride UHTC.
+The aero-convective rows (arc-jet, plasma torch, flight) are all SURVIVALS —
+those tests stopped, they did not fail — so on that side the demonstrated
+region is a *floor* (§11.1).  The Levine 2003 furnace rows supply the first
+**FAILURES** (caps), with the caveat that they are 1-atm stagnant-air cyclic
+furnace data: they cap the passive-oxidation regime, not the aero-convective
+one.  A clean *aero-convective* failure (arc-jet or recovered flight hardware
+burned through at a known T/dwell/flux) remains the highest-value missing
+point.
 
 Record schema (one per datum): `id · material_class · kind · tip_radius ·
 flux (+kind, enthalpy, stag pressure) · peak_T (+source) · dwell above 1650 °C ·
@@ -100,6 +104,10 @@ recession · mass change · outcome (+mode) · source`.
 | Scatteia-2010 | zrb2_sic | arcjet | 10 mm (blunt) | 26.5 MW/m² cold-wall | 10 MJ/kg near specimen | 2000–2300 °C (pyro) | >600 s (10+ min) | ~3 mm stag; 7 % mass loss | survived (single-use) | Scatteia et al., *J. Spacecraft & Rockets* 47(2) 271, 2010, DOI 10.2514/1.42834 |
 | Monteverde-2013-ZSL10 | zrb2_sic | arcjet | 5 mm (hemisphere) | — | 11.4 MJ/kg / 8 kPa | 1973 K = 1700 °C (pyro) | 300 s | R 5.02→5.14 mm (≈none); **+0.3 % mass** | survived | Monteverde, Alfano, Savino, *Corros. Sci.* 75, 443–453, 2013 — note: LaB₆ was *detrimental* vs plain ZrB₂-SiC |
 | Xu-2026-HTS5 | carbide_boride | plasma_torch | bulk billet | H₂/Ar flame | — | 2500–2600 °C (pyro) | 1800 s | **−0.1 µm/s** (net oxide growth); −0.14 g/m²·s | survived | Xu et al., *J. Eur. Ceram. Soc.* 46, 117934, 2026, DOI 10.1016/j.jeurceramsoc.2025.117934 |
+| Levine-2003-ZSTS-arcjet | zrb2_sic_tasi2 | arcjet | flat disc 2.54 cm | 3.5 MW/m² stag; ~6 MW/m² edge | 0.07 atm | ~1800 °C measured; edge 1950–2000 °C | 600 s | Δwt −1.4 % | survived | Levine, Opila et al., "Ultra-High Temperature Ceramic Composites for Leading Edges," 27th JANNAF APS, Dec 2003, NTRS 20040033992 |
+| Levine-2003-ZS-1927 | zrb2_sic | furnace (1 atm, stagnant, cyclic 10 min hot/10 cool) | coupon | — | 1 atm | 1927 °C | 100 min (10 cycles) | oxidized, discolored, **intact** | survived | Levine, Opila et al., NTRS 20040033992 |
+| **Levine-2003-ZSTS-1927** | zrb2_sic_tasi2 | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1927 °C** | ≤10 min (1 cycle already slumped; 5-cycle a molten mass fused to setter) | destroyed | **FAILED — melt/slump** | Levine, Opila et al., NTRS 20040033992 |
+| **Levine-2003-ZSTC-1627** | zrb2_sic_tac | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1627 °C** | ≤100 min | ~20 mg/cm² gain; visible holes | **FAILED — breakaway oxidation** | Levine, Opila et al., NTRS 20040033992 |
 | SHARP-B1 | hfb2_sic | flight | 3.5 mm (sharp) | ballistic reentry | — | — | short (ballistic) | non-ablating demonstrated | flew, **not recovered** | Johnson, Gasch, Lawson et al., "Recent Developments in UHTCs at NASA Ames" (AIAA); Kolodziej et al. NASA TM-112215, 1997 |
 | SHARP-B2 | hfb2_sic / zrb2_sic | flight | strakes on Mk12A RV | ballistic reentry | — | designed to **multi-use limit (retract 47.9 km) / single-use limit (43.3 km)** | short (ballistic) | recovered | flew, **recovered**; some segments failed on **material quality**, not the T/dwell limit | Johnson et al. (AIAA), NASA Ames |
 
@@ -113,17 +121,41 @@ UHTC.)
 **What the table pins:**
 - `continuous_K` (glass ceiling) = **1650 °C** — 5+ independent sources agree.
 - Demonstrated dwell floor: **≥300 s at 1973 K** (zero recession), extending to
-  **~575 s at 2450 °C** (sharp, tip-blunting).  Use the low end as the
-  conservative floor.
+  **~575 s at 2450 °C** (sharp, tip-blunting); plus **600 s at ~1800 °C**
+  arc-jet (Levine ZSTS) and **100 min at 1927 °C** in 1-atm furnace air
+  (plain ZrB₂-SiC).  Use the low end as the conservative floor.
 - Demonstrated peak: **~2450 °C** sharp ZrB₂-SiC, **~2600 °C** carbide-boride.
+- First caps (passive-oxidation regime, 1-atm furnace): TaSi₂-doped ZrB₂-SiC
+  **melts/slumps at 1927 °C within 10 min**; TaC-doped fails by breakaway
+  oxidation at 1627 °C within 100 min.
 - Recession rate (flux-normalized): ~0.07 µm/s @ 7 MW/m² (sharp) / ~3.6 µm/s @
   26 MW/m² (blunt).
+- **The additive-inversion trap** (envelope-scoping rule): dopant effects
+  invert with temperature — TaSi₂ is the best performer at 1627 °C and fatal
+  at 1927 °C (Levine 2003); TaC hurts even at 1627 °C (Levine 2003); LaB₆
+  hurts at 1700 °C (Monteverde 2013).  Class envelopes must therefore be
+  built from the PLAIN ZrB₂-SiC / HfB₂-SiC rows; doped variants get their own
+  class ids (`zrb2_sic_tasi2`, `zrb2_sic_tac`, …), never averaged into the
+  parent class.
 
 **What it does NOT contain** (the honest gap, §11.6): a sharp UHTC tip held at
-**1700–2000 °C for 1000 s+ at flight pressure** — the actual HGV glide case.
-The data brackets it but does not reach it.  All anchors are ground-facility
-low pressure (~0.08–0.2 atm); the SiC active/passive transition is pressure-
-sensitive, so flight may sit on the other side of it.
+**1700–2000 °C for 1000 s+ at flight pressure under aero-convective heating**
+— the actual HGV glide case.  The data brackets it but does not reach it.  The
+aero-convective anchors are low pressure (~0.07–0.2 atm); the furnace rows are
+1 atm but stagnant (no dissociated O, no shear).  The SiC active/passive
+transition is pressure-sensitive, so flight may sit on the other side of both.
+
+**Remaining wanted data, ranked by information value:**
+1. An **aero-convective failure** — arc-jet run driven to burn-through, or
+   recovered flight hardware failed at known conditions (SHARP-B2 quantitative
+   post-flight recession would qualify).
+2. A **long-dwell moderate-temperature point**: one continuous arc-jet run at
+   ~1800–2000 °C for 20–30 min (the HGV-glide hole; Peters' "80 min" is
+   cumulative across cycles, not continuous).
+3. A **flight-pressure aero-convective point** (VKI Plasmatron class) to close
+   the active/passive asterisk.
+4. An **HfB₂-SiC arc-jet dwell/recession point**, so that class stands on its
+   own data instead of assumed-same-as-ZrB₂-SiC.
 
 **Caveats to carry:** Monteverde-2012's 2450 °C is a CFD tip estimate (measured
 pyrometer, 3 mm back, was 1577 °C).  Xu's −0.1 µm/s is net oxide *growth*, an
