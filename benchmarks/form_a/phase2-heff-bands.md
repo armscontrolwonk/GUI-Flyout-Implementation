@@ -94,7 +94,7 @@ spread. **These are conservative screening constants, NOT fits.**
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (plan §Phase 2 handbook guidance; enthalpy-dependence corroborated by CP/PICA arc-jet literature above). Nominal 15 at the conservative low end. |
 | pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~5× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. **Cited arc-jet point:** Winter et al. AIAA 2014-1151 (mArc, NASA Ames) — flat-face flux 1036 W/cm² (10.36 MW/m², ±10%, converted from a 2575 W/cm² hemispherical probe), PICA recession rate 0.05–0.06 cm/s by tracer spectroscopy, corroborated by typical large-facility rates 0.05–0.1 cm/s at similar conditions, surface T ≥ 2800 K. Implied Q\* = q̇/(ρ·ṡ) with ρ_virgin = 270: **38–77 MJ/kg at ~10 MW/m²** (77 at 0.5 mm/s ↔ 38 at 1.0 mm/s). The nominal 35 sits at/below the low edge of this cited band → conservative-low is now *cited*, not just argued. (Caveats: cold-wall calorimeter flux; feasibility-demo rate estimate.) |
-| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765); [NTRS 19790010869, C/C nosetip ablative performance](https://ntrs.nasa.gov/search.jsp?R=19790010869)). Table endpoints remain engineering brackets; the **Reentry-F flight-derived bracket 29–130 MJ/kg** (next section) contains the nominal 40 in its lower third, with the spread — not a sign claim — carried (Schneider 72-705 ±25%/1.6× ablation-model spread). |
+| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765), still unretrieved; **Nestler 1979, NTRS 19790010869 — now READ FROM PRIMARY**, PDF in repo `data/`, see "Severe-regime cap" below). Table endpoints remain engineering brackets for the moderate-pressure regime; the **Reentry-F flight-derived bracket 29–130 MJ/kg** (next section) contains the nominal 40 in its lower third, with the spread — not a sign claim — carried (Schneider 72-705 ±25%/1.6× ablation-model spread). **Validity floor:** at stagnation pressures ≥80 atm the band does not apply — see the Nestler severe-regime cap. |
 
 **Provenance honesty:** the CP and C/C *band endpoints* are literature-informed
 engineering brackets, not values lifted from one retrieved table (the authoritative
@@ -104,6 +104,38 @@ arc-jet point above is a firsthand, cited Q\* datum (38–77 MJ/kg at ~10 MW/m²
 Q\* enthalpy-dependent) ARE literature-grounded. The nominals are unchanged from
 the prior screening values, now justified as conservative-low rather than
 arbitrary, and independently bound-checked in Phase 3.
+
+## Severe-regime cap: Nestler 1979 (C/C at 80–168 atm) — read from primary
+
+Nestler, "Ablative Performance of Carbon-Carbon Nosetips in Simulated Re-Entry
+Environments" (GE RESD; NTRS 19790010869 / N79-19040; PDF in repo `data/`)
+gives **measured steady-state recession rates for 3-D carbon-carbon** in the
+AFFDL 50 MW arc and HIP facility — the verbatim table (p. 400):
+
+| facility | P_s (atm) | H_CL kJ/kg (Btu/lb) | ṡ (cm/s) | cone θ | T_w (K) | Ch/Cho |
+|---|---|---|---|---|---|---|
+| 50 MW | 80 | 11,600 (5,000) | 0.635 | 45° | 4,000 | 1.4 |
+| HIP | 124 | 6,914 (2,980) | 0.508 | 57° | 4,167 | 1.4 |
+| HIP | 168 | 8,027 (3,460) | 0.787 | 57° | 4,167 | 1.5 |
+
+**Derived implication (⚠ labeled, assumptions stated):** using the paper's own
+steady-state energy balance (its Eq. 3, `q_hot-wall = q_RR + ṁ·H_w`), the
+effective heat of ablation is `Q* = q_RR/ṁ + H_w`.  With ṁ = ρ·ṡ at a *nominal*
+3-D C/C density ~1.9 g/cc (not stated in the paper — flagged), q_RR = εσT_w⁴
+(~13 MW/m² at 4,000 K), and H_w read from the paper's Fig. 5 at
+sublimation-regime B′ (~9–19 MJ/kg): **Q\* ≈ 10–20 MJ/kg at 80–168 atm** —
+*below* our band low (25) and nominal (40).  Physical reading: at these extreme
+pressures ablation is sublimation- plus thermomechanically-dominated (the paper
+measures roughness-augmented heating 1.4–1.5× smooth-wall theory, and its ramp
+tests show surface gouging onset at transition pressures ~60–77 atm, biased
+along the 45° weave rays), so effective heat collapses.  Consistent with
+Schneider 72-705's mechanical-erosion regime bound (>55 atm).
+
+**Consequence for the screen:** the C/C H_eff band applies to the
+moderate-pressure regime (Reentry-F class, ≤~60 atm).  For a sharp, very-high-β
+RV whose stagnation pressure reaches ≥80 atm, H_eff = 40 would UNDER-predict
+recession several-fold.  Logged as a validity limit, not folded into the band —
+the screening envelope's blunt-RV cases sit well below this regime.
 
 ## Acceptance check
 
