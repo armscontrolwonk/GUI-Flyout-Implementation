@@ -3081,12 +3081,16 @@ report states **coverage against a demonstrated envelope** (design:
   *extrapolation*, not *failure*: the data does not license either verdict.
 
 The envelope is **derived from a per-datum anchor table**, not hardcoded:
-survivals bound it from below, failures cap it from above.  The first caps
-are the Levine et al. 2003 1-atm furnace failures (NTRS 20040033992,
-passive-oxidation regime only) and the Di Maso 2009 sharp-cone oxide
-detachment at ~2800 K CFD tip (PhD thesis, Univ. Naples Federico II — the
-first *aero-convective* cap; both cap doped classes, never plain
-diborides).  A new flight or test strengthens the dataset as a data edit.  Two scoping rules carry
+survivals bound it from below, failures cap it from above.  Caps come from the
+Levine et al. 2003 1-atm furnace failures (NTRS 20040033992, passive-oxidation
+regime only) and two convergent *aero-convective* caps — the Di Maso 2009
+HfB₂-TaSi₂ sharp cone and the De Prisco 2026 ZrB₂-TiB₂-SiC hemispheres (*J.
+Eur. Ceram. Soc.* 46, 118184) — which both fail by **oxide-scale detachment at
+~2700–2800 K** (not burn-through), across two labs and two classes.  All cap
+doped/complex diborides, never plain ones.  The De Prisco pair, same specimens
+run at two pressures, is direct evidence that the SiC active/passive transition
+is pressure-sensitive: survived 1700–1800 K at 3×10⁻³ atm, detached at 2700 K
+at 2.3×10⁻² atm.  A new flight or test strengthens the dataset as a data edit.  Two scoping rules carry
 citations: dopant effects invert with temperature (TaSi₂ best-in-class at
 1627 °C, destroyed at 1927 °C), so envelopes are built per material
 *class* and doped variants are never averaged into the parent; and every
