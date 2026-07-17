@@ -43,30 +43,42 @@ TM X-1856 Fig. 11).
   the 60,000 ft anomaly is at 458.7 s) — read from figure, flagged.
 - ATJ density ~1.73 g/cc (vendor-nominal, flagged; model's carbon_carbon uses 1800).
 
-**Bracket arithmetic — reconciled with the EARLIER in-chat Reentry-F work.**
-This repo already holds a deeper Reentry-F heat-load analysis
-(`HEATING_TPS_REFERENCES.md`, Reentry-F entry): TM X-2253, TM X-2560 and
-TM X-2282 were read from primary there, the stagnation q̇(t) was found to exist
-only as the preflight LWP-460 curve, a rough integration of that curve gave an
-order-of-magnitude **~1 GJ/m²** stagnation load, and the session explicitly
-decided **Q_MJ stays None** (no single well-defined Reentry-F integrated load).
-Honoring that: the Q range here runs from the earlier curve-integration estimate
-up to the no-time-averaging ceiling —
-`Q ∈ [~1.0 (LWP-460 curve integration), 318 MW/m² × 14 s = 4.5] GJ/m²`, so
-`H_eff = Q/(ρ·δ) ≈` **29–130 MJ/kg** for flight-regime graphite
+**Bracket arithmetic — now DIGITIZED from the clean nominal-trajectory figure.**
+History, kept for the audit trail: the repo's earlier Reentry-F heat-load
+analysis (`HEATING_TPS_REFERENCES.md`: TM X-2253/X-2560/X-2282 read from
+primary) found the stagnation q̇(t) exists only as the preflight LWP-460 curve,
+made an order-of-magnitude integration (~1 GJ/m²) from Berry's congested
+reproduction, and decided **Q_MJ stays None**.  A first pass here used a
+constant-flux bracket (Q ∈ [~1, 4.5] GJ/m² → H_eff 29–130 MJ/kg).  A clean
+full-resolution copy of the figure ("Figure 1 — Nominal Reentry 'F' trajectory,
+γ_E = 21.2°, V_E = 20,300 ft/s"; the figure Berry reproduces as his Fig. 6
+[LWP-460]) was then supplied in-chat, and the curve was digitized point-by-point
+— reads and integration in `reentryf_nominal_qdot.csv`:
+
+- **Q ≈ 2.85 GJ/m² cold-wall stagnation (±~25% read error)**, superseding both
+  the ~1 GJ/m² order-of-magnitude and the 4.5 GJ/m² ceiling (both bracket it).
+- Peak q̇ ≈ 28.5×10³ Btu/ft²·s ≈ **324 MW/m² at ~431.5 s (~45–49 kft)** —
+  confirms the `_BENCHMARKS` 318 MW/m² pin to within read error.
+- **Window correction:** 100→50 kft takes **~8 s** (423→431 s at ~6.5–7 kft/s
+  sink), not the 12–14 s previously read off the TM X-1856 axis span (that
+  figure's axis covers more altitude; also note the nominal figure's time base
+  runs ~20 s earlier than the actual flight's).
+
+`H_eff = Q/(ρ·δ)` with ρ 1.73 g/cc and δ carrying the radius-history spread
+(0.6–1.0 in axial, centered on CR-154044's 0.77 in = 19.6 mm):
+**H_eff ≈ 50–135 MJ/kg, central ≈ 84 MJ/kg** for flight-regime graphite
 (oxidation + mechanical-erosion, 5–60 atm).
 
-**Reading (nuanced, not a sign claim):** the carbon_carbon nominal **40 sits in
-the lower third of the bracket**.  At the ~1 GJ/m² central estimate the screen
-would *under*-predict the preflight-predicted 19.6 mm by ~25% — within the
-±25% / ~1.6× ablation-model recession spread that Schneider, Teter, Coleman &
-Heath (AIAA 72-705, read from primary; `HEATING_MODEL_CROSSCHECK.md` §10.6)
-document for exactly this design problem — while the constant-peak ceiling end
-over-predicts several-fold.  So for the sharp-graphite-tip regime the honest
-statement is *the spread is carried*, not "always conservative"; the
-uniformly-conservative sign claim belongs to the blunt-capsule ablator bounds,
-which is where the bound tests enforce it.  ⚠ Derived bracket (inputs cited,
-arithmetic ours); **not** a point calibration; nominal unchanged.
+**Reading:** with the digitized Q, the carbon_carbon nominal **40 over-predicts
+the preflight-predicted recession ~2×** (41 mm vs 19.6 mm) — the conservative
+sign is restored for the sharp-tip regime, somewhat beyond Schneider 72-705's
+±25%/1.6× ablation-model spread but on the safe side for a screen.  The
+first-pass statement that the screen might under-predict by ~25% rested on the
+~1 GJ/m² order-of-magnitude read and is withdrawn with it.  ⚠ Still a derived
+bracket (nominal-preflight environment, figure-read Q, δ spread carried);
+**not** a point calibration; nominal unchanged; `_BENCHMARKS` Q_MJ stays None
+(the 2.85 GJ/m² is a preflight prediction — no flight-measured stagnation
+heating exists).
 (TM X-2584 — uploaded in-chat and in the project Drive — firsthand-confirms the
 ~18 MJ/kg (8,000 Btu/lbm) total enthalpy and the Mach-20 edge conditions.)
 
@@ -94,7 +106,7 @@ spread. **These are conservative screening constants, NOT fits.**
 |---|---|---|---|---|---|
 | carbon_phenolic | 1450 | 10 | **15** | 30 | flight-regime CP effective-heat-of-ablation band ~10–30 MJ/kg (plan §Phase 2 handbook guidance; enthalpy-dependence corroborated by CP/PICA arc-jet literature above). Nominal 15 at the conservative low end. |
 | pica | 270 | 25 | **35** | ~100+ | PICA Q\* is higher than CP and rises sharply with enthalpy (peak "enthalpy of ablation" figures reach the hundreds of MJ/kg at Orion/return enthalpies). Screening nominal 35 is a deliberately conservative low-regime value — it over-predicts Stardust ~5× (Phase 3), vs FIAT's ~1.5×, which is *safe* for a screen. **Cited arc-jet point:** Winter et al. AIAA 2014-1151 (mArc, NASA Ames) — flat-face flux 1036 W/cm² (10.36 MW/m², ±10%, converted from a 2575 W/cm² hemispherical probe), PICA recession rate 0.05–0.06 cm/s by tracer spectroscopy, corroborated by typical large-facility rates 0.05–0.1 cm/s at similar conditions, surface T ≥ 2800 K. Implied Q\* = q̇/(ρ·ṡ) with ρ_virgin = 270: **38–77 MJ/kg at ~10 MW/m²** (77 at 0.5 mm/s ↔ 38 at 1.0 mm/s). The nominal 35 sits at/below the low edge of this cited band → conservative-low is now *cited*, not just argued. (Caveats: cold-wall calorimeter flux; feasibility-demo rate estimate.) |
-| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765), still unretrieved; **Nestler 1979, NTRS 19790010869 — now READ FROM PRIMARY**, PDF in repo `data/`, see "Severe-regime cap" below). Table endpoints remain engineering brackets for the moderate-pressure regime; the **Reentry-F flight-derived bracket 29–130 MJ/kg** (next section) contains the nominal 40 in its lower third, with the spread — not a sign claim — carried (Schneider 72-705 ±25%/1.6× ablation-model spread). **Validity floor:** at stagnation pressures ≥80 atm the band does not apply — see the Nestler severe-regime cap. |
+| carbon_carbon | 1800 | 25 | **40** | 60 | bare C/C nosetip, oxidation→sublimation regime ([OSTI: carbon/graphite ablation correlation for RV nosetips](https://www.osti.gov/biblio/4729765), still unretrieved; **Nestler 1979, NTRS 19790010869 — now READ FROM PRIMARY**, PDF in repo `data/`, see "Severe-regime cap" below). Table endpoints remain engineering brackets for the moderate-pressure regime; the **Reentry-F flight-derived bracket 50–135 MJ/kg (central ≈84, digitized Q)** sits above the nominal 40, which over-predicts recession ~2× — conservative for a screen (next section). **Validity floor:** at stagnation pressures ≥80 atm the band does not apply — see the Nestler severe-regime cap. |
 
 **Provenance honesty:** the CP and C/C *band endpoints* are literature-informed
 engineering brackets, not values lifted from one retrieved table (the authoritative
@@ -146,9 +158,10 @@ the screening envelope's blunt-RV cases sit well below this regime.
   Hayabusa 44×, both predicted ≥ measured.
 - Reentry-F honored within radius-history spread? **Yes, as a bracket** — the
   Berry white paper (project Drive) supplied the paired environment + recession
-  numbers, reconciled with the repo's pre-existing Reentry-F heat-load analysis
-  (`HEATING_TPS_REFERENCES.md`: LWP-460 integration ~1 GJ/m², Q_MJ-stays-None
-  decision).  The derived H_eff bracket 29–130 MJ/kg contains the C/C nominal 40
-  in its lower third, and the TM X-1856 curve-1/2/3 spread is quantified
-  (0.17–0.30 in best-supported, 0.5 in worst case refuted) rather than collapsed
-  to a point.
+  numbers, and the clean nominal-trajectory figure (supplied in-chat) let the
+  heat pulse be digitized: Q ≈ 2.85 GJ/m² ±25%
+  (`reentryf_nominal_qdot.csv`), giving H_eff 50–135 MJ/kg (central ≈84).  The
+  C/C nominal 40 over-predicts ~2× (conservative); the TM X-1856 curve-1/2/3
+  spread is quantified (0.17–0.30 in best-supported, 0.5 in worst case refuted)
+  rather than collapsed to a point; `_BENCHMARKS` Q_MJ stays None (preflight
+  prediction, not flight measurement).
