@@ -241,7 +241,7 @@ tabbed notebook**.
 | **Flight Timeline** | Tabular milestone events (ignition, burnout, apogee, shroud jettison, reentry, impact) with lat/lon/alt/speed/range |
 | **Booster Parameters** | Read-only summary of the active booster's mass, geometry, propulsion, and payload |
 | **Heating Survivability** | Reentry aerothermal screening estimate for the reentry object (Sutton-Graves + radiative-equilibrium) |
-| **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs on the nose-recession accuracy ladder (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C) |
+| **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs on the nose-recession accuracy ladder (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C). For UHTC hot-structure gliders the verdict is moving from a pass/fail dwell to a **demonstrated-envelope coverage** statement — how much of the glide lies *within* the flight/arc-jet/furnace record (`SURVIVABILITY_REPORT_DESIGN.md` §11) — backed by a living anchor dataset in `BENCHMARKING.md` (survivals bound the envelope from below, failures cap it from above; a new flight strengthens the dataset as a data edit, not a code change) |
 | **SLV Performance** | Algebraic payload-to-orbit analysis (circular or elliptical orbit) |
 
 ### Dialogs
