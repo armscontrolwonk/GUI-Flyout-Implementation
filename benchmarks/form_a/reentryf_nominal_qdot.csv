@@ -1,28 +1,41 @@
 t_s,qdot_kBtu_ft2_s,qdot_MW_m2,notes
-400,0.3,3.4,
-410,0.6,6.8,
-416,1.0,11.4,
-418,1.5,17.0,
-420,2.5,28.4,
-422,4.0,45.4,
-424,6.5,73.8,"~100 kft crossing ≈ 423 s (altitude line, ~6.5-7 kft/s sink)"
-426,10.0,113.6,
-428,15.5,176.0,
-430,22.5,255.5,
-431.5,28.5,323.7,"peak; ≈ 45-49 kft"
-433,26.0,295.3,
-434,22.0,249.9,
-436,13.0,147.6,"curve read ends; altitude ≈ 16 kft"
+406,0.8,9.0,
+408,1.0,11.6,
+410,1.3,14.8,
+412,1.8,19.9,
+414,2.4,27.1,
+416,3.2,36.5,
+418,4.4,49.6,
+420,6.0,68.0,
+422,8.4,95.5,
+424,12.1,137.1,"~100 kft crossing ≈ 423 s"
+426,16.7,189.6,
+428,22.6,256.5,
+430,28.2,319.9,
+431.7,30.6,348.1,"peak (apex pixel-located); ≈ 47 kft, just below the 50-kft window edge (~431 s)"
+434,20.2,229.4,"descent read from 3x zoom (bell's steep right side)"
+436.2,10.2,115.8,"all curves terminate here (end of plotted data)"
 # Source: "Figure 1 - Nominal Reentry 'F' trajectory. Reentry angle = 21.2 deg; Reentry velocity
 #   = 20,300 ft/sec" — the nominal preflight trajectory figure Berry reproduces as his Fig. 6
-#   [NASA LWP-460]; clean full-resolution copy supplied in-chat 2026-07-17.  All q-dot values
-#   READ FROM FIGURE (heating axis: 0-28x10^3 Btu/ft2-s, ticks every 4x10^3; top 32x10^3);
-#   estimated read uncertainty ~±10% mid-curve, worse near the peak and tail.
-# NOTE ON TIME BASE: this nominal figure runs 400-440 s with impact ~438-439 s; the ACTUAL
-#   flight (TM X-1856 Fig. 11) shows the test window at 448-462 s — the flight ran ~20 s later
-#   than nominal.  Durations/shapes, not absolute times, are the transferable content.
-# Integration (trapezoid over the reads, 400-436 s): Q ≈ 251 kBtu/ft2 ≈ 2.85 GJ/m2 cold-wall
-#   stagnation (±~25% with read error; tails beyond 436 s add little).  100->50 kft window
-#   ≈ 8 s (423 -> 431 s), NOT the 12-14 s previously estimated from the TM X-1856 axis span.
+#   [NASA LWP-460].  DIGITIZED FROM PIXELS (not eyeballed): the embedded scan was extracted
+#   losslessly from the Berry white-paper PDF (pdfimages, 956x639 native), each axis calibrated
+#   by least-squares on ITS OWN detected tick marks (the figure's rulers are NOT frame-aligned),
+#   and the heating curve traced apex-first with slope-continuity tracking; the tangled descent
+#   was patched from a 3x zoom read.  Full ~530-point trace: reentryf_qdot_trace_full.csv.
+# Validation: (1) traced in-window (100->50 kft, ~423-431 s) flux range 10.2-30.2 kBtu/ft2-s vs
+#   LWP-460's quoted "9,000-28,000 Btu/ft2-s" for that window; (2) apex 348 MW/m2 vs
+#   Sutton-Graves at R_n 0.1 in / ~6 km/s / ~47 kft ~ 340-380 MW/m2; (3) the figure's own
+#   "stagnation-point heating rate" label arrow touches the traced curve at (426 s, ~17.4k).
+# INTEGRATION: Q ≈ 341 kBtu/ft2 ≈ 3.87 GJ/m2 cold-wall stagnation (±~15-20%: calibration is
+#   tick-anchored; residual error is line-width + the zoom-read descent patch).  In-window
+#   (423-431 s) share: ~1.79 GJ/m2.
+# NOTE the _BENCHMARKS "ICBM RV" 318 MW/m2 pin equals the LWP window-max quote (28 kBtu/ft2-s
+#   at the 50-kft edge); the apex (~348 MW/m2 at ~47 kft) sits just outside the quoted window.
+# TIME BASE: nominal figure runs 400-440 s (impact ~438-439 s); the actual flight (TM X-1856)
+#   shows the window at 448-462 s — flight ran ~20 s later than nominal.  Durations transfer.
+# SUPERSESSION TRAIL: (1) the original in-chat order-of-magnitude estimate ~1 GJ/m2 (congested
+#   reproduction) and (2) the first eyeball table in this file (Q ≈ 2.85 GJ/m2) are BOTH
+#   superseded — the eyeball table had followed a lower curve through the mid-rise (overlay QC
+#   caught it: the label arrow and apex sit on the true curve, which runs ~1.5-2x higher there).
 # This is a PREFLIGHT-NOMINAL prediction: no flight-measured stagnation heating exists
 #   (TM X-2560; ablating tip never calorimetered).  heating._BENCHMARKS Q_MJ stays None.

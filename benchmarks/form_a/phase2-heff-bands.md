@@ -49,36 +49,42 @@ analysis (`HEATING_TPS_REFERENCES.md`: TM X-2253/X-2560/X-2282 read from
 primary) found the stagnation q̇(t) exists only as the preflight LWP-460 curve,
 made an order-of-magnitude integration (~1 GJ/m²) from Berry's congested
 reproduction, and decided **Q_MJ stays None**.  A first pass here used a
-constant-flux bracket (Q ∈ [~1, 4.5] GJ/m² → H_eff 29–130 MJ/kg).  A clean
-full-resolution copy of the figure ("Figure 1 — Nominal Reentry 'F' trajectory,
-γ_E = 21.2°, V_E = 20,300 ft/s"; the figure Berry reproduces as his Fig. 6
-[LWP-460]) was then supplied in-chat, and the curve was digitized point-by-point
-— reads and integration in `reentryf_nominal_qdot.csv`:
+constant-flux bracket (Q ∈ [~1, 4.5] GJ/m² → H_eff 29–130 MJ/kg).  The figure ("Figure 1 — Nominal Reentry 'F' trajectory, γ_E = 21.2°,
+V_E = 20,300 ft/s"; the figure Berry reproduces as his Fig. 6 [LWP-460]) was
+then **digitized from pixels**: the embedded scan extracted losslessly from the
+Berry PDF, each axis least-squares-calibrated on its own detected tick marks
+(the rulers are *not* frame-aligned), the heating curve traced apex-first with
+slope-continuity tracking, overlay-QC'd, and the tangled descent patched from a
+3× zoom.  Summary table + method: `reentryf_nominal_qdot.csv`; full ~530-point
+trace: `reentryf_qdot_trace_full.csv`.
 
-- **Q ≈ 2.85 GJ/m² cold-wall stagnation (±~25% read error)**, superseding both
-  the ~1 GJ/m² order-of-magnitude and the 4.5 GJ/m² ceiling (both bracket it).
-- Peak q̇ ≈ 28.5×10³ Btu/ft²·s ≈ **324 MW/m² at ~431.5 s (~45–49 kft)** —
-  confirms the `_BENCHMARKS` 318 MW/m² pin to within read error.
-- **Window correction:** 100→50 kft takes **~8 s** (423→431 s at ~6.5–7 kft/s
-  sink), not the 12–14 s previously read off the TM X-1856 axis span (that
-  figure's axis covers more altitude; also note the nominal figure's time base
-  runs ~20 s earlier than the actual flight's).
+- **Q ≈ 3.87 GJ/m² cold-wall stagnation (±~15–20%)** — supersedes the ~1 GJ/m²
+  order-of-magnitude AND the intermediate 2.85 GJ/m² eyeball table (the eyeball
+  had followed a lower curve through the mid-rise; overlay QC caught it via the
+  figure's own label arrow, which touches the true curve at 426 s / ~17.4×10³).
+- Peak q̇ ≈ 30.6×10³ Btu/ft²·s ≈ **348 MW/m² at ~431.7 s (~47 kft)**.  The
+  `_BENCHMARKS` 318 MW/m² pin equals the LWP *window-max quote* (28×10³ at the
+  50-kft edge); the apex sits just outside the quoted window.  **Validation:**
+  traced in-window flux range 10.2–30.2×10³ vs LWP's quoted 9,000–28,000
+  Btu/ft²·s, and Sutton-Graves at R_n 0.1 in / ~6 km/s / ~47 kft gives
+  ~340–380 MW/m² — both consistent.
+- **Window:** 100→50 kft takes **~8 s** (423→431 s); in-window load ~1.79 GJ/m²
+  (the nominal time base runs ~20 s earlier than the actual flight's).
 
 `H_eff = Q/(ρ·δ)` with ρ 1.73 g/cc and δ carrying the radius-history spread
 (0.6–1.0 in axial, centered on CR-154044's 0.77 in = 19.6 mm):
-**H_eff ≈ 50–135 MJ/kg, central ≈ 84 MJ/kg** for flight-regime graphite
+**H_eff ≈ 70–175 MJ/kg, central ≈ 114 MJ/kg** for flight-regime graphite
 (oxidation + mechanical-erosion, 5–60 atm).
 
-**Reading:** with the digitized Q, the carbon_carbon nominal **40 over-predicts
-the preflight-predicted recession ~2×** (41 mm vs 19.6 mm) — the conservative
-sign is restored for the sharp-tip regime, somewhat beyond Schneider 72-705's
+**Reading:** with the pixel-traced Q, the carbon_carbon nominal **40
+over-predicts the preflight-predicted recession ~2.9×** (56 mm vs 19.6 mm) —
+firmly conservative for the sharp-tip regime, beyond Schneider 72-705's
 ±25%/1.6× ablation-model spread but on the safe side for a screen.  The
-first-pass statement that the screen might under-predict by ~25% rested on the
-~1 GJ/m² order-of-magnitude read and is withdrawn with it.  ⚠ Still a derived
-bracket (nominal-preflight environment, figure-read Q, δ spread carried);
-**not** a point calibration; nominal unchanged; `_BENCHMARKS` Q_MJ stays None
-(the 2.85 GJ/m² is a preflight prediction — no flight-measured stagnation
-heating exists).
+first-pass "might under-predict by ~25%" claim rested on the ~1 GJ/m² read and
+is withdrawn.  ⚠ Still a derived bracket (nominal-preflight environment,
+figure-traced Q, δ spread carried); **not** a point calibration; nominal
+unchanged; `_BENCHMARKS` Q_MJ stays None (preflight prediction — no
+flight-measured stagnation heating exists).
 (TM X-2584 — uploaded in-chat and in the project Drive — firsthand-confirms the
 ~18 MJ/kg (8,000 Btu/lbm) total enthalpy and the Mach-20 edge conditions.)
 
