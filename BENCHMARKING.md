@@ -70,7 +70,7 @@ MSL 2.0 / 55; Shuttle 0.6 / 66.
 | shape-change onset δ/R_n | 0.10 | more shape-change → dispersion flight data |
 | severe blunting δ/R_n | 0.50–1.0 | more recovered/tracked RV data |
 | glider ablative-tip flag δ/R_n | 0.05 | any glider tip-recession tolerance data |
-| **UHTC `oxidation_dwell_s`** | **120 s (rough)** | **top priority** — arc-jet / flight dwell life for ZrB₂/HfB₂-class tips; gates every long-glide sharp-tip verdict |
+| **UHTC `oxidation_dwell_s`** | **120 s (rough → retired)** | superseded by the cited dwell floor (≥300 s @ 1973 K, ~575 s @ 2450 °C) in the anchor table; still want a plain-diboride *aero-convective failure* to cap the top |
 | ablator `H_eff_MJ_kg` (CP 15, PICA 35, C/C 40) | screening values | recovered-capsule recession back-out (Hayabusa, Stardust) |
 | analytic-honesty factor | 2–4× | more paired analytic/numerical runs |
 
@@ -104,10 +104,10 @@ recession · mass change · outcome (+mode) · source`.
 | Scatteia-2010 | zrb2_sic | arcjet | 10 mm (blunt) | 26.5 MW/m² cold-wall | 10 MJ/kg near specimen | 2000–2300 °C (pyro) | >600 s (10+ min) | ~3 mm stag; 7 % mass loss | survived (single-use) | Scatteia et al., *J. Spacecraft & Rockets* 47(2) 271, 2010, DOI 10.2514/1.42834 |
 | Monteverde-2013-ZSL10 | zrb2_sic | arcjet | 5 mm (hemisphere) | — | 11.4 MJ/kg / 8 kPa | 1973 K = 1700 °C (pyro) | 300 s | R 5.02→5.14 mm (≈none); **+0.3 % mass** | survived | Monteverde, Alfano, Savino, *Corros. Sci.* 75, 443–453, 2013 — note: LaB₆ was *detrimental* vs plain ZrB₂-SiC |
 | Xu-2026-HTS5 | carbide_boride | plasma_torch | bulk billet | H₂/Ar flame | — | 2500–2600 °C (pyro) | 1800 s | **−0.1 µm/s** (net oxide growth); −0.14 g/m²·s | survived | Xu et al., *J. Eur. Ceram. Soc.* 46, 117934, 2026, DOI 10.1016/j.jeurceramsoc.2025.117934 |
-| Levine-2003-ZSTS-arcjet | zrb2_sic_tasi2 | arcjet | flat disc 2.54 cm | 3.5 MW/m² stag; ~6 MW/m² edge | 0.07 atm | ~1800 °C measured; edge 1950–2000 °C | 600 s | Δwt −1.4 % | survived | Levine, Opila et al., "Ultra-High Temperature Ceramic Composites for Leading Edges," 27th JANNAF APS, Dec 2003, NTRS 20040033992 |
+| Levine-2003-ZSTS-arcjet | zrb2_sic_tasi2 | arcjet | flat disc 2.54 cm | 3.5 MW/m² face (350 W/cm²); ~6 MW/m² edge (600 W/cm²) | 0.07 atm | ~1800 °C measured; edge est. 1950–2000 °C | 600 s | Δwt −1.4 % | survived | Levine, Opila et al., "Ultra-High Temperature Ceramic Composites for Leading Edges," 27th JANNAF APS, Dec 2003, NTRS 20040033992 |
 | Levine-2003-ZS-1927 | zrb2_sic | furnace (1 atm, stagnant, cyclic 10 min hot/10 cool) | coupon | — | 1 atm | 1927 °C | 100 min (10 cycles) | oxidized, discolored, **intact** | survived | Levine, Opila et al., NTRS 20040033992 |
 | **Levine-2003-ZSTS-1927** | zrb2_sic_tasi2 | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1927 °C** | ≤10 min (1 cycle already slumped; 5-cycle a molten mass fused to setter) | destroyed | **FAILED — melt/slump** | Levine, Opila et al., NTRS 20040033992 |
-| **Levine-2003-ZSTC-1627** | zrb2_sic_tac | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1627 °C** | ≤100 min | ~20 mg/cm² gain; visible holes | **FAILED — breakaway oxidation** | Levine, Opila et al., NTRS 20040033992 |
+| **Levine-2003-ZSTC-1627** | zrb2_sic_tac | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1627 °C** | 10-min cycles | ~20 mg/cm² runaway gain; degraded to molten washer | **FAILED — TaC ineffective at 1627 °C (runaway oxidation)** | Levine, Opila et al., NTRS 20040033992 |
 | SHARP-B1 | hfb2_sic | flight | 3.5 mm (sharp) | ballistic reentry | — | — | short (ballistic) | non-ablating demonstrated | flew, **not recovered** | Johnson, Gasch, Lawson et al., "Recent Developments in UHTCs at NASA Ames" (AIAA); Kolodziej et al. NASA TM-112215, 1997 |
 | SHARP-B2 | hfb2_sic / zrb2_sic | flight | strakes on Mk12A RV | ballistic reentry | — | designed to **multi-use limit (retract 47.9 km) / single-use limit (43.3 km)** | short (ballistic) | recovered | flew, **recovered**; some segments failed on **material quality**, not the T/dwell limit | Johnson et al. (AIAA), NASA Ames |
 
@@ -161,3 +161,74 @@ transition is pressure-sensitive, so flight may sit on the other side of both.
 pyrometer, 3 mm back, was 1577 °C).  Xu's −0.1 µm/s is net oxide *growth*, an
 extreme-temp ablation-survival datum for a better material class — do not use it
 to set a generic UHTC number.  Never edit a citation.
+
+## UHTC anchor table — additions (Savino/Di Maso corpus)
+
+| id | class | kind | tip R | flux | enthalpy / press | peak T (src) | dwell | recession / mass | outcome | source |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Savino-2010-SPES-hemi | zrb2_sic | arcjet (SPES, M=3) | 5 mm | — | ≤10 MJ/kg | 2053 K = 1780 °C (pyro) | ~165 s hold (~10 min campaign) | oxide 150→60 µm; **−0.5 % mass** (Di Maso thesis); undamaged | **survived** | Savino, De Stefano Fumo, Paterna, Di Maso, Monteverde, *Aerosp. Sci. Technol.* 14 (2010) 178–187 |
+| Savino-2010-SPES-cone | zrb2_sic | arcjet (SPES, M=3) | **0.5 mm (sharp)** | — | ≤10 MJ/kg | 2083 K = 1810 °C (pyro) | ~224 s hold | oxide 190 µm tip; SiC-depleted tip layer 70→0 µm (shear-driven); **−0.6 % mass** (Di Maso thesis); undamaged | **survived** | ibid. |
+| Savino-2010-DLR-wedge | zrb2_sic | arcjet (DLR L2K, M=3.9) | 5 mm wedge | — | 6.05–9.7 MJ/kg | up to ~2250 K (abstract) | 60–180 s × multiple runs, AoA 0/25° | survived | **survived** | ibid. |
+| DiMaso-2009-HfB2TaSi2-hemi | hfb2_tasi2 | arcjet (SPES), **3 thermal cycles** | 5 mm | — | 8.7→12.9 MJ/kg / 7–11 kPa | 2010–2044 K (pyro, per cycle) | ~142–186 s per condition (~684 s cum.) | micro-cracks in Hf,Ta-oxide + HfO₂ from cycling (mass change not separately reported for this material) | **survived (cycled)** | Di Maso, A., *Plasma Wind Tunnel Testing of UHTC*, PhD thesis, Univ. Naples Federico II, XXII ciclo |
+| **DiMaso-2009-HfB2TaSi2-cone** | hfb2_tasi2 | arcjet (SPES), 2 cycles | **0.5 mm (sharp)** | — | 8.7→12.9 MJ/kg / 7–11 kPa | 2279 K (pyro); **~2800 K tip (CFD)** | ~90 s holds | LE oxide **detached from bulk**; craters ~10 µm; Ta₂O₅·6HfO₂ extensively evaporated 2300–2800 K | **DEGRADED — the dataset's first aero-convective cap** (oxide-scale detachment = loss of protection; not burn-through) | ibid. |
+
+Abstract-only (no test table held — do not anchor from it): *Aerothermodynamic
+response of ZrB₂-based compositionally complex UHTCs…*, **J. Eur. Ceram. Soc.
+(2026), S0955221926000609** — ZrB₂-TiB₂-SiC doped NbC/VC hemispheres, ~20 MJ/kg,
+M 3 and 6, surface 1700–2700 K.  Obtain full text before using.
+
+**What the additions change:**
+- **First cap.**  The envelope is no longer survival-only: the Di Maso sharp
+  cone bounds HfB₂-TaSi₂ from above (oxide detachment at ~2800 K CFD tip /
+  2279 K pyro, ~90 s cycles).  Note it caps the *doped* class — consistent with
+  the additive-inversion rule (TaSi₂ helps low, hurts high); it must NOT be
+  averaged into plain ZrB₂-SiC or HfB₂-SiC envelopes.
+- **The mid-ladder fills in**: sharp (0.5 mm!) ZrB₂-SiC survives ~1810 °C for
+  ~224 s undamaged — between the 1700 °C/300 s and 2450 °C/575 s anchors, and at
+  a tip radius 200× sharper than the Scatteia nose.
+- **Cycling datum**: 3 heat-up/cool-down cycles at ~2000 K survive with
+  micro-cracking — the first reuse-relevant point.
+- **Plain-diboride isothermal survival at 1927 °C** (Levine ZS furnace): plain
+  ZrB₂-SiC held 10× 10-min cycles at 1927 °C, discolored but intact — a
+  survival *above* every arc-jet hold, and directly above the temperature that
+  melted its TaSi₂-doped sibling.  Illustrates why furnace caps don't transfer
+  to aero-convection: the ZSTS arc-jet edge ran 1950–2000 °C for 600 s and
+  survived, yet the same material melts at 1927 °C isothermal — the furnace
+  soaks the whole coupon, the arc-jet edge is transient and conducts away.
+- **Mechanism temperatures now citable** (Di Maso thesis conclusions + its
+  refs): B₂O₃ liquid protection 670–1370 K, boils off >1370 K; silica melts at
+  ~2100 K and the film is lost to volatility/shear (the SiC-depletion onset);
+  Ta₂O₅·6HfO₂ evaporates 2300–2800 K.
+
+## Threshold provenance audit
+
+Standing rule: **every threshold the survivability model consumes is either
+cited to a real source, or explicitly labeled as an internal inference /
+placeholder — never given a fake citation.**  Status of every threshold:
+
+| Threshold | Value | Provenance | Status |
+|---|---|---|---|
+| Sutton-Graves constant | 1.7415e-4 | Sutton & Graves 1971, NASA TR R-376 | ✔ cited |
+| shape-change onset | δ/R_n = 0.10 | Lin, Grabowsky & Yelmgren 1982 (TRW/BMO): 0.1 R_N "mildly indented"; PANT (DTIC ADA019186): asymmetry→dispersion | ✔ cited |
+| severe blunting | δ/R_n = 0.50–1.0 | Berry, Reentry-F (NASA CR-154044): flew R_n 0.10→0.171 in (~0.7 R_n), survived | ✔ cited |
+| burn-through | δ > nose_solid_depth (≈R_n) | Reentry-F solid-tip length ~7.7 R_n axial (Berry) | ✔ cited |
+| glider tip flag | δ/R_n ≥ 0.05 | **internal inference** from Murbach 1993/AEOLUS (SWERVE C-C nose) + AHW's move to non-ablating tips; no literature number | ⚠ labeled inference |
+| NRC duration ladder | 300 / 800 / 3,000 / 3,600 s | NRC 2008, *U.S. Conventional Prompt Global Strike*, App. D Fig. D-2, pp. 119–121 (Mk-500, CSM-1 AMaRV, CSM-2 FALCON) | ✔ cited |
+| ablation↔reradiation crossover | ~1,000 s | **derived** from the NRC CSM-1 (800 s ablative) vs CSM-2 (3,000 s C-C) pair | ⚠ labeled derived |
+| UHTC glass ceiling | 1650 °C | Monteverde & Savino 2012; Peters 2024; Fahrenholtz & Hilmas 2012; Marschall 2009; Li 2008 | ✔ cited (5 sources) |
+| silica melt / film loss | ~2100 K | Di Maso thesis concl. 5 (citing its [45]); mechanism distinct from the 1650 °C protectiveness ceiling | ✔ cited |
+| UHTC dwell floor | ≥300 s @ 1973 K; ~575 s @ 2450 °C | Monteverde 2013 (Corros. Sci. 75); Monteverde & Savino 2012 | ✔ cited |
+| UHTC demonstrated peaks | ~2450 °C sharp ZrB₂-SiC / ~2600 °C carbide-boride | Monteverde 2012 (CFD-source flagged); Xu 2026 | ✔ cited |
+| HfB₂-TaSi₂ cap | oxide detachment ~2800 K tip (CFD) | Di Maso thesis (sharp cone) | ✔ cited |
+| additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); corroborated by the Di Maso cone at temperature | ✔ cited |
+| acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
+| bondline limit | 250 °C | NASA NTRS 20060004824 (ablative TPS sizing); Orion 260 °C NTRS 20080013535 | ✔ cited |
+| tile/RCC/material limits | per-material peak/continuous K | HEATING_TPS_REFERENCES.md §2 (TPSX, KSC STS ref, NTRS 19940030739, Peters 2024, …) | ✔ cited per entry |
+| analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
+| `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
+| `uhtc` `oxidation_dwell_s` (current code) | 120 s | **uncited placeholder** — retired at §11 implementation in favor of the cited dwell floor above | ⚠ flagged for removal |
+
+Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
+each is labeled with its true epistemic status in code and report text.  If a
+future source covers one, replace the label with the citation — never the
+reverse.

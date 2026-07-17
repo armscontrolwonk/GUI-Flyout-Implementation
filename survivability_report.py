@@ -34,7 +34,12 @@ from booster_models import glide_family
 #          heating.py's recession criterion supplies the depth-based margin.
 SHAPE_CHANGE_ONSET = 0.10
 SEVERE_BLUNTING    = 0.50
-GLIDER_ABL_TIP_FLAG = 0.05    # any meaningful recession on a glider tip/LE
+# INTERNAL INFERENCE, not a literature number (see BENCHMARKING.md "Threshold
+# provenance audit"): derived from Murbach 1993/AEOLUS (SWERVE flew a
+# carbon-carbon nose/LE) plus AHW's move to non-ablating tips — any meaningful
+# recession on a glider tip/LE corrupts the aeroshape.  No source gives a
+# tolerance number; 0.05 is a screening flag, not a cited threshold.
+GLIDER_ABL_TIP_FLAG = 0.05
 
 
 def classify(result) -> str:

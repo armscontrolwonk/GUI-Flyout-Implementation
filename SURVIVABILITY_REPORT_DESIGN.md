@@ -244,20 +244,33 @@ bands in §10 are unaffected.
 
 ### 11.1 The data is a floor, not a fence
 
-Every UHTC survivability datum we have (BENCHMARKING.md §UHTC) is a **survival**:
-the arc-jet or flight test *stopped*, it did not *fail*.  So each point is a
-**lower bound** — "at least this hot, this long, with this tip radius, is fine" —
-and the demonstrated region is a floor with **no ceiling**.  We know where it is
-safe; we are guessing where it breaks.
+Nearly every UHTC survivability datum we have (BENCHMARKING.md §UHTC) is a
+**survival**: the arc-jet or flight test *stopped*, it did not *fail*.  So each
+point is a **lower bound** — "at least this hot, this long, with this tip
+radius, is fine" — and on the aero-convective side the demonstrated region is a
+floor with **almost no ceiling**.  We know where it is safe; we are largely
+guessing where it breaks.
 
 The two outcomes bound the envelope from opposite sides:
 
-* **Survival → lower bound** (extends the floor).  All current anchors.
-* **Failure → upper bound** (caps the ceiling).  We have essentially none:
-  SHARP-B2 segment failures were **material-quality**, not a temperature/dwell
-  limit, so they do not cleanly cap anything.  One clean failure datum — a
-  recovered tip that burned through at a known (T, dwell) — is worth more than
-  several survivals, because it is the half we lack.
+* **Survival → lower bound** (extends the floor).  Most current anchors.
+* **Failure → upper bound** (caps the ceiling).  We now have three caps, each
+  narrow and to be applied only to its own regime and material class:
+  * **Levine 2003 furnace failures** (NTRS 20040033992): ZrB₂-SiC-TaSi₂
+    melted/slumped at 1927 °C; ZrB₂-SiC-TaC breakaway oxidation at 1627 °C.
+    1-atm stagnant cyclic furnace — they cap the passive-oxidation regime for
+    the *doped* classes, not the aero-convective regime, and not plain
+    ZrB₂-SiC (which survived the same 1927 °C exposure).
+  * **Di Maso 2009 sharp-cone degradation** (PhD thesis, Univ. Naples): the
+    HfB₂-15TaSi₂ sharp cone's leading-edge oxide **detached from the bulk** at
+    ~2800 K CFD tip (2279 K pyro), ~90 s cycles — the first *aero-convective*
+    cap: oxide-scale detachment = loss of protection, though not burn-through.
+    Again a doped class; the additive-inversion rule (§11.6-adjacent) forbids
+    averaging it into plain-diboride envelopes.
+  * SHARP-B2 segment failures remain excluded: **material-quality**, not a
+    temperature/dwell limit.
+  A clean aero-convective failure of a *plain* ZrB₂-SiC or HfB₂-SiC tip at a
+  known (T, dwell, flux) is still the highest-value missing point.
 
 The report must therefore never say "survives" beyond the floor.  It says
 "within the demonstrated envelope" up to the floor, and "beyond validated
