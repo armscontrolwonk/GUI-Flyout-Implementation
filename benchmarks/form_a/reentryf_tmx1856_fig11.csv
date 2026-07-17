@@ -1,0 +1,23 @@
+t_s,alt_kft_approx,curve1_thermochem_in,curve2_mech_erosion_in,curve3_worst_case_in,pressure_bar_in,notes
+448,~140,0.105,0.105,0.105,,"all curves at initial R_n ~0.105-0.11 in"
+452,~105,0.115,0.115,0.115,,
+454,~93,0.12,0.125,0.13,,"curves begin to diverge ~453.5-454 s"
+455.8,~78,0.135,0.145,0.19,0.135-0.16,"first pressure-derived bar"
+457.3,~68,0.15,0.17,0.27,0.145-0.185,
+458,~64,0.155,0.185,0.32,0.11-0.17,"third bar dips below curve 1"
+458.3,~62,0.16,0.19,0.35,0.175-0.28,"wide bar reaching toward curve 2/3"
+458.7,~60,0.165,0.20,0.39,,"curve 3 reaches EXPOSURE RADIUS ~0.39 in (arrow); thermocouple A anomalous rise begins here; report refutes curve 3 (plug exposure would have shown in TC/motions/pressures)"
+460.2,~52,0.18,0.25,,0.165-0.22,"last pressure-derived bar, straddling curve 1"
+462,~40,0.205,0.315,,,"end of plot: curve 1 ~0.20-0.21 in (Δ≈1.0 R_n0), curve 2 ~0.31-0.32 in (Δ≈2.1 R_n0)"
+# Source: NASA TM X-1856 Figure 11(b) "Measured temperatures and recession estimates"
+#   (via Berry white paper; CLEAN full-resolution copy supplied in-chat 2026-07-17).
+#   Hemispherical nose-tip radius axis 0.1-0.5 in (0.25-1.2+ cm); time 448-462 s; top axis
+#   altitude 140->40 kft (40->12 km).  All values READ FROM FIGURE, ~±0.01 in mid-curve.
+# CORRECTION vs earlier low-res read: the exposure radius (graphite-plug exposure) is
+#   ~0.385-0.39 in, NOT 0.5 in (0.5 is merely the axis top).  Worst-case curve 3 reaches
+#   it at 458.7 s and is refuted by the report.
+# Thermocouple panel: TC-A slow rise ~150->300 F then near-vertical anomalous rise at
+#   ~458.7-459 s (~60 kft); TC-B kicks up ~459.5-460 s to ~1150 F by 462; TC-C mild, to ~750 F.
+# Cross-check: top-axis altitude scale gives 100 kft ~453 s and 50 kft ~460.4 s ->
+#   100->50 kft ≈ 7.5 s on the FLIGHT time base, corroborating the ~8 s window
+#   digitized from the nominal-trajectory figure (reentryf_nominal_qdot.csv).
