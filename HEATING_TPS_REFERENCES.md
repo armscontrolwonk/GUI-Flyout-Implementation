@@ -262,10 +262,15 @@ These four were read directly and their key results confirmed:
   stagnation Q_MJ: the descent is third-stage **powered** (Mach *rises* to
   20.2 mid-window, so Allen-Eggers ballistic analytics don't apply) and the
   nose **recesses/blunts** from 2.54 mm during flight.  The stagnation q̇(t)
-  curve lives in **NASA LWP-460** (Berry Fig. 6); a rough integration of it
-  gives an order-of-magnitude **~1 GJ/m²** stagnation load (huge flux × short
-  pulse — why the tip must ablate), but it is too congested/preflight to pin.
-  Q_MJ left None pending LWP-460 or a measured stagnation q̇(t).  NASA TM
+  curve lives in **NASA LWP-460** (Berry Fig. 6); a rough integration of the
+  congested reproduction originally gave an order-of-magnitude **~1 GJ/m²**.
+  UPDATE: a clean full-resolution copy of the figure was later supplied
+  in-chat and digitized point-by-point
+  (`benchmarks/form_a/reentryf_nominal_qdot.csv`): **Q ≈ 2.85 GJ/m² ±25%**
+  cold-wall stagnation, peak read ≈ 324 MW/m² (confirming the 318 pin),
+  100→50 kft in ~8 s — superseding the ~1 GJ/m² estimate.  Q_MJ nonetheless
+  stays None in `_BENCHMARKS`: the curve is preflight-nominal, and per TM
+  X-2560 no flight-measured stagnation heating exists.  NASA TM
   X-2560 (Stainback, Johnson, Boney & Wicker, 1972; NTRS 19790075398; read
   from primary) compares predicted vs measured laminar/transitional/turbulent
   heating — but its flight data are explicitly "downstream of the stagnation

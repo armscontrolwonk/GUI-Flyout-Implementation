@@ -3150,16 +3150,20 @@ The anchors split by role, and the split is load-bearing:
   nosetip recession history after ~60,000 ft is carried as a *spread*, now
   quantified from TM X-1856 Fig. 11: final radius 0.17–0.30 in best-supported
   (thermochemical and erosion-corrected curves plus pressure-derived estimates),
-  the 0.5 in worst case refuted by the report itself.  A flight-derived H_eff
-  *bracket* of 29–130 MJ/kg (Q from the pre-existing LWP-460 curve integration
-  of ~1 GJ/m² — see `HEATING_TPS_REFERENCES.md`, whose Q_MJ-stays-None decision
-  stands — up to the constant-peak ceiling, against 19.6 mm axial recession)
-  contains the model's carbon-carbon nominal 40 in its lower third; at the
-  ~1 GJ/m² central estimate the screen under-predicts by ~25%, inside the
-  ±25%/1.6× ablation-model recession spread of Schneider et al. AIAA 72-705
-  (read from primary).  The spread — not a conservativeness claim — is what is
-  carried for the sharp-tip regime; a bracket, never a single-point H_eff
-  calibration.
+  the 0.5 in worst case refuted by the report itself.  The nominal stagnation
+  heat pulse is now *digitized point-by-point* from the clean nominal-trajectory
+  figure (γ_E 21.2°, V_E 20,300 ft/s; supplied in-chat; reads in
+  `benchmarks/form_a/reentryf_nominal_qdot.csv`): **Q ≈ 2.85 GJ/m² ±25%
+  cold-wall**, peak ≈ 324 MW/m² (confirming the 318 MW/m² benchmark pin),
+  100→50 kft window ≈ 8 s.  Against the 0.6–1.0 in axial-recession spread this
+  gives a flight-derived H_eff *bracket* of **50–135 MJ/kg (central ≈ 84)**; the
+  model's carbon-carbon nominal 40 sits below it and **over-predicts recession
+  ~2×** — the conservative side for a screen, and the same sign as the capsule
+  bounds.  (An earlier ~1 GJ/m² order-of-magnitude read, and the ~25%
+  under-prediction caveat that rested on it, are superseded by the digitized
+  integration.)  Still a bracket, never a single-point H_eff calibration, and
+  `heating._BENCHMARKS` Q_MJ stays None: the pulse is a preflight prediction —
+  no flight-measured stagnation heating exists (TM X-2560).
 - **Stardust** (PICA, recovered, 12.8 km/s) and **Hayabusa** (carbon-phenolic,
   recovered, >12 km/s) are **bounding anchors, not fits** — both now firsthand.
   Post-flight analysis found equilibrium-style ablation chemistry *over*-predicts
