@@ -292,13 +292,15 @@ The two outcomes bound the envelope from opposite sides:
     quantified.
   * SHARP-B2 segment failures remain excluded: **material-quality**, not a
     temperature/dwell limit.
-  HfB₂-SiC now has a *protected-side* ground anchor (Gasch & Johnson 2010, AHF
-  arcjet: survived ~1690 °C / 2.5 MW/m² / 0.10 atm / 600 s), so its floor is no
-  longer purely inferred from ZrB₂-SiC.  The remaining, narrower gaps are a
+  HfB₂-SiC now has two ground anchors: Gasch & Johnson 2010 (~1690 °C /
+  2.5 MW/m² / 0.10 atm / 600 s) and Sevastyanov 2014 — HfB₂-45SiC **survived
+  2500–2700 °C for 15–18 min** (>30 min total) with 1.5 % mass loss and no
+  cracking, empirically confirming Peters' Hf-shifts-higher point (~700 °C above
+  ZrB₂-SiC's ~1942 °C PA).  So HfB₂'s floor extends to ~2700 °C (caveat:
+  high-SiC, porous variant, 10–30 kPa).  The remaining, narrower gaps are a
   *total burn-through* of a plain tip (the PA transition is runaway *onset*) and
-  the **HfB₂-SiC PA-transition cap** — where HfB₂-SiC goes active — which Hf
-  shifts higher than Zr (Peters 2024), so it cannot be borrowed from the ZrB₂
-  number.
+  the **HfB₂ PA cap itself** — which Sevastyanov's run bounds only from below
+  (> 2700 °C), never reaching runaway.
 
   Two anchors **isolate the pressure axis** (§11.6), so it is not hypothetical:
   the De Prisco pair (same specimens survived 1700–1800 K at 3×10⁻³ atm but
