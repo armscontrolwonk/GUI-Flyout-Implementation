@@ -84,15 +84,17 @@ MSL 2.0 / 55; Shuttle 0.6 / 66.
 
 Seeds the anchor dataset behind the Form B envelope-coverage model
 (SURVIVABILITY_REPORT_DESIGN.md §11).  Each row is one flight / arc-jet /
-plasma-torch / furnace datum for a ZrB₂-SiC-class or carbide-boride UHTC.
-The aero-convective rows (arc-jet, plasma torch, flight) are all SURVIVALS —
-those tests stopped, they did not fail — so on that side the demonstrated
-region is a *floor* (§11.1).  The Levine 2003 furnace rows supply the first
-**FAILURES** (caps), with the caveat that they are 1-atm stagnant-air cyclic
-furnace data: they cap the passive-oxidation regime, not the aero-convective
-one.  A clean *aero-convective* failure (arc-jet or recovered flight hardware
-burned through at a known T/dwell/flux) remains the highest-value missing
-point.
+plasma-torch / furnace datum for a ZrB₂-SiC-class, complex-boride, or
+carbide-boride UHTC.  Most aero-convective rows are SURVIVALS — those tests
+stopped, they did not fail — so on that side the demonstrated region is a
+*floor* (§11.1).  Caps now come from three places: the **Levine 2003 furnace**
+rows (1-atm stagnant cyclic — they cap the passive-oxidation regime for *doped*
+classes only, not the aero-convective one), and two **aero-convective**
+degradation caps — the **Di Maso HfB₂-TaSi₂ sharp cone** and the **De Prisco
+2026 ZrB₂-TiB₂-SiC hemispheres** — which both fail by *oxide-scale detachment*
+at ~2700–2800 K (not burn-through).  A clean aero-convective **burn-through** of
+a *plain* ZrB₂-SiC / HfB₂-SiC tip at a known T/dwell/flux is still the
+highest-value missing point.
 
 Record schema (one per datum): `id · material_class · kind · tip_radius ·
 flux (+kind, enthalpy, stag pressure) · peak_T (+source) · dwell above 1650 °C ·
@@ -110,6 +112,9 @@ recession · mass change · outcome (+mode) · source`.
 | **Levine-2003-ZSTC-1627** | zrb2_sic_tac | furnace (1 atm, cyclic) | coupon | — | 1 atm | **1627 °C** | 10-min cycles | ~20 mg/cm² runaway gain; degraded to molten washer | **FAILED — TaC ineffective at 1627 °C (runaway oxidation)** | Levine, Opila et al., NTRS 20040033992 |
 | SHARP-B1 | hfb2_sic | flight | 3.5 mm (sharp) | ballistic reentry | — | — | short (ballistic) | non-ablating demonstrated | flew, **not recovered** | Johnson, Gasch, Lawson et al., "Recent Developments in UHTCs at NASA Ames" (AIAA); Kolodziej et al. NASA TM-112215, 1997 |
 | SHARP-B2 | hfb2_sic / zrb2_sic | flight | strakes on Mk12A RV | ballistic reentry | — | designed to **multi-use limit (retract 47.9 km) / single-use limit (43.3 km)** | short (ballistic) | recovered | flew, **recovered**; some segments failed on **material quality**, not the T/dwell limit | Johnson et al. (AIAA), NASA Ames |
+| DePrisco-2026-ZTN-M6 | zrb2_tib2_sic (NbC) | arcjet (SPES, M=6) | 10 mm (hemi) | ~4 MW/m² stag | 4.5→20.3 MJ/kg / 3×10⁻³ atm | 1800 K (pyro) | ~300 s (stepped) | +0.31 % mass; tip white oxide, sides silica; 165 µm peak-valley | **survived** | De Prisco et al., *J. Eur. Ceram. Soc.* 46 (2026) 118184 |
+| DePrisco-2026-ZTV-M6 | zrb2_tib2_sic (VC) | arcjet (SPES, M=6) | 10 mm (hemi) | ~4 MW/m² stag | 4.5→20.3 MJ/kg / 3×10⁻³ atm | 1700 K (pyro) | >400 s (stepped) | +0.16 % mass; dark borosilicate glass (better than Nb); 100 µm | **survived** | ibid. |
+| **DePrisco-2026-ZT-M3-2700K** | zrb2_tib2_sic (NbC & VC) | arcjet (SPES, M=3) | 10 mm (hemi) | ~10 MW/m² stag | 5.1→14.4 MJ/kg / 2.3×10⁻² atm | **2700 K** (pyro) | stepped (30–120 s) | small net mass gain; **very tip of BOTH samples detached** (poor oxide adherence) | **DEGRADED — 2nd aero-convective cap** (oxide detachment on handling after 2700 K; not burn-through) | ibid. |
 
 Review-level context (not a point datum): **Peters et al., *Nat. Commun.* 15,
 2024, DOI 10.1038/s41467-024-46753-3** — ZrB₂/HfB₂-SiC oxidation ceiling
@@ -172,17 +177,23 @@ to set a generic UHTC number.  Never edit a citation.
 | DiMaso-2009-HfB2TaSi2-hemi | hfb2_tasi2 | arcjet (SPES), **3 thermal cycles** | 5 mm | — | 8.7→12.9 MJ/kg / 7–11 kPa | 2010–2044 K (pyro, per cycle) | ~142–186 s per condition (~684 s cum.) | micro-cracks in Hf,Ta-oxide + HfO₂ from cycling (mass change not separately reported for this material) | **survived (cycled)** | Di Maso, A., *Plasma Wind Tunnel Testing of UHTC*, PhD thesis, Univ. Naples Federico II, XXII ciclo |
 | **DiMaso-2009-HfB2TaSi2-cone** | hfb2_tasi2 | arcjet (SPES), 2 cycles | **0.5 mm (sharp)** | — | 8.7→12.9 MJ/kg / 7–11 kPa | 2279 K (pyro); **~2800 K tip (CFD)** | ~90 s holds | LE oxide **detached from bulk**; craters ~10 µm; Ta₂O₅·6HfO₂ extensively evaporated 2300–2800 K | **DEGRADED — the dataset's first aero-convective cap** (oxide-scale detachment = loss of protection; not burn-through) | ibid. |
 
-Abstract-only (no test table held — do not anchor from it): *Aerothermodynamic
-response of ZrB₂-based compositionally complex UHTCs…*, **J. Eur. Ceram. Soc.
-(2026), S0955221926000609** — ZrB₂-TiB₂-SiC doped NbC/VC hemispheres, ~20 MJ/kg,
-M 3 and 6, surface 1700–2700 K.  Obtain full text before using.
-
 **What the additions change:**
-- **First cap.**  The envelope is no longer survival-only: the Di Maso sharp
-  cone bounds HfB₂-TaSi₂ from above (oxide detachment at ~2800 K CFD tip /
-  2279 K pyro, ~90 s cycles).  Note it caps the *doped* class — consistent with
-  the additive-inversion rule (TaSi₂ helps low, hurts high); it must NOT be
-  averaged into plain ZrB₂-SiC or HfB₂-SiC envelopes.
+- **Two aero-convective caps now converge on one mode.**  The Di Maso HfB₂-TaSi₂
+  sharp cone (oxide detachment ~2800 K CFD tip) and the De Prisco 2026
+  ZrB₂-TiB₂-SiC hemispheres (both NbC and VC tips detached after 2700 K, Mach 3,
+  ~10 MW/m²) fail the *same way* — **oxide-scale detachment / poor adherence to
+  the unreacted bulk at ~2700–2800 K** — across two labs, two material classes,
+  and two geometries.  That convergence is a stronger cap than either alone: for
+  doped/complex diborides the ~2700 °C-class limit is oxide adherence, not melt
+  or burn-through.  Both cap *doped/complex* classes, consistent with the
+  additive-inversion rule; neither may be averaged into plain ZrB₂-SiC /
+  HfB₂-SiC envelopes.
+- **New class survives the mid-band, pressure-resolved.**  De Prisco's
+  ZrB₂-TiB₂-SiC survived 1700–1800 K at low pressure (Mach 6, 3×10⁻³ atm,
+  ~4 MW/m², 300–400 s) but detached at 2700 K under **10× higher pressure**
+  (Mach 3, 2.3×10⁻² atm) — the same specimens, so it isolates the pressure
+  axis: the SiC active/passive footnote (§11.6) is not hypothetical here.
+  VC-doping out-performed NbC (darker, more-stable borosilicate glass).
 - **The mid-ladder fills in**: sharp (0.5 mm!) ZrB₂-SiC survives ~1810 °C for
   ~224 s undamaged — between the 1700 °C/300 s and 2450 °C/575 s anchors, and at
   a tip radius 200× sharper than the Scatteia nose.

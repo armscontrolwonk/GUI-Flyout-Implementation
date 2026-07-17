@@ -254,23 +254,33 @@ guessing where it breaks.
 The two outcomes bound the envelope from opposite sides:
 
 * **Survival → lower bound** (extends the floor).  Most current anchors.
-* **Failure → upper bound** (caps the ceiling).  We now have three caps, each
+* **Failure → upper bound** (caps the ceiling).  We now have several caps, each
   narrow and to be applied only to its own regime and material class:
   * **Levine 2003 furnace failures** (NTRS 20040033992): ZrB₂-SiC-TaSi₂
     melted/slumped at 1927 °C; ZrB₂-SiC-TaC breakaway oxidation at 1627 °C.
     1-atm stagnant cyclic furnace — they cap the passive-oxidation regime for
     the *doped* classes, not the aero-convective regime, and not plain
     ZrB₂-SiC (which survived the same 1927 °C exposure).
-  * **Di Maso 2009 sharp-cone degradation** (PhD thesis, Univ. Naples): the
-    HfB₂-15TaSi₂ sharp cone's leading-edge oxide **detached from the bulk** at
-    ~2800 K CFD tip (2279 K pyro), ~90 s cycles — the first *aero-convective*
-    cap: oxide-scale detachment = loss of protection, though not burn-through.
-    Again a doped class; the additive-inversion rule (§11.6-adjacent) forbids
-    averaging it into plain-diboride envelopes.
+  * **Two aero-convective oxide-detachment caps that converge on one mode.**
+    The **Di Maso 2009** HfB₂-15TaSi₂ sharp cone (oxide detached from the bulk
+    at ~2800 K CFD tip / 2279 K pyro, PhD thesis, Univ. Naples) and the
+    **De Prisco 2026** ZrB₂-TiB₂-SiC hemispheres doped NbC/VC (both tips
+    detached after 2700 K, Mach 3, ~10 MW/m²; *J. Eur. Ceram. Soc.* 46, 118184)
+    fail the *same way* — oxide-scale detachment / poor adherence to the
+    unreacted bulk at ~2700–2800 K — across two labs, two classes, two
+    geometries.  So for doped/complex diborides the ~2700 °C-class limit is
+    **oxide adherence, not melt or burn-through**.  Both cap doped/complex
+    classes; the additive-inversion rule forbids averaging them into
+    plain-diboride envelopes.
   * SHARP-B2 segment failures remain excluded: **material-quality**, not a
     temperature/dwell limit.
-  A clean aero-convective failure of a *plain* ZrB₂-SiC or HfB₂-SiC tip at a
-  known (T, dwell, flux) is still the highest-value missing point.
+  A clean aero-convective *burn-through* of a **plain** ZrB₂-SiC or HfB₂-SiC tip
+  at a known (T, dwell, flux) is still the highest-value missing point.
+
+  The De Prisco pair also **isolates the pressure axis** (§11.6): the *same*
+  specimens survived 1700–1800 K at 3×10⁻³ atm (Mach 6) but detached at 2700 K
+  under 10× the pressure (2.3×10⁻² atm, Mach 3) — direct evidence that the
+  facility-pressure footnote is real, not hypothetical.
 
 The report must therefore never say "survives" beyond the floor.  It says
 "within the demonstrated envelope" up to the floor, and "beyond validated
