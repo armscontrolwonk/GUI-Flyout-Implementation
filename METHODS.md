@@ -3090,9 +3090,13 @@ survivals bound it from below, failures cap it from above.  Caps come from the
 Levine et al. 2003 1-atm furnace failures (NTRS 20040033992, passive-oxidation
 regime only); two convergent doped/complex *oxide-detachment* caps — the Di Maso
 2009 HfB₂-TaSi₂ sharp cone and the De Prisco 2026 ZrB₂-TiB₂-SiC hemispheres (*J.
-Eur. Ceram. Soc.* 46, 118184) at ~2700–2800 K; and the keystone **Marschall
-2012 PA transition** of *plain* ZrB₂-SiC (*J. Thermophys. Heat Transfer* 26(4)),
-a pressure-explicit, flight-corroborated (SHARP-B1) runaway threshold.  All cap
+Eur. Ceram. Soc.* 46, 118184) at ~2700–2800 K; and the keystone **plain-ZrB₂-SiC
+PA transition**, a pressure-explicit, flight-corroborated (SHARP-B1) runaway
+threshold that is triple-sourced — Marschall 2012 (*J. Thermophys. Heat
+Transfer* 26(4), +400 K jump at ~2 MW/m² / 10 kPa), Monteverde 2017 (*J. Eur.
+Ceram. Soc.* 37, onset ~2050 K), and Zhang 2008 (*Compos. Sci. Technol.* 68,
+flux-bracketed passive at 1.7 MW/m² ↔ active at 5.4 MW/m² with ~5 µm/s
+recession).  All cap
 doped/complex diborides, never plain ones.  The De Prisco pair, same specimens
 run at two pressures, is direct evidence that the SiC active/passive transition
 is pressure-sensitive: survived 1700–1800 K at 3×10⁻³ atm, detached at 2700 K

@@ -283,7 +283,13 @@ The two outcomes bound the envelope from opposite sides:
     said we could not fill from doped data — and it is **flight-corroborated**
     (SHARP-B1: 2360→2810 K jump in ~15 s, Kolodziej et al.).  It is also the
     *mechanism* under the whole model: the loss of the borosilicate glass that
-    `continuous_K` is about.
+    `continuous_K` is about.  Now **triple-sourced**: Monteverde 2017 (SPES,
+    *JECS* 37, 2325) sees the same jumps-/waves-of-radiance onset ~2050 K at the
+    same ~10 kPa; Zhang 2008 (HIT, *CST* 68, 1718) brackets it by flux on a flat
+    face — fully passive at 1.7 MW/m² (1650 °C, 0 % mass loss) vs active at
+    5.4 MW/m² (>2300 °C, 15.75 % loss, 3 mm recession ≈ 5 µm/s) — so the PA
+    crossing sits between ~1.7 and ~5.4 MW/m² and the active-side recession is
+    quantified.
   * SHARP-B2 segment failures remain excluded: **material-quality**, not a
     temperature/dwell limit.
   The remaining, narrower gap is a *total burn-through* of a plain tip (the PA
@@ -381,10 +387,13 @@ bounded in time by:
   used as a hard fail line.)
 
 The honest sharp-tip criterion is ultimately a **flux-normalized recession
-rate** (≈0.07 µm/s at 7 MW/m² sharp; ≈3.6 µm/s at 26 MW/m² blunt) that blunts
-the tip and degrades sharpness/accuracy — mapping onto the Form A δ/R_n ladder
-applied to the tip radius.  That rework is a later step; the floor + coverage
-shading is the near-term model.
+rate**, and it is now regime-split: in the *passive* band ≈0.07 µm/s at 7 MW/m²
+(sharp, Monteverde 2012) to ≈3.6 µm/s at 26 MW/m² (blunt, Scatteia) — slow tip
+blunting that degrades sharpness/accuracy; but *past the PA transition* it jumps
+to ≈5 µm/s at 5.4 MW/m² (Zhang 2008, active oxidation) — an order of magnitude
+faster per unit flux, because the protective glass is gone.  Mapping onto the
+Form A δ/R_n ladder applied to the tip radius, with the passive/active split, is
+a later step; the floor + coverage shading is the near-term model.
 
 ### 11.5 Guessing the material, and the update loop
 

@@ -91,14 +91,15 @@ stopped, they did not fail — so on that side the demonstrated region is a
 rows (1-atm stagnant cyclic — they cap the passive-oxidation regime for *doped*
 classes only, not the aero-convective one); two doped/complex **oxide-detachment**
 caps (**Di Maso HfB₂-TaSi₂** cone, **De Prisco 2026 ZrB₂-TiB₂-SiC** hemispheres,
-both ~2700–2800 K); and — the keystone — the **Marschall 2012 PA transition**,
-a *plain* ZrB₂-SiC aero-convective runaway (loss of protective silica → active
-SiC oxidation → +400 K temperature jump) at a cited, pressure-explicit threshold
-(~2 MW/m² cold-wall, ~2215 K, 10 kPa), flight-corroborated by SHARP-B1.  The
-remaining, narrower gap is a *total burn-through / complete consumption* of a
-plain tip (the PA transition is runaway *onset*, not full loss), and an
-aero-convective cap specifically for **HfB₂-SiC** (only in telemetry-limited
-flight so far).
+both ~2700–2800 K); and — the keystone — the **plain-ZrB₂-SiC PA
+transition** (loss of protective silica → active SiC oxidation → temperature
+jump), now **triple-sourced and flux-bracketed**: Marschall 2012 (VKI, +400 K
+jump at ~2 MW/m² / 10 kPa), Monteverde 2017 (SPES, onset ~2050 K), and Zhang
+2008 (HIT, passive at 1.7 MW/m² / 0 % mass ↔ active at 5.4 MW/m² / 15.75 %
+loss, 3 mm), plus SHARP-B1 flight corroboration.  The remaining, narrower gap
+is a *total burn-through / complete consumption* of a plain tip (the PA
+transition is runaway *onset*, not full loss), and an aero-convective cap
+specifically for **HfB₂-SiC** (only in telemetry-limited flight so far).
 
 Record schema (one per datum): `id · material_class · kind · tip_radius ·
 flux (+kind, enthalpy, stag pressure) · peak_T (+source) · dwell above 1650 °C ·
@@ -121,6 +122,9 @@ recession · mass change · outcome (+mode) · source`.
 | **DePrisco-2026-ZT-M3-2700K** | zrb2_tib2_sic (NbC & VC) | arcjet (SPES, M=3) | 10 mm (hemi) | ~10 MW/m² stag | 5.1→14.4 MJ/kg / 2.3×10⁻² atm | **2700 K** (pyro) | stepped (30–120 s) | small net mass gain; **very tip of BOTH samples detached** (poor oxide adherence) | **DEGRADED — 2nd aero-convective cap** (oxide detachment on handling after 2700 K; not burn-through) | ibid. |
 | Marschall-2012-ZrB2-30SiC-protected | zrb2_sic | plasmatron (VKI 1.2 MW, subsonic) | flat "mushroom" face | 110 W/cm² (1.1 MW/m²) cold-wall | 10 kPa static | 1800–1900 K steady | held at power | small mass change; stable protective oxide | **survived (passive/protected)** | Marschall, Pejaković, Fahrenholtz, Hilmas, Panerai, Chazot, *J. Thermophys. Heat Transfer* 26(4) 2012, DOI 10.2514/1.T3798 |
 | **Marschall-2012-ZrB2-30SiC-jump** | zrb2_sic | plasmatron (VKI, subsonic) | flat "mushroom" face | **jump at q_cw ≈ 202 W/cm² (2.02 MW/m²)**; no jump at 185 W/cm² (1.85) | 10 kPa static; P_dyn 75–95 Pa | ~2215 K steady → **+400 K in 20–30 s** (after 30–45 s hold) | onset-defined | protective silica lost → active SiC oxidation → chemical heat-flux surge; accelerated mass loss / changing mold line | **DEGRADED/RUNAWAY — the plain-ZrB₂-SiC passive→active (PA) transition; first plain-diboride aero-convective cap** | ibid. |
+| Zhang-2008-1.7MW | zrb2_sic | arcjet (subsonic) | flat face, sharp LE R 3.5 mm | **1.7 MW/m²** | — | **1640–1660 °C** (pyro) | 600 s | **0.00 % mass, 0.00 mm, oxide 25 µm, no SiC depletion** | **survived (passive — below PA)** | Zhang, Hu, Han, Meng, *Compos. Sci. Technol.* 68 (2008) 1718–1726 |
+| **Zhang-2008-5.4MW** | zrb2_sic | arcjet (subsonic) | flat face, sharp LE R 3.5 mm | **5.4 MW/m²** | — | 2150–2330 °C (pyro) | 600 s | **−15.75 % mass; 2.98 mm recession (~5 µm/s); oxide 390 µm** | **DEGRADED — active oxidation/ablation (above PA)** | ibid. |
+| Monteverde-2017-SiCZrB2-jump | zrb2_sic | plasmatron (SPES, supersonic) | disc 12.7 mm | 3.5 MW/m² cold-wall | 9–11 kPa static; pO+O₂ 1.7–2.1 kPa; ≤21 MJ/kg | instabilities onset T_F ~2020–2050 K → jumps/waves-of-radiance | held | endured "rather well"; SiC-depletion correlates with jumps | survived-with-instabilities (2nd-lab PA corroboration) | Monteverde, Cecere, Savino, *J. Eur. Ceram. Soc.* 37 (2017) 2325–2341 |
 
 Review-level context (not point data):
 - **Peters et al., *Nat. Commun.* 15, 2024, DOI 10.1038/s41467-024-46753-3** —
@@ -238,6 +242,21 @@ to set a generic UHTC number.  Never edit a citation.
   7 MW/m² because a sharp, conducting tip can stay locally passive, whereas
   Marschall's flat face went active at ~2215 K / 2 MW/m² / 10 kPa.  Same
   material, different (flux, geometry, pressure) → different PA crossing.
+- **The PA transition is now triple-sourced and flux-bracketed.**  Three
+  independent labs see the same plain-ZrB₂-SiC boundary:
+  * **Marschall 2012** (VKI Plasmatron) — the +400 K jump at ~2 MW/m² / 10 kPa.
+  * **Monteverde 2017** (SPES, *JECS* 37, 2325) — "jumps-/waves-of-radiance"
+    instabilities onset at T_F ~2020–2050 K, 3.5 MW/m², 9–11 kPa: a second-lab
+    confirmation at the same pressure regime (its 200 Pa is the *base* chamber
+    pressure, not the test static pressure).
+  * **Zhang 2008** (HIT arc-jet, *CST* 68, 1718) — a clean *flux bracket* on a
+    flat plain-ZrB₂-SiC face: at **1.7 MW/m²** the surface sat at 1650 °C with
+    **0.00 % mass / 0.00 mm** (fully passive, right at the glass ceiling); at
+    **5.4 MW/m²** it reached >2300 °C with **15.75 % mass loss / 3 mm recession
+    (~5 µm/s)** (active).  So the PA crossing lies between 1.7 and 5.4 MW/m² for
+    a flat face — consistent with Marschall's ~2 MW/m² — and the active-side
+    recession is now *quantified* (~5 µm/s at 5.4 MW/m² / 2300 °C), not just
+    named.
 - **The mid-ladder fills in**: sharp (0.5 mm!) ZrB₂-SiC survives ~1810 °C for
   ~224 s undamaged — between the 1700 °C/300 s and 2450 °C/575 s anchors, and at
   a tip radius 200× sharper than the Scatteia nose.
@@ -274,7 +293,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | silica melt / film loss | ~2100 K | Di Maso thesis concl. 5 (citing its [45]); mechanism distinct from the 1650 °C protectiveness ceiling | ✔ cited |
 | UHTC dwell floor | ≥300 s @ 1973 K; ~575 s @ 2450 °C | Monteverde 2013 (Corros. Sci. 75); Monteverde & Savino 2012 | ✔ cited |
 | UHTC demonstrated peaks | ~2450 °C sharp ZrB₂-SiC / ~2600 °C carbide-boride | Monteverde 2012 (CFD-source flagged); Xu 2026 | ✔ cited |
-| **PA (passive→active) transition** — the "too hot" edge (plain ZrB₂-SiC) | ~2215 K / 2.02 MW/m² cold-wall / 10 kPa (flux/pressure surface, not fixed T) | Marschall et al. 2012 (*J. Thermophys. Heat Transfer* 26(4), DOI 10.2514/1.T3798); flight-corroborated SHARP-B1 (Kolodziej et al.) | ✔ cited |
+| **PA (passive→active) transition** — the "too hot" edge (plain ZrB₂-SiC) | ~2 MW/m² / ~2050–2215 K / 10 kPa; flux-bracketed 1.7 (passive) ↔ 5.4 MW/m² (active); active-side recession ~5 µm/s @ 5.4 MW/m² (flux/pressure surface, not fixed T) | Marschall 2012 (*JTHT* 26(4), DOI 10.2514/1.T3798); Monteverde 2017 (*JECS* 37, 2325); Zhang 2008 (*CST* 68, 1718); flight-corroborated SHARP-B1 (Kolodziej et al.) | ✔ cited (3 labs + flight) |
 | HfB₂-TaSi₂ / complex-boride oxide-detachment cap | ~2700–2800 K tip | Di Maso thesis (HfB₂-TaSi₂ cone, CFD tip); De Prisco 2026 (ZrB₂-TiB₂-SiC hemi, *JECS* 46 118184) | ✔ cited |
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); corroborated by the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
