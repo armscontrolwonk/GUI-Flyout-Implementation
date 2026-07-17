@@ -96,14 +96,17 @@ transition** (loss of protective silica → active SiC oxidation → temperature
 jump), now **triple-sourced and flux-bracketed**: Marschall 2012 (VKI, +400 K
 jump at ~2 MW/m² / 10 kPa), Monteverde 2017 (SPES, onset ~2050 K), and Zhang
 2008 (HIT, passive at 1.7 MW/m² / 0 % mass ↔ active at 5.4 MW/m² / 15.75 %
-loss, 3 mm), plus SHARP-B1 flight corroboration.  **HfB₂-SiC** now has a ground-test
-anchor on the *protected* side (Gasch & Johnson 2010, AHF arcjet, survived
-~1690 °C / 2.5 MW/m² / 0.10 atm / 600 s).  The remaining gaps are a *total
-burn-through / complete consumption* of a plain tip (the PA transition is
-runaway *onset*, not full loss), and the **HfB₂-SiC PA-transition cap** itself
-— where HfB₂-SiC goes active (Gasch's samples stayed below it at ~1690 °C;
-Peters notes Hf shifts the transition higher than Zr, so it can't be borrowed
-from the ZrB₂ number).
+loss, 3 mm), plus SHARP-B1 flight corroboration.  **HfB₂-SiC** now has two ground-test
+anchors: moderate-T (Gasch & Johnson 2010, ~1690 °C / 2.5 MW/m² / 600 s) and —
+the strong one — Sevastyanov 2014, **HfB₂-45SiC survived 2500–2700 °C for
+15–18 min** (>30 min total) with only **1.5 % mass loss and no cracking**.  That
+confirms Peters' point empirically: Hf pushes the transition **~700 °C above**
+plain ZrB₂-SiC's ~1942 °C — so HfB₂-SiC's floor extends to ~2700 °C (with the
+caveats that this is a *high-SiC*, ~20 %-porous variant at 10–30 kPa).  The
+remaining gaps are a *total burn-through* of a plain tip (the PA transition is
+runaway *onset*, not full loss) and the **HfB₂ PA cap itself** — Sevastyanov's
+sample never went into runaway, so HfB₂-45SiC's active-oxidation boundary is
+only bounded *below* (> 2700 °C), not pinned.
 
 Record schema (one per datum): `id · material_class · kind · tip_radius ·
 flux (+kind, enthalpy, stag pressure) · peak_T (+source) · dwell above 1650 °C ·
@@ -131,6 +134,7 @@ recession · mass change · outcome (+mode) · source`.
 | Monteverde-2017-SiCZrB2-jump | zrb2_sic | plasmatron (SPES, supersonic) | disc 12.7 mm | 3.5 MW/m² cold-wall | 9–11 kPa static; pO+O₂ 1.7–2.1 kPa; ≤21 MJ/kg | instabilities onset T_F ~2020–2050 K → jumps/waves-of-radiance | held | endured "rather well"; SiC-depletion correlates with jumps | survived-with-instabilities (2nd-lab PA corroboration) | Monteverde, Cecere, Savino, *J. Eur. Ceram. Soc.* 37 (2017) 2325–2341, DOI 10.1016/j.jeurceramsoc.2017.01.018 |
 | Gasch-2010-HfB2SiC | hfb2_sic | arcjet (NASA Ames AHF) | flat face | ~250–280 W/cm² (2.5–2.8 MW/m²) cold-wall | 0.10 atm | ~1690 °C (baseline; pyro) | 600 s | thin oxide + SiC-depleted subsurface zone; smooth surface | **survived (passive/protected)** — first HfB₂-SiC ground-test anchor | Gasch & Johnson, *J. Eur. Ceram. Soc.* 30 (2010) 2337–2344 |
 | Gasch-2010-HfB2SiC-TaSi2 | hfb2_sic_tasi2 | arcjet (NASA Ames AHF) | flat face | 250 W/cm² (2.5 MW/m²) | 0.10 atm | 1515–1590 °C | 600 s | oxide 3–7 µm, SiC-depl 6–34 µm; TaSi₂ *reduced* oxide/depletion at this T | survived (TaSi₂ helps at ~1500–1690 °C — additive-inversion *low* side, vs Levine's 1927 °C melt) | ibid. |
+| **Sevastyanov-2014-HfB2-45SiC** | hfb2_45sic (high-SiC, ~20 % porosity) | induction plasmatron (VGU-4, subsonic dissociated air) | flat-end cyl, 15 mm | 45–64 kW anodic | 100–300 hPa (10–30 kPa) | **2500–2700 °C** (pyro; parts 1700–1800 °C) | **>15–18 min at 2500–2700 °C; ~20 min >2000 °C; >30 min total** | **−1.5 % mass; no cracking/exfoliation** (X-ray µCT: no bulk defects); oxide HfO₂ 300–400 µm + borosilicate 200–300 µm + SiC-depleted HfB₂ | **survived — the high-T, long-dwell HfB₂ anchor** | Sevastyanov, Simonenko, Gordeev et al., *Russ. J. Inorg. Chem.* 59(11) 1298–1311, 2014, DOI 10.1134/S0036023614110217 |
 
 Review-level context (not point data):
 - **Peters et al., *Nat. Commun.* 15, 3328 (2024), DOI 10.1038/s41467-024-46753-3** —
