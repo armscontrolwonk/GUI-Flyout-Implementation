@@ -3081,10 +3081,12 @@ report states **coverage against a demonstrated envelope** (design:
   *extrapolation*, not *failure*: the data does not license either verdict.
 
 The envelope is **derived from a per-datum anchor table**, not hardcoded:
-survivals bound it from below, failures cap it from above (the first caps
-are 1-atm furnace failures — Levine et al. 2003, NTRS 20040033992 — which
-constrain the passive-oxidation regime only).  A new flight or test
-strengthens the dataset as a data edit.  Two scoping rules carry
+survivals bound it from below, failures cap it from above.  The first caps
+are the Levine et al. 2003 1-atm furnace failures (NTRS 20040033992,
+passive-oxidation regime only) and the Di Maso 2009 sharp-cone oxide
+detachment at ~2800 K CFD tip (PhD thesis, Univ. Naples Federico II — the
+first *aero-convective* cap; both cap doped classes, never plain
+diborides).  A new flight or test strengthens the dataset as a data edit.  Two scoping rules carry
 citations: dopant effects invert with temperature (TaSi₂ best-in-class at
 1627 °C, destroyed at 1927 °C), so envelopes are built per material
 *class* and doped variants are never averaged into the parent; and every
