@@ -25,3 +25,12 @@
   Bounding direction (predicted ≥ measured) holds strongly.  The 7× (vs FIAT's
   ~1.5×) reflects the screening chain's crudeness (full-Q × single H_eff), which
   is conservative-safe for a screen.
+
+## CORRECTION (post-baseline, firsthand source obtained)
+The "measured stagnation recession = 4.06 mm" above was a search-derived
+SECONDHAND number.  The firsthand Kontinos & Stackpoole AIAA 2008-1197 Table 1
+(reproducing Stackpoole AIAA 2008-1202) shows there is NO measured stagnation
+value (the SRC impacted off-center); the measured near-stagnation maximum is
+Core 1 = 5.7±0.3 mm.  The bound test and all current docs use the firsthand
+value (baseline ratio becomes 29.2/5.7 ≈ 5.1×; bounding direction unchanged).
+See stardust_recession.csv.

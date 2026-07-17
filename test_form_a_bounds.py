@@ -6,7 +6,8 @@ anchors" before touching them, and read the two-sentence warning below.
 WHY THE DIRECTION IS "predicted >= measured", NOT "predicted == measured":
 Recovered-capsule post-flight analysis found equilibrium-style ablation chemistry
 OVER-predicts recession (Hayabusa calc/measured ~= 3x, Suzuki JSR 10.2514/1.A32549;
-Stardust equilibrium models > 50% over the forebody cores, Stackpoole AIAA 2008-1202).
+Stardust 51-61% over at the near-stagnation core and 22-25% at mid-flank — firsthand
+Kontinos & Stackpoole AIAA 2008-1197 Table 1, from Stackpoole et al. AIAA 2008-1202).
 That chemistry conservatism is larger than the radiative-gas heating the
 convective-only model omits above ~9 km/s, so the two biases net to OVER-prediction.
 The capsules therefore validate the model only as a lower-bounding sanity check:
@@ -64,11 +65,20 @@ def _run_recession(material, q_peak_MW, tau_s, V_entry_km_s, nose_radius_m):
 # --- Anchored / documented environment values (see benchmarks/form_a CSVs) ----
 # Stardust: q_peak 9.4 MW/m^2, integrated load Q = 276 MJ/m^2 (heating._BENCHMARKS,
 #   'solid').  Half-sine of that peak reproduces Q at tau = Q*pi/(2*q_peak).
+#   Conservative for a lower-bound test: Kontinos & Stackpoole AIAA 2008-1197 give
+#   an expected upper-bound environment of ~12 MW/m^2 / ~360 MJ/m^2, so if anything
+#   the true load was higher and predicted recession would only grow.
 _STARDUST_Q_MJ = 276.0
 _STARDUST_QPK_MW = 9.4
 _STARDUST_TAU = _STARDUST_Q_MJ / (_STARDUST_QPK_MW) * np.pi / 2.0   # ~46 s
-_STARDUST_RN = 0.2286        # 60 deg sphere-cone, 0.812 m base dia
-_STARDUST_MEAS_MM = 4.06     # near-stagnation measured recession (NTRS-verified)
+_STARDUST_RN = 0.2286        # 60 deg sphere-cone, 0.827 m max dia (AIAA 2008-1197)
+# Near-stagnation measured recession: Core 1 = 5.7±0.3 mm, the measured maximum
+# (no core exists at the geometric stagnation point — the SRC impacted off-center).
+# FIRSTHAND: Kontinos & Stackpoole AIAA 2008-1197 Table 1 (from Stackpoole et al.
+# AIAA 2008-1202).  Comparing our stagnation-point prediction against the
+# near-stagnation measured max is fair for a bound: stagnation recession >= Core 1
+# recession (the paper's own calc: 9.6 mm stagnation vs 8.6 mm Core 1).
+_STARDUST_MEAS_MM = 5.7
 
 # Hayabusa: design environment ~15 MW/m^2 peak for ~30 s (Suzuki JSR 10.2514/1.A32549,
 #   plan-restated / secondhand); half-sine Q ~= 286 MJ/m^2.
@@ -79,7 +89,7 @@ _HAYABUSA_MEAS_MM = 0.3      # max measured recession (secondhand)
 
 
 def test_stardust_bound():
-    """PICA screening recession must bound Stardust's measured 4.06 mm from above."""
+    """PICA screening recession must bound Stardust's measured 5.7 mm (Core 1) from above."""
     fom, rec = _run_recession("pica", _STARDUST_QPK_MW, _STARDUST_TAU, 12.9, _STARDUST_RN)
     pred_mm = rec["recession_m"] * 1e3
     ratio = pred_mm / _STARDUST_MEAS_MM
