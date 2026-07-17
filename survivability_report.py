@@ -41,6 +41,163 @@ SEVERE_BLUNTING    = 0.50
 # tolerance number; 0.05 is a screening flag, not a cited threshold.
 GLIDER_ABL_TIP_FLAG = 0.05
 
+# ---------------------------------------------------------------------------
+# UHTC anchor dataset (SURVIVABILITY_REPORT_DESIGN.md §11.2) — one record per
+# flight / arc-jet / plasma-torch / furnace datum.  "A new flight strengthens
+# the dataset" is a DATA EDIT here, not a code change.  Sources are exact
+# (never paraphrased); BENCHMARKING.md §UHTC is the citation of record with the
+# full per-datum discussion.  Fields None where the source does not give them.
+# ---------------------------------------------------------------------------
+UHTC_ANCHORS = [
+    dict(id="Monteverde-2013-ZS", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=None,
+         peak_T_K=1973, T_source="measured", dwell_s=300, recession_um=0,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="Monteverde & Savino 2013, Corros. Sci. 75 (300 s at 1973 K, zero recession)"),
+    dict(id="Monteverde-2012-ZS-sharp", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=0.002, flux_MW_m2=7.0, flux_kind="cold_wall", stag_pressure_Pa=None,
+         peak_T_K=2723, T_source="cfd", dwell_s=575, recession_um=None,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="Monteverde & Savino 2012 (sharp ZrB2-SiC tip, passive to ~2450 °C CFD at ~7 MW/m², ~575 s, measurable blunting)"),
+    dict(id="Scatteia-2010-blunt", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=26.0, flux_kind="cold_wall", stag_pressure_Pa=None,
+         peak_T_K=None, T_source=None, dwell_s=None, recession_um=None,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="Scatteia et al. 2010, DOI 10.2514/1.42834 (blunt; passive-band recession ~3.6 µm/s at 26 MW/m²)"),
+    dict(id="Zhang-2008-passive", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=1.7, flux_kind="cold_wall", stag_pressure_Pa=None,
+         peak_T_K=None, T_source=None, dwell_s=None, recession_um=None,
+         mass_change_pct=0.0, outcome="survived", failure_mode=None,
+         source="Zhang et al. 2008, Compos. Sci. Technol. 68:1718 (passive at 1.7 MW/m², ~0% mass loss)"),
+    dict(id="Zhang-2008-active", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=5.4, flux_kind="cold_wall", stag_pressure_Pa=None,
+         peak_T_K=None, T_source=None, dwell_s=None, recession_um=3000,
+         mass_change_pct=-15.75, outcome="failed", failure_mode="active oxidation (~5 µm/s recession)",
+         source="Zhang et al. 2008, Compos. Sci. Technol. 68:1718 (active at 5.4 MW/m²; 15.75% mass loss, ~3 mm)"),
+    dict(id="Marschall-2012-PA", material_class="zrb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=2.02, flux_kind="cold_wall", stag_pressure_Pa=10000,
+         peak_T_K=2215, T_source="measured", dwell_s=None, recession_um=None,
+         mass_change_pct=None, outcome="degraded", failure_mode="passive→active transition (+400 K temperature jump)",
+         source="Marschall et al. 2012, JTHT 26(4), DOI 10.2514/1.T3798 (flat face, ~2 MW/m² / 10 kPa)"),
+    dict(id="SHARP-B1", material_class="zrb2_sic", kind="flight",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=None,
+         peak_T_K=None, T_source=None, dwell_s=None, recession_um=None,
+         mass_change_pct=None, outcome="degraded", failure_mode="flight corroboration of the PA/runaway threshold",
+         source="SHARP-B1 (Kolodziej et al.)"),
+    dict(id="Gasch-Johnson-2010-HS", material_class="hfb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=2.5, flux_kind="cold_wall", stag_pressure_Pa=None,
+         peak_T_K=1963, T_source="measured", dwell_s=600, recession_um=None,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="Gasch & Johnson 2010 (HfB2-SiC, ~1690 °C at ~2.5 MW/m², 600 s)"),
+    dict(id="Sevastyanov-2014-HfB2-45SiC", material_class="hfb2_sic", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=None,
+         peak_T_K=2973, T_source="measured", dwell_s=1080, recession_um=None,
+         mass_change_pct=-1.5, outcome="survived", failure_mode=None,
+         source="Sevastyanov et al. 2014, DOI 10.1134/S0036023614110217 (2500–2700 °C, 15–18 min, 1.5% mass loss, no cracking; high-SiC ~20%-porous variant, 10–30 kPa)"),
+    dict(id="Savino-2008-1atm", material_class="hfb2_hfc_mosi2", kind="arcjet",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=118000,
+         peak_T_K=2273, T_source="measured", dwell_s=40, recession_um=None,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="Savino et al. 2008, DOI 10.1016/j.jeurceramsoc.2007.11.021 (~1 atm, >2000 °C, ~30–40 s)"),
+    dict(id="DePrisco-2026-lowp", material_class="complex_boride", kind="plasma_torch",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=300,
+         peak_T_K=1800, T_source="measured", dwell_s=None, recession_um=None,
+         mass_change_pct=None, outcome="survived", failure_mode=None,
+         source="De Prisco et al. 2026, JECS 46:118184 (ZrB2-TiB2-SiC hemisphere, 3×10⁻³ atm)"),
+    dict(id="DePrisco-2026-highp", material_class="complex_boride", kind="plasma_torch",
+         tip_radius_m=None, flux_MW_m2=None, flux_kind=None, stag_pressure_Pa=2300,
+         peak_T_K=2700, T_source="measured", dwell_s=None, recession_um=None,
+         mass_change_pct=None, outcome="failed", failure_mode="oxide-scale detachment",
+         source="De Prisco et al. 2026, JECS 46:118184 (same specimens at 2.3×10⁻² atm — pressure-sensitivity evidence)"),
+]
+
+# Envelope constants consumed by the coverage verdict (§11.3/§11.4).  Values
+# read from the anchors above; the sharp/blunt PA split follows §11.4: the PA
+# edge is a flux/pressure surface, screened here by the two bounding anchors.
+_UHTC_SHARP_RN_M = 0.05           # below this, use the sharp-conducting-tip anchor
+_UHTC_PA_SHARP_K = 2723.0         # Monteverde-2012-ZS-sharp (passive to 2450 °C @ 7 MW/m²)
+_UHTC_PA_BLUNT_K = 2215.0         # Marschall-2012-PA (flat face, ~2 MW/m² / 10 kPa)
+
+
+def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
+    """Envelope-coverage classification for a UHTC hot-structure nose (§11.3).
+
+    Returns dict(bands=[(t0,t1,'green'|'amber'|'red'),...] (absolute times),
+    dwell_s, covered_s, coverage (fraction of above-ceiling dwell inside the
+    demonstrated envelope; 1.0 when nothing exceeds the ceiling), exits
+    (subset of {'too hot','too long'}), pa_K, pa_anchor, floor_s, lines
+    (report text block)).
+    """
+    t = np.asarray(t, float); q = np.asarray(q, float)
+    eps = max(float(eps or 0.85), 1e-3)
+    T_eq = (q / (heating.SIGMA * eps)) ** 0.25
+    ceiling = float(mat["continuous_K"])                    # 1923 K (1650 °C)
+    floor_s = float(mat.get("oxidation_dwell_s") or 300.0)  # demonstrated floor
+    sharp = float(nose_radius_m or 0.0) < _UHTC_SHARP_RN_M
+    pa_K = _UHTC_PA_SHARP_K if sharp else _UHTC_PA_BLUNT_K
+    pa_anchor = ("Monteverde-2012-ZS-sharp (sharp conducting tip: passive to "
+                 "~2450 °C at ~7 MW/m²)" if sharp else
+                 "Marschall-2012-PA (flat face: PA jump at ~2215 K / "
+                 "~2 MW/m² / 10 kPa)")
+    dt = np.diff(t, prepend=t[0])
+    above = T_eq > ceiling
+    cum = np.cumsum(np.where(above, dt, 0.0))
+    # per-sample class
+    cls = np.full(t.shape, 0, int)                          # 0 green
+    cls[above] = 1                                          # amber candidate
+    cls[(above) & (cum > floor_s)] = 2                      # red: too long
+    cls[T_eq > pa_K] = 3                                    # red: too hot (wins)
+    dwell = float(cum[-1]) if cum.size else 0.0
+    covered = float(np.sum(dt[cls == 1])) if t.size else 0.0
+    coverage = 1.0 if dwell <= 0 else covered / dwell
+    exits = set()
+    if np.any(cls == 3):
+        exits.add("too hot")
+    if np.any(cls == 2):
+        exits.add("too long")
+    # contiguous bands for the plot
+    bands = []
+    if t.size:
+        colour = {0: 'green', 1: 'amber', 2: 'red', 3: 'red'}
+        i0 = 0
+        for i in range(1, len(cls) + 1):
+            if i == len(cls) or colour[cls[i]] != colour[cls[i0]]:
+                bands.append((float(t[i0]), float(t[min(i, len(cls) - 1)]),
+                              colour[cls[i0]]))
+                i0 = i
+    # report text
+    lines = []
+    if dwell <= 0:
+        lines.append(f"  Envelope coverage: GREEN — nose never exceeds the "
+                     f"{ceiling - 273.15:.0f} °C glass ceiling; "
+                     f"silica-protected, no dwell clock runs.")
+    else:
+        lines.append(f"  Nose above {ceiling - 273.15:.0f} °C for "
+                     f"{dwell:,.0f} s: {covered:,.0f} s within the "
+                     f"demonstrated ZrB₂-SiC envelope "
+                     f"(floor {floor_s:.0f} s — Monteverde-2013-ZS, "
+                     f"1973 K · 300 s; sharp-tip extension 575 s).")
+        if "too long" in exits:
+            lines.append(f"  RED (too long): dwell outruns the demonstrated "
+                         f"floor — beyond validated dwell, extrapolation "
+                         f"(not asserted failure).  Fix: shorten exposure.")
+        if "too hot" in exits:
+            lines.append(f"  RED (too hot): surface crosses the "
+                         f"passive→active oxidation boundary — protective "
+                         f"silica lost, heating runs away.  "
+                         f"Anchor: {pa_anchor}.  Fix: loft / blunt tip / "
+                         f"lower flux.")
+        if not exits:
+            lines.append("  AMBER: inside the demonstrated envelope, "
+                         "consuming recession margin.")
+        lines.append("  * Demonstrated at ground-facility pressure "
+                     "(anchors span 3×10⁻³–1 atm, but long-dwell points are "
+                     "low-pressure; the SiC active/passive transition is "
+                     "pressure-sensitive — §11.6).")
+    return dict(bands=bands, dwell_s=dwell, covered_s=covered,
+                coverage=coverage, exits=exits, pa_K=pa_K,
+                pa_anchor=pa_anchor, floor_s=floor_s, lines=lines)
+
 
 def classify(result) -> str:
     """'A' (ballistic RV) | 'B' (glider) | 'C' (MaRV: glide + terminal dive)."""
@@ -147,10 +304,24 @@ def build_report(result) -> dict:
     nose = locs.get('nose') or fom
     body_loc = locs.get('body')
 
+    # UHTC hot-structure nose → the envelope-coverage verdict (§11.3) replaces
+    # the boolean dwell fail for the nose; its dwell-floor "compromise" is an
+    # extrapolation flag, not a failure, so it must not drive t_fail.
+    _nose_mat = heating.TPS_MATERIALS.get(str(prof.get('nose_material') or ""))
+    uhtc_nose = bool(form in ('B', 'C') and _nose_mat
+                     and not _nose_mat.get('is_ablator')
+                     and _nose_mat.get('oxidation_dwell_s'))
+    coverage = None
+    if uhtc_nose:
+        coverage = _uhtc_coverage(t, q, prof.get('emissivity', 0.85),
+                                  prof.get('nose_radius_m', 0.0), _nose_mat)
+
     # t_fail: earliest compromise across locations (absolute mission time —
     # heating.py evaluated the arc on t_arr, so compromise t_s is absolute).
     t_fail = None
-    for L in locs.values():
+    for name_, L in locs.items():
+        if uhtc_nose and name_ == 'nose':
+            continue                      # coverage verdict owns the nose
         c = (L or {}).get('compromise')
         if c and (t_fail is None or c['t_s'] < t_fail):
             t_fail = float(c['t_s'])
@@ -233,6 +404,20 @@ def build_report(result) -> dict:
             j.append(f"  Thermal range ≈ {r_fail:,.0f} km of the "
                      f"{r_end:,.0f}-km aero range → the vehicle is "
                      f"thermal-range capped (min(aero, thermal)).")
+        elif coverage is not None:
+            # UHTC hot-structure nose: envelope-coverage verdict (§11.3) —
+            # green/amber inside the demonstrated record, red = extrapolation
+            # (named exit), never an asserted failure.
+            j += coverage['lines']
+            if coverage['exits']:
+                status = 'analysis'
+            elif coverage['dwell_s'] > 0:
+                j.append(f"  Coverage: {coverage['coverage']:.0%} of "
+                         f"above-ceiling dwell inside the demonstrated "
+                         f"envelope.")
+            if body_loc is not None and body_loc.get('material') \
+                    and not body_loc.get('compromise'):
+                j.append(f"  Body holds the full {dur:,.0f}-s glide.")
         else:
             # survives — but distinguish honest survive from beyond-screening
             _worst_T = float(nose.get('T_eq_peak_K', 0) or 0)
@@ -295,6 +480,9 @@ def build_report(result) -> dict:
         'fail':     "LIKELY FAILS",
         'analysis': "NEEDS ANALYSIS (beyond screening)",
     }[status]
+    if coverage is not None and coverage['exits'] and status == 'analysis':
+        headline = ("BEYOND DEMONSTRATED ENVELOPE — EXTRAPOLATION ("
+                    + " + ".join(sorted(coverage['exits'])) + ")")
     _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
     headline += f"   —   Form {form} ({_form_name})"
 
@@ -306,6 +494,8 @@ def build_report(result) -> dict:
         t_fail=(t_fail - t0) if t_fail is not None else None,
         glide_s=dur if form in ('B', 'C') else None,
         tiers=(tps_ladder.NAS_LINEAGE if form in ('B', 'C') else None),
+        bands=([(b0 - t0, b1 - t0, c) for b0, b1, c in coverage['bands']]
+               if coverage is not None else None),
     )
     return dict(status=status, headline=headline, body=body,
                 form=form, plot=plot)

@@ -3122,10 +3122,18 @@ failures were mechanical/attachment, not oxidation).  METHODS names the
 threshold-setting sources inline; `BENCHMARKING.md` is the citation of record for
 the full set.
 
-*Status:* the envelope-coverage model is adopted and documented; the
-report currently implements the earlier peak/soak/heat-sink screening
-(Sections 13.1–13.3) with the envelope shading as the next implementation
-step (`SURVIVABILITY_REPORT_DESIGN.md` §11.7).
+*Status:* **implemented** (SRD §11.7 steps 1–4).  The `uhtc` catalog entry
+carries the cited thresholds (`continuous_K` = 1923 K glass ceiling;
+`oxidation_dwell_s` = 300 s demonstrated floor, labeled floor-not-cliff);
+the anchor dataset lives as `survivability_report.UHTC_ANCHORS` (§11.2
+schema, one record per cited datum — a new flight is a data edit); Form B/C
+verdicts for UHTC hot-structure noses use the green/amber/red coverage
+shading with the two named exits (too hot = PA transition at the
+sharp/blunt-appropriate anchor; too long = past the demonstrated floor),
+report **extrapolation rather than asserted failure**, cite the bounding
+anchors inline, and carry the §11.6 ground-facility-pressure asterisk; the
+Reentry Survivability tab shades the flux/load plot with the coverage
+bands.
 
 ### 13.6 Ballistic-RV ablator recession: bounding vs. tuning anchors
 
