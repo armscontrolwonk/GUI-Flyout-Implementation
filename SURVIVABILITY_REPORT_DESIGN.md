@@ -272,15 +272,28 @@ The two outcomes bound the envelope from opposite sides:
     **oxide adherence, not melt or burn-through**.  Both cap doped/complex
     classes; the additive-inversion rule forbids averaging them into
     plain-diboride envelopes.
+  * **Marschall 2012 — the plain-ZrB₂-SiC passive→active (PA) transition**
+    (*J. Thermophys. Heat Transfer* 26(4), VKI Plasmatron): the keystone cap.
+    A *plain* (undoped) ZrB₂-SiC surface holds a stable protective silica scale
+    up to a threshold, then loses it — SiC oxidises actively, the chemical heat
+    flux surges, and the surface **jumps +400 K in 20–30 s** (a self-amplifying
+    runaway).  At 10 kPa the boundary is sharp: q_cw ≈ 202 W/cm² (2.02 MW/m²,
+    ~2215 K steady) triggered it; 185 W/cm² did not.  This is the first
+    **plain-diboride** aero-convective cap — the gap the additive-inversion rule
+    said we could not fill from doped data — and it is **flight-corroborated**
+    (SHARP-B1: 2360→2810 K jump in ~15 s, Kolodziej et al.).  It is also the
+    *mechanism* under the whole model: the loss of the borosilicate glass that
+    `continuous_K` is about.
   * SHARP-B2 segment failures remain excluded: **material-quality**, not a
     temperature/dwell limit.
-  A clean aero-convective *burn-through* of a **plain** ZrB₂-SiC or HfB₂-SiC tip
-  at a known (T, dwell, flux) is still the highest-value missing point.
+  The remaining, narrower gap is a *total burn-through* of a plain tip (the PA
+  transition is runaway *onset*) and an aero-convective cap specifically for
+  HfB₂-SiC.
 
-  The De Prisco pair also **isolates the pressure axis** (§11.6): the *same*
-  specimens survived 1700–1800 K at 3×10⁻³ atm (Mach 6) but detached at 2700 K
-  under 10× the pressure (2.3×10⁻² atm, Mach 3) — direct evidence that the
-  facility-pressure footnote is real, not hypothetical.
+  Two anchors **isolate the pressure axis** (§11.6), so it is not hypothetical:
+  the De Prisco pair (same specimens survived 1700–1800 K at 3×10⁻³ atm but
+  detached at 2700 K under 10× the pressure), and Marschall's PA threshold is
+  quoted *at a stated 10 kPa* because the transition is pO₂-dependent.
 
 The report must therefore never say "survives" beyond the floor.  It says
 "within the demonstrated envelope" up to the floor, and "beyond validated
@@ -323,10 +336,16 @@ from Sutton-Graves q̇).  Against the class envelope it shades the trajectory:
   margin.
 * **Red — extrapolation.**  Left the envelope by **one of two named exits**,
   reported distinctly because they have different fixes:
-  * **too hot** — peak `T_eq` exceeds the hottest demonstrated point for the
-    class (≈2450 °C sharp ZrB₂-SiC; ≈2600 °C carbide-boride) → loft / blunt tip.
-  * **too long** — dwell above the ceiling outruns the demonstrated floor at
-    that temperature → shorten exposure.
+  * **too hot** — the surface crosses the **passive→active (PA) oxidation
+    boundary** for the class: the protective silica is lost and heating runs
+    away (Marschall's +400 K jump).  This edge is a **flux/pressure surface,
+    not a single temperature** — Marschall's plain ZrB₂-SiC went active at
+    ~2215 K / 2 MW/m² / 10 kPa (flat face), while a sharp conducting tip stayed
+    passive to 2450 °C at 7 MW/m² (Monteverde).  So "too hot" is evaluated
+    against the PA threshold at *this run's* flux and pressure, not a fixed
+    peak.  Fix: loft / blunt tip / lower flux.
+  * **too long** — dwell above the glass ceiling outruns the demonstrated floor
+    at that temperature → shorten exposure.
 
 The verdict is a **coverage fraction plus the beyond-envelope segment**, not a
 boolean.  Example: *"Nose above 1650 °C for 420 s: first ~300 s within the
@@ -334,14 +353,26 @@ demonstrated ZrB₂-SiC envelope (Monteverde 2013, 1973 K · 300 s), remaining
 ~120 s at 1900–2050 °C is beyond validated dwell — extrapolation."*  On the
 flux/load plot this is a green/amber/red band along the arc.
 
-### 11.4 The dwell floor, defined precisely
+### 11.4 The two thresholds and the dwell floor, defined precisely
 
-The `uhtc` §10 numbers become:
+Plain ZrB₂-SiC has **two distinct thermal thresholds**, not one; the model must
+carry both:
 
-* **`continuous_K` = 1650 °C (1923 K)** — the borosilicate-glass protective
-  ceiling, now confirmed by ≥5 independent sources (Monteverde 2012, Peters
-  2024, Fahrenholtz & Hilmas, Marschall, Li).  Below it, no clock.  (Was 1900 °C
-  / a single rough value.)
+1. **`continuous_K` = 1650 °C (1923 K)** — the borosilicate-glass
+   *protectiveness* ceiling, confirmed by ≥5 independent sources (Monteverde
+   2012, Peters 2024, Fahrenholtz & Hilmas, Marschall, Li).  Below it, no clock;
+   the glass is stable and long-duration-protective.  (Was 1900 °C / a single
+   rough value.)
+2. **The passive→active (PA) transition** — the *upper* edge, where the glass is
+   lost and oxidation runs away (Marschall's +400 K jump).  Not a fixed
+   temperature: a **flux/pressure surface**, anchored at ~2215 K / 2.02 MW/m²
+   cold-wall / 10 kPa for a flat plain-ZrB₂-SiC face, and pushed higher on a
+   sharp conducting tip (passive to 2450 °C at 7 MW/m², Monteverde).  This is
+   the "too hot" red exit (§11.3).
+
+Between the two — the **amber band** — the material survives with recession,
+bounded in time by:
+
 * **`oxidation_dwell_s` = the demonstrated floor**, conservatively the low
   anchor (~300 s at 1973 K, zero recession — Monteverde 2013; sharp-tip
   survival extends to ~575 s at 2450 °C — Monteverde 2012).  Re-annotated as a
