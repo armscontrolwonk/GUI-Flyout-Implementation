@@ -3144,25 +3144,34 @@ and provenance: `BENCHMARKING.md` ("Form A recession anchors");
 
 The anchors split by role, and the split is load-bearing:
 
-- **Reentry-F** (6.1 km/s graphite nosetip; NASA CR-154044 / Berry) is the
-  **in-envelope tuning anchor**, wired as the δ/R_n shape-change ladder (≈0.7 R_n
-  radial blunting survived, 7.7 R_n axial solid-tip length).  Its nosetip
-  recession history is uncertain after ~60,000 ft, so it is carried as a *spread*,
+- **Reentry-F** (Mach ~20, ATJ graphite nosetip; NASA CR-154044 / TM X-1856 /
+  LWP-460, via Berry's nose-tip white paper in the project Drive) is the
+  **in-envelope tuning anchor**, wired as the δ/R_n shape-change ladder.  Its
+  nosetip recession history after ~60,000 ft is carried as a *spread*, now
+  quantified from TM X-1856 Fig. 11: final radius 0.17–0.30 in best-supported
+  (thermochemical and erosion-corrected curves plus pressure-derived estimates),
+  the 0.5 in worst case refuted by the report itself.  A flight-derived H_eff
+  *bracket* of 36–130 MJ/kg (heating window 102–318 MW/m² × 12–14 s against
+  19.6 mm axial recession; every input cited, arithmetic ours) contains the
+  model's carbon-carbon nominal 40 at its conservative low edge — a bracket,
   never a single-point H_eff calibration.
 - **Stardust** (PICA, recovered, 12.8 km/s) and **Hayabusa** (carbon-phenolic,
-  recovered, ~12.2 km/s) are **bounding anchors, not fits**.  Post-flight
-  analysis found equilibrium ablation chemistry *over*-predicts their recession
-  (Hayabusa calc/measured ≈ 3×, Suzuki *J. Spacecraft & Rockets* DOI
-  10.2514/1.A32549; Stardust 51–61% over at the near-stagnation core — measured
-  5.7±0.3 mm vs 8.6–9.2 mm calculated — and 22–25% at mid-flank: firsthand,
-  Kontinos & Stackpoole AIAA 2008-1197 Table 1, reproducing Stackpoole et al.
-  AIAA 2008-1202).  That chemistry conservatism *exceeds* the radiative-gas
-  heating the convective-only screen omits above ~9 km/s — for Stardust the
-  radiative part was only 9% of peak rate / 4% of load, and including it moved
-  the calculated recession just 9.6 → 10.4 mm — so the net bias is
-  over-prediction.  The capsules therefore validate the chain only as a
-  **lower bound** — the model must predict ≥ measured recession — enforced by
-  `test_form_a_bounds.py` (predicted/measured: Stardust 5.1×, Hayabusa 44×).
+  recovered, >12 km/s) are **bounding anchors, not fits** — both now firsthand.
+  Post-flight analysis found equilibrium-style ablation chemistry *over*-predicts
+  their recession (Hayabusa: measured ~0.3 mm at stagnation by laser scan with
+  <10% error, none downstream, against calculation over-estimating by a factor
+  of three at a reconstructed peak of 5.3 MW/m² convective + ~1 MW/m² radiative
+  — Suzuki et al. *J. Spacecraft & Rockets* 51(1) 2014, DOI 10.2514/1.A32549;
+  Stardust 51–61% over at the near-stagnation core — measured 5.7±0.3 mm vs
+  8.6–9.2 mm calculated — and 22–25% at mid-flank: Kontinos & Stackpoole AIAA
+  2008-1197 Table 1, reproducing Stackpoole et al. AIAA 2008-1202).  That
+  chemistry conservatism *exceeds* the radiative-gas heating the convective-only
+  screen omits above ~9 km/s — for Stardust the radiative part was only 9% of
+  peak rate / 4% of load, and including it moved the calculated recession just
+  9.6 → 10.4 mm — so the net bias is over-prediction.  The capsules therefore
+  validate the chain only as a **lower bound** — the model must predict ≥
+  measured recession — enforced by `test_form_a_bounds.py` (predicted/measured:
+  Stardust 5.1×, Hayabusa 31×).
   **Raising H_eff to shrink that ratio is the failure mode this design forbids.**
 
 Two limitations are logged rather than hidden: **P3-radiative** (convective-only
