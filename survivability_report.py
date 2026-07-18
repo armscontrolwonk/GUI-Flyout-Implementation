@@ -179,12 +179,21 @@ def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
                      f"1973 K · 300 s; sharp-tip extension 575 s).")
         if "too long" in exits:
             lines.append(f"  RED (too long): dwell outruns the demonstrated "
-                         f"floor — beyond validated dwell, extrapolation "
-                         f"(not asserted failure).  Fix: shorten exposure.")
+                         f"floor — the test record simply ENDS here.  The "
+                         f"data is a floor, not a fence (nearly every anchor "
+                         f"is a survival where the test stopped), so survival "
+                         f"past the floor is plausible but undemonstrated — "
+                         f"this is extrapolation, not a failure prediction.  "
+                         f"Fix: shorten exposure.")
         if "too hot" in exits:
             lines.append(f"  RED (too hot): surface crosses the "
-                         f"passive→active oxidation boundary — protective "
-                         f"silica lost, heating runs away.  "
+                         f"passive→active oxidation boundary — unlike "
+                         f"'too long', this red has failure-side physics "
+                         f"behind it: protective silica is lost, heating "
+                         f"jumps (~+400 K, Marschall) and recession runs "
+                         f"~10× faster per unit flux (Zhang 2008, ~5 µm/s "
+                         f"active).  Rapid degradation expected, though not "
+                         f"an asserted kill at screening tier.  "
                          f"Anchor: {pa_anchor}.  Fix: loft / blunt tip / "
                          f"lower flux.")
         if not exits:

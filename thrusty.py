@@ -6051,7 +6051,10 @@ class BoosterFlyoutApp(tk.Tk):
             # UHTC envelope-coverage shading (SRD §11.3): green = protected
             # (below the 1650 °C glass ceiling), amber = inside the
             # demonstrated envelope consuming recession margin, red =
-            # extrapolation (too hot / too long).
+            # beyond the demonstrated record (too hot / too long — see the
+            # report text; NOT a failure prediction by itself).  The bands
+            # classify TIME segments by nose surface temperature — they
+            # correspond to neither y-axis; the caption says so.
             if pl.get('bands'):
                 _band_col = {'green': "#2e8b57", 'amber': "#e0a020",
                              'red': "#c03030"}
@@ -6059,6 +6062,13 @@ class BoosterFlyoutApp(tk.Tk):
                     if _b1 > _b0:
                         ax.axvspan(_b0, _b1, color=_band_col[_c], alpha=0.12,
                                    linewidth=0)
+                ax.set_title(
+                    "shading = time segments of nose surface temp vs the "
+                    "demonstrated UHTC envelope (not the flux/load axes)\n"
+                    "green protected · amber demonstrated · red beyond the "
+                    "test record (see report — not a failure prediction by "
+                    "itself)",
+                    fontsize=6.5, color="#555555", loc="left")
             ax.plot(pl['t'], pl['q_MW'], color="#aa2222", linewidth=1.4,
                     label="q̇ (MW/m²)")
             ax2.plot(pl['t'], pl['Q_MJ'], color="#2255aa", linewidth=1.4,
