@@ -250,8 +250,21 @@ These four were read directly and their key results confirmed:
   Sources: NASA TM X-2584 (flight data); Berry, *Deep Dive of Reentry F Nose
   Tip Step and Gap* (NASA LaRC white paper, the 9k–28k Btu/ft²·s figures);
   Thompson, Zoby, Wurster & Gnoffo, *Aerothermodynamic Study of Slender
-  Conical Vehicles*, J. Thermophysics 3(4), 1989 (VSL/engineering validation
-  vs the Reentry F laminar & turbulent flight heating).
+  Conical Vehicles*, J. Thermophysics 3(4), 1989, DOI 10.2514/3.28761 — now
+  READ FROM PRIMARY (PDF in repo `data/`): VSL3D + engineering-code validation
+  vs the Reentry F laminar/transitional/turbulent flight heating (prime data
+  window 120,000–60,000 ft, M≈20); "good agreement," VSL3D "excellent."
+  DISAMBIGUATION for future readers: Thompson's "graphite nosetip extended for
+  the first 7.69 in." is the NOSETIP SECTION LENGTH (Berry's white paper says
+  8.5 in — different reference points), a different quantity from the
+  δ/R_n ladder's "~7.7 R_n axial recession survived" (= 0.77 in, the
+  CR-154044 predicted recession at 49 kft) — coincidentally similar digits.
+  BONUS (Form C-relevant): at angle of attack on slender cones the
+  engineering heating codes (INCHES/AEROHEAT/MINIVER) disagree with VSL3D by
+  up to ~40% near the local windward heating maximum at α=3° and ~15%
+  overall at α=20° (streamline-spreading metric limitation; improved by
+  pressure-based metrics per its Ref. 36) — the citable uncertainty band for
+  any screening-tier windward/AoA heating probe.
   **Integrated load (Q_MJ) — still open.**  NASA TM X-2253 (Wright & Zoby,
   NTRS 19770076296; read from primary) gives the measured *cone-flank*
   turbulent heating (15–50 Btu/ft²·s ≈ 0.17–0.57 MW/m² — the body, not the
