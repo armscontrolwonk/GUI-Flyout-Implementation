@@ -3142,13 +3142,19 @@ surface-temperature limit: an ablator sits *above* its onset temperature and
 survives by receding at its ablation temperature, so the screen integrates
 `δ = ∫q̇dt / (ρ·H_eff)` over the ablating portion and flags burn-through when δ
 exceeds the available depth (heating.py; grounded in Duffa §4.3/§4.7).  `H_eff`
-here is the **effective heat of ablation Q\***, which is *enthalpy-dependent*,
-not a fixed constant — so the catalog nominals (carbon-phenolic 15, PICA 35,
-carbon-carbon 40 MJ/kg) are deliberately set at the **conservative (low) end** of
-the flight/handbook band (CP ~10–30 MJ/kg; PICA higher; C/C in the sublimation
-regime), which makes the screen **over-predict** recession.  Uncertainty bands
-and provenance: `BENCHMARKING.md` ("Form A recession anchors");
-`benchmarks/form_a/phase2-heff-bands.md`.
+here is the **effective heat of ablation Q\***, which is *enthalpy- and
+regime-dependent*, not a fixed constant — so the catalog nominals
+(carbon-phenolic 15, PICA 35, carbon-carbon 40 MJ/kg) are deliberately set at
+the **conservative (severe-regime) end** of the cited data, which makes the
+screen **over-predict** recession in benign regimes.  Each nominal is now
+cited: CP 15 equals the measured *mechanical-char-removal-regime* value
+(Sutton, NASA TN D-5930, 1970: Q\* collapses to 14–20 MJ/kg once char removal
+begins — onset as low as 2.4 atm stagnation in air — while clean low-pressure
+rows run 68–195 MJ/kg); PICA 35 sits at/below the Winter 2014 arc-jet point
+(38–77 MJ/kg); C/C 40 sits below the Reentry-F flight bracket and Scala/Perini
+diffusion-limit theory, with the Nestler ≥80 atm severe-regime floor as its
+validity limit.  Uncertainty bands and provenance: `BENCHMARKING.md`
+("Form A recession anchors"); `benchmarks/form_a/phase2-heff-bands.md`.
 
 The anchors split by role, and the split is load-bearing:
 

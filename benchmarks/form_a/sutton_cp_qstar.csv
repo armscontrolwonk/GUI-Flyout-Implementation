@@ -1,0 +1,30 @@
+P_s_atm,K_O2,H_s_MJ_kg,q_cw_MW_m2,t_s,dl_cm,char_removal,T_s_K,Qstar_MJ_kg,notes
+0.07,0.23,25.52,7.72,30.0,+0.086,No,3090,,"EXPANSION at lowest pressure — no net recession"
+0.31,0.23,25.05,14.19,30.0,-0.157,No,3370,195,"clean high-enthalpy row"
+0.60,0.23,25.52,18.16,30.0,-0.290,No,3455,135,"highest-flux clean row (duplicate 30-s row -0.284 -> 137)"
+1.08,0.08,11.60,7.72,20.0,-0.079,No,3035,140,"reduced O2 (K=0.08)"
+1.38,0.23,3.48,3.72,20.0,-0.079,No,,68,"low-enthalpy clean row"
+2.40,0.23,5.43,7.95,29.3,-1.138,Yes,,14.7,"mechanical char removal — Q* COLLAPSES"
+2.91,0.23,3.48,5.62,20.0,-0.404,Yes,,20.0,"char removal"
+5.97,0.23,2.55,3.45,20.0,-0.348,Yes,,14.2,"char removal, ~6 atm"
+5.97,0.00,2.55,3.45,20.0,+0.056,—,,,"PURE N2: EXPANSION, no recession — ablation is oxidation-driven at these fluxes"
+# Source: Sutton, K., "An Experimental Study of a Carbon-Phenolic Ablation Material," NASA TN
+#   D-5930, Langley, Sept 1970 (DTIC ADA309608; PDF in repo data/).  Material: Narmco 4028
+#   carbon-phenolic, virgin density 1392 kg/m3.  Facilities: Langley 11-in ceramic-heated +
+#   20-in hypersonic arc tunnels; ranges 0.07-11 atm, 2.55-25.5 MJ/kg, 1.48-18.2 MW/m2
+#   cold-wall.  Rows READ FROM Table I (p. 16 scan; representative subset).
+# DERIVATION (ours, labeled): Q* = q_cw * t / (rho * |dl|), rho = 1392 kg/m3 — the same
+#   cold-wall bundled-reradiation convention as the screening chain's H_eff.  dl is the
+#   stagnation LENGTH change; surface expansion (seen in low-flux/low-O2/pure-N2 rows, and in
+#   Hayabusa post-flight) superposes on recession, so clean-row Q* values are slightly
+#   OVERSTATED.  Errors: table-read ~last digit.
+# TWO-REGIME STRUCTURE (mirrors the C/C ledger):
+#   - Clean rows (no char removal, <~2.4 atm): Q* ~ 68-195 MJ/kg, rising with enthalpy and
+#     with reradiation share (T_s 3000-3455 K).
+#   - MECHANICAL CHAR REMOVAL rows: onset at stagnation pressures AS LOW AS 2.4 atm in air
+#     (K_O2 = 0.23; ~6 atm for air-N2 mixtures) -> Q* collapses to ~14-20 MJ/kg.
+#   - The catalog nominal H_eff(carbon_phenolic) = 15 MJ/kg == the measured char-removal-regime
+#     value: conservative-correct for high-pressure RV entries, hugely conservative (~10x) for
+#     low-pressure capsule pulses — consistent with the Hayabusa 31x bound ratio.
+# No recession in pure nitrogen: oxidation-driven ablation at these fluxes (their Fig. 9 regime
+#   map; char removal occurred whenever oxygen was present at sufficient pressure).
