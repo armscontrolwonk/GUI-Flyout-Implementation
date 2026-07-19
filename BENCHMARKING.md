@@ -97,7 +97,12 @@ probe.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
   datum, DTIC.
 - Any **windward/leeward heating split measured during a pull-up** (flight or
-  wind tunnel) — the datum the later-tier AoA probe needs.
+  wind tunnel) — the datum the later-tier AoA probe needs.  First piece in
+  hand: Thompson 1989 (read from primary, repo `data/`) brackets the
+  engineering-code uncertainty at AoA on slender cones (~40% near the windward
+  local maximum at α=3°, ~15% overall at α=20°, vs VSL3D; Mach-10.6 15° cone
+  wind-tunnel validation at α=20°) — the honesty band for a screening AoA
+  probe, though not yet a flight maneuver datum.
 
 *Drive-folder triage (2026-07-19, folder `1oUqtoFx02…`):*
 - `regan1993.pdf` — the Regan & Anandakrishnan book: **the priority get**,
