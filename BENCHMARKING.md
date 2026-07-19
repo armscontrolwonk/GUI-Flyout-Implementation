@@ -86,12 +86,13 @@ probe.
   Mach/g, airframe skin material and temperature margin (DTIC: Pershing II
   development & flight-test reports; Army historical monographs).
 - **AMaRV** (McDonnell Douglas Advanced Maneuvering Reentry Vehicle, 1979–80
-  flights): the canonical open-literature MaRV — trajectory/maneuver
-  reconstruction commonly reproduced via Regan & Anandakrishnan, *Dynamics of
-  Atmospheric Re-Entry* (AIAA 1993); NRC-2008 already uses it as CSM-1 in the
-  duration ladder.  **In the project Drive as `regan1993.pdf` (21.7 MB) but
-  ABOVE the 10 MB Drive-connector download cap, and direct
-  drive/DTIC fetches are proxy-blocked — needs a chat upload to mine.**
+  flights): the canonical open-literature MaRV; NRC-2008 already uses it as
+  CSM-1 in the duration ladder.  **CORRECTION (claim checked and withdrawn):**
+  an earlier note here asserted the AMaRV trajectory reconstruction appears in
+  Regan & Anandakrishnan 1993 — the book (now read from primary, repo `data/`)
+  contains **no AMaRV content at all** (the 1984 Regan mentions the program
+  name only, via its gyro).  A genuine open AMaRV maneuver/trajectory source
+  is **still wanted** — do not cite the Regan books for it.
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
@@ -125,6 +126,24 @@ probe.
   (46 MB scan) — unidentified beyond the journal; >10 MB cap.
 - Subfolders X-51 / HTV / Defenses / General Hypersonics + the Heating-folder
   Martin-class "atmospheric reentry" book (13 MB, >cap) — unswept.
+
+#### Form C modeling anchors: Regan & Anandakrishnan 1993 (read from primary)
+
+*Dynamics of Atmospheric Re-Entry* (AIAA 1993; repo `data/`), Chapter 9
+"Maneuvering Re-Entry Vehicles: Particle Motion" + Appendix D simulation:
+
+- **Diveline guidance framework** — the MaRV shapes its trajectory by a
+  preset lift schedule (pull-up followed by tuck/pull-down, essentially
+  in-plane; sequential divelines produce large out-of-plane deviation,
+  Figs. 9.13–9.14) — the published conceptual model matching the Form C
+  terminal-dive design (`glider_terminal_*` + dive-at-target).
+- **Representative MaRV evader parameters** (Table D.1 listing, OCR-decoded):
+  mass 140 kg, diameter 0.4 m, C_D0 = 0.1, (L/D)max = 2.5, max side
+  acceleration **100 g**, fraction-of-(L/D)max 0.85 → β ≈ 1.1×10⁴ kg/m² —
+  consistent with the 1984 worked case's β = 10⁴ and with Ch. 5's "two orders
+  of magnitude greater than gravity" maneuver-load statement.  Textbook
+  *representative* values, not flight data — citable as the reference MaRV
+  configuration for Form C verification runs.
 
 #### Form C verification case: Regan 1984 Table 6.7/6.8 (in hand)
 
