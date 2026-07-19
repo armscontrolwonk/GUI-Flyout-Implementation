@@ -6,6 +6,15 @@ downstream (s=0.2 m),~0 (none observed),>1 (case 4 turbulent),—,,,,>18,"no rec
 #   Cold-wall/radiative context estimates: Detra-Kemp-Riddell + Tauber (Fig. 3).
 # CT: char/virgin discriminated by x-ray CT; virgin layer >16 mm (stagnation) / 18 mm (downstream).
 # Char/virgin densities 1325/1125 kg/m3: from CITING literature (secondhand) — not restated in this paper's text layer.
+# SHAPE-CHANGE CAVEATS (FIRSTHAND, Yamada, Inatani & Ishii AIAA 2011-3322, PDF in repo data/):
+#   3-D laser scan (Konica Range-7, 80 um line-of-sight accuracy): recession CONFINED to the
+#   stagnation region, max ~0.3 mm; most of the surface shows SWELLING, +/-0.3 mm at maximum
+#   (quantifies Suzuki's thermal-expansion observation).  X-ray CT of the overall heatshield:
+#   char-layer thickness UNIFORM — no local anomalies, no turbulent-transition heating scars;
+#   "endorsed the design validity of the heatshield thickness."  Recession everywhere <1 mm.
 # CORRECTION NOTE: an earlier revision carried "~15 MW/m2 for ~30 s" as the design environment
-#   (plan-restated, secondhand).  The firsthand reconstruction is peak convective 5.3 MW/m2 (+ ~1 MW/m2
-#   radiative).  The bound test now uses the firsthand peak with a labeled pulse-duration estimate.
+#   (plan-restated, secondhand).  Both ends of that discrepancy are now firsthand: Yamada 2011
+#   quotes the ~14 MW/m2 DESIGN-class heat-load figure (the origin of the secondhand number),
+#   while Suzuki 2014's converged CFD/ablation reconstruction gives peak convective 5.3 MW/m2
+#   (+ ~1 MW/m2 radiative).  The bound test uses the firsthand reconstructed peak with a
+#   labeled pulse-duration estimate.

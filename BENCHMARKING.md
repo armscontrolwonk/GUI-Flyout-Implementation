@@ -300,6 +300,7 @@ and the distinction is load-bearing — details in `benchmarks/form_a/`.
 `kontinos-stackpoole-2008-stardust-postflight-entry-aiaa-2008-1197.pdf`,
 `winter-stackpoole-2014-remote-recession-sensing-pica-aiaa-2014-1151.pdf`,
 `stackpoole-sepka-cozmuta-kontinos-2008-stardust-forebody-heatshield-aiaa-2008-1202.pdf`,
+`yamada-inatani-ishii-2011-hayabusa-reentry-postflight-heatshield-aiaa-2011-3322.pdf`,
 `schneider-teter-coleman-heath-1972-graphite-nosetip-design-aiaa-72-705.pdf`,
 `sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf`,
 `nestler-1979-carbon-carbon-nosetip-ablation-high-pressure-arcs-ntrs-19790010869.pdf`,
@@ -318,7 +319,7 @@ entry) and `HEATING_MODEL_CROSSCHECK.md` §10.6, and governs here.
 |---|---|---|
 | **Reentry-F** (Mach ~20 entry, ATJ graphite nosetip R_n 0.1 in; NASA CR-154044 / TM X-1856 / LWP-460, all via Berry's nose-tip white paper in the project Drive) | *tuning* — the in-envelope δ/R_n shape-change ladder, now with the radius-history spread quantified from the clean TM X-1856 Fig. 11 (digitized: `benchmarks/form_a/reentryf_tmx1856_fig11.csv`): R_n 0.105 → **~0.20 in (thermochemical) / ~0.31 in (erosion-corrected)** at end of window, pressure-derived bars mostly straddling the lower curve; worst case reaching the **~0.39 in exposure radius** at 458.7 s **refuted** by the report itself | the accuracy-band ladder plus a **derived H_eff bracket 70–175 MJ/kg, central ≈114** (Q ≈ 3.87 GJ/m² ±20%, pixel-traced from the nominal-trajectory figure — `benchmarks/form_a/reentryf_nominal_qdot.csv` + full trace `reentryf_qdot_trace_full.csv` — ÷ 0.6–1.0 in axial-recession spread; apex 348 MW/m² @ ~47 kft, the 318 MW/m² pin = LWP window-max quote, traced window range 10–30×10³ vs quoted 9–28×10³ Btu/ft²·s; nominal 40 over-predicts ~2.9× → conservative; Q_MJ stays None in code — preflight prediction, never flight-measured) |
 | **Stardust** (PICA, recovered, 12.8 km/s inertial; Q 276 MJ/m² wired, design upper-bound ~360 MJ/m²) | *bounding* | model must predict ≥ the measured near-stagnation maximum, Core 1 = 5.7±0.3 mm (no core exists at the geometric stagnation point — the SRC impacted off-center) |
-| **Hayabusa** (carbon-phenolic, recovered, >12 km/s; peak convective 5.3 MW/m² + ~1 MW/m² radiative at 70 s, calc peak surface ~3200 K) | *bounding* | model must predict ≥ measured ~0.3 mm (laser scan, error <10%; no recession downstream — slight thermal expansion instead). All firsthand: Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549, PDF in repo `data/` |
+| **Hayabusa** (carbon-phenolic, recovered, >12 km/s; peak convective 5.3 MW/m² + ~1 MW/m² radiative at 70 s, calc peak surface ~3200 K) | *bounding* | model must predict ≥ measured ~0.3 mm (laser scan, error <10%; no recession downstream — slight thermal expansion instead).  Shape caveats firsthand (Yamada AIAA 2011-3322): recession confined to stagnation, swelling ±0.3 mm elsewhere, char layer **uniform** by X-ray CT — no transition scars or local anomalies.  All firsthand: Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549 + Yamada, Inatani & Ishii AIAA 2011-3322, PDFs in repo `data/` |
 
 **Bounds, not fits (read before touching H_eff).**  Post-flight analysis found
 equilibrium-style ablation chemistry *over*-predicts capsule recession
