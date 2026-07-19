@@ -74,7 +74,7 @@ probe.
 *Already in hand — mine first:*
 | asset | where | expected yield |
 |---|---|---|
-| Regan, *Re-Entry Vehicle Dynamics* (AIAA, 1984) | repo `data/` | maneuvering-RV dynamics framework; possible AMaRV-lineage trajectory data |
+| Regan, *Re-Entry Vehicle Dynamics* (AIAA, 1984) | repo `data/` (scan; searchable OCR corpus supplied in-chat + user Drive) | **MINED** — see the verification case below.  AMaRV appears only as a program name (App. B, Honeywell GG1328AA strapdown gyro "used in the AMARV project") — the trajectory reconstruction remains with the 1993 Regan & Anandakrishnan |
 | Williamson, "Hypersonic Flight Testing," AIAA 92-3989 (Sandia) | repo `data/` (`williamson-1992-hypersonic-flight-testing-sandia-aiaa-92-3989.pdf`) | Sandia flight-test record incl. SWERVE-class vehicles: Mach/altitude corridors, maneuver profiles |
 | Morrison & Vamos, "The Reentry Systems Application Program (RSAP)" (1996) | project Drive | MaRV flight-test program overview; candidate pull-up datums |
 | Brooks, "Estimating Characteristics of a Maneuvering Reentry Vehicle" (2010) | project Drive | observable MaRV maneuver signatures — pull-up geometry/g estimates |
@@ -125,6 +125,22 @@ probe.
   (46 MB scan) — unidentified beyond the journal; >10 MB cap.
 - Subfolders X-51 / HTV / Defenses / General Hypersonics + the Heating-folder
   Martin-class "atmospheric reentry" book (13 MB, >cap) — unswept.
+
+#### Form C verification case: Regan 1984 Table 6.7/6.8 (in hand)
+
+Regan, *Re-Entry Vehicle Dynamics* (AIAA Education Series, 1984), pp. 133–134
+— a published worked maneuvering trajectory (BASIC listing + sample output):
+**fixed L/D = 1.5, β = 10,000 kg/m² (≈ Mk12A class), V₀ = 6,000 m/s at
+z₀ = 100 km, γ₀ = 10°, transverse-acceleration limit 4 g** — with the book's
+stated result that the fixed-L/D maneuver **hits the 4-g transverse limit at
+≈45 km and L/D must be feathered below it**.  This is exactly the Form C
+dive/maneuver physics, so it is the natural first verification case when the
+Form C anchor work lands: run the MaRV mode at these parameters and check the
+transverse-g crossing altitude ≈45 km.  Supporting load-context quotes (same
+book): maneuvering loads normal to the velocity vector "can be more than two
+orders of magnitude greater than the gravitational force" (Ch. 5 intro), and
+a Ch. 13 worked transient of 25.7 g at α = 60° with endo-maneuvering loads
+"an order of magnitude larger" causing little bending (distributed load).
 
 #### Form A — CLOSED (changelog)
 
