@@ -1,11 +1,15 @@
-location,delta_measured_mm,delta_calc_mm,calc_over_meas,peak_conv_MW_m2,peak_rad_MW_m2,calc_peak_T_K,virgin_layer_mm,notes,provenance
-stagnation,~0.3,~0.9,~3.0,5.3,~1,~3200,>16,"laser-scan (Konica Minolta Range 7) measured ~0.3 mm at stagnation region, max shape-measurement error <10%; calc (case 1, laminar + nitridation, converged CFD/SCMA2) overestimates measurement along the wall by a factor of three (abstract); peak convective 5.3 MW/m2 at 70 s, peak radiative ~1 MW/m2 at 65 s (converged solution, Fig. 4); calc peak surface T ~3200 K at 70 s","FIRSTHAND: Suzuki, Fujita, Yamada, Inatani & Ishii, JSR 51(1) 2014, DOI 10.2514/1.A32549 (PDF in repo data/)"
-downstream (s=0.2 m),~0 (none observed),>1 (case 4 turbulent),—,,,,>18,"no recession observed downstream; slight THERMAL EXPANSION instead (phenolic resin); turbulent case 4 predicts >1 mm along entire wall — over-prediction everywhere","FIRSTHAND: Suzuki et al. 2014 (Fig. 11 discussion)"
+location,delta_measured_mm,delta_calc_mm,calc_over_meas,peak_conv_MW_m2,peak_rad_MW_m2,calc_peak_T_K,char_depth_mm,virgin_layer_mm,notes,provenance
+stagnation,~0.3,~0.9-1.05 (case 1),~3.0,5.3,~1,~3200,5.5,16.5,"laser-scan (Konica Minolta Range 7) measured ~0.3 mm at stagnation region, max shape-measurement error <10%, experimental uncertainty <±0.5 mm; calc (case 1, laminar + nitridation, converged CFD/SCMA2) overestimates measurement along the wall by a factor of three (abstract); Fig. 10: computed stagnation recession cases 1/2 ~1.0-1.25 mm, turbulent case 4 ~2.05 mm; peak convective 5.3 MW/m2 at 70 s, peak radiative ~1 MW/m2 at 65 s (converged, Fig. 4); calc peak surface T ~3200 K; thermal expansion roughly estimated <0.5 mm (alpha 5e-6/K, dT~3000 K, ~30 mm)","FIRSTHAND: Suzuki, Fujita, Yamada, Inatani & Ishii, JSR 51(1) 2014, DOI 10.2514/1.A32549, pp. 96-105 (full-quality scan in repo data/); char/virgin layers from x-ray CT, annotated on Fig. 12a"
+downstream (s=0.2 m),~0 (none observed),>1 (case 4 turbulent),—,,,,4.0,18.5,"no recession observed downstream; slight THERMAL EXPANSION instead (phenolic resin); turbulent case 4 predicts >1 mm along entire wall — over-prediction everywhere; early turbulent transition deemed unlikely (Conclusions)","FIRSTHAND: Suzuki et al. 2014 (Fig. 11-12b + Conclusions)"
+# DENSITIES (item closed — was the last secondhand flag): virgin 1325 kg/m3, char 1125 kg/m3.
+#   Triply grounded: (1) Suzuki 2014 Fig. 12a/b density-profile plateaus — GRAPHICAL in the
+#   primary, read directly from the full-quality scan; (2) stated numerically by Johnston (NASA
+#   LaRC), "Comparison between Hayabusa 2 Spectral Measurements and Simulations" (preprint, repo
+#   data/), citing Suzuki as its [22]; (3) plateau values consistent between stagnation and
+#   downstream panels.
 # Entry/environment (FIRSTHAND, Suzuki et al. 2014): entry >12 km/s; t=0 at 200 km altitude
-#   (2010-06-13 13:51:11 UTC); heating rises from ~40 s, total peaks ~70 s; CFD points every 5 s over 55-80 s.
-#   Cold-wall/radiative context estimates: Detra-Kemp-Riddell + Tauber (Fig. 3).
-# CT: char/virgin discriminated by x-ray CT; virgin layer >16 mm (stagnation) / 18 mm (downstream).
-# Char/virgin densities 1325/1125 kg/m3: from CITING literature (secondhand) — not restated in this paper's text layer.
+#   (2010-06-13 13:51:11 UTC); heating rises from ~40 s, total peaks ~70 s; CFD points every 5 s
+#   over 55-80 s.  Cold-wall/radiative context estimates: Detra-Kemp-Riddell + Tauber (Fig. 3).
 # SHAPE-CHANGE CAVEATS (FIRSTHAND, Yamada, Inatani & Ishii AIAA 2011-3322, PDF in repo data/):
 #   3-D laser scan (Konica Range-7, 80 um line-of-sight accuracy): recession CONFINED to the
 #   stagnation region, max ~0.3 mm; most of the surface shows SWELLING, +/-0.3 mm at maximum
