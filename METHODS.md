@@ -3193,7 +3193,11 @@ The anchors split by role, and the split is load-bearing:
   — Suzuki et al. *J. Spacecraft & Rockets* 51(1) 2014, DOI 10.2514/1.A32549;
   Stardust 51–61% over at the near-stagnation core — measured 5.7±0.3 mm vs
   8.6–9.2 mm calculated — and 22–25% at mid-flank: Kontinos & Stackpoole AIAA
-  2008-1197 Table 1, reproducing Stackpoole et al. AIAA 2008-1202).  That
+  2008-1197 Table 1 and the primary itself, Stackpoole, Sepka, Cozmuta &
+  Kontinos AIAA 2008-1202 — both held firsthand, identical tables; the
+  primary adds that the flank discrepancy sits within the FIAT/PICA-v3.3
+  model's own arc-jet calibration scatter while the near-stagnation 61%
+  over-prediction was "not fully understood" at publication).  That
   chemistry conservatism *exceeds* the radiative-gas heating the convective-only
   screen omits above ~9 km/s — for Stardust the radiative part was only 9% of
   peak rate / 4% of load, and including it moved the calculated recession just
