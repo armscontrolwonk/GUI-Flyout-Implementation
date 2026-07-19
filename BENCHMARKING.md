@@ -89,13 +89,37 @@ probe.
   flights): the canonical open-literature MaRV — trajectory/maneuver
   reconstruction commonly reproduced via Regan & Anandakrishnan, *Dynamics of
   Atmospheric Re-Entry* (AIAA 1993); NRC-2008 already uses it as CSM-1 in the
-  duration ladder.
+  duration ladder.  **In the project Drive as `regan1993.pdf` (21.7 MB) but
+  ABOVE the 10 MB Drive-connector download cap, and direct
+  drive/DTIC fetches are proxy-blocked — needs a chat upload to mine.**
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
   datum, DTIC.
 - Any **windward/leeward heating split measured during a pull-up** (flight or
   wind tunnel) — the datum the later-tier AoA probe needs.
+
+*Drive-folder triage (2026-07-19, folder `1oUqtoFx02…`):*
+- `regan1993.pdf` — the Regan & Anandakrishnan book: **the priority get**,
+  blocked by the 10 MB connector cap (see above).
+- `AD0376942.pdf` = DTIC, "Aerodynamics of Conical Bodies" — RV aero
+  (trim/static-margin side); also >10 MB, same cap.
+- `GEReentryVehicles.pdf` = AIAA Historic Site brochure, GE Re-entry Systems —
+  archived to repo `data/`.  Gives the **MaRV lineage map for the DTIC hunt**
+  (MBRV → MaRV studies → EP MaRV / HP MaRV / Mk 500 → MTV / HAVE STING /
+  ENDO LEAP / PDV / MSV / HEART) and a citable early datum: **MBRV (GE,
+  contract 1963): three successful maneuvering reentry flights over the
+  Pacific mid-1960s, demonstrating aerodynamic controls** (no quantitative
+  pull-up numbers in the brochure).
+- `10.1016@j.dt.2015.06.003.pdf` = Rizvi, He & Xu, *Defence Technology* 11
+  (2015) 350–361, waverider boost-glide optimal trajectory + heat load —
+  Form B methodology context, archived to repo `data/`.
+- `206-215.pdf` = NRC-2008 CPGS **Appendix G** excerpt (boost-glide why/how) —
+  already cited in HEATING_TPS_REFERENCES §6; no new datum.
+- `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article
+  (46 MB scan) — unidentified beyond the journal; >10 MB cap.
+- Subfolders X-51 / HTV / Defenses / General Hypersonics + the Heating-folder
+  Martin-class "atmospheric reentry" book (13 MB, >cap) — unswept.
 
 #### Form A — CLOSED (changelog)
 
