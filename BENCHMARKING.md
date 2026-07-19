@@ -120,10 +120,33 @@ probe.
 - Richie, "The Common Aero Vehicle: Space Delivery System of the Future,"
   AIAA 1999-4435 — CAV concept lineage (feeds the NRC-2008 CSM-2/FALCON tier
   context; Form B/C future-vehicle framing).
-- Allen (NASA Ames), "Composite Heat Shields Revisited," AIAA 97-0471 —
-  two-stage heat shield (ballistic first stage jettisoned to expose a
-  maneuver-optimized second stage); concept-level tie to the separation/
-  loadout machinery and Form C.
+
+#### AMaRV reference configuration: Allen 1997 (read from primary)
+
+Allen (NASA Ames), "Composite Heat Shields Revisited," AIAA 97-0471 (repo
+`data/`) — initially parked, then found to treat **AMaRV extensively** (user
+catch): it uses the AMaRV geometry as the maneuverable second stage of a Mars
+composite heat shield, citing information "declassified for supporting DC-X
+and other unclassified projects" (source appears to be his McDonnell Douglas
+personal-communication reference; superscript ambiguous in the scan).  The
+**open-literature AMaRV configuration**, firsthand:
+
+- **Biconic-cut body**: leading-cone half-angle **10.4°**, trailing cone
+  **6°**; **split windward flap + two side flaps** for yaw control.
+- **Mass 470 kg; ballistic coefficient β = 13,485 kg/m²** — note the
+  Regan-1993 textbook evader (β ≈ 1.1×10⁴) sits right at this class ✓.
+- **Nominal angle of attack 10.0°, "the middle of AMaRV's operating range"**;
+  "designed for rapid and accurate reentry … while performing high-G
+  maneuvers"; "successfully tested weapon system prototype."
+- Allen's Traj code carries a coded AMaRV aero model; in his Mars
+  application the AMaRV second stage sees peak convective **153 W/cm²
+  (1.53 MW/m²)** with RCC judged tolerant without significant recession —
+  and he notes the *terrestrial* AMaRV design environment was more severe.
+
+Together with Auclair's flight profile (dive → 30 kft near-horizontal TFS
+segment → terminal dive) and the MDAC program facts, the AMaRV anchor now has
+geometry, mass, β, trim AoA, control layout, and profile — the remaining open
+number is the maneuver Mach/g itself.
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
