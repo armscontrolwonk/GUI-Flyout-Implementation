@@ -62,6 +62,55 @@ Find: pull-up altitude & speed, airframe material, survived-the-maneuver.
 Candidates: **Pershing II** (operational MaRV pull-up), SWERVE (maneuvering
 flight record — already anchored).
 
+#### Form C anchor shopping list (the next campaign)
+
+Form C is the one form with no dedicated anchor campaign yet.  Per-vehicle
+datums wanted: **pull-up/maneuver altitude & Mach, g-load, AoA, airframe
+material + measured/estimated windward temperature, and
+survived-the-maneuver** — feeding the terminal-dive transient screen (peak
+flux × duration vs heat-sink capacity) and, later, a windward/AoA heating
+probe.
+
+*Already in hand — mine first:*
+| asset | where | expected yield |
+|---|---|---|
+| Regan, *Re-Entry Vehicle Dynamics* (AIAA, 1984) | repo `data/` | maneuvering-RV dynamics framework; possible AMaRV-lineage trajectory data |
+| Williamson, "Hypersonic Flight Testing," AIAA 92-3989 (Sandia) | repo `data/` (`williamson-1992-hypersonic-flight-testing-sandia-aiaa-92-3989.pdf`) | Sandia flight-test record incl. SWERVE-class vehicles: Mach/altitude corridors, maneuver profiles |
+| Morrison & Vamos, "The Reentry Systems Application Program (RSAP)" (1996) | project Drive | MaRV flight-test program overview; candidate pull-up datums |
+| Brooks, "Estimating Characteristics of a Maneuvering Reentry Vehicle" (2010) | project Drive | observable MaRV maneuver signatures — pull-up geometry/g estimates |
+| Bunn, *Technology of Ballistic Missile Reentry Vehicles* | project Drive + cited | MaRV context: β, maneuver classes (already cited for Form A context) |
+| Sandia Lab News (1981), Strypi/Wente 1982 | uploaded in-chat (Jul 3) | SWERVE program context, booster lineage |
+
+*To find:*
+- **Pershing II / MGM-31B**: the RADAG terminal maneuver — pull-up altitude/
+  Mach/g, airframe skin material and temperature margin (DTIC: Pershing II
+  development & flight-test reports; Army historical monographs).
+- **AMaRV** (McDonnell Douglas Advanced Maneuvering Reentry Vehicle, 1979–80
+  flights): the canonical open-literature MaRV — trajectory/maneuver
+  reconstruction commonly reproduced via Regan & Anandakrishnan, *Dynamics of
+  Atmospheric Re-Entry* (AIAA 1993); NRC-2008 already uses it as CSM-1 in the
+  duration ladder.
+- **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
+  maneuver-profile specifics.
+- **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
+  datum, DTIC.
+- Any **windward/leeward heating split measured during a pull-up** (flight or
+  wind tunnel) — the datum the later-tier AoA probe needs.
+
+#### Form A — CLOSED (changelog)
+
+The Form A ablator campaign (plan: retire the `H_eff_MJ_kg` screening
+placeholders) is **closed**: all three nominals cited and regime-labeled
+(CP 15 = Sutton char-removal regime; PICA 35 ≤ Winter arc-jet point; C/C 40
+under the Reentry-F flight bracket + Scala/Perini theory, Nestler validity
+floor), both capsules firsthand (Stardust ×2, Hayabusa + Yamada caveats +
+densities), bound tests enforcing predicted ≥ measured, P3-radiative and
+P3-chemistry logged.  Mirrors the UHTC `oxidation_dwell_s` retirement.
+*Remaining optionals, non-blocking:* **LWP-460** (would upgrade the
+pixel-traced Reentry-F pulse to a published curve — user is hunting a copy);
+**user spot-check of the Figure-1 digitization** (peak/tail reads); both land
+as data edits when they arrive.
+
 ## Scalar benchmarks already in the code (`heating._BENCHMARKS`)
 Check/extend — these drive the "N.N× Apollo" ratio line:
 ICBM RV 318 MW/m²; Stardust 9.4 MW / 276 MJ; Apollo 7.9 MW / 468 MJ;
