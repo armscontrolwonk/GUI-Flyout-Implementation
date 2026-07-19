@@ -115,6 +115,15 @@ probe.
     chat upload or page renders).
   Quantitative pull-up numbers (Mach/g at the 30-kft maneuver) remain the open
   want.
+
+*Parked for later (identified, archived to repo `data/`, not yet mined):*
+- Richie, "The Common Aero Vehicle: Space Delivery System of the Future,"
+  AIAA 1999-4435 — CAV concept lineage (feeds the NRC-2008 CSM-2/FALCON tier
+  context; Form B/C future-vehicle framing).
+- Allen (NASA Ames), "Composite Heat Shields Revisited," AIAA 97-0471 —
+  two-stage heat shield (ballistic first stage jettisoned to expose a
+  maneuver-optimized second stage); concept-level tie to the separation/
+  loadout machinery and Form C.
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
