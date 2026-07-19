@@ -162,6 +162,26 @@ Review-level context (not point data):
   "design of mechanical interfaces with subtending structures."  This is why
   the model excludes those component failures from the *thermal* envelope and
   keeps Marschall's PA transition as the clean plain-material oxidation cap.
+- **Squire, T. H. & Marschall, J., "Material property requirements for analysis
+  and design of UHTC components in hypersonic applications," *J. Eur. Ceram.
+  Soc.* 30 (2010) 2239–2251** (read from primary; PDF in repo `data/`) — the
+  design-methodology companion to the anchors: the canonical statement of the
+  **cold-wall vs hot-wall flux distinction** (arc-jet/Plasmatron conditions are
+  characterized by fully-catalytic cold-wall flux, always higher than the
+  hot-wall flux in flight — the like-for-like caveat our comparisons carry),
+  the **catalysis uncertainty** (deriving recombination efficiency γ can be off
+  by an order of magnitude, strongly emissivity-sensitive), and roughness-
+  induced transition.  Contains **no aero-convective failure datum** — checked
+  as a candidate for the missing plain-diboride cap — but explains *why* that
+  datum is so scarce from the design side: sharp UHTC components are governed
+  by **thermally-induced stress limits** (CTE/thermal-shock; components are
+  redesigned smaller/lower-aspect when predicted stresses approach allowables),
+  so hardware fails or is redesigned *mechanically* before the material reaches
+  a thermochemical aero-convective limit — independently corroborating Glass's
+  mechanical-failures-first finding.  The standing want (a plain-diboride
+  aero-convective failure to cap the envelope top) therefore REMAINS OPEN, and
+  may be practically unfillable below the PA transition — which is itself the
+  reason the PA transition serves as the cap.
 
 **What the table pins:**
 - `continuous_K` (glass ceiling) = **1650 °C** — 6+ independent sources agree (Monteverde 2012, Peters 2024, Fahrenholtz & Hilmas, Marschall, Li, Glass 2011).
