@@ -91,8 +91,30 @@ probe.
   an earlier note here asserted the AMaRV trajectory reconstruction appears in
   Regan & Anandakrishnan 1993 — the book (now read from primary, repo `data/`)
   contains **no AMaRV content at all** (the 1984 Regan mentions the program
-  name only, via its gyro).  A genuine open AMaRV maneuver/trajectory source
-  is **still wanted** — do not cite the Regan books for it.
+  name only, via its gyro).  Do not cite the Regan books for it.
+  **Now partially filled from three DTIC documents (user-supplied):**
+  - *Auclair, AFIT/GST/OS/82M-2 (1982), DTIC ADA115704* (read from primary,
+    repo `data/`): the ABRES program fielded **two AMaRV classes — Evader**
+    (preprogrammed avoidance maneuvers, ending with an accuracy maneuver) **and
+    Accuracy** (same size/shape, no evasion).  **Accuracy-AMaRV flight
+    profile: dive to 30,000 ft → near-horizontal flight while a Terminal Fix
+    System (radar-correlation / TERCOM / pulse-Doppler map-match; Goodyear /
+    McDonnell Douglas / Raytheon) updates navigation → dive to target.**
+    The thesis's own model is effectiveness-only (CEP/yield/Pk) — no
+    trajectory dynamics.
+  - *MDAC SBMO/TR-80-12 (1980), DTIC ADA090577* (read from primary, repo
+    `data/`): program facts — contract F04701-76-C-0100 under ABRES/BMO
+    (Maneuvering Vehicle Branch, Norton AFB), start Sept 1976, **three flight
+    vehicles built**, ~**30-minute flight time**, part-level environments
+    (shock/vibration/acceleration/temperature) "exceeded any previous program"
+    at SAMSO.
+  - *Critchlow & Williams, AFIT/GST/OS/82M-5 (1982), DTIC ADA115691* (in user
+    Drive; Drive text extraction partial — front matter only): RV/ABM
+    engagement simulation with a sample RV trajectory (Fig. 8, p. 43) —
+    **the quantitative maneuver model is still unmined** (scanned pages; needs
+    chat upload or page renders).
+  Quantitative pull-up numbers (Mach/g at the 30-kft maneuver) remain the open
+  want.
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
