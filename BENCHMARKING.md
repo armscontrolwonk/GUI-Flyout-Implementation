@@ -177,8 +177,21 @@ aerothermal datum expected); Bedke "High Speed Weapons — What is Different
 Today" and Sponable "Reusable Space Systems" (legacy binary .ppt, unreadable
 via the Drive connector; briefing-deck context, low datum value);
 `FalconHTV2FlightPath.jpeg` (the DARPA trajectory graphic — the same image
-Wright cites as his pierce-point source); `4217801.ppt` (X-51 folder, legacy
-binary .ppt, unidentified).
+Wright cites as his pierce-point source).
+
+*X-51 folder re-check (2026-07-20, second pass):* the folder holds exactly two
+files — the FOIA 14-F-0122 PDF (byte-identical to the HTV-folder copy already
+mined/archived) and `4217801.ppt`, now **identified** (it is OOXML despite the
+.ppt extension — text extracted): the **X-51A Collier Trophy nomination deck**
+(X-51A WaveRider team, post-2013).  Facts-only (promotional briefing, no
+distribution statement — not archived).  One datum refines the X-51A ledger
+entry — the **Flight-4 mission clock (slide 7, 1 May 2013): total flight
+448.0 s = boost 31.0 s + engine start 12.0 s + scramjet run 212.0 s + descent
+193.0 s; max Mach 5.1, max altitude 63,500 ft, distance 240.6 nm** — i.e. the
+airframe's demonstrated hypersonic dwell on Shuttle-class TPS is ~420 s
+(scramjet run + descent), consistent with and sharper than the fact sheet's
+"370 s of data."  Design slide corroborates: "conventional materials + high
+Mach thermal protection."
 
 ### Form C — Maneuvering quasi-ballistic (the envelope)
 **Computed:** terminal-dive segment peak flux + duration vs airframe limit
