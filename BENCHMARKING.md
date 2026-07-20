@@ -537,6 +537,50 @@ Quantitative windward temperature / TPS thickness remain unpublished in the
 open sources on hand (Yengst + Lund are program/test histories, not thermal
 data reports).
 
+*Modern corroboration — the terminal-velocity end of the profile (facts
+recorded from in-chat page images, 2026-07-20):* **Wang, Tang & Zhang (NPU
+Xi'an), "Short-Range Reentry Guidance With Impact Angle and Impact Velocity
+Constraints for Hypersonic Gliding Reentry Vehicle," IEEE Access 7 (2019)
+47437, DOI 10.1109/ACCESS.2019.2909589** (open access) — a Chinese guidance
+study that **"uses the Pershing II HGRV as the research object."**  Its
+mission profile is the same three-phase shape as Lund/Auclair (initial-
+descent pull-up → gliding velocity-bleed under overload/field-of-view
+constraints → terminal forcing-down), and it publishes the *design*
+terminal constraints for the Pershing II-class problem: **impact angle
+−90° ≤ θ ≤ −70° (near-vertical dive), impact velocity 550–650 m/s
+(≈ Mach 1.7–2), miss distance ≤ 6 m, guidance completed within several
+hundred km**.  It also states the published engineering *rationale* for the
+velocity-control maneuver Lund described: excessive terminal velocity both
+raises the required overload and generates an aeroheating **plasma that
+blocks seeker transmission and refractively distorts the IR/radome path**,
+up to destroying the seeker — i.e. why the RV must "slow to proper terminal
+velocity" before the RADAG map-match.  Status: simulation-study design
+values for a Pershing II-modeled vehicle (modern secondary), NOT flight
+data — corroborates and bounds the terminal-velocity end of the maneuver;
+the ~25-g pullout datum remains Yengst/Lund.
+
+*Full-paper tables (complete page set supplied in-chat):* the simulation
+profile locks onto the flight-history datums at two independent points —
+**Table 1's process constraint is acceleration ±25 g** (the same figure as
+Yengst's ~25-g pullout, now as the modern engineering overload bound for the
+Pershing II-modeled class; encoded as a `textbook`-kind record in
+`MANEUVER_ANCHORS`), and **the gliding/velocity-bleed phase runs at ~16 km
+altitude** (handover 16 km / 50 km-to-go; Fig. 13) — matching Yengst's
+"below ~50,000 ft" (15.2 km) energy-retention band.  Full profile: reentry
+range 300 km, h₀ 55 km, V₀ 3,400 m/s, γ₀ −22° (Table 4); initial-descent
+pull-up peaking ~11 g normal (Fig. 13d); quasi-level bleed glide 16–18 km
+with ±5-g bank maneuvers; terminal attack from 20 km / 1,200 m/s / 50 km
+(Table 2) ending at 600 m/s / −85° / ~1 m miss (Tables 3/5); robustness 300
+Monte-Carlo runs at ±10% density, ±15% C_L/C_D → 296 hits.  Their trajectory
+taxonomy: short-range HGRV flies a **C-shaped** lateral trajectory (large
+seeker FOV, few bank reversals) vs the **S-shaped** trajectory of long-range
+Shuttle-class gliders.  Notable context: the stated target "is to hit the
+ship at sea" (moving-target anti-ship application); their Pershing II source
+is **ref [16]: Zhang Hanyuan & Chen Kejun, "Velocity control of maneuvering
+reentry vehicle," J. Nat. Defense Technol. (NUDT) 15(2):11–17, 1993** — a
+candidate primary for the Chinese-literature Pershing II model if ever
+needed.
+
 *Pershing II Drive-folder triage (2026-07-20, folder `11Iqc63JuDov…`):* only
 **Lund 1984** was archivable and is mined above.  Also present:
 `ADA121622` — **now MINED from primary (user chat-upload, 2 parts; archived

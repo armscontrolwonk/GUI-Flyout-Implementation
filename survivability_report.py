@@ -246,6 +246,14 @@ MANEUVER_ANCHORS = [
               "⌀ 0.4 m, (L/D)max 2.5, β ≈ 1.1×10⁴ kg/m²)",
          source="Regan & Anandakrishnan 1993, Dynamics of Atmospheric "
                 "Re-Entry (AIAA), Table D.1"),
+    dict(id="Wang-2019-PII-overload", vehicle="Pershing II-modeled HGRV",
+         g=25.0, kind="textbook",
+         note="modern guidance-simulation overload constraint ±25 g for a "
+              "Pershing II-modeled vehicle (Table 1); glide/bleed phase at "
+              "~16 km matches Yengst's sub-50-kft band — independent "
+              "corroboration of the 25-g class, not flight data",
+         source="Wang, Tang & Zhang 2019, IEEE Access 7:47437, "
+                "DOI 10.1109/ACCESS.2019.2909589"),
 ]
 
 # Envelope constants read from the anchors above.
