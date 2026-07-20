@@ -141,6 +141,9 @@ These four were read directly and their key results confirmed:
 - ⭐ Tracy, C.L. & Wright, D., *Modeling the Performance of Hypersonic Boost-Glide
   Missiles*, Science & Global Security 28(3) (2020) — glide surface-temp-vs-time,
   reradiative-equilibrium model. https://scienceandglobalsecurity.org/archive/sgs28tracy.pdf
+  Now read from primary + archived to repo `data/`; same-chain cross-check
+  logged in HEATING_MODEL_CROSSCHECK.md §6 (+6.5% cold-wall vs their
+  hot-wall at the Fig.-10 point).
 - ⭐ Acton, J.M., *Hypersonic Boost-Glide Weapons*, Science & Global Security 23(3)
   (2015) — trajectory model, HTV-2 L/D≈2.6. https://scienceandglobalsecurity.org/archive/sgs23acton.pdf
   Now read from primary + archived to repo `data/` (paper, online supplement,

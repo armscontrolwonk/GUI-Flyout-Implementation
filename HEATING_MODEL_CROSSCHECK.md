@@ -367,6 +367,14 @@ peak — the physics of D-glide_heating.
 - Existing `heating.py` `_BENCHMARKS` / `TPS_MATERIALS` are consistent with Duffa Table 1.4
   (flight anchors are "rough cold wall") and must be reconciled with the spec's
   `NAS_TIERS` / `MATERIAL_LADDER` (one table, not two).
+- **Tracy & Wright 2020 (S&GS 28; repo `data/`) — independent same-chain
+  cross-check (2026-07-20)**: their HTV-2-based model is the identical
+  methodology (stagnation heating + radiative-equilibrium wall, ε = 0.85,
+  Acton aero parameters).  At their Fig.-10 point (v = 6 km/s, h = 49.7 km,
+  R_n = 0.034 m) Thrusty's cold-wall Sutton-Graves chain gives **3,408 K vs
+  their ~3,200 K (+6.5%)** — the offset matches their hot-wall enthalpy
+  correction, i.e. the repo's cold-wall choice reads high (conservative)
+  by the expected margin.  ✔
 
 ---
 
