@@ -375,6 +375,15 @@ peak — the physics of D-glide_heating.
   their ~3,200 K (+6.5%)** — the offset matches their hot-wall enthalpy
   correction, i.e. the repo's cold-wall choice reads high (conservative)
   by the expected margin.  ✔
+- **Flight-side conservatism corroboration (2026-07-20, repo `data/`)**: two
+  independent European flight programs report measured TPS temperatures
+  **below** radiation-equilibrium-class predictions — **IXV** post-flight
+  thermocouples read **200–600 K under** the predictions (Buffenoir et al.,
+  EUCASS 2017-330; hottest windward sensor −600 K, nose −400 K, heating
+  slopes matching), and **SHEFEX I** was *designed* to prove facet-edge
+  temperature peaks sit below the radiation-equilibrium hypothesis (Barth &
+  Eggers, STAB 2006).  The screening chain errs hot at real hardware —
+  conservative, in the direction the design intends.  ✔
 
 ---
 

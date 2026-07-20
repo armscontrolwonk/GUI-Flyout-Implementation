@@ -678,6 +678,86 @@ context, not a screening-tier anchor number.
   wind-tunnel validation at α=20°) — the honesty band for a screening AoA
   probe, though not yet a flight maneuver datum.
 
+#### Coated hot-structure dwell floors (RCC / C-SiC / C-C-HS) — campaign OPEN (2026-07-20)
+
+**Goal**: replace the generic 120-s soak-dwell surrogate (the one uncited
+number in the verdict machinery; `heating.py` labels it "empirical damage
+surrogate, not an oxidation-kinetics closure") with **cited, per-material
+demonstrated dwell floors** for the coated hot structures — mirroring the
+UHTC campaign (U1–U4).  The coverage machinery is already property-gated
+(`oxidation_dwell_s` present → envelope verdict), so each material lights up
+as its data lands.  Status by material:
+
+- **`cc_hot_structure` (HTV-2-class C/C) — sources in hand, mining pending**:
+  the DARPA Flight-2 ERB primary (skin "peeled from the aerostructure" after
+  ~3 min of stable Mach-20 flight; FOIA 14-F-0122, archived) + NTRS
+  20090004576 (oxidation of C/C through coating cracks — the failure
+  mechanism).  A *flight* degradation-time datum.
+- **`rcc` (Shuttle) — source in hand, mining pending**: NTRS 19940030739,
+  "Analysis of the Shuttle Orbiter RCC Oxidation Protection System" (coating
+  mass-loss / reuse limits) + the certified 100-mission design life.
+- **`c_sic` — first flight dwell record NOW IN HAND (below); at/near-limit
+  arc-jet oxidation-life still the open get.**
+
+*C/SiC model-half (facts-only from abstract; full text not yet supplied):*
+Huang, Yang & Huang, "Oxidation and Sublimation Ablation of C/SiC Ceramics in
+Hypersonic Environments," *J. Spacecraft & Rockets*, DOI 10.2514/1.A36501
+(online 18 Aug 2025) — a **theoretical/numerical** wide-temperature ablation
+model for C/SiC covering **passive oxidation → active oxidation →
+sublimation** with a dimensionless ablation-rate system; reports pressure has
+weak effect on surface temperature but a **significant positive correlation
+with mass-ablation rate** — the C/SiC statement of the same SiC
+pressure-sensitivity caveat the UHTC envelope carries (§11.6).  A regime-map
+source (the Jacobson-and-Harder role), **not** a demonstrated dwell (no
+specimen was heated); its bibliography is the hunting ground for the
+experimental arc-jet papers.
+
+*SHEFEX I flight heritage + a conservatism datum (read from primary, archived
+`data/barth-eggers-2006-shefex-…-dlr-stab.pdf`):* Barth & Eggers (DLR),
+"SHEFEX — A First Aerodynamic Post-Flight Analysis," STAB 2006.  SHEFEX I
+(S30 + Improved Orion, apogee 211 km): **45 s of experimental reentry between
+90 and 14 km**, Mach ≈5.6 held from 100→50 km rising to its maximum lower
+down; facetted ceramic-composite sharp-edged TPS.  **Deliberately NOT flown
+at the material thermal boundary** — the stated objective was "to prove in
+flight that the temperature peaks at the edges of the ceramic-composite
+panels are **lower than those predicted based on a radiation equilibrium
+hypothesis**" — i.e. the program was *designed around* rad-eq over-prediction
+at sharp features.  Benign-regime flight heritage for facetted CMC (45-s
+survival), not a dwell-at-limit floor.  Bonus data: boundary layer assessed
+laminar >40 km / turbulent <30 km with the 33.8 km station reading turbulent
+(a Mach-6 sharp-body flight transition band), and a flight-data caveat (AoA/
+sideslip extraction "much more demanding than expected").
+
+*IXV — the first C/SiC-class flight dwell record (read from primary, archived
+`data/buffenoir-…-eucass-2017-330.pdf`):* Buffenoir, Pichon & Barreteau
+(Ariane Group), "IXV Thermal Protection System Post-Flight Preliminary
+Analysis," EUCASS 2017-330.  The windward + nose **SepcarbInox C/SiC-class
+CMC** assemblies (non-ablative OML), flown Feb 2015 and recovered:
+- **Design spec: max heat flux 650 kW/m² (0.65 MW/m²), estimated max TPS
+  outer-skin temperature 1650 °C (1923 K), reentry duration 20 minutes
+  (~1200 s), 3 g.**
+- **Post-flight: measured temperatures 200–600 K BELOW predictions** (hottest
+  windward sensor WT80 on panel 27: −600 K vs calculation; hottest nose
+  sensor NT2: −400 K); heating slopes/durations matched, absolute levels did
+  not; temperature gradients smoother than expected; **no visible damage**
+  on the panels at first inspection; "re-entry conditions were less severe
+  than predicted."
+- **Draft anchor shape**: C/SiC-class CMC, kind=flight, dwell ≈ 1200 s
+  (full reentry), design-spec environment 0.65 MW/m² / ≤1923 K, measured
+  well below spec, outcome = survived (no visible damage; *preliminary*
+  analysis — margins consumed not quantified).  A **moderate-temperature
+  1200-s flight floor**, not an at-limit datum: the at/near-limit
+  time-to-failure (arc-jet) remains the open want before `c_sic` gets a
+  cited `oxidation_dwell_s`.
+
+**Cross-cutting conservatism corroboration**: two independent European flight
+programs — DLR SHEFEX (by design objective) and ESA/Ariane IXV (by measured
+−200…−600 K) — both report **flight temperatures below
+radiation-equilibrium-class predictions**.  Direct flight-side corroboration
+that Thrusty's screening chain (cold-wall Sutton-Graves + radiative
+equilibrium) errs hot, i.e. conservative — consistent with the Tracy &
+Wright hot-wall cross-check (+6.5%) logged in HEATING_MODEL_CROSSCHECK §6.
+
 #### Windward/AoA heating probe — BUILT (2026-07-20)
 
 **Status: implemented** (`heating.windward_flank_flux`, wired into the Form C
