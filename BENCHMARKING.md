@@ -81,10 +81,39 @@ probe.
 | Bunn, *Technology of Ballistic Missile Reentry Vehicles* | project Drive + cited | MaRV context: β, maneuver classes (already cited for Form A context) |
 | Sandia Lab News (1981), Strypi/Wente 1982 | uploaded in-chat (Jul 3) | SWERVE program context, booster lineage |
 
-*To find:*
-- **Pershing II / MGM-31B**: the RADAG terminal maneuver — pull-up altitude/
-  Mach/g, airframe skin material and temperature margin (DTIC: Pershing II
-  development & flight-test reports; Army historical monographs).
+#### Form C maneuver numbers: Yengst, *Lightning Bolts* (2010) — the keystone
+
+William Yengst (ABRES/RV engineer), *Lightning Bolts: The Race to Develop
+Maneuvering Reentry Vehicles* (2010) — a full-length development-and-test
+history of U.S. (and foreign) MaRVs.  **Copyright: the book is NOT archived to
+the repo** (commercial title; it stays in the user's library) — only the cited
+facts are recorded here, with attribution.  The maneuver-load numbers the
+Form C screen wanted, per Yengst:
+
+- **AMaRV maneuver load ≈ 100 g** — the guidance unit was required to hold
+  accuracy through ~100-g reentry maneuvers, and Bell XI accelerometers
+  measured >100-g reentry maneuver levels on the flights (three: 20 Dec 1979,
+  8 Oct 1980, 4 Oct 1981; CEP ~1,250 ft).  This is the AMaRV-specific g the
+  ledger was missing — it quantifies Allen 1997's "high-G maneuvers" and
+  matches Regan 1993's 100-g evader cap.  Geometry re-confirmed: 10.4° / 6°
+  biconic (= Allen).
+- **Pershing II MaRV**: ~**Mach 8** ballistic reentry, then below ~50,000 ft
+  it retained energy for a **~25-g pullout + ~30-mile range extension** (during
+  which RADAG ran its radar map-match accuracy update), or alternatively a
+  high-g evasion maneuver.  This is the Pershing II RADAG pull-up datum
+  (altitude/Mach/g) — the other open want, now filled.
+- **BGRV** (boost-glide RV): Atlas boosted to ~130,000 ft, pitched to
+  horizontal to build speed, then separated BGRV at **>Mach 15** onto a glide
+  toward ~110,000–125,000 ft; components qualified to 25 g.  Fills the "BGRV
+  early high-β maneuver datum" want.
+- **MBRV**: corroborates the four-vehicle Atlas/Vandenberg account (Lin) — the
+  qualification loads were the high-g reference the BGRV/AMaRV programs scaled
+  against.
+
+*Still to find (lower priority):* airframe **skin material + temperature
+margin** for Pershing II / AMaRV (Yengst is program/test history, light on TPS
+specifics); primary DTIC flight-test reports if publication-grade citation is
+needed (Yengst is a secondary synthesis, though an authoritative insider one).
 - **AMaRV** (McDonnell Douglas Advanced Maneuvering Reentry Vehicle, 1979–80
   flights): the canonical open-literature MaRV; NRC-2008 already uses it as
   CSM-1 in the duration ladder.  **CORRECTION (claim checked and withdrawn):**
