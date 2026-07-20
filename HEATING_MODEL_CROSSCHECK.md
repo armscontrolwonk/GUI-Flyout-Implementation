@@ -83,7 +83,7 @@ three modes work — they refine the verdict, they don't change the architecture
 | Windward turbulent | spec uses `0.0296 …Re*^(−1/5)` | **Fletcher p.112** uses **0.0288** | ⚠ pick one + cite (both in literature; ~3%) |
 | Reradiation wall temp | `T_w = (q̇/εσ)^¼` | **Duffa p.36 Fig 1.8** (ceramic ≤ ~2000 K oxidizing; ε matters) | ✔ |
 | Heat ∝ ρV³ (windward avg) | `q̇ ∝ ρV³` via Reynolds analogy | **Regan Eq. 6.110** (`q̇ = c_f ρV³/4`) | ✔ corroborates n=3 exponent |
-| β convention | `β = W/(C_D A)` (repo: `ROParams.beta_kg_m2`) | **Regan Ch. VI** (Cases I–V parameterized by β, L/D) | ✔ |
+| β convention | `β = m/(C_D A)` **[kg/m²]** (repo: `ROParams.beta_kg_m2`; drag `a = q/β`) | **Regan Ch. VI** (Cases I–V parameterized by β, L/D) — NB Regan's own β = `mg/(C_D A)` in **Pascals**, the ×g weight form (his p.100 notes the metric `m/(C_D A)` alternative the repo uses); a Regan β value must be ÷ g ≈ 9.81 before entering `beta_kg_m2` | ✔ (convention matched, ×g unit difference flagged) |
 
 **Net:** the correlation forms and constants are correct and mutually consistent
 across Duffa (ablation/stagnation), Fletcher (windward/reference-enthalpy), and
