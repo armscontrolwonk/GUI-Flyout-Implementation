@@ -511,7 +511,17 @@ context, not a screening-tier anchor number.
 - `regan1993.pdf` — the Regan & Anandakrishnan book: **the priority get**,
   blocked by the 10 MB connector cap (see above).
 - `AD0376942.pdf` = DTIC, "Aerodynamics of Conical Bodies" — RV aero
-  (trim/static-margin side); also >10 MB, same cap.
+  (trim/static-margin side); >10 MB download cap.  **Partially identified via
+  the Drive text-extraction path (2026-07-20):** it is **Boeing report
+  D2-56139-1** (rev. 10-12-66; declassified from Confidential 10 Dec 1978,
+  DoDD 5200.10), a cone aerodynamics databook — normal force, pitching
+  moment / center of pressure, axial force incl. nose-bluntness effects,
+  Newtonian wave drag for cones, base pressure vs Reynolds/Mach — with
+  recurring "Summary of all LORV vehicle flight tests" tables (Boeing LORV
+  reentry-vehicle program).  Candidate citation anchor for the repo's cone
+  wave-drag validation (`validate_cone_wave_drag.py`) and static-margin/trim
+  gate; the data lives in scanned figures the text path cannot recover —
+  full mining needs the PDF in-chat (zip upload, as with regan1993).
 - `GEReentryVehicles.pdf` = AIAA Historic Site brochure, GE Re-entry Systems —
   archived to repo `data/`.  Gives the **MaRV lineage map for the DTIC hunt**
   (MBRV → MaRV studies → EP MaRV / HP MaRV / Mk 500 → MTV / HAVE STING /
