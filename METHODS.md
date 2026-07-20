@@ -3246,17 +3246,37 @@ the heating profile) to the ladder: ≤25 g is the operational-MaRV class,
 25–100 g is inside the AMaRV flight-demonstrated ceiling, and >100 g exceeds
 every load in the open flight record.  **Context, never a verdict**: the
 anchors are structural/guidance survived-the-maneuver demonstrations, not
-thermal limits, so the block never changes the survivability status; the
-windward/AoA heating *during* the pull-up remains a later-tier probe, carried
-with Thompson 1989's engineering-code uncertainty band (~15–40% at AoA).
-When that probe is built, its source pack is in `data/` (BENCHMARKING.md
-"Windward/AoA heating probe" subsection): Van Driest/Eckert–Tewfik
-reference-enthalpy windward method (AGARD-R-754 Kapp et al.; validated on
-the Tracy M-7.95 cone), the fin-LE interference severity (Alviani 2022,
-10–80× baseline at the body-fin gap, AEDC Mach-6 validated), and a coupled
-maneuvering-aeroheating + ablation reference method (MASCC/CMA, Murray &
-Russell 2002) for a later tier that unifies Form A recession and Form C
-windward heating.
+thermal limits, so the block never changes the survivability status.
+
+### 13.8 Windward-flank heating (Form C AoA probe)
+
+A lifting reentry vehicle flies its glide at angle of attack, so the
+**windward generator** — not the nose — carries the off-nose acreage heat.
+`heating.windward_flank_flux` computes it at screening tier: the α=0 acreage
+flux (the cited `BODY_FLUX_FRACTION = 0.13 × body-stagnation` from §13.5's
+two-location screen) times a **modified-Newtonian windward amplification**
+`A(α) = sin(δ+α)/sin(δ)`, where δ is the forebody half-angle and α the trim
+AoA.  The amplification is the surface-pressure ratio `Cp ∝ sin²θ` fed through
+the reference-enthalpy laminar scaling `q̇ ∝ √ρ_e ∝ √p_e` (`CP_MAX` cancels, so
+it is purely geometric); the method family (Van Driest + Eckert–Tewfik) and
+the windward-vs-leeward ordering it reproduces are cited (AGARD-R-754; Tracy
+M-7.95 cone gives `A(12°)≈2.46`, `A(24°)≈3.81`), while the closed-form
+sin-ratio reduction is a labeled inference (mildly conservative — `ρ_e∝p_e`
+holds edge temperature fixed).  It is evaluated over the **glide sub-arc**
+(the low-AoA terminal dive is masked out and keeps the nose-stagnation block),
+reported as a **T_eq band across α = 5–20°** (ends = Thompson 1989's error
+anchors) with the trimmed operating AoA (`alpha_glide_deg` from the
+static-margin gate) marked inside for a non-sep body glider; a separating RV
+is band-only.  **Turbulent flank (~3–5×) and control-fin gap interference
+(Alviani 2022, 10–80× at reattachment) are flags, not computed** — screening
+cannot place the transition or reattachment line; Murray & Russell 2002
+(MASCC) is the named computed-value upgrade.  The verdict role is gated by
+`heating.WINDWARD_DRIVES_VERDICT` (default **off**, a context overlay; when on
+it downgrades survive→degraded past the body soak limit at the gentlest α, or
+flags needs-analysis past the peak limit — never a hard fail, since the nose
+remains the primary hard-fail driver and the AoA/transition uncertainty
+forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
+"Windward/AoA heating probe"; pinned by `test_windward_flank.py`.
 
 ---
 

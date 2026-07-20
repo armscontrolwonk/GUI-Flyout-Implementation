@@ -678,11 +678,46 @@ context, not a screening-tier anchor number.
   wind-tunnel validation at α=20°) — the honesty band for a screening AoA
   probe, though not yet a flight maneuver datum.
 
-#### Windward/AoA heating probe — source pack (read from primary, archived 2026-07-20)
+#### Windward/AoA heating probe — BUILT (2026-07-20)
 
-Four references (user-supplied) that between them **provision the last open
-Form C modeling tier** — the windward/fin-LE heating probe the terminal-dive
-block currently defers.  Each is archived to repo `data/`.
+**Status: implemented** (`heating.windward_flank_flux`, wired into the Form C
+report).  The screening model, from the source pack below:
+
+```
+q̇_flank0 = BODY_FLUX_FRACTION · q̇_stag(ρ,V,R_body)     # α=0 acreage flux (cited, 0.13)
+A(α)      = sin(δ+α)/sin(δ)                             # windward amplification
+q̇_wind    = q̇_flank0 · A(α)   →   T_eq,w = (q̇_wind/σε)^¼
+```
+
+evaluated over the **glide sub-arc** (the low-AoA terminal dive is masked out —
+that segment keeps the nose-stagnation block), reported as a **T_eq band across
+α = 5–20°** (the Thompson error-anchor ends) with the trimmed operating AoA
+marked inside when a non-sep body glider supplies one (from the static-margin
+gate `alpha_glide_deg`; a separating RV → band-only).  **`A(α)` reuses the
+already-cited `BODY_FLUX_FRACTION = 0.13`** (Lu/Shi & Zhang 2024, `heating.py`)
+for the α=0 flank and the modified-Newtonian pressure ratio through the
+reference-enthalpy `q̇ ∝ √p_e` scaling for the amplification — **`CP_MAX`
+cancels**, so the factor is purely geometric.  **Inference labels carried in
+code:** the closed-form sin-ratio reduction is an inference (the *method family*
+Van Driest + Eckert-Tewfik and the windward-vs-leeward *ordering* are the cited
+part — AGARD-R-754, Tracy M=7.95 cone); `ρ_e∝p_e` holds edge temperature fixed
+so the ratio mildly **over-predicts** (conservative); the δ≥5° floor is a
+numerical guard.  Turbulent flank (~3–5×) and control-fin gap interference
+(Alviani 10–80×) are **flags, not computed** — screening can't place the
+transition or reattachment line; Murray & Russell 2002 (MASCC) is the named
+computed-value upgrade.  Verdict role is gated by
+`heating.WINDWARD_DRIVES_VERDICT` (default **off** → context overlay; on →
+downgrade survive→degraded past the body soak limit at the gentlest α, or flag
+needs-analysis past the peak limit — never a hard fail).  Pinned by
+`test_windward_flank.py` (α=0 reduction, Tracy 2.46/3.81 magnitudes, windward>
+leeward ordering, stagnation-approach guard, band/stamp).  *Still genuinely
+open:* a **flight** windward/leeward split during a real maneuver — all four
+sources below are wind-tunnel / CFD / ground-code.
+
+##### Source pack (read from primary, archived 2026-07-20)
+
+Four references (user-supplied) that between them **provisioned this tier**.
+Each is archived to repo `data/`.
 
 - **Kapp, Mathauer & Rieger, "Aerodynamic Heating of Missiles," AGARD-R-754
   paper 10 (Special Course on Missile Aerodynamics, 1988; DTIC ADA199172,
