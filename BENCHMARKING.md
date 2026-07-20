@@ -62,6 +62,14 @@ Find: pull-up altitude & speed, airframe material, survived-the-maneuver.
 Candidates: **Pershing II** (operational MaRV pull-up), SWERVE (maneuvering
 flight record — already anchored).
 
+> **ENCODED (2026-07-20):** the maneuver-load anchors below now live in code as
+> `survivability_report.MANEUVER_ANCHORS` (same data-edit philosophy as
+> `UHTC_ANCHORS`; METHODS §13.7), and the Form C report prints a
+> demonstrated-envelope context block comparing the plan's commanded
+> `glider_pullup_g_max` to the ladder (≤25 g operational class / ≤100 g AMaRV
+> flight-demonstrated ceiling / beyond = extrapolation).  Context only — never
+> a survivability verdict.  This file remains the citation of record.
+
 #### Form C anchor shopping list (the next campaign)
 
 Form C is the one form with no dedicated anchor campaign yet.  Per-vehicle

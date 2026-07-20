@@ -2927,6 +2927,7 @@ def integrate_trajectory(params: BoosterParams,
                     'body_material':   (_ero_ms.body_material()
                                         if hasattr(_ero_ms, 'body_material') else ''),
                     'body_thickness_m': float(getattr(_ero_ms, 'body_tps_thickness_m', 0.0) or 0.0),
+                    'pullup_g_max':    float(getattr(_ero_ms, 'glider_pullup_g_max', 0.0) or 0.0),
                     'terminal_alt_km': (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0)
                                         if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0),
                     'dive_target_radius_km': float(getattr(_ero_ms, 'glider_dive_target_radius_km', 0.0) or 0.0),
