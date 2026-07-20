@@ -3249,6 +3249,14 @@ anchors are structural/guidance survived-the-maneuver demonstrations, not
 thermal limits, so the block never changes the survivability status; the
 windward/AoA heating *during* the pull-up remains a later-tier probe, carried
 with Thompson 1989's engineering-code uncertainty band (~15–40% at AoA).
+When that probe is built, its source pack is in `data/` (BENCHMARKING.md
+"Windward/AoA heating probe" subsection): Van Driest/Eckert–Tewfik
+reference-enthalpy windward method (AGARD-R-754 Kapp et al.; validated on
+the Tracy M-7.95 cone), the fin-LE interference severity (Alviani 2022,
+10–80× baseline at the body-fin gap, AEDC Mach-6 validated), and a coupled
+maneuvering-aeroheating + ablation reference method (MASCC/CMA, Murray &
+Russell 2002) for a later tier that unifies Form A recession and Form C
+windward heating.
 
 ---
 

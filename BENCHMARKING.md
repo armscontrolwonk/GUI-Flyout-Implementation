@@ -678,6 +678,65 @@ context, not a screening-tier anchor number.
   wind-tunnel validation at α=20°) — the honesty band for a screening AoA
   probe, though not yet a flight maneuver datum.
 
+#### Windward/AoA heating probe — source pack (read from primary, archived 2026-07-20)
+
+Four references (user-supplied) that between them **provision the last open
+Form C modeling tier** — the windward/fin-LE heating probe the terminal-dive
+block currently defers.  Each is archived to repo `data/`.
+
+- **Kapp, Mathauer & Rieger, "Aerodynamic Heating of Missiles," AGARD-R-754
+  paper 10 (Special Course on Missile Aerodynamics, 1988; DTIC ADA199172,
+  Distribution Unlimited)** — the method template for the probe: engineering
+  aeroheating via **Van Driest** (Stanton-number, geometry-dependent) for
+  general bodies and **Wing** for ogival noses, with the **Eckert–Tewfik
+  reference-enthalpy** adaptation of Lee's momentum-integral for the laminar
+  distribution.  Validated windward-vs-leeward: an **ogive-cylinder swept
+  through α = −10°…+10°** shows "the increase on the windward side is much
+  higher than on the leeward side" (weak on the cylinder, strong on the
+  ogive), and a **pointed cone at M = 7.95, α = 12°/24°** matches Tracy's
+  measured *circumferential* (windward→leeward) heat-transfer distribution —
+  the **same Tracy test case Thompson 1989 uses**, so the two anchors align.
+  This is exactly the reference-enthalpy windward estimator a Form C AoA
+  probe would implement.
+- **Richards, "Kinetic Heating of High Speed Missiles," AGARD-LS-98 paper 9
+  (Missile Aerodynamics, 1979; DTIC ADA068808, public release)** — the
+  companion review: kinetic heating for *tactical* missiles (the class with
+  the sparsest open literature), covering attached vs separated flows,
+  high-incidence effects, transient/arbitrary-wall vs steady-isothermal, and
+  the shock-surface-interaction localized-heating problem — the framing and
+  caveat set for the probe.
+- **Alviani, Fano, Poggie & Blaisdell, "Aerodynamic Heating in the Gap
+  Between a Missile Body and a Control Fin," J. Spacecraft & Rockets (2022),
+  DOI 10.2514/1.A35183** — the **fin-LE / control-surface interference
+  anchor** the terminal-dive block explicitly punts to "later tier": RANS,
+  fully-turbulent **Mach 6**, validated against **AEDC VKF Tunnel B 1979**
+  wind-tunnel data.  Quantifies the shock-interaction augmentation in the
+  body-fin gap: local heat transfer **10–80× the fin-off baseline** (surface
+  pressure up to ~20×) at the fin-root reattachment — i.e. the control-flap
+  leading edge, not the nose, is the Form C thermal driver, and by a large
+  factor.  The cited flag "AoA probe is a later tier" now has a numbered
+  severity to attach when built.
+- **Murray & Russell (ITT Aerotherm / US Army AMCOM), "Coupled
+  Aeroheating/Ablation Analysis for Missile Configurations," JSR 39(4) 2002**
+  — the **maneuvering + windward + ablation coupled method**: the Maneuvering
+  Aerotherm Shape Change Code (MASCC) computes surface heat flux on
+  **windward streamlines as a function of velocity, altitude and angle of
+  attack** through the trajectory (axisymmetric-analogy streamline tracing;
+  Dahm–Love / other windward-pressure options), feeding the CMA charring-
+  ablator transient — a missile-specific, AoA-aware counterpart to Duffa
+  that couples **both Form A (recession) and Form C (windward aeroheating)**.
+  The reference design for a future coupled tier above the current screening
+  split.
+
+*Together these retire the "provisioning" half of the AoA-probe want*: the
+method (Van Driest/Eckert reference-enthalpy windward estimate; MASCC-class
+coupling for a later tier), the validation cases (Tracy cone circumferential;
+AEDC fin-gap Mach 6), and the severity (fin-LE 10–80× baseline) are now all in
+hand and archived.  Still genuinely open: a **flight** windward/leeward split
+measured during an actual maneuver (all four here are wind-tunnel/CFD or
+ground-code), and the probe itself is **not yet built** — this is the source
+pack for that build, not the build.
+
 *Drive-folder triage (2026-07-19, folder `1oUqtoFx02…`):*
 - `regan1993.pdf` — the Regan & Anandakrishnan book: **the priority get**,
   blocked by the 10 MB connector cap (see above).
