@@ -537,8 +537,11 @@ Quantitative windward temperature / TPS thickness remain unpublished in the
 open sources on hand (Yengst + Lund are program/test histories, not thermal
 data reports).
 
-*Modern corroboration — the terminal-velocity end of the profile (facts
-recorded from in-chat page images, 2026-07-20):* **Wang, Tang & Zhang (NPU
+*Modern corroboration — the terminal-velocity end of the profile (read from
+primary; archived to repo
+`data/wang-tang-zhang-2019-short-range-reentry-guidance-pershing-ii-hgrv-ieee-access-7.pdf`,
+merged from a 4-part chat upload — IEEE Access is open access):* **Wang,
+Tang & Zhang (NPU
 Xi'an), "Short-Range Reentry Guidance With Impact Angle and Impact Velocity
 Constraints for Hypersonic Gliding Reentry Vehicle," IEEE Access 7 (2019)
 47437, DOI 10.1109/ACCESS.2019.2909589** (open access) — a Chinese guidance
