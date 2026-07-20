@@ -118,6 +118,43 @@ maneuver plan).  *Still to find (lower priority):* **Pershing II** skin
 material + temperature margin (Yengst is program/test history, light on TPS
 specifics); primary DTIC flight-test reports if publication-grade citation is
 needed (Yengst is a secondary synthesis, though an authoritative insider one).
+
+#### Contemporaneous trade-press corroboration: AW&ST (facts only)
+
+Several *Aviation Week & Space Technology* articles (period trade press; **not
+archived — copyrighted; facts recorded with attribution**) independently
+corroborate and date the Form C programs:
+
+- **AMaRV first flight — 20 Dec 1979**, Minuteman-1 from Vandenberg to Kwajalein
+  Atoll; first of three planned launches (Smith, AW&ST 11 Feb 1980).  Matches
+  Yengst's flight dates (1979-12-20 / 1980-10-08 / 1981-10-04) exactly.
+  ~50–75% of objectives met; the vehicle **did perform a pull-up** but the
+  planned pull-down/diving turn was marginal/abandoned after a Minuteman-1
+  booster anomaly left it too high and not fully restabilized — it coasted and
+  impacted the ocean.  Full three-axis self-contained inertial guidance +
+  digital computer; nearest predecessor the ACE (Advanced Control Experiment,
+  completed 1976; MDAC prime for both).  Program mgrs Lt Col M. Buchen /
+  Maj J. Traeger.  Maneuvering-RV investment since 1963 ≈ $224 M; PGRV renamed
+  AMaRV (Miller, AW&ST 24 May 1976).
+- **ABRV (Advanced Ballistic Reentry Vehicle)** — a *ballistic*-RV anchor,
+  new to the ledger: MX-program vehicle / option for Mk.12A, ~5 ft length,
+  **carbon-carbon nosetip that ablates symmetrically** during reentry —
+  deliberately, to avoid the asymmetric nosetip shapes that would produce
+  unwanted aerodynamic lift and accuracy loss.  Program 1977, three flights on
+  Boeing/Minuteman-1 (first two successful), completed ~1983 (AW&ST 16 Jun
+  1980).  **This directly corroborates the Form A δ/R_n shape-change ladder**
+  (asymmetric recession → dispersion; SHAPE_CHANGE_ONSET, Lin 1982/PANT).
+- **Nosetip TPS genealogy**: Mk.12 / Mk.12A use **carbon-phenolic** nosetips;
+  a **transpiration-cooled** nosetip was an early (1976) AMaRV candidate to
+  prevent tip ablation (vs the carbon-carbon actually used per Allen).
+- **MBRV / BGRV / Mk.500 corroboration** (Miller 1976): MBRV <3,000 lb,
+  flaps + open-loop autopilot, 3-of-4 GD Atlas launches; BGRV (MDAC) long
+  slender high-L/D, ~3,000-lb class, two Atlas launches, low-level hypersonic
+  glide; Mk.500 "Evader" (GE) Navy-flight-tested 5×, Trident option, simpler/
+  less-accurate than the Lockheed Mk.400.  Gas-jet (reaction-control) RV
+  maneuvering was flight-demoed on Celesco Athena at White Sands but judged
+  not to scale to operational size without a high weight penalty (→ the
+  aero-control choice for MBRV/BGRV/AMaRV).
 - **AMaRV** (McDonnell Douglas Advanced Maneuvering Reentry Vehicle, 1979–80
   flights): the canonical open-literature MaRV; NRC-2008 already uses it as
   CSM-1 in the duration ladder.  **CORRECTION (claim checked and withdrawn):**
