@@ -1568,6 +1568,7 @@ def integrate_trajectory(params: BoosterParams,
                     'static_margin_cal': _g['static_margin_cal'],
                     'LD_max': _g['LD_max'], 'LD_achievable': _g['LD_achievable'],
                     'alpha_trim_max_deg': _g['alpha_trim_max_deg'],
+                    'alpha_glide_deg': _g.get('alpha_glide_deg'),
                     'verdict': _g['verdict'],
                 }
                 params = copy.copy(params)
@@ -2983,6 +2984,40 @@ def integrate_trajectory(params: BoosterParams,
                         material=str(getattr(_ero_ms, 'tps_material', '') or ''),
                         mass_kg=float(getattr(_ero_ms, 'mass_kg', 0.0) or 0.0),
                         frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
+                # Windward-flank heating band (Form C AoA probe, heating.py):
+                # the α=0 acreage flux scaled by the modified-Newtonian windward
+                # amplification A(α)=sin(δ+α)/sin(δ), over the glide sub-arc
+                # (the low-AoA terminal dive is masked out).  A lifting vehicle
+                # flies its glide at AoA, so the windward flank — not the nose —
+                # carries the off-nose acreage heat.  Context overlay by default.
+                if (isinstance(_heating_fom, dict) and _diam > 0
+                        and getattr(_ero_ms, 'glider_enabled', False)
+                        and float(getattr(_ero_ms, 'glider_LD', 0.0)) > 0.0):
+                    _L_fore = float(getattr(_ero_ms, 'length_m', 0.0) or 0.0)
+                    _delta_defaulted = not (_L_fore > 0.0)
+                    _delta_deg = (float(np.degrees(np.arctan((_diam / 2.0) / _L_fore)))
+                                  if _L_fore > 0.0 else 8.0)
+                    # Operating glide AoA: the trimmed AoA already found by the
+                    # static-margin gate (non-sep body); a separating RV has no
+                    # trimmable geometry -> None -> windward reported band-only.
+                    _alpha_op = (_reentry_trim.get('alpha_glide_deg')
+                                 if _reentry_trim else None)
+                    # Glide sub-arc: exclude the commanded terminal dive.
+                    _term_alt = (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0) * 1000.0
+                                 if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0)
+                    _gmask = (np.asarray(_glide_a, float) > _term_alt) if _term_alt > 0 else None
+                    try:
+                        _heating_fom['windward'] = heating.windward_flank_flux(
+                            t_arr[_re_idx:], _rho_g, _glide_v, _glide_a, ranges[_re_idx:],
+                            body_radius_m=(_diam / 2.0), nose_radius_m=_RN,
+                            flank_half_angle_deg=_delta_deg, alpha_op_deg=_alpha_op,
+                            emissivity=float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85),
+                            body_material=(_ero_ms.body_material()
+                                           if hasattr(_ero_ms, 'body_material') else ''),
+                            glide_mask=_gmask, delta_defaulted=_delta_defaulted)
+                    except Exception:
+                        pass   # windward is an overlay; never break the FOM
+
                 _cmp = _heating_fom.get('compromise')
                 if _cmp is not None:
                     _row = _milestone(_cmp['t_s'])

@@ -545,8 +545,43 @@ def build_report(result) -> dict:
                      "peak flux (phugoid troughs).")
 
         if form == 'C':
-            # terminal-dive transient block (screening): the arc below the
-            # commanded dive altitude (or 15 km for dive-at-target).
+            # Windward-flank heating (screening AoA probe): a lifting vehicle
+            # flies its glide at AoA, so the windward generator — not the nose —
+            # carries the off-nose acreage heat.  The α=0 acreage flux scaled by
+            # the modified-Newtonian amplification A(α)=sin(δ+α)/sin(δ), over the
+            # glide sub-arc (heating.windward_flank_flux).
+            _w = (fom or {}).get('windward')
+            if _w and _w.get('T_eq_windward_K'):
+                _T = _w['T_eq_windward_K']; _qw = _w['q_windward_MW_m2']
+                _amp = _w['amplification']; _ab = _w['alpha_band_deg']
+                j.append("─── Windward-flank heating (screening) ─────────────────────")
+                _opstr = (f", {_T['op']:.0f} K at trim α={_w['alpha_op_deg']:.0f}°"
+                          if _w.get('alpha_op_deg') is not None and _T.get('op') else "")
+                j.append(f"  Windward T_eq {_T['lo']:.0f}–{_T['hi']:.0f} K across "
+                         f"α {_ab[0]:.0f}–{_ab[1]:.0f}°{_opstr}  "
+                         f"(δ={_w['delta_deg']:.0f}° flank; "
+                         f"{_qw['lo']:.1f}–{_qw['hi']:.1f} MW/m², "
+                         f"{_amp['lo']:.1f}–{_amp['hi']:.1f}× the α=0 acreage flux).")
+                _wc = (_w.get('criteria') or {}).get('windward_surface')
+                if _wc:
+                    j.append(f"  vs body {_w['body_material']}: soak "
+                             f"{_wc['limit_continuous_K']:.0f} K / peak "
+                             f"{_wc['limit_peak_K']:.0f} K — {_w['verdict']}.")
+                    if heating.WINDWARD_DRIVES_VERDICT:
+                        if _wc['T_lo_K'] > _wc['limit_continuous_K'] and status == 'survive':
+                            status = 'degraded'
+                        elif _wc['T_hi_K'] > _wc['limit_peak_K'] and status == 'survive':
+                            status = 'analysis'
+                elif _w.get('verdict'):
+                    j.append(f"  {_w['verdict']}.")
+                j.append(f"  {_w.get('thompson_band', '')}; laminar — turbulent "
+                         f"flank ~3–5× higher; control-fin gap interference "
+                         f"10–80× at reattachment (Alviani 2022) — flags, not "
+                         f"computed at screening tier.")
+
+            # Terminal-dive transient block (screening): the low-AoA arc below
+            # the commanded dive altitude (or 15 km for dive-at-target) — the
+            # nose-stagnation complement to the windward glide flank above.
             _h_dive = (prof.get('terminal_alt_km', 0.0) or 15.0) * 1000.0
             alt = np.asarray(arc['alt'], float)
             m = alt <= _h_dive
@@ -556,8 +591,8 @@ def build_report(result) -> dict:
                 j.append(f"  Dive segment below {_h_dive/1000:.0f} km: peak "
                          f"{np.max(q_d)/1e6:.1f} MW/m² over "
                          f"{t_d[-1]-t_d[0]:.0f} s — heat-sink regime "
-                         f"(windward flank/fin LE, not the nose; AoA probe is "
-                         f"a later tier).")
+                         f"(nose-stagnation; the windward flank/fin LE is the "
+                         f"block above).")
             j += _maneuver_context(prof.get('pullup_g_max', 0.0))
 
     # ---- NRC ladder (gliders) + method line ---------------------------------

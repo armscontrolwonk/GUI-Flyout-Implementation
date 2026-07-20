@@ -434,6 +434,27 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
 # (~0.1) is consistent.  One number, flagged — not a heating distribution.
 BODY_FLUX_FRACTION = 0.13
 
+# --- Windward-flank heating band (Form C AoA probe) --------------------------
+# The α=0 acreage flux above times a windward amplification A(α)=sin(δ+α)/sin(δ):
+# the modified-Newtonian surface-pressure ratio Cp ∝ sin²θ fed through the
+# reference-enthalpy laminar scaling q̇ ∝ √ρ_e ∝ √p_e (Eckert/Hung C_h ∝ Re*^−½,
+# HEATING_MODEL_CROSSCHECK.md reference-enthalpy section).  CP_MAX cancels in the
+# ratio, so A(α) is purely geometric.  The METHOD FAMILY (Van Driest St∝1/√Re
+# laminar + Eckert-Tewfik reference enthalpy) and the windward-vs-leeward
+# ORDERING it reproduces are CITED (AGARD-R-754 Kapp/Mathauer/Rieger 1988,
+# validated on the Tracy M=7.95 cone at α=12°/24°); the closed-form sin-ratio
+# reduction itself is an INFERENCE (BENCHMARKING.md "Windward/AoA heating
+# probe").  ρ_e∝p_e holds edge temperature fixed, so behind the stronger
+# windward shock the true ρ_e ratio is below the p_e ratio — the sin-ratio
+# mildly OVER-predicts (conservative for a screen).
+_WINDWARD_ALPHA_BAND  = (5.0, 20.0)   # deg; ends coincide with Thompson 1989's cited error anchors
+_WINDWARD_DELTA_FLOOR = 5.0           # deg; numerical guard — A(α) diverges as δ→0 (RV forebodies are 5–15° cones)
+# Gate: keep windward heating as a CONTEXT overlay by default (does not change
+# any shipped verdict).  Flip to True to let it downgrade survive→degraded /
+# flag needs-analysis.  Screening cannot place the transition or fin-gap
+# reattachment line, so it never asserts a hard fail even when True.
+WINDWARD_DRIVES_VERDICT = False
+
 
 def _severity(res):
     """Rank a single-location FOM result for binding-location selection
@@ -546,6 +567,146 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         f"used here.",
     ]
     return out
+
+
+def windward_amplification(delta_deg, alpha_deg):
+    """Windward / leeward laminar-heating amplification over the α=0 flank.
+
+    A(α) = sin(δ+α)/sin(δ)  (windward generator);  leeward uses sin(max(δ−α,0)).
+    Modified-Newtonian pressure ratio through the √p_e laminar scaling; CP_MAX
+    cancels.  δ is floored at _WINDWARD_DELTA_FLOOR (A diverges as δ→0)."""
+    d = np.radians(max(float(delta_deg), _WINDWARD_DELTA_FLOOR))
+    a = np.radians(max(float(alpha_deg), 0.0))
+    sd = np.sin(d)
+    win = np.sin(min(d + a, np.pi / 2.0)) / sd
+    lee = np.sin(max(d - a, 0.0)) / sd
+    return float(win), float(lee)
+
+
+def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
+                        flank_half_angle_deg, alpha_band_deg=_WINDWARD_ALPHA_BAND,
+                        alpha_op_deg=None, emissivity=0.85, body_material="",
+                        nose_radius_m=0.0, body_flux_fraction=BODY_FLUX_FRACTION,
+                        glide_mask=None, delta_defaulted=False):
+    """Screening windward-flank convective heating for a lifting RV at AoA.
+
+    Model (all closed-form, Sutton-Graves altitude):
+        q̇_flank0 = body_flux_fraction · q̇_stag(ρ,V,R_body)   (α=0 acreage flux)
+        q̇_windward(α) = q̇_flank0 · A(α),  A(α)=sin(δ+α)/sin(δ)
+        T_eq,w = (q̇_windward / (σ·ε))^¼
+    Evaluated over the glide sub-arc (pass glide_mask to exclude the low-AoA
+    terminal dive).  Reported as a band across alpha_band_deg with the operating
+    AoA marked when supplied.  Windward is off-nose acreage — the nose remains
+    the hard-fail driver; this is a body-location severity overlay.
+
+    Returns a flat dict: q_windward_MW_m2 / T_eq_windward_K each {lo,op,hi},
+    delta_deg, alpha_band_deg, alpha_op_deg, amplification {lo,op,hi},
+    criteria {windward_surface: {...}}, verdict, warnings.
+    """
+    rho = np.asarray(rho, float); V = np.asarray(V, float)
+    alt = np.asarray(alt, float); t = np.asarray(t, float)
+    eps = max(float(emissivity or 0.85), 1e-3)
+    warnings = []
+
+    delta = max(float(flank_half_angle_deg or 0.0), _WINDWARD_DELTA_FLOOR)
+    if float(flank_half_angle_deg or 0.0) < _WINDWARD_DELTA_FLOOR:
+        warnings.append(
+            f"Forebody half-angle {float(flank_half_angle_deg or 0.0):.1f}° "
+            f"floored to {_WINDWARD_DELTA_FLOOR:.0f}° (windward amplification "
+            f"diverges as δ→0; screening guard, not a cited threshold).")
+    if delta_defaulted:
+        warnings.append(
+            f"Forebody geometry unset — half-angle defaulted to {delta:.0f}° "
+            f"(flagged inference).")
+
+    R_body = float(body_radius_m) if body_radius_m and body_radius_m > 0 else float(nose_radius_m or 0.0)
+    if R_body <= 0:
+        return dict(verdict="windward not evaluated (no body radius)",
+                    warnings=["no body/nose radius for the windward acreage scale"],
+                    delta_deg=delta, criteria={})
+
+    # α=0 flank flux over the (glide-masked) arc, then peak.
+    q_flank0 = float(body_flux_fraction) * _stag_flux(rho, V, R_body)
+    q_stag_nose = _stag_flux(rho, V, float(nose_radius_m)) if nose_radius_m and nose_radius_m > 0 else None
+    mask = np.ones(t.shape, bool) if glide_mask is None else np.asarray(glide_mask, bool)
+    if mask.shape != q_flank0.shape or not mask.any():
+        mask = np.ones(q_flank0.shape, bool)
+        if glide_mask is not None:
+            warnings.append("glide-phase mask empty — windward evaluated over the full arc.")
+    q_flank0_pk = float(np.max(q_flank0[mask])) if q_flank0[mask].size else 0.0
+
+    a_lo, a_hi = float(alpha_band_deg[0]), float(alpha_band_deg[1])
+    A_lo, _ = windward_amplification(delta, a_lo)
+    A_hi, _ = windward_amplification(delta, a_hi)
+    A_op = windward_amplification(delta, alpha_op_deg)[0] if alpha_op_deg is not None else None
+
+    def _T(q):    return float((q / (eps * SIGMA)) ** 0.25) if q > 0 else 0.0
+    q_lo, q_hi = q_flank0_pk * A_lo, q_flank0_pk * A_hi
+    T_lo, T_hi = _T(q_lo), _T(q_hi)
+    q_op = (q_flank0_pk * A_op) if A_op is not None else None
+    T_op = _T(q_op) if q_op is not None else None
+
+    # Stagnation-approach guard: windward should stay below the nose stagnation
+    # flux for the screening regime.
+    if q_stag_nose is not None and q_stag_nose[mask].size:
+        q_stag_pk = float(np.max(q_stag_nose[mask]))
+        if q_stag_pk > 0 and q_hi >= q_stag_pk:
+            warnings.append(
+                f"Windward estimate ({q_hi/1e6:.1f} MW/m²) approaches the nose "
+                f"stagnation flux ({q_stag_pk/1e6:.1f} MW/m²) — sharp tip + small "
+                f"δ + high α is outside the screening regime; treat as a flag.")
+
+    # Body material limits → the windward criterion.
+    mat = TPS_MATERIALS.get(str(body_material or "")) if body_material else None
+    criteria = {}
+    verdict = ""
+    if mat and not mat.get("is_ablator"):
+        cont, peak = float(mat["continuous_K"]), float(mat["peak_K"])
+        criteria["windward_surface"] = {
+            "limit_continuous_K": cont, "limit_peak_K": peak,
+            "T_lo_K": T_lo, "T_hi_K": T_hi, "T_op_K": T_op,
+            # margins: robust (even at the gentlest α=lo) and worst (α=hi)
+            "margin_soak_lo": (T_lo / cont) if cont else 0.0,
+            "margin_peak_hi": (T_hi / peak) if peak else 0.0}
+        if T_lo > cont:
+            verdict = (f"windward flank exceeds the body continuous limit "
+                       f"({mat['label']} {cont:.0f} K) even at α={a_lo:.0f}° — "
+                       f"body TPS runs beyond its soak limit on the windward side")
+        elif T_hi > peak:
+            verdict = (f"windward flank can exceed the body peak limit "
+                       f"({mat['label']} {peak:.0f} K) at α≤{a_hi:.0f}° — "
+                       f"needs a dedicated AoA/transition analysis")
+        else:
+            verdict = (f"windward flank within the body limits across α "
+                       f"{a_lo:.0f}–{a_hi:.0f}° ({mat['label']})")
+    elif mat and mat.get("is_ablator"):
+        verdict = (f"body is an ablator ({mat['label']}) — windward reported as "
+                   f"flux/T_eq only (recession is the failure mode, not T_eq)")
+    else:
+        verdict = "windward flux/T_eq only (no body TPS material set)"
+
+    warnings.append(
+        "Laminar windward estimate — turbulent flank runs ~3–5× higher "
+        "(T_eq ~1.3–1.5×); flag, not a computed value.")
+    warnings.append(
+        "Control-fin / body-fin gap interference heating can reach 10–80× the "
+        "fin-off flank value at reattachment (Alviani 2022, AEDC Mach-6); "
+        "screening cannot place the reattachment line — flagged, not computed. "
+        "Computed value needs a coupled solver (Murray & Russell 2002, MASCC).")
+    if alpha_op_deg is None:
+        warnings.append(
+            "No trimmed operating AoA (separating RV or geometry unset) — "
+            "windward reported as a band only.")
+
+    return dict(
+        q_windward_MW_m2={"lo": q_lo / 1e6, "op": (q_op / 1e6 if q_op is not None else None), "hi": q_hi / 1e6},
+        T_eq_windward_K={"lo": T_lo, "op": T_op, "hi": T_hi},
+        delta_deg=delta, alpha_band_deg=(a_lo, a_hi), alpha_op_deg=alpha_op_deg,
+        amplification={"lo": A_lo, "op": A_op, "hi": A_hi},
+        q_flank0_peak_MW_m2=q_flank0_pk / 1e6, body_material=str(body_material or ""),
+        criteria=criteria, verdict=verdict,
+        thompson_band="engineering-code AoA uncertainty ~15–40% (Thompson 1989)",
+        warnings=warnings)
 
 
 # ---------------------------------------------------------------------------
