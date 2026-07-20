@@ -693,9 +693,10 @@ as its data lands.  Status by material:
   ~3 min of stable Mach-20 flight; FOIA 14-F-0122, archived) + NTRS
   20090004576 (oxidation of C/C through coating cracks — the failure
   mechanism).  A *flight* degradation-time datum.
-- **`rcc` (Shuttle) — source in hand, mining pending**: NTRS 19940030739,
-  "Analysis of the Shuttle Orbiter RCC Oxidation Protection System" (coating
-  mass-loss / reuse limits) + the certified 100-mission design life.
+- **`rcc` (Shuttle) — REUSE-LIFE DATUM NOW IN HAND (Jenkins 2013, below)**;
+  also NTRS 19940030739 ("Analysis of the Shuttle Orbiter RCC Oxidation
+  Protection System," coating mass-loss / reuse limits — still to mine for
+  the per-cycle mass-loss number).
   *Checked-and-empty (2026-07-20, not archived):* Smith, Soares et al.
   (Boeing/NASA JSC), "Space Shuttle TPS Repair Flight Experiment Induced
   Contamination Impacts" (AIAA/JSC, STS-114/121 DTO 848) — an STS-114 RCC
@@ -704,6 +705,38 @@ as its data lands.  Status by material:
   E 1559, EVA visor fogging); no RCC entry environment, no arc-jet exposure,
   no time-at-temperature.  Right material/mission, wrong subject — carries no
   dwell datum.  Do not re-mine.
+
+*RCC reuse-life anchor (read from primary, archived
+`data/jenkins-2013-protecting-the-body-orbiter-tps-nasa-history-ch5.pdf`):*
+Jenkins, D. R., "Protecting the Body: The Orbiter's Thermal Protection
+System," Ch. 5 of the NASA Shuttle history (AIAA book DOI
+10.2514/5.9781624102172.0111.0136).  The authoritative Shuttle-TPS history,
+and it hands over the RCC reuse-life numbers **and** the epistemic caveat:
+- **RCC operating range −250 °F to 3000 °F** (3000 °F = **1922 K** — matches
+  the catalog `rcc` `peak_K` 1922 K exactly).  Pyrolyzed-carbon/carbon with a
+  **silicon-carbide conversion coating** (diffusion reaction at 3200 °F =
+  2033 K); "**not an insulator — the backface was essentially as hot as the
+  frontface**" (so the RCC limit really is a bulk-material limit, exactly how
+  the `hot_structure` group treats it, not a through-thickness soak).
+- **Reuse-life spec (Lockheed TPS): "100 normal operational entries at
+  2500 °F (= 1644 K), or a single-contingency entry at 3000 °F (= 1922 K)."**
+  → the RCC anchor: **kind=design/flight, reuse floor 100 entries at 1644 K,
+  single-entry cap 1922 K, coating = SiC conversion, outcome survived (flew
+  the full 135-mission program on the wing LE / nose cap)**.  This is a
+  *cycle-life* floor (the right RCC metric — reusability, not single-entry
+  dwell), sitting **below** the current `continuous_K` 1811 K — i.e. the
+  routine-reuse temperature is lower than the material's one-shot limit.
+- **The honesty caveat, in the program's own words**: 1970s coatings
+  "appeared to permit an upper-limit temperature of about 2500 °F for 100
+  cycles, but **actual real-world data was lacking**."  The Shuttle's own
+  coating-life numbers were *design estimates*, not measured oxidation-life —
+  precisely why the campaign wants an at-limit arc-jet time-to-failure and
+  why "floor, not fence" is the honest verdict semantics.
+- Corroborates the **silica-tile** limits too: LI-900/LI-2200 tiles ran
+  650–2300 °F acreage (**2300 °F = 1533 K** = catalog `silica_tile`
+  `continuous_K`), cyclable to 2500 °F, backface held to 350 °F (450 K =
+  the aluminum airframe limit) — a clean independent check on three catalog
+  numbers at once.
 - **`c_sic` — first flight dwell record NOW IN HAND (below); at/near-limit
   arc-jet oxidation-life still the open get.**
 
