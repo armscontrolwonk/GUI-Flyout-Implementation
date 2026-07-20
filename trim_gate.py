@@ -37,6 +37,14 @@ OUTCOMES:
 This is a preliminary-design gate, not a 6-DOF trim solution: it uses linearised
 small-AoA moment slopes, a single control set, and the constant-area-reference
 build-up of glider_ld.  CG and fin station are estimates (overridable).
+
+Known limitation (cone noses): the Barrowman cone-nose c.p. fraction (0.666 of
+nose length) is the slender-body value; the flight-substantiated sharp-cone
+result is X_cp/l = 2/(3cos^2 delta), Mach-independent and constant to alpha
+<= 90 deg (Eastman, Boeing D2-36139-1 / DTIC AD0376942, Eq. 3.2 + Fig. 3.6).
+0.666 under-places the c.p. by ~3% at delta = 10 deg, ~13% at 20 deg, ~33% at
+30 deg -> the gate slightly understates static margin for fat cones.  Fine at
+screening tier for slender (RV-class) noses; see BENCHMARKING.md.
 """
 
 from __future__ import annotations

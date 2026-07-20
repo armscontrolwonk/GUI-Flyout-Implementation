@@ -52,6 +52,9 @@ from booster_models import (BoosterParams, _cl_alpha_gridfins, effective_ro,
                              _SHAPE_ALIAS)
 
 # Barrowman nose centre-of-pressure, as a fraction of nose length from the tip.
+# NB the cone value is the slender-body limit of the flight-substantiated
+# sharp-cone result 2/(3cos^2 delta) (Eastman, Boeing D2-36139-1 Eq. 3.2):
+# within ~3% for delta <= 10 deg, ~13% low at 20 deg — see trim_gate.py note.
 _NOSE_CP_FRACTION = {
     "cone":           0.666,
     "tangent_ogive":  0.466,

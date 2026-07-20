@@ -144,6 +144,68 @@ defense community's characterization of the Form B vehicle as a target):
 The threat table cites the X-43 / X-51 / HTV-2 / AHW lineage as the class
 exemplars — consistent with the ledger's Form B anchor set.
 
+#### Cone-aero databook: Eastman, Boeing D2-36139-1 (read from primary, archived in 3 parts)
+
+**Eastman, D. W., "Aerodynamics of Conical Bodies (U)," Boeing D2-36139-1,
+rev. A (approved Dec 1965 / rev 10-12-66), 187 sheets; DTIC AD0376942,
+declassified from Confidential 10 Dec 1978** — a compilation/evaluation of
+theoretical + experimental cone aero, Mach 0–25, "emphasis on slender cones
+such as might be used for ballistic missile re-entry," several hundred
+references indexed by test condition and geometry.  Mined findings:
+
+- **Sharp-cone center of pressure (the trim-gate anchor)**: Eq. 3.2,
+  **X_cp/l = 2/(3 cos²δ)** from the apex — from ray geometry (conical-flow
+  *and* Newtonian), **Mach-independent (shock attached) and constant with α
+  to ≤90°**; "experimental results substantiate equation 3.2."  Fig. 3.6
+  (M = 6.8, cg at 0.75 l, δ = 5–50°) encodes a self-check: the δ = 20° cone
+  reads C_m ≈ 0 for all C_N, and 2/(3cos²20°) = 0.755 ≈ the 0.75 l cg ✓.
+  **Thrusty comparison (run 2026-07-20):** the Barrowman buildup
+  (`grid_fin_sizing._nose_cp_fraction`, cone = 0.666) sits **+0.9% forward
+  of the substantiated value at δ = 5°, +3.2% at 10°, +5.0% at 12.5°,
+  +13.4% at 20°, +33% at 30°** — fine at screening tier for slender
+  (RV-class) noses, degrades for fat cones; limitation now noted in
+  `trim_gate.py` / `grid_fin_sizing.py` with this citation.  Fig. 3.7 gives
+  the Newtonian blunt-cone c.p. chart (vs d/D and L/D) if a blunted
+  correction is ever wanted.
+- **Newtonian C_N validated**: sharp cones "at most angles of attack"
+  (overpredicts α > 60°); blunt cones at AoA good to α = 45° at M 9.75
+  (Fig. 2.11, r_N/r_b to 0.763).  But **Newtonian fails for blunted-cone
+  C_Nα at α = 0** (reductions much larger than 2sin²δ predicts; Modified
+  Shock Expansion needed) — the same slender-blunt caveat class the repo's
+  cone wave-drag validation notes for blunt/low-L/D shapes.
+- **Base pressure** (§4): ~constant with α, ~independent of cone half-angle,
+  larger for a cone than a cone-cylinder; nose blunting / base rounding
+  negligible; **strongly sensitive to Reynolds number and sting mounting,
+  and free-flight base drag differs significantly from wind-tunnel values**
+  (their Figs. 4.13–4.15) — an honesty band to carry for `_cd_base`
+  (Chin 1961 / DATCOM are tunnel-derived curves).
+- **Boundary-layer transition** (§7): the ten-factor list (Re, M, roughness,
+  wall/edge enthalpy ratio, nose bluntness, tunnel turbulence, pressure
+  gradient, injection, vehicle dynamics, ablation shape change; "Mach and
+  Reynolds generally conceded the most important"); **flight transition data
+  were Secret** (their ref 536, "transition data from flights of actual
+  reentry vehicles") and ground facilities could not reach flight transition
+  Re — the 1966 statement of exactly the open-literature scarcity the repo's
+  transition-uncertainty treatment (Thompson band, PANT-era anchors) works
+  around.
+- **Ablation/blowing effects on aero** (§9): simulated-ablation blowing
+  **reduces C_N by a large amount** (α = 0), **reduces skin friction but
+  increases wave drag**; small ablation rates reduce total axial force,
+  larger rates can go either way; "most of the meager experimental data are
+  classified SECRET."  A cited mechanism note for the Form A
+  ablation-alters-aero coupling (alongside the δ/R_n shape-change ladder).
+- **"LORV" identified**: the databook's recurring "Summary of all LORV
+  vehicle flight tests" (data spanning **Mach 1–25**) references the **AVCO
+  RAD "Low-Observable Reentry Vehicle" flight-test program** — per-flight
+  evaluation reports for vehicles **L-1** (RAD-SR-64-307 Add., AD-363497)
+  and **L-4** (RAD-SR-65-259, AD-366403) and the program summary
+  **RAD-SR-66-31 Vol. I (AD-370054)**, all Secret at the time — an early
+  (mid-1960s) low-observable/penetration-aids RV flight program; candidate
+  DTIC declassification hunts if that lineage ever matters here.
+- §5 (dynamic damping in pitch, C_mq-class derivatives) noted but not mined —
+  beyond the screening tier (Thrusty's ζ is a guidance-law knob, not an aero
+  damping derivative).
+
 #### General Hypersonics folder sweep (2026-07-20, folder `1uGJ-ok4…`)
 
 Four substantive finds, three archived to repo `data/`:
@@ -510,18 +572,10 @@ context, not a screening-tier anchor number.
 *Drive-folder triage (2026-07-19, folder `1oUqtoFx02…`):*
 - `regan1993.pdf` — the Regan & Anandakrishnan book: **the priority get**,
   blocked by the 10 MB connector cap (see above).
-- `AD0376942.pdf` = DTIC, "Aerodynamics of Conical Bodies" — RV aero
-  (trim/static-margin side); >10 MB download cap.  **Partially identified via
-  the Drive text-extraction path (2026-07-20):** it is **Boeing report
-  D2-56139-1** (rev. 10-12-66; declassified from Confidential 10 Dec 1978,
-  DoDD 5200.10), a cone aerodynamics databook — normal force, pitching
-  moment / center of pressure, axial force incl. nose-bluntness effects,
-  Newtonian wave drag for cones, base pressure vs Reynolds/Mach — with
-  recurring "Summary of all LORV vehicle flight tests" tables (Boeing LORV
-  reentry-vehicle program).  Candidate citation anchor for the repo's cone
-  wave-drag validation (`validate_cone_wave_drag.py`) and static-margin/trim
-  gate; the data lives in scanned figures the text path cannot recover —
-  full mining needs the PDF in-chat (zip upload, as with regan1993).
+- `AD0376942.pdf` = "Aerodynamics of Conical Bodies" — **MINED from primary
+  (2026-07-20, user chat-upload in three parts; archived to repo
+  `data/eastman-1966-…-d2-36139-1-…-part-{a,b,c}.pdf`).**  See the dedicated
+  cone-aero databook subsection below.
 - `GEReentryVehicles.pdf` = AIAA Historic Site brochure, GE Re-entry Systems —
   archived to repo `data/`.  Gives the **MaRV lineage map for the DTIC hunt**
   (MBRV → MaRV studies → EP MaRV / HP MaRV / Mk 500 → MTV / HAVE STING /
