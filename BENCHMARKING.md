@@ -538,10 +538,33 @@ open sources on hand (Yengst + Lund are program/test histories, not thermal
 data reports).
 
 *Pershing II Drive-folder triage (2026-07-20, folder `11Iqc63JuDov…`):* only
-**Lund 1984** was archivable and is mined above.  Also present, **not archived**:
-`ADA121622` "Pershing II Simulation Studies" (Georgia Tech, DTIC — public, *not
-yet mined*; candidate for quantitative terminal-trajectory numbers if the
-screening tier ever needs a published Mach/g); `Maneuvering Warheads.pdf` = a
+**Lund 1984** was archivable and is mined above.  Also present:
+`ADA121622` — **now MINED from primary (user chat-upload, 2 parts; archived
+to repo `data/knight-1982-pershing-ii-simulation-studies-rd-cr-82-27-…`)**:
+Knight, Lynch, Pyles, Seitz & Thornton (Georgia Tech EES for the US Army
+Missile Command), "Pershing II Simulation Studies," RD-CR-82-27, July 1982,
+Distribution Unlimited.  **NEGATIVE RESULT for the open quantitative want**
+(published terminal-maneuver Mach/g): the aerodynamic flight validation "could
+not be completed because Pershing II flight test data were not available in
+time," and the nine Tactical-Ballistic-Missile trajectory profiles were
+delivered to the sponsor **on tape**, not printed in the report — so the
+report documents simulation *infrastructure*, not RV maneuver data (the
+Appendix F aero tables are worked interpolation examples with made-up
+numbers).  Yengst 2010 (+ Lund 1984 corroboration) therefore remains the
+citation of record for the ~25-g / sub-50-kft / Mach-8 pullout datum.
+What the report *does* give:
+- The Army's **U70 simulation program** covers Pershing II "through boost and
+  re-entry including the maneuvering re-entry vehicle" (separate BOUT/RVOUT
+  boost/RV output stages) — confirmation that MICOM's own tool chain modeled
+  the terminal maneuver, plus the TRW advanced simulator with
+  multidimensional aero-pressure/temperature/coefficient tables.
+- **A boost-phase structural/breakup criterion used in the Army's WSMR
+  range-safety analysis: missile breakup assumed when total AoA exceeds 15°
+  or normal acceleration exceeds 5 g during boost** (nozzle-deflection
+  failure cases at t = 30 s [max-q] and 49 s [near first-stage burnout]) — a
+  citable in-boost structural-limit class datum (Thrusty currently applies
+  no boost structural gate; parked as a possible future anchor).
+`Maneuvering Warheads.pdf` = a
 1983 NYT article (**copyrighted, ProQuest — facts-only, not archived**; no new
 technical datum beyond the above); FM 6-11 / FM 6-11 FD(84) Army field manuals
 and an operator's technical manual (doctrine, not TPS/kinematics — no datum);
