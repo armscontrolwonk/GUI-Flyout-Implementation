@@ -110,8 +110,12 @@ Form C screen wanted, per Yengst:
   qualification loads were the high-g reference the BGRV/AMaRV programs scaled
   against.
 
-*Still to find (lower priority):* airframe **skin material + temperature
-margin** for Pershing II / AMaRV (Yengst is program/test history, light on TPS
+*AMaRV TPS resolved:* Allen 1997 states the terrestrial AMaRV used
+**carbon-carbon** (see the Allen section above), nose radius 2.34 cm — so the
+AMaRV reference reentry object can be fully specified (biconic 10.4°/6°, 470 kg,
+β 13,485 kg/m², AoA 10°, R_n 2.34 cm, nose material `carbon_carbon`, ~100-g
+maneuver plan).  *Still to find (lower priority):* **Pershing II** skin
+material + temperature margin (Yengst is program/test history, light on TPS
 specifics); primary DTIC flight-test reports if publication-grade citation is
 needed (Yengst is a secondary synthesis, though an authoritative insider one).
 - **AMaRV** (McDonnell Douglas Advanced Maneuvering Reentry Vehicle, 1979–80
@@ -169,8 +173,18 @@ personal-communication reference; superscript ambiguous in the scan).  The
   maneuvers"; "successfully tested weapon system prototype."
 - Allen's Traj code carries a coded AMaRV aero model; in his Mars
   application the AMaRV second stage sees peak convective **153 W/cm²
-  (1.53 MW/m²)** with RCC judged tolerant without significant recession —
-  and he notes the *terrestrial* AMaRV design environment was more severe.
+  (1.53 MW/m²)**, stagnation T ≤ 2500 K, with RCC judged tolerant without
+  significant recession — and he notes the *terrestrial* AMaRV design
+  environment was more severe.
+- **AMaRV TPS = reinforced carbon-carbon** — stated directly: Allen selects
+  RCC for the Mars second stage *because* "carbon-carbon TPS was used" on the
+  terrestrial AMaRV (SLA-561V would recede at 153 W/cm²; RCC tolerates it).
+  So the AMaRV airframe TPS is **carbon-carbon** — which ties Form C straight
+  back to the Form A C/C ablator anchors (Perini/Scala theory, Nestler
+  severe-regime, Reentry-F bracket; `heating.py` `carbon_carbon`).
+- **AMaRV second-stage nose radius = 2.34 cm** (Allen's parameter table; a
+  sharp maneuvering-biconic tip) — the last geometry field for a Form C
+  reference reentry object.
 
 Together with Auclair's flight profile (dive → 30 kft near-horizontal TFS
 segment → terminal dive) and the MDAC program facts, the AMaRV anchor now has
