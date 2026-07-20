@@ -113,6 +113,63 @@ Distribution A / DARPA public releases):
     a low-Mach corroboration point for the NRC duration-ladder's
     conventional tier.
 
+#### General Hypersonics folder sweep (2026-07-20, folder `1uGJ-ok4…`)
+
+Four substantive finds, three archived to repo `data/`:
+
+- **Tracy & Wright, "Modeling the Performance of Hypersonic Boost-Glide
+  Missiles," *S&GS* 28 (2020), DOI 10.1080/08929882.2020.1864945**
+  (`tracy-wright-2020-modeling-hypersonic-boost-glide-sgs28.pdf`) — an
+  independent published model using **the same methodology chain as Thrusty's
+  Form B screen**: stagnation-point heating + radiative-equilibrium wall
+  temperature, ε = 0.85 carbon aeroshell, HTV-2 aero parameters from Acton's
+  flight fit, leading-edge radius 0.034 m.  **Cross-check run against
+  Thrusty's chain**: their Fig. 10 stagnation-region temperature ~3,200 K at
+  v = 6 km/s / h = 49.7 km; Thrusty's cold-wall Sutton-Graves +
+  radiative-equilibrium at the same point gives **3,408 K (+6.5%)** — high in
+  exactly the conservative direction expected, since Tracy applies a hot-wall
+  enthalpy correction and the repo deliberately stays cold-wall (screening
+  bias).  Their Fig. 11 (centerline 1 m aft of the nose): ~1,200–2,000 K
+  across the glide for 5–7 km/s entry speeds.
+- **Glass, Dirling, Croop, Fry & Frank, "Materials Development for Hypersonic
+  Flight Vehicles," AIAA 2006-8122, NASA NTRS 20070004792**
+  (`glass-2006-…-ntrs-20070004792.pdf`) — the **Falcon MIPT paper** (same
+  Glass as the 2011 C/C–SiC survey already cited in METHODS): the HTV-2/HCV
+  TPS technology areas with their design-class temperatures — **C-C leading
+  edges at nominal use <3,000 °F (= 1,922 K — independently matching the
+  repo's `uhtc`/hot-structure 1,923 K continuous ceiling almost exactly)**,
+  a >3,000 °F task targeting **3,600 °F (2,255 K) refractory composites**
+  (Ir/HfO₂ MLOP, PCP-SiC), high-temperature multi-layer insulation to
+  3,000 °F (backface ≤350 °F), acreage C/SiC & C-C rib-stiffened panels, and
+  ~3,000 °F wafer seals.  Design-practice corroboration of the Form B
+  material-class bands, from the HTV-2 program itself.
+- **Spravka & Jorris, "Current Hypersonic and Space Vehicle Flight Test and
+  Instrumentation," AFTC 412TW-PA-15264 / DTIC ADA619521 (2015, Dist. A)**
+  (`spravka-jorris-2015-…-dtic-ada619521.pdf`) — the embedded Hypersonic-CTF
+  brief carries **independent HTV-2 endo numbers: Mission A endo flight time
+  1,363 s / endo range 3,180 nm (5,889 km); Mission B 1,409 s / 3,079 nm +
+  1,250 nm cross-range (2,315 km); coast altitude 450 kft** — the A/B endo
+  times match Acton's table-derived durations (1,798−435 = 1,363 s;
+  1,785−376 = 1,409 s) **exactly**, and A's endo range matches Acton's
+  x₅−x₂ = 5,900 km and the B cross-range his ~2,300 km.  Strong independent
+  corroboration of the Acton reconstruction the HTV-2 RO is built on.  Also:
+  X-51A max altitude 71 kft / 310 nmi; AHW flew ~2,500 mi in <30 min
+  (first flight 3,700 km).
+- **RAND RR-2137, Speier, Nacouzi, Lee & Moore, *Hypersonic Missile
+  Nonproliferation* (2017) — facts-only, NOT archived** (RAND's rights page
+  prohibits online posting; personal-use duplication only).  Appendix A
+  presents the total-heat-transfer scaling **Q ∝ ∫√(ρ/R_n)·V³ dt — the same
+  Sutton-Graves form Thrusty integrates**, plus the larger-nose-radius and
+  trajectory-shaping mitigation arguments; the rest is a global
+  hypersonic-facility survey and export-control analysis (no anchor datums).
+
+Also present, identified but not mined: Rana & Chudoba, AIAA 2016-5319
+(lifting-reentry-vehicle design historiography, Tsien → Dream Chaser; 19.5 MB
+>connector cap; survey, no screening datums — parked); Micol, "Experimental
+Hypersonics at NASA Langley" (legacy binary .ppt, unreadable via the
+connector); duplicate copies of the Bedke and Sponable decks triaged in the
+X-51/HTV sweep.
+
 *X-51/HTV Drive-folder triage (2026-07-20):* mined & archived as above.  Also
 present, triaged but **not mined**: Davies, "Infrasonic Characterization of
 the Falcon HTV-2" (.pptx, 12.8 MB — geophysical observable of the flight, no
@@ -425,10 +482,10 @@ context, not a screening-tier anchor number.
   already cited in HEATING_TPS_REFERENCES §6; no new datum.
 - `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article
   (46 MB scan) — unidentified beyond the journal; >10 MB cap.
-- Subfolders X-51 / HTV — **swept 2026-07-20** (see the HTV-2
-  Acton/Wright/FOIA corpus subsection under Form B); Defenses / General
-  Hypersonics + the Heating-folder Martin-class "atmospheric reentry" book
-  (13 MB, >cap) — still unswept.
+- Subfolders X-51 / HTV / General Hypersonics — **swept 2026-07-20** (see the
+  HTV-2 Acton/Wright/FOIA corpus and General-Hypersonics-sweep subsections
+  under Form B); Defenses + the Heating-folder Martin-class "atmospheric
+  reentry" book (13 MB, >cap) — still unswept.
 
 #### Form C modeling anchors: Regan & Anandakrishnan 1993 (read from primary)
 
