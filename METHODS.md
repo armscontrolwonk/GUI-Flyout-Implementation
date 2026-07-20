@@ -3229,6 +3229,27 @@ bound-checked against the recovered Stardust and Hayabusa capsules.  No nominal
 changed value (verdict-stable); the epistemic status did.  H_eff was **not** tuned
 to the capsule measurements — by design (see above).
 
+### 13.7 Maneuver-load anchors (Form C demonstrated envelope)
+
+For maneuvering RVs (Form C) the report adds a **demonstrated maneuver-load
+context block** alongside the terminal-dive transient screen.  The anchor
+dataset lives as `survivability_report.MANEUVER_ANCHORS` (same data-edit
+philosophy as `UHTC_ANCHORS` — one cited record per demonstrated or
+published-representative load; `BENCHMARKING.md` §Form C is the citation of
+record): Regan 1984's worked 4-g accuracy-maneuver case, Pershing II's ~25-g
+operational pullout (Yengst 2010; maneuver corroborated by Lund 1984),
+BGRV's 25-g component qualification (Yengst), AMaRV's flight-measured ~100 g
+(Yengst; Bell XI accelerometers, three flights 1979–81), and Regan &
+Anandakrishnan 1993's representative 100-g evader (Table D.1).  The block
+compares the plan's commanded lift cap (`glider_pullup_g_max`, plumbed into
+the heating profile) to the ladder: ≤25 g is the operational-MaRV class,
+25–100 g is inside the AMaRV flight-demonstrated ceiling, and >100 g exceeds
+every load in the open flight record.  **Context, never a verdict**: the
+anchors are structural/guidance survived-the-maneuver demonstrations, not
+thermal limits, so the block never changes the survivability status; the
+windward/AoA heating *during* the pull-up remains a later-tier probe, carried
+with Thompson 1989's engineering-code uncertainty band (~15–40% at AoA).
+
 ---
 
 ## 14. Outputs, events, and milestones

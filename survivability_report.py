@@ -208,6 +208,86 @@ def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
                 pa_anchor=pa_anchor, floor_s=floor_s, lines=lines)
 
 
+# ---------------------------------------------------------------------------
+# Form C maneuver-load anchor dataset — one record per demonstrated (or
+# published-representative) MaRV maneuver load.  Same philosophy as
+# UHTC_ANCHORS: a new flight datum is a DATA EDIT, not a code change; sources
+# are exact and BENCHMARKING.md §Form C is the citation of record.  These are
+# structural/guidance survived-the-maneuver demonstrations, NOT thermal
+# limits — the context block below is a demonstrated-envelope comparison,
+# never a pass/fail verdict.
+# ---------------------------------------------------------------------------
+MANEUVER_ANCHORS = [
+    dict(id="Regan-1984-worked-4g", vehicle="Regan 1984 worked case", g=4.0,
+         kind="textbook",
+         note="fixed L/D=1.5, β=10⁴ kg/m² MaRV hits the 4-g transverse limit "
+              "at ≈45 km (gentle accuracy-maneuver class)",
+         source="Regan 1984, Re-Entry Vehicle Dynamics (AIAA), Tables 6.7/6.8"),
+    dict(id="Pershing-II-pullout", vehicle="Pershing II", g=25.0,
+         kind="operational_flight",
+         note="~25-g pullout below ~50 kft after ~Mach-8 reentry (RADAG "
+              "map-match segment); velocity-control pullup/pulldown, fielded "
+              "Dec 1983",
+         source="Yengst 2010, Lightning Bolts; maneuver corroborated by "
+                "Lund 1984 (Martin Marietta/AIAA)"),
+    dict(id="BGRV-qual-25g", vehicle="BGRV", g=25.0, kind="qualification",
+         note="components qualified to 25 g (Atlas-boosted, >Mach-15 "
+              "separation onto low-altitude glide)",
+         source="Yengst 2010, Lightning Bolts"),
+    dict(id="AMaRV-flight-100g", vehicle="AMaRV", g=100.0,
+         kind="flight_measured",
+         note="Bell XI accelerometers measured >100-g reentry-maneuver "
+              "levels; guidance held accuracy through ~100-g maneuvers "
+              "(3 flights, 1979–81)",
+         source="Yengst 2010, Lightning Bolts"),
+    dict(id="Regan-1993-evader-cap", vehicle="Regan 1993 evader", g=100.0,
+         kind="textbook",
+         note="representative evader max side acceleration 100 g (140 kg, "
+              "⌀ 0.4 m, (L/D)max 2.5, β ≈ 1.1×10⁴ kg/m²)",
+         source="Regan & Anandakrishnan 1993, Dynamics of Atmospheric "
+                "Re-Entry (AIAA), Table D.1"),
+]
+
+# Envelope constants read from the anchors above.
+_MARV_G_OPERATIONAL = 25.0    # Pershing-II-pullout (fielded system)
+_MARV_G_DEMONSTRATED = 100.0  # AMaRV-flight-100g (flight-measured ceiling)
+
+
+def _maneuver_context(g_cmd):
+    """Demonstrated maneuver-load envelope context for Form C (text block).
+
+    Compares the plan's commanded lift cap (glider_pullup_g_max, in g) to the
+    flight-demonstrated ladder.  Context only — the anchors are structural/
+    guidance demonstrations, not thermal limits, so this never changes the
+    survivability status.
+    """
+    g_cmd = float(g_cmd or 0.0)
+    if g_cmd <= 0.0:
+        return []
+    lines = ["─── Maneuver-load anchors (demonstrated envelope) ──────────",
+             f"  Commanded lift cap {g_cmd:g} g vs the open flight record: "
+             f"4 g (Regan textbook gentle) · 25 g (Pershing II operational "
+             f"pullout; BGRV qual) · ~100 g (AMaRV, flight-measured)."]
+    if g_cmd <= _MARV_G_OPERATIONAL:
+        lines.append("  Within the operational-MaRV class (Pershing II "
+                     "~25-g pullout, fielded Dec 1983).")
+    elif g_cmd <= _MARV_G_DEMONSTRATED:
+        lines.append("  Above the operational Pershing II class but inside "
+                     "the AMaRV flight-demonstrated ~100-g ceiling "
+                     "(3 flights, 1979–81).")
+    else:
+        lines.append(f"  EXCEEDS every flight-demonstrated maneuver load in "
+                     f"the open record (~{_MARV_G_DEMONSTRATED:.0f} g, "
+                     f"AMaRV) — structural/guidance extrapolation beyond the "
+                     f"anchor dataset.")
+    lines.append("  * Load anchors are survived-the-maneuver structural/"
+                 "guidance demonstrations, not thermal limits; windward/AoA "
+                 "heating during the pull-up is a later-tier probe "
+                 "(engineering-code uncertainty ~15–40% at AoA, "
+                 "Thompson 1989).")
+    return lines
+
+
 def classify(result) -> str:
     """'A' (ballistic RV) | 'B' (glider) | 'C' (MaRV: glide + terminal dive)."""
     arc = result.get('heating_arc') or {}
@@ -470,6 +550,7 @@ def build_report(result) -> dict:
                          f"{t_d[-1]-t_d[0]:.0f} s — heat-sink regime "
                          f"(windward flank/fin LE, not the nose; AoA probe is "
                          f"a later tier).")
+            j += _maneuver_context(prof.get('pullup_g_max', 0.0))
 
     # ---- NRC ladder (gliders) + method line ---------------------------------
     tail = []
