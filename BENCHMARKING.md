@@ -696,6 +696,14 @@ as its data lands.  Status by material:
 - **`rcc` (Shuttle) — source in hand, mining pending**: NTRS 19940030739,
   "Analysis of the Shuttle Orbiter RCC Oxidation Protection System" (coating
   mass-loss / reuse limits) + the certified 100-mission design life.
+  *Checked-and-empty (2026-07-20, not archived):* Smith, Soares et al.
+  (Boeing/NASA JSC), "Space Shuttle TPS Repair Flight Experiment Induced
+  Contamination Impacts" (AIAA/JSC, STS-114/121 DTO 848) — an STS-114 RCC
+  leading-edge document, but entirely about **NOAX repair-material
+  outgassing/contamination** (49 °C dispense, −34 °C deposit surfaces, ASTM
+  E 1559, EVA visor fogging); no RCC entry environment, no arc-jet exposure,
+  no time-at-temperature.  Right material/mission, wrong subject — carries no
+  dwell datum.  Do not re-mine.
 - **`c_sic` — first flight dwell record NOW IN HAND (below); at/near-limit
   arc-jet oxidation-life still the open get.**
 
