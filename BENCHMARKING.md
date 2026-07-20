@@ -52,6 +52,77 @@ IXV (C/SiC, single mission ~1,700 °C).  Already anchored: HTV-2
 (~1,900 °C surface / 1,090 °C·3,600 s structure), SWERVE (Mach 8–14 band),
 NRC-2008 tiers.
 
+#### HTV-2 primary/reconstruction corpus: Acton 2015 + Wright 2015 + DARPA FOIA 14-F-0122 (read from primary, archived 2026-07-20)
+
+The X-51/HTV Drive folders (user-supplied) yielded the full open-literature
+HTV-2 source set, now archived to repo `data/` (S&GS self-distributes free
+PDFs from scienceandglobalsecurity.org — the exact files here; the FOIA set is
+Distribution A / DARPA public releases):
+
+- **Acton, "Hypersonic Boost-Glide Weapons," *Science & Global Security*
+  23:191–219 (2015), DOI 10.1080/08929882.2015.1087242**
+  (`acton-2015-hypersonic-boost-glide-weapons-sgs23.pdf` + the online
+  supplement `acton-2015-sgs23-appendix-online-supplement.pdf`): the published
+  HTV-2 trajectory reconstruction the shipped `HTV-2.ro.json` is built from —
+  **A-flight fit: L/D = 2.6, glide β_L = 13,000 kg/m² (his β is the metric
+  mass form, matching the repo convention), R = 4.9×10³ km, glide start
+  h₄ ≈ 47 km ~1,100 km downrange; entry (t₂=435 s) γ₂ = 5.03°, h₂ = 100 km,
+  v₂ = 6,010 m/s; endo end 30.5 km at 5,900 km.**  B-flight (2011): entry
+  γ₂ = 3°, v₂ = 7,170 m/s, ~2,300 km design cross-range, same L/D/β_L
+  assumed.  He flags the fitted entry-phase β_S = 7.0 kg/m² as physically
+  unreliable (Newtonian flat-plate gives ≫; the RO notes already carry this).
+  L/D 2.6 vs NRC-2008's assumed 2.2.
+- **Wright, "Research Note … Boost Phase of the HTV-2 Tests," *S&GS*
+  23:220–229 (2015), DOI 10.1080/08929882.2015.1088734**
+  (`wright-2015-htv2-boost-phase-analysis-sgs23.pdf`): NOTMAR-constrained
+  Minotaur IV-Lite (Peacekeeper 3-stage) boost reconstruction → **HTV-2 mass
+  ≈ 1,000 kg** (the shipped RO's mass source), stage table, 16° stage-3
+  dogleg (ΔV ≈ 1.0 km/s), A-flight burnout 6.0 km/s / 123 km / 3.7°.
+  *Flag:* Wright's Table 1 pairs the pierce-point angles opposite to Acton's
+  tables (A: −3° / B: −5.03° vs Acton A: 5.03° / B: 3°) — a crossed column in
+  one of the two; the repo RO follows Acton's pairing (his fit used it).
+  Not resolved here.
+- **DARPA/USAF FOIA release 14-F-0122**
+  (`foia-14-f-0122-darpa-htv2-x51-documents.pdf`), all Distribution A:
+  - HTV-2 program brief: objectives, **"high lift-to-drag ratio, advanced
+    carbon-carbon aeroshell"** — primary confirmation of the C/C aeroshell
+    (repo `cc_hot_structure` body); Flight 1 (22 Apr 2010) roll-yaw-coupling
+    anomaly during pull-up (adverse yaw exceeded flap roll authority; fix:
+    CG shift, lower AoA, RCS augmentation); AoA capability to 89° demoed at
+    release.
+  - **HTV-2 Flight-2 ERB conclusion (DARPA release, 20 Apr 2012) — the
+    citable primary for the Form B "too hot" flight anchor**: ~3 minutes of
+    stable aero-controlled flight at up to Mach 20, then "unexpected
+    aeroshell degradation — larger than anticipated portions of the vehicle's
+    skin **peeled from the aerostructure**," the gouges creating impulsive
+    shock waves ~100× design tolerance that repeatedly rolled the vehicle
+    until the flight-safety system terminated.  Confirms the failure was
+    thermal-material (skin/TPS loss → aero upset), not aerodynamic design.
+  - DARPA Integrated Hypersonics (2012): Mach-20 endoatmospheric skin
+    temperatures "**exceeding 3,500 °F**" (~2,200 K) — DARPA's own figure,
+    consistent with the C/C–UHTC-class band the Form B screen uses.
+  - **X-51A Waverider fact sheets (USAF)** — first ledger entry for X-51A:
+    airbreathing scramjet cruiser (not a glider; Form B context datum only).
+    TPS: "primarily standard aerospace materials (aluminum, steel, inconel,
+    titanium); some carbon/carbon composites on the leading edges of fins and
+    cowls; Boeing-designed **silica-based TPS and Boeing Reusable Insulation
+    tiles, similar to the Shuttle Orbiter's**."  Flight 4 (1 May 2013):
+    **Mach 5.1 at ~60,000 ft, 240-s burn, >230 nmi in ~6 min, 370 s of
+    data — the longest airbreathing hypersonic flight** — i.e. a demonstrated
+    ~370-s Mach-5-class dwell on Shuttle-class insulation + C/C edges,
+    a low-Mach corroboration point for the NRC duration-ladder's
+    conventional tier.
+
+*X-51/HTV Drive-folder triage (2026-07-20):* mined & archived as above.  Also
+present, triaged but **not mined**: Davies, "Infrasonic Characterization of
+the Falcon HTV-2" (.pptx, 12.8 MB — geophysical observable of the flight, no
+aerothermal datum expected); Bedke "High Speed Weapons — What is Different
+Today" and Sponable "Reusable Space Systems" (legacy binary .ppt, unreadable
+via the Drive connector; briefing-deck context, low datum value);
+`FalconHTV2FlightPath.jpeg` (the DARPA trajectory graphic — the same image
+Wright cites as his pierce-point source); `4217801.ppt` (X-51 folder, legacy
+binary .ppt, unidentified).
+
 ### Form C — Maneuvering quasi-ballistic (the envelope)
 **Computed:** terminal-dive segment peak flux + duration vs airframe limit
 (screening; windward/AoA probe is a later tier).
@@ -354,8 +425,10 @@ context, not a screening-tier anchor number.
   already cited in HEATING_TPS_REFERENCES §6; no new datum.
 - `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article
   (46 MB scan) — unidentified beyond the journal; >10 MB cap.
-- Subfolders X-51 / HTV / Defenses / General Hypersonics + the Heating-folder
-  Martin-class "atmospheric reentry" book (13 MB, >cap) — unswept.
+- Subfolders X-51 / HTV — **swept 2026-07-20** (see the HTV-2
+  Acton/Wright/FOIA corpus subsection under Form B); Defenses / General
+  Hypersonics + the Heating-folder Martin-class "atmospheric reentry" book
+  (13 MB, >cap) — still unswept.
 
 #### Form C modeling anchors: Regan & Anandakrishnan 1993 (read from primary)
 

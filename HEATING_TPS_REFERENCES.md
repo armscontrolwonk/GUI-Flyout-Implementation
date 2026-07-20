@@ -143,6 +143,9 @@ These four were read directly and their key results confirmed:
   reradiative-equilibrium model. https://scienceandglobalsecurity.org/archive/sgs28tracy.pdf
 - ⭐ Acton, J.M., *Hypersonic Boost-Glide Weapons*, Science & Global Security 23(3)
   (2015) — trajectory model, HTV-2 L/D≈2.6. https://scienceandglobalsecurity.org/archive/sgs23acton.pdf
+  Now read from primary + archived to repo `data/` (paper, online supplement,
+  and Wright's boost-phase companion note; also the DARPA FOIA 14-F-0122
+  HTV-2/X-51 set) — see BENCHMARKING.md's HTV-2 corpus subsection.
 - *Oxidation of Carbon/Carbon through Coating Cracks*, NASA NTRS 20090004576 —
   SiC CTE-mismatch crack oxidation (HTV-2 skin-peel analog).
   https://ntrs.nasa.gov/citations/20090004576
