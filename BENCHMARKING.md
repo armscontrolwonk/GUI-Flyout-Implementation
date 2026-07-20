@@ -588,12 +588,46 @@ context, not a screening-tier anchor number.
   Form B methodology context, archived to repo `data/`.
 - `206-215.pdf` = NRC-2008 CPGS **Appendix G** excerpt (boost-glide why/how) —
   already cited in HEATING_TPS_REFERENCES §6; no new datum.
-- `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article
-  (46 MB scan) — unidentified beyond the journal; >10 MB cap.
+- `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article —
+  **identified and MINED from primary (2026-07-20, user chat-upload of a clean
+  1.9 MB copy; archived to repo
+  `data/townend-1979-research-and-design-for-lifting-reentry-pas-18.pdf`):
+  Townend, L. H. (UK MoD Procurement Executive), "Research and Design for
+  Lifting Reentry," *Prog. Aerospace Sci.* 18 (1979) 1–80** — the UK
+  caret-wing / waverider "flow containment" lifting-reentry survey.  Form B
+  design-space context, with several citable datums:
+  - **"The supersonic and hypersonic L/D need not exceed 2±1 (rather than
+    5±1, say)" for lifting-reentry gliders** (vs hypersonic cruise vehicles;
+    §3) — a 1979 design-community statement of exactly the L/D class the
+    repo's Form B objects ship with (C-HGB 2.0, HTV-2 2.6 flight-fit,
+    NRC-2008's assumed 2.2) and the reason reentry gliders are "substantially
+    bulkier" than cruise vehicles.
+  - **Flow-containment lift data (AASU gun tunnel, Southampton)**: an
+    anhedral "high-wing" modification of the NASA-MSC/040A Shuttle-class
+    orbiter produced **~20% more lift than the low-wing version at α =
+    40–50°, M = 9.7, Re = 4×10⁵** (East 1976; corroborating Davies &
+    Townsend 1972 at M 8.4); caret undersurface ω ≈ 5° gave ~10% higher C_L
+    at α = 55°, M = 12.2.  C_L ≈ 0.7–0.9 at α = 40–60°, C_L/C_D ≈ 0.4–1.2 —
+    the high-α Shuttle-class reentry regime (25–70°), distinct from the
+    low-α MaRV/HGV regime.
+  - **The heat-transfer logic of raising C_L** (his Refs. 8/11 argument): at
+    given wing loading, higher C_L ⇒ deceleration at higher altitude ⇒ lower
+    ambient density ⇒ reduced stagnation heating; and beneath the stronger
+    contained shock, lower local flow velocity ⇒ reduced undersurface
+    heating per unit wetted area.  The same corridor physics Thrusty's
+    equilibrium-glide altitude embodies (higher C_L/(W/S) → higher glide
+    altitude → lower flux, longer duration — the NRC stopwatch trade).
+  - Stability: the high-wing orbiter's aerodynamic centre sat ~10% of length
+    further aft than the low-wing's, and for both, **a.c. position was
+    almost invariant with attitude for α = 40–60°**; experiments confirmed
+    the concave-undersurface C_L gain across 6 < M < 22, 25° < α < 70°.
+  Copyright: Pergamon/Elsevier journal article — archived per the repo's
+  technical-journal precedent (Lin 2003, Francis 2024).
 - Subfolders X-51 / HTV / General Hypersonics / Defenses — **all swept
-  2026-07-20** (see the Form B sweep subsections).  Remaining cap-blocked
-  items (>10 MB, need chat upload): AD0376942 "Aerodynamics of Conical
-  Bodies," the PAS-1979 scan, and the Heating-folder Martin-class
+  2026-07-20** (see the Form B sweep subsections).  The two big scans are
+  now also mined via chat upload: AD0376942 (Boeing cone-aero databook, 3
+  parts) and the PAS-1979 article (Townend lifting-reentry survey).  The
+  only remaining cap-blocked item is the Heating-folder Martin-class
   "atmospheric reentry" book (13 MB).
 
 #### Form C modeling anchors: Regan & Anandakrishnan 1993 (read from primary)
