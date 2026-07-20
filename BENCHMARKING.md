@@ -147,6 +147,42 @@ Together with Auclair's flight profile (dive → 30 kft near-horizontal TFS
 segment → terminal dive) and the MDAC program facts, the AMaRV anchor now has
 geometry, mass, β, trim AoA, control layout, and profile — the remaining open
 number is the maneuver Mach/g itself.
+
+#### MaRV loads & RV-TPS genealogy: Lin 2003 (read from primary)
+
+Lin, "Development of U.S. Air Force ICBM Weapon Systems," *J. Spacecraft &
+Rockets* 40(4) 2003, DOI 10.2514/2.3990 (Northrop Grumman RV engineer; repo
+`data/`) — a survey with several citable Form C / Form A data points:
+
+- **MaRV lateral-acceleration datum**: a piloted interceptor pulls 6–8 g;
+  "a MaRV … must pull approximately 10–20 times as much gravitational-
+  acceleration to evade a typical ABM interceptor such as the U.S. SPRINT."
+  (Wording ambiguous — reads as either ~10–20 g absolute or 10–20× the
+  6–8 g; flagged.)  Brackets the maneuver-load range alongside Regan's 4 g
+  (gentle) and 100 g (extreme evasion) figures.
+- **MBRV refinement** (vs the GE brochure's "three, over the Pacific,
+  mid-1960s"): "**Four MBRVs** developed and launched by **Atlas** boosters
+  from **Vandenberg** in the late 1960s," with **cruciform trailing flaps at
+  the base** for high-g attitude control; program started 1964.  (Slight count/
+  site discrepancy with the GE brochure — noted, not resolved.)
+- **β convention corroborated**: Lin defines β = **W/(C_D·A)**, the weight/
+  Pascal form — same as Regan, confirming the RV-literature convention split
+  documented in `HEATING_MODEL_CROSSCHECK.md` (the repo uses the ÷g metric form).
+- **RV-TPS genealogy** (Form A context): Teflon (low-β); **silica phenolic**
+  on MK5 (MM I) and MK11 (MM II), "a melting and pyrolysis ablator, adequate
+  for low-to-medium β" — corroborates the `silica_phenolic` catalog entry;
+  asbestos/quartz phenolic; first recovered ablative RV Thor/Able 9 Apr 1959.
+
+#### Form C transition/AoA context: Francis 2024 (parked, archived)
+
+Francis, Dylewicz, Klothakis, Theofilis, Jewell, "Instability Measurements on
+a Cone-Slice-Flap in Mach-6 Quiet Flow," AIAA 2024-0500 (repo `data/`) —
+modern boundary-layer-transition experiment on a **cone-slice-flap** (the
+MaRV control-flap geometry) in the Boeing/AFOSR Mach-6 quiet tunnel; cites
+AMaRV and Shuttle as the flight-test motivation for control-surface
+heating/transition prediction.  The empirical face of the same control-surface
+transition uncertainty Thompson 1989 flags for the Form C windward/AoA probe —
+context, not a screening-tier anchor number.
 - **Mk 500 Evader**: NRC-2008 already cites (300-s ablative tier); any
   maneuver-profile specifics.
 - **BGRV** (boost-glide reentry vehicle, 1968 flight): early high-β maneuver
