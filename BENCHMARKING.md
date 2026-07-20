@@ -113,6 +113,37 @@ Distribution A / DARPA public releases):
     a low-Mach corroboration point for the NRC duration-ladder's
     conventional tier.
 
+#### Defenses folder sweep (2026-07-20, folder `1YWhSDy_…`) — the target as a class
+
+Single file: **Peace, Pulimidi, Umapathy, Singh, Lu (UT Arlington) & Barnard
+(Lockheed Martin), "Mid-Tier Defense Against Hypersonic Glide Vehicles During
+Cruise," AIAA 2018-5254, DOI 10.2514/6.2018-5254** (archived to repo
+`data/peace-pulimidi-2018-…-aiaa-2018-5254.pdf`, AIAA-conference-paper
+precedent).  A conceptual THAAD-baseline hit-to-kill interceptor design — the
+defense-side value here is its **stated threat-HGV class requirements** (the
+defense community's characterization of the Form B vehicle as a target):
+
+- **Threat HGV class: mass 2,000–5,000 lb (907–2,268 kg); cruise Mach 12–15;
+  cruise altitude 120–140 kft (36.6–42.7 km)**; maneuvering or
+  non-maneuvering, with "a maneuver possible at any stage of the engagement"
+  (maneuver *magnitude* unquantified — no g-level given); raid model 3 HGVs
+  at 15-s spacing.  The mass band brackets the HTV-2's ~1,000 kg (Wright) at
+  its low end.
+- **Corroboration check (run 2026-07-20, repo atmosphere)**: Thrusty's
+  equilibrium-glide altitude for the shipped HTV-2-class glider
+  (β_L = 13,000 kg/m², L/D = 2.6) is **125 kft at Mach 12 and 139 kft at
+  Mach 15 — the paper's 120–140 kft threat band is precisely the
+  equilibrium-glide corridor Thrusty computes** for that class.  Independent
+  (adversarial-design) confirmation of the Form B glide-corridor physics,
+  complementing the CBO 30–40 km band check.
+- Defense-side context facts (not screening anchors): ground-radar horizon at
+  that altitude ≈ 420–460 mi → ~7-km defended radius with a Mach-6-class
+  single-stage interceptor, ~60-s time-to-target; pure proportional
+  navigation N′ = 4 in their engagement model.
+
+The threat table cites the X-43 / X-51 / HTV-2 / AHW lineage as the class
+exemplars — consistent with the ledger's Form B anchor set.
+
 #### General Hypersonics folder sweep (2026-07-20, folder `1uGJ-ok4…`)
 
 Four substantive finds, three archived to repo `data/`:
@@ -495,10 +526,11 @@ context, not a screening-tier anchor number.
   already cited in HEATING_TPS_REFERENCES §6; no new datum.
 - `10.1016@0376-04217990001-0.pdf` = *Prog. Aerosp. Sci.* 1979 first article
   (46 MB scan) — unidentified beyond the journal; >10 MB cap.
-- Subfolders X-51 / HTV / General Hypersonics — **swept 2026-07-20** (see the
-  HTV-2 Acton/Wright/FOIA corpus and General-Hypersonics-sweep subsections
-  under Form B); Defenses + the Heating-folder Martin-class "atmospheric
-  reentry" book (13 MB, >cap) — still unswept.
+- Subfolders X-51 / HTV / General Hypersonics / Defenses — **all swept
+  2026-07-20** (see the Form B sweep subsections).  Remaining cap-blocked
+  items (>10 MB, need chat upload): AD0376942 "Aerodynamics of Conical
+  Bodies," the PAS-1979 scan, and the Heating-folder Martin-class
+  "atmospheric reentry" book (13 MB).
 
 #### Form C modeling anchors: Regan & Anandakrishnan 1993 (read from primary)
 
