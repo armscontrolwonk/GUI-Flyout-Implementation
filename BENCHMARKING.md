@@ -114,10 +114,14 @@ Form C screen wanted, per Yengst:
 **carbon-carbon** (see the Allen section above), nose radius 2.34 cm — so the
 AMaRV reference reentry object can be fully specified (biconic 10.4°/6°, 470 kg,
 β 13,485 kg/m², AoA 10°, R_n 2.34 cm, nose material `carbon_carbon`, ~100-g
-maneuver plan).  *Still to find (lower priority):* **Pershing II** skin
-material + temperature margin (Yengst is program/test history, light on TPS
-specifics); primary DTIC flight-test reports if publication-grade citation is
-needed (Yengst is a secondary synthesis, though an authoritative insider one).
+maneuver plan).  *Pershing II TPS/maneuver — now resolved from primary* (Lund
+1984, see the Pershing II subsection below): **ablative radome** over the RADAG
+antenna + **velocity-control pullup/pulldown** terminal maneuver; only a
+quantitative windward-temperature/thickness datum stays open (unpublished in
+the open sources on hand).  *Still lower-priority:* primary DTIC flight-test
+reports if publication-grade quantitative citation is needed (Yengst/Lund are
+program/test histories, authoritative insider syntheses but light on thermal
+data).
 
 #### Contemporaneous trade-press corroboration: AW&ST (facts only)
 
@@ -252,6 +256,54 @@ Rockets* 40(4) 2003, DOI 10.2514/2.3990 (Northrop Grumman RV engineer; repo
   on MK5 (MM I) and MK11 (MM II), "a melting and pyrolysis ablator, adequate
   for low-to-medium β" — corroborates the `silica_phenolic` catalog entry;
   asbestos/quartz phenolic; first recovered ablative RV Thor/Able 9 Apr 1959.
+
+#### Pershing II terminal-maneuver RV: Lund 1984 (Martin Marietta / AIAA, read from primary)
+
+Lund, "Evolution of the Pershing II Missile System," Martin Marietta (Copyright
+1984 Martin Marietta, **released to AIAA to publish** — a public technical paper,
+hence archived to repo `data/lund-1984-evolution-of-pershing-ii-missile-system-martin-marietta-aiaa.pdf`).
+Pershing II is the operational-MaRV candidate named at the top of Form C; this
+is the primary account of its reentry vehicle and terminal maneuver:
+
+- **First terminally-guided MaRV fielded**: Pershing II was "the first ballistic
+  missile deployed with a terminally guided maneuvering reentry vehicle"
+  (Martin Marietta prime; deployed Dec 1983).  Program payoff: >doubled the
+  Pershing Ia's ~740 km range and cut delivery error by an order of magnitude —
+  the accuracy step that *required* the terminal maneuver + map-match.
+- **RV structure (three sections)**: radar section + warhead section + guidance-
+  and-control / adapter section.  The **radar antenna sits behind an ablative
+  radome** — the one firsthand Pershing II TPS datum (a forebody ablator over
+  the RADAG antenna; the report is qualitative, no thickness/temperature
+  margin).  This partly fills the Yengst "Pershing II skin material" open want:
+  the guided nose uses an **ablative** radome, not a passive heat sink.
+- **Terminal maneuver = velocity-control pullup/pulldown under inertial
+  guidance**: after ballistic reentry the RV executes a "velocity control
+  maneuver (pullup/pulldown)" to bleed to the proper terminal velocity, then
+  **RADAG** (radar area guidance) runs its radar map-match against a stored
+  reference, and the RV is steered to the target by a **vane (aerodynamic)
+  control system**; an exoatmospheric **reaction control system** handles
+  attitude above the sensible atmosphere.  This corroborates the Yengst
+  Pershing II datum (~Mach 8 reentry → sub-50-kft ~25-g pullout during the
+  RADAG update) and matches the Auclair Accuracy-AMaRV profile shape
+  (dive → near-horizontal map-match segment → terminal dive) — the same
+  velocity-bleed-then-map-match kinematics in an operational vehicle.
+
+This closes the last open Form C *want* (Pershing II TPS + terminal-maneuver
+kinematics) at the screening tier: the vehicle is a velocity-control pullup
+MaRV (~25 g, Mach-8-class reentry) with an **ablative** guided forebody.
+Quantitative windward temperature / TPS thickness remain unpublished in the
+open sources on hand (Yengst + Lund are program/test histories, not thermal
+data reports).
+
+*Pershing II Drive-folder triage (2026-07-20, folder `11Iqc63JuDov…`):* only
+**Lund 1984** was archivable and is mined above.  Also present, **not archived**:
+`ADA121622` "Pershing II Simulation Studies" (Georgia Tech, DTIC — public, *not
+yet mined*; candidate for quantitative terminal-trajectory numbers if the
+screening tier ever needs a published Mach/g); `Maneuvering Warheads.pdf` = a
+1983 NYT article (**copyrighted, ProQuest — facts-only, not archived**; no new
+technical datum beyond the above); FM 6-11 / FM 6-11 FD(84) Army field manuals
+and an operator's technical manual (doctrine, not TPS/kinematics — no datum);
+four Pershing II Space Force photographs (imagery, no datum).
 
 #### Form C transition/AoA context: Francis 2024 (parked, archived)
 
