@@ -38,3 +38,16 @@ def test_context_classification():
     # Context, not a verdict: the honesty caveat rides every block.
     for g in (10.0, 40.0, 150.0):
         assert "not thermal limits" in blob(g)
+
+
+def test_regan_1984_worked_case():
+    """Regan 1984 Tables 6.7/6.8: the fixed-L/D=1.5 MaRV hits its 4-g
+    transverse limit at ≈45 km.  Verifies the atmosphere + glide force-law
+    chain against the published table — and that Regan's β=10⁴ must be read
+    in his Pa (weight) convention: taken as kg/m² it misses by ~15 km."""
+    from regan1984_marv_check import fly, BETA_REGAN_PA, G0
+
+    z_ok, _ = fly(BETA_REGAN_PA / G0, dt=0.1)
+    assert z_ok is not None and abs(z_ok - 45.0e3) < 5.0e3
+    z_bad, _ = fly(BETA_REGAN_PA, dt=0.1)
+    assert z_bad is not None and z_bad < 35.0e3

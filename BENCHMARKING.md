@@ -385,7 +385,19 @@ stated result that the fixed-L/D maneuver **hits the 4-g transverse limit at
 ≈45 km and L/D must be feathered below it**.  This is exactly the Form C
 dive/maneuver physics, so it is the natural first verification case when the
 Form C anchor work lands: run the MaRV mode at these parameters and check the
-transverse-g crossing altitude ≈45 km.  Supporting load-context quotes (same
+transverse-g crossing altitude ≈45 km.
+
+**RUN (2026-07-20) — PASS.**  `regan1984_marv_check.py` (planar point-mass
+EOM with Thrusty's own `atmosphere()` and the constant_LD glide force law
+`a_lift = min(L/D·q̄/β, n_max·g)`): the 4-g cap first binds at **46.4 km**
+(V = 5,882 m/s) — within 1.4 km of Regan's ≈45 km.  The case also exercises
+the β-convention rule (HEATING_MODEL_CROSSCHECK.md): Regan's β = 10⁴ is his
+**Pa weight form** and must be ÷ g → 1,019.7 kg/m² in repo units; read
+wrongly as kg/m² the bind altitude comes out **31.2 km** — a 14-km miss.
+Pinned by `test_form_c_anchors.py::test_regan_1984_worked_case` (±5 km
+band).  This verifies the atmosphere + force-law + convention chain against
+a published table; the 3-D integrator embeds the same law
+(`trajectory.py` damped_glide constant_LD branch).  Supporting load-context quotes (same
 book): maneuvering loads normal to the velocity vector "can be more than two
 orders of magnitude greater than the gravitational force" (Ch. 5 intro), and
 a Ch. 13 worked transient of 25.7 g at α = 60° with endo-maneuvering loads
