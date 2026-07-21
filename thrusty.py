@@ -5986,9 +5986,9 @@ class BoosterFlyoutApp(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         self._surv_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        for tag, colour in (("survive", "#006600"), ("fail", "#aa0000"),
-                            ("degraded", "#cc6600"), ("analysis", "#b8860b"),
-                            ("none", "#555555")):
+        import survivability_report as _sr
+        _tier_tags = [(k, v[1]) for k, v in _sr.SURVIVAL_TIERS.items()]
+        for tag, colour in (_tier_tags + [("none", "#555555")]):
             self._surv_text.tag_configure(
                 tag, foreground=colour, font=("TkFixedFont", 11, "bold"))
 
@@ -6003,13 +6003,13 @@ class BoosterFlyoutApp(tk.Tk):
             "flux pulse q̇(t) and the running load Q(t) — the pulse shape is\n"
             "the mode's signature.")
 
-    def _surv_set_text(self, status, headline, body):
+    def _surv_set_text(self, tier, headline, body):
         self._surv_text.configure(state=tk.NORMAL)
         self._surv_text.delete("1.0", tk.END)
-        if status is not None:
-            mark = {"survive": "✓  ", "fail": "✗  ", "degraded": "◑  ",
-                    "analysis": "⚠  ", "none": "•  "}.get(status, "")
-            self._surv_text.insert(tk.END, mark + headline + "\n\n", status)
+        if tier is not None:
+            mark = {"experience": "✓  ", "design": "◆  ", "beyond": "△  ",
+                    "fail": "✗  ", "none": "•  "}.get(tier, "")
+            self._surv_text.insert(tk.END, mark + headline + "\n\n", tier)
         self._surv_text.insert(tk.END, body)
         self._surv_text.configure(state=tk.DISABLED)
 
@@ -6040,7 +6040,7 @@ class BoosterFlyoutApp(tk.Tk):
                     f"  Trajectory shaping trades flux against load "
                     f"(lofted = flux-stressed, depressed = load-stressed).\n")
         self._surv_set_text(
-            rep['status'] if rep.get('form') else 'none',
+            rep.get('tier') if rep.get('form') else 'none',
             rep['headline'], body)
 
         self._surv_fig.clf()
@@ -6056,17 +6056,20 @@ class BoosterFlyoutApp(tk.Tk):
             # classify TIME segments by nose surface temperature — they
             # correspond to neither y-axis; the caption says so.
             if pl.get('bands'):
-                _band_col = {'green': "#2e8b57", 'amber': "#e0a020",
-                             'red': "#c03030"}
+                import survivability_report as _sr
+                # bands now carry survival-tier keys; fall back to legacy keys.
+                _band_col = {k: v[1] for k, v in _sr.SURVIVAL_TIERS.items()}
+                _band_col.update({'green': "#2e8b57", 'amber': "#2e8b57",
+                                  'red': "#2f6fb0"})
                 for _b0, _b1, _c in pl['bands']:
                     if _b1 > _b0:
-                        ax.axvspan(_b0, _b1, color=_band_col[_c], alpha=0.12,
-                                   linewidth=0)
+                        ax.axvspan(_b0, _b1, color=_band_col.get(_c, "#888888"),
+                                   alpha=0.14, linewidth=0)
                 ax.set_title(
                     "shading = time segments of nose surface temp vs the "
-                    "demonstrated UHTC envelope (not the flux/load axes)\n"
-                    "green protected · amber demonstrated · red beyond the "
-                    "test record (see report — not a failure prediction by "
+                    "survival ladder (not the flux/load axes)\n"
+                    "green within experience · blue within design · yellow "
+                    "beyond design (see report — not a failure prediction by "
                     "itself)",
                     fontsize=6.5, color="#555555", loc="left")
             ax.plot(pl['t'], pl['q_MW'], color="#aa2222", linewidth=1.4,

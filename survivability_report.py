@@ -26,6 +26,48 @@ import heating
 import tps_ladder
 from booster_models import glide_family
 
+# ── Unified survival ladder ────────────────────────────────────────────────
+# One 4-tier verdict for EVERY material (ablator, hot structure, metal, tile).
+# The underlying test differs by material; the output your eye reads is always
+# one of these four.  Colors carry the intended semantics: green = demonstrated
+# experience; blue = permitted extrapolation (permission, NOT caution); yellow
+# = caution / beyond design; red = reserved for a COMPUTED failure.
+SURVIVAL_TIERS = {
+    'experience': ("WITHIN EXPERIENCE",      "#2e8b57"),  # green
+    'design':     ("WITHIN DESIGN ENVELOPE", "#2f6fb0"),  # blue (permission)
+    'beyond':     ("BEYOND DESIGN ENVELOPE", "#c78a0a"),  # yellow (caution)
+    'fail':       ("CANNOT SURVIVE",         "#c0392b"),  # red
+}
+_TIER_KEYS = ('experience', 'design', 'beyond', 'fail')
+# Per-timestep coverage-band class → tier (for the plot shading).  0 below the
+# glass ceiling and 1 above-but-within the demonstrated envelope are both
+# demonstrated → experience; 2 (dwell past the demonstrated floor, still
+# passive) is design-vouched extrapolation → design; 3 (passive→active
+# transition) is beyond-design caution.
+_BAND_CLASS_TIER = {'green': 'experience', 'amber': 'experience',
+                    'red': 'design', 'redhot': 'beyond'}
+
+
+def survival_tier(status, coverage=None):
+    """Collapse the internal status (+ UHTC coverage) into one survival tier.
+
+    RED ('cannot survive') is reserved for a COMPUTED failure — burn-through,
+    melt, a t_fail crossing.  BLUE ('within design') is only reachable for a
+    material with a demonstrated envelope to extrapolate past (the payoff of a
+    curated anchor dataset); a material without one shows green/yellow/red only.
+    """
+    if status == 'fail':
+        return 'fail'
+    if coverage is not None and coverage.get('exits'):
+        ex = coverage['exits']
+        if 'too hot' in ex:        # passive→active oxidation: beyond design, less likely
+            return 'beyond'
+        if 'too long' in ex:       # past demonstrated dwell, still passive: design vouches
+            return 'design'
+    if status in ('analysis', 'degraded'):
+        return 'beyond'
+    return 'experience'
+
 # δ/R_n consequence ladder (design doc §3; crosscheck §10.2).  Flight anchors:
 #   0.1  — Lin 1982 (TRW-SCATHE): 0.1 R_N at 67 kft already "mildly indented";
 #          PANT: asymmetric recession → dispersion well below blunting levels.
@@ -158,7 +200,9 @@ def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
     # contiguous bands for the plot
     bands = []
     if t.size:
-        colour = {0: 'green', 1: 'amber', 2: 'red', 3: 'red'}
+        # 2 = dwell past the demonstrated floor (still passive) → design tier;
+        # 3 = passive→active transition → beyond tier (see _BAND_CLASS_TIER).
+        colour = {0: 'green', 1: 'amber', 2: 'red', 3: 'redhot'}
         i0 = 0
         for i in range(1, len(cls) + 1):
             if i == len(cls) or colour[cls[i]] != colour[cls[i0]]:
@@ -607,17 +651,13 @@ def build_report(result) -> dict:
         "Not a through-wall TPS design analysis.",
     ]
 
-    headline = {
-        'survive':  "LIKELY SURVIVES",
-        'degraded': "SURVIVES — DEGRADED",
-        'fail':     "LIKELY FAILS",
-        'analysis': "NEEDS ANALYSIS (beyond screening)",
-    }[status]
-    if coverage is not None and coverage['exits'] and status == 'analysis':
-        headline = ("BEYOND DEMONSTRATED ENVELOPE — EXTRAPOLATION ("
-                    + " + ".join(sorted(coverage['exits'])) + ")")
+    # ── Unified 4-tier verdict (the headline every material now shares) ──────
+    tier = survival_tier(status, coverage)
+    tier_label, tier_color = SURVIVAL_TIERS[tier]
+    if coverage is not None and coverage.get('exits') and tier in ('design', 'beyond'):
+        tier_label += "  (" + " + ".join(sorted(coverage['exits'])) + ")"
     _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
-    headline += f"   —   Form {form} ({_form_name})"
+    headline = f"{tier_label}   —   Form {form} ({_form_name})"
 
     body = "\n".join(hdr) + "\n\n" + "\n".join(budget) + "\n" \
            + "\n".join(j) + "\n" + "\n".join(tail) + "\n"
@@ -627,8 +667,11 @@ def build_report(result) -> dict:
         t_fail=(t_fail - t0) if t_fail is not None else None,
         glide_s=dur if form in ('B', 'C') else None,
         tiers=(tps_ladder.NAS_LINEAGE if form in ('B', 'C') else None),
-        bands=([(b0 - t0, b1 - t0, c) for b0, b1, c in coverage['bands']]
+        tier=tier, tier_color=tier_color,
+        # bands recolored from per-timestep coverage class → survival tier
+        bands=([(b0 - t0, b1 - t0, _BAND_CLASS_TIER.get(c, c))
+                for b0, b1, c in coverage['bands']]
                if coverage is not None else None),
     )
-    return dict(status=status, headline=headline, body=body,
+    return dict(status=status, tier=tier, headline=headline, body=body,
                 form=form, plot=plot)
