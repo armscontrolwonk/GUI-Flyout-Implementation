@@ -45,6 +45,7 @@ from coordinates import range_between
 from slv_performance import schilling_performance
 import mass_estimator as mest
 import heating
+import thresholds
 
 # ---------------------------------------------------------------------------
 # Country border map data (Natural Earth 110m, bundled GeoJSON)
@@ -4973,6 +4974,148 @@ class MassEstimatorDialog(tk.Toplevel):
         self._out.configure(state=tk.DISABLED)
 
 
+class ScreeningEnvelopeDialog(tk.Toplevel):
+    """View and adjust the screening-envelope benchmark numbers (thresholds.py).
+
+    The shipped defaults are frozen: an edit lives only in the overlay file,
+    and "Restore All Defaults" discards it.  Each row shows the current value,
+    its units, the greyed shipped default, and the default's citation of
+    record, plus a "modified" flag when the two differ.  A changed number
+    self-discloses in the survivability report, so the citation on the row is
+    the *default's* provenance, not a warranty for the edited value.
+
+    Design decision (README "Adjustable screening thresholds"): a policy
+    modeler is likelier to adjust the ENVELOPE (glide endurance, maneuver
+    ceiling) in light of a new flight than to re-coupon a material — so this
+    curated set of ~9 envelope numbers is the editable surface; the material
+    catalog and anchor datasets are deferred to a future spreadsheet project.
+    """
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._app = app
+        self.title("Screening Envelope — benchmark thresholds")
+        self.resizable(False, False)
+        self._vars = {}      # key -> StringVar (entry text)
+        self._badges = {}    # key -> Label (the "modified" flag)
+        self._build()
+        try:
+            app._center_dialog(self)
+        except Exception:
+            pass
+
+    def _build(self):
+        pad = dict(padx=6, pady=2)
+        outer = ttk.Frame(self)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        ttk.Label(
+            outer, wraplength=560, justify=tk.LEFT,
+            text=("Screening-envelope benchmarks. Shipped defaults are frozen; "
+                  "an edit lives only in the overlay file and can always be "
+                  "restored. A changed number self-discloses in the "
+                  "survivability report — the citation shown is the default's "
+                  "provenance, not a warranty for an edited value.")
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        grid = ttk.Frame(outer)
+        grid.pack(fill=tk.BOTH, expand=True)
+        cur = thresholds.current()
+        r = 0
+        last_group = None
+        _grey = "#777777"
+        for e in thresholds.REGISTRY:
+            if e["group"] != last_group:
+                if last_group is not None:
+                    ttk.Separator(grid, orient=tk.HORIZONTAL).grid(
+                        row=r, column=0, columnspan=4, sticky="ew", pady=(6, 2))
+                    r += 1
+                ttk.Label(grid, text=e["group"],
+                          font=("TkDefaultFont", 9, "bold")).grid(
+                    row=r, column=0, columnspan=4, sticky=tk.W, **pad)
+                r += 1
+                last_group = e["group"]
+
+            key = e["key"]
+            ttk.Label(grid, text=e["label"]).grid(
+                row=r, column=0, sticky=tk.W, **pad)
+            var = tk.StringVar(value=f"{cur[key]:g}")
+            self._vars[key] = var
+            ent = ttk.Entry(grid, textvariable=var, width=11)
+            ent.grid(row=r, column=1, sticky=tk.W, **pad)
+            ttk.Label(grid, text=e["units"], foreground=_grey).grid(
+                row=r, column=2, sticky=tk.W, **pad)
+            badge = ttk.Label(grid, text="", foreground="#2f6fb0",
+                              font=("TkDefaultFont", 8, "bold"))
+            badge.grid(row=r, column=3, sticky=tk.W, **pad)
+            self._badges[key] = badge
+            var.trace_add("write", lambda *_a, k=key: self._refresh_badge(k))
+            r += 1
+
+            ttk.Label(grid, text=f"default {e['default']:g} {e['units']}".strip(),
+                      foreground=_grey, font=("TkDefaultFont", 8)).grid(
+                row=r, column=1, columnspan=3, sticky=tk.W, padx=6)
+            r += 1
+            ttk.Label(grid, text=e["source"], foreground=_grey, wraplength=520,
+                      justify=tk.LEFT, font=("TkDefaultFont", 8, "italic")).grid(
+                row=r, column=1, columnspan=3, sticky=tk.W, padx=6, pady=(0, 2))
+            r += 1
+            self._refresh_badge(key)
+
+        btns = ttk.Frame(outer)
+        btns.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(btns, text="Restore All Defaults",
+                   command=self._restore_defaults).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="Save", command=self._save).pack(
+            side=tk.RIGHT, padx=(0, 6))
+
+    def _refresh_badge(self, key):
+        """Show a 'modified' flag when the entry differs from the default."""
+        e = thresholds._BY_KEY[key]
+        badge = self._badges.get(key)
+        if badge is None:
+            return
+        try:
+            v = float(self._vars[key].get())
+            changed = (v != float(e["default"]))
+        except ValueError:
+            changed = True   # unparseable text is not the default
+        badge.configure(text="● modified" if changed else "")
+
+    def _restore_defaults(self):
+        thresholds.reset()
+        for key, var in self._vars.items():
+            var.set(f"{thresholds._BY_KEY[key]['default']:g}")
+            self._refresh_badge(key)
+
+    def _save(self):
+        # Parse every field; clamp/store via set_override (value==default clears).
+        bad = []
+        for e in thresholds.REGISTRY:
+            txt = self._vars[e["key"]].get().strip()
+            try:
+                thresholds.set_override(e["key"], float(txt))
+            except ValueError:
+                bad.append(e["label"])
+        if bad:
+            messagebox.showerror(
+                "Invalid value",
+                "These fields are not numbers:\n  • " + "\n  • ".join(bad),
+                parent=self)
+            return
+        thresholds.save()      # writes the overlay (or deletes it at defaults)
+        thresholds.apply()     # push into the live models
+        # Re-render the survivability report so any change (and the modified-
+        # benchmark disclosure) shows immediately.
+        if getattr(self._app, "_result", None) is not None:
+            try:
+                self._app._populate_survivability(self._app._result)
+            except Exception:
+                pass
+        self.destroy()
+
+
 # ---------------------------------------------------------------------------
 # Main application window
 # ---------------------------------------------------------------------------
@@ -5017,6 +5160,8 @@ class BoosterFlyoutApp(tk.Tk):
         _migrate_analytic_family()   # migrate: banked/targeted analytic plans -> numerical family
         _load_ro_library()           # populate RO_DB from ro_library/*.ro.json
         _load_custom_boosters()      # restore any user-saved boosters
+        thresholds.load()            # restore any saved screening-threshold overrides
+        thresholds.apply()           # push them (or the shipped defaults) into the live models
         # Restore per-booster named flight-plan selections.
         try:
             if _ACTIVE_PLANS_PATH.exists():
@@ -5094,6 +5239,7 @@ class BoosterFlyoutApp(tk.Tk):
         analysis_menu.add_command(label="Engine Cutoff (liquid)…",  command=self._set_engine_cutoff)
         analysis_menu.add_command(label="Re-entry Query…",          command=self._set_reentry_query)
         analysis_menu.add_command(label="Dry Mass Estimator…",      command=self._open_mass_estimator)
+        analysis_menu.add_command(label="Screening Envelope…",      command=self._open_screening_envelope)
 
         # Reference Data — swap the empirical source behind a model term.
         # Built automatically from booster_models.MODEL_OPTIONS so new toggles
@@ -9406,6 +9552,9 @@ class BoosterFlyoutApp(tk.Tk):
 
     def _open_mass_estimator(self):
         MassEstimatorDialog(self)
+
+    def _open_screening_envelope(self):
+        ScreeningEnvelopeDialog(self)
 
     def _set_model_option(self, key, value):
         """Switch the empirical source behind a model term (Analysis ▸ Reference

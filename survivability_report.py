@@ -24,6 +24,7 @@ import numpy as np
 
 import heating
 import tps_ladder
+import thresholds
 from booster_models import glide_family
 
 # ── Unified survival ladder ────────────────────────────────────────────────
@@ -651,6 +652,20 @@ def build_report(result) -> dict:
         "Not a through-wall TPS design analysis.",
     ]
 
+    # ── Modified-benchmark self-disclosure ───────────────────────────────────
+    # A user-edited screening threshold rides on NONE of the shipped citations,
+    # so the report says so plainly: an asterisk on the headline and a block
+    # naming each changed number, its shipped default, and the default's source.
+    _mods = thresholds.modified()
+    if _mods:
+        tail += ["", "Modified benchmarks (screening thresholds changed from the",
+                 "shipped defaults — this verdict does not carry the citation of",
+                 "record for the numbers below):"]
+        for m in _mods:
+            _u = (" " + m["units"]) if m["units"] else ""
+            tail.append(f"  • {m['label']}: {m['value']:g}{_u} "
+                        f"(default {m['default']:g}{_u}, {m['source']})")
+
     # ── Unified 4-tier verdict (the headline every material now shares) ──────
     tier = survival_tier(status, coverage)
     tier_label, tier_color = SURVIVAL_TIERS[tier]
@@ -658,6 +673,8 @@ def build_report(result) -> dict:
         tier_label += "  (" + " + ".join(sorted(coverage['exits'])) + ")"
     _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
     headline = f"{tier_label}   —   Form {form} ({_form_name})"
+    if _mods:
+        headline += "  *"
 
     body = "\n".join(hdr) + "\n\n" + "\n".join(budget) + "\n" \
            + "\n".join(j) + "\n" + "\n".join(tail) + "\n"

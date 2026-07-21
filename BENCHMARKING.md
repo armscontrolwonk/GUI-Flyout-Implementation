@@ -1399,3 +1399,28 @@ Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
 each is labeled with its true epistemic status in code and report text.  If a
 future source covers one, replace the label with the citation — never the
 reverse.
+
+### User-adjustable screening thresholds (`thresholds.py`) + deferred spreadsheets
+
+A curated **~9-number envelope subset** of the thresholds above is now
+user-editable at runtime (Analysis ▸ Screening Envelope…): the UHTC dwell
+floor, the two MaRV g-ceilings, the `δ/R_n` accuracy-ladder steps + glider-tip
+flag, and the two model-conservatism knobs (acreage flux fraction, windward AoA
+band).  These are the numbers a **policy modeler** is likeliest to move when a
+new open-source flight/test lands — the *envelope*, not the material coupons.
+The registry (`thresholds.REGISTRY`) carries each default's citation of record
+(the same provenance as the audit table above); a user edit lives only in an
+overlay (`benchmark_overrides.json`) and always restores, and any modified
+number self-discloses in the report (headline asterisk + *Modified benchmarks*
+block).  `test_thresholds.py` pins the registry defaults to the live constants.
+
+**Deferred to a future spreadsheet project (explicit scope decision):** the
+full **material catalog** (14 TPS materials × ~7 numeric fields) and the
+**anchor datasets** (`UHTC_ANCHORS`, `MANEUVER_ANCHORS`, the Form A recession
+anchors) remain code/data-edit surfaces, *not* runtime-editable.  Rationale: a
+policy modeler integrates *events* (a new glide time, a new demonstrated g),
+not new coupon data for one material; the catalog/anchor tables are a
+heavier, spreadsheet-shaped import job better served by an XLSX round-trip
+(mirroring the booster/RO XLSX templates) than by a threshold dialog.  When
+that project happens, it slots beneath this same frozen-default + self-disclose
+discipline.
