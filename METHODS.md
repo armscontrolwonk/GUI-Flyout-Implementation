@@ -3057,10 +3057,35 @@ full `q̇(t)` time series is computed internally but not exposed to the
 user. Adding a CSV column for `q_dot_W_m2` would be a small extension
 if a user wanted the time series for plotting.
 
-### 13.5 Survivability judgements: the demonstrated-envelope model
+### 13.5 Survivability judgements: the unified 4-tier survival ladder
 
-The Reentry Survivability report converts the `q̇(t)` / `T_eq(t)` history
-into a *judgement*, and for UHTC hot-structure gliders that judgement is
+Every material — ablator, hot structure, metal, tile — reports the **same
+four-tier verdict**, so the reader never has to know which criterion fired
+(recession vs temperature vs dwell vs heat-sink).  The underlying test
+differs by material; the headline your eye reads is always one of these four
+(`survivability_report.SURVIVAL_TIERS` / `survival_tier()`):
+
+| Tier | Colour | Meaning |
+|---|---|---|
+| **Within experience** | green | comparable objects/materials have *demonstrated* this (flight or test) |
+| **Within design envelope** | blue | beyond demonstration but within design/theory — *permitted extrapolation* |
+| **Beyond design envelope** | yellow | past design too — undemonstrated *and* unsupported; less likely |
+| **Cannot survive** | red | a **computed** failure — burn-through, melt, a t_fail crossing |
+
+Two honesty rules are built into the ladder: **red is reserved for a computed
+failure** (never a soft "probably won't"), and **blue is only reachable for a
+material with a demonstrated envelope to extrapolate past** — the direct
+payoff of a curated anchor dataset.  A material with no curated envelope can
+only land green / yellow / red; it cannot claim "within design but beyond
+experience," because without the data that distinction isn't ours to make.
+Per-material mapping: an ablator's tier follows its recession margin
+(comfortable → green, thin → yellow, burn-through → red); a limit-only
+hot-structure/metal/tile follows T_eq vs its continuous (green) / peak (blue
+short-excursion) limits with sustained soak → yellow and melt/heat-sink-out →
+red; a material with anchor data (UHTC, and RCC/C-SiC as curated) uses the
+demonstrated-envelope coverage below.
+
+For UHTC hot-structure gliders that judgement is
 deliberately **not** a pass/fail number.  The flight and arc-jet record
 for these materials is sparse and one-sided — nearly every published test
 is a *survival* (the test stopped; it did not fail) — so a single
