@@ -3303,6 +3303,39 @@ remains the primary hard-fail driver and the AoA/transition uncertainty
 forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
 "Windward/AoA heating probe"; pinned by `test_windward_flank.py`.
 
+### 13.9 Adjustable screening thresholds (`thresholds.py`)
+
+The survivability screen rests on a small set of **benchmark numbers**: the
+UHTC demonstrated dwell floor, the operational and flight-demonstrated MaRV
+g-ceilings, the nose-recession accuracy ladder (`δ/R_n` shape-change onset and
+severe-blunting steps, plus the glider ablative-tip flag), and the two
+model-conservatism knobs (the body-acreage flux fraction and the windward AoA
+band).  These are the numbers a **policy-focused modeler** is most likely to
+want to move — a new flight extends how long an object is *demonstrated* to
+glide, or how hard a MaRV is *demonstrated* to pull — so Thrusty makes exactly
+this set editable (Analysis ▸ Screening Envelope…, `ScreeningEnvelopeDialog`)
+and leaves the material catalog and per-vehicle anchor datasets for a future
+spreadsheet project.  The set is curated **by user story**, not by where each
+number lives in code: `thresholds.REGISTRY` pulls each one from wherever its
+consumer reads it (a module scalar such as `SHAPE_CHANGE_ONSET`, or a material
+field such as `TPS_MATERIALS['uhtc']['oxidation_dwell_s']`).
+
+Two disciplines are structural.  **Shipped defaults are frozen:** the registry
+holds each default plus its citation of record; a user edit lives only in an
+overlay file (`benchmark_overrides.json`, `thresholds.load/save`), and
+`thresholds.reset()` (the dialog's *Restore All Defaults*) discards it.
+`thresholds.apply()` is the single writer that pushes the effective values into
+the live modules — including the two windward kwarg defaults
+(`body_flux_fraction`, `alpha_band_deg`), which resolve from their module
+attributes **at call time** so a change actually reaches them.
+`test_thresholds.py` pins the registry defaults to the live constants (a drift
+guard) and covers the overlay round-trip and the apply/reset paths.  **Modified
+benchmarks self-disclose:** `thresholds.modified()` lists every overridden
+number, and `build_report` stamps the headline with an asterisk and prints a
+*Modified benchmarks* block naming each changed value, its shipped default, and
+the default's source — so a hand-edited number never rides on the shipped
+numbers' citations.
+
 ---
 
 ## 14. Outputs, events, and milestones

@@ -487,7 +487,7 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                              mass_kg=0.0, frontal_area_m2=0.0,
                              soak_dwell_s=120.0, nose_solid_depth_m=0.0,
                              body_thickness_m=0.0,
-                             body_flux_fraction=BODY_FLUX_FRACTION):
+                             body_flux_fraction=None):
     """Two-location screening verdict: the SAME evaluator run at the nose
     (stagnation flux, nose material) and at the body acreage
     (body_flux_fraction × stagnation, body material); the headline verdict is
@@ -516,6 +516,8 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         emissivity=emissivity, material=nose_material, mass_kg=0.0,
         frontal_area_m2=0.0, soak_dwell_s=soak_dwell_s,
         recession_depth_m=nose_solid_depth_m)
+    if body_flux_fraction is None:      # resolve the live module attr at call time
+        body_flux_fraction = BODY_FLUX_FRACTION
     f = min(max(float(body_flux_fraction), 1e-3), 1.0)
     # Acreage reference scale: the flank/acreage boundary layer is set by the
     # BODY scale and contains no tip-radius term — referencing the fraction to
@@ -584,9 +586,9 @@ def windward_amplification(delta_deg, alpha_deg):
 
 
 def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
-                        flank_half_angle_deg, alpha_band_deg=_WINDWARD_ALPHA_BAND,
+                        flank_half_angle_deg, alpha_band_deg=None,
                         alpha_op_deg=None, emissivity=0.85, body_material="",
-                        nose_radius_m=0.0, body_flux_fraction=BODY_FLUX_FRACTION,
+                        nose_radius_m=0.0, body_flux_fraction=None,
                         glide_mask=None, delta_defaulted=False):
     """Screening windward-flank convective heating for a lifting RV at AoA.
 
@@ -607,6 +609,11 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
     alt = np.asarray(alt, float); t = np.asarray(t, float)
     eps = max(float(emissivity or 0.85), 1e-3)
     warnings = []
+    # Resolve the live module attrs at call time so thresholds.apply() drives them.
+    if alpha_band_deg is None:
+        alpha_band_deg = _WINDWARD_ALPHA_BAND
+    if body_flux_fraction is None:
+        body_flux_fraction = BODY_FLUX_FRACTION
 
     delta = max(float(flank_half_angle_deg or 0.0), _WINDWARD_DELTA_FLOOR)
     if float(flank_half_angle_deg or 0.0) < _WINDWARD_DELTA_FLOOR:

@@ -288,6 +288,47 @@ tabbed notebook**.
   diverges from each. Pulls per-stage parameters from the selected booster; works
   standalone too (`python mass_estimator.py --demo`). Full method notes in
   `MASS_ESTIMATOR.md`.
+- **Screening Envelope** (Analysis menu) — view and, if new data warrants,
+  adjust the ~9 **benchmark thresholds** behind the survivability screen (glide
+  endurance, maneuver g-ceiling, the nose-recession accuracy ladder, and the
+  model-conservatism knobs). Each row shows the current value, the greyed
+  **shipped default**, and the default's citation; the shipped defaults are
+  frozen, an edit lives only in an overlay file (`benchmark_overrides.json`),
+  and **Restore All Defaults** discards it. A changed number self-discloses in
+  the report — see *Adjustable screening thresholds* below.
+
+---
+
+### Adjustable screening thresholds
+
+The survivability verdict rests on a small set of **benchmark numbers** — how
+long a glider is *demonstrated* to endure, how hard a MaRV is *demonstrated* to
+pull, where nose recession first disperses a ballistic RV, and a couple of
+model-conservatism factors. New flights and tests move these numbers, so the
+tool lets a user view and change them (Analysis ▸ Screening Envelope…), while
+**always** being able to return to the shipped defaults.
+
+**Why the thresholds, and only the thresholds.** Thrusty exposes exactly one
+editable surface — these ~9 curated *envelope* numbers — and defers the full
+material catalog and the anchor datasets to a future spreadsheet project. The
+reasoning: a Thrusty user is a **policy-focused modeler**. That person is far
+likelier to model a reentry object that *survived* and want to adjust the
+envelope — the length of time an object might glide, the g a MaRV might pull —
+in light of new open-source data, than to integrate new coupon data for one
+particular material. So the first (and, for now, only) place to turn a knob is
+the envelope, curated **by user story**, not by where the number lives in the
+code. Material coupons and per-vehicle anchor records are a heavier,
+spreadsheet-shaped job and are recorded as deferred work.
+
+**Two disciplines keep an edit honest.** The shipped defaults are *frozen*: the
+registry in `thresholds.py` holds each default plus its citation of record, a
+user edit lives only in the overlay file, and a drift test
+(`test_thresholds.py`) pins the registry defaults to the live model constants
+so the dialog can never show one number while the model uses another. And a
+modified benchmark *self-discloses*: the survivability report stamps its
+headline with an asterisk and prints a **Modified benchmarks** block naming each
+changed number, its shipped default, and the default's source — so a hand-edited
+value never quietly rides on the shipped numbers' citations.
 
 ---
 
