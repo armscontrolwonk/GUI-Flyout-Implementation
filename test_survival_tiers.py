@@ -30,9 +30,11 @@ def test_classifier_all_four_reachable():
     assert sr.survival_tier('degraded', None) == 'experience'
     # blue — past the demonstrated dwell floor but still passive (design vouches)
     assert sr.survival_tier('survive', long_) == 'design'
-    # yellow — passive→active transition, or the screen cannot assess
+    # yellow — passive→active transition, the screen cannot assess, or an
+    # ablator load past its demonstrated flight record ('beyond' status)
     assert sr.survival_tier('survive', hot) == 'beyond'
     assert sr.survival_tier('analysis', None) == 'beyond'
+    assert sr.survival_tier('beyond', None) == 'beyond'
     # red — computed failure always wins, even with coverage exits present
     assert sr.survival_tier('fail', None) == 'fail'
     assert sr.survival_tier('fail', hot) == 'fail'

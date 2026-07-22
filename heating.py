@@ -95,18 +95,37 @@ TPS_MATERIALS = {
     "silica_tile":     dict(peak_K=1811, continuous_K=1533, melt_K=None, c_J_kgK=1000, label="Silica tile (LI-900)",
                             group="insulative", is_ablator=False, density_kg_m3=144, H_eff_MJ_kg=None, oxidation_dwell_s=None),
     # --- ablators (sacrificial layer; recede) ---
+    # Ablator verdicts compare the flown heat LOAD against a demonstrated flight
+    # record (like the UHTC dwell floor), NOT a computed recession point-value:
+    #   demonstrated_load_MJ_m2 : the largest cited flight stagnation heat load
+    #                             for this material family (None where the open
+    #                             record has no integrated-load anchor).
+    #   H_eff_bound_MJ_kg       : the MOST OPTIMISTIC cited effective-heat-of-
+    #                             ablation, used ONLY for the burn-through
+    #                             tripwire (red fires only if the shield is
+    #                             consumed even at this best case).  The nominal
+    #                             H_eff_MJ_kg drives only the reported δ band.
     "carbon_ablator":  dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Ablative carbon-carbon",
-                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15),
     "carbon_carbon":   dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Bare carbon-carbon (nose)",
-                            group="ablative", is_ablator=True, density_kg_m3=1800, H_eff_MJ_kg=40, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=1800, H_eff_MJ_kg=40, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=3870, H_eff_bound_MJ_kg=175,
+                            demonstrated_load_source="Reentry-F graphite nosetip flew Q ≈ 3.87 GJ/m² (NASA CR-154044 / LWP-460, pixel-traced, ±20%)"),
     "carbon_phenolic": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Carbon phenolic",
-                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=None, H_eff_bound_MJ_kg=20,
+                            demonstrated_load_source="no cited integrated-load anchor in the open record (NRC gives durations, not loads) — OPEN"),
     "silica_phenolic": dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="Silica phenolic",
-                            group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10),
     "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="SIRCA (low-density ablator)",
-                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15),
     "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
-                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None),
+                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=77,
+                            demonstrated_load_source="Stardust PICA forebody flew Q ≈ 276 MJ/m² and was recovered (Stackpoole et al. AIAA 2008-1202)"),
 }
 
 # Dropdown groups for the GUI flyout (§10.1/§10.4) — order = display order.
@@ -170,6 +189,10 @@ def register_custom_material(key, props):
         density_kg_m3=_num(props.get("density_kg_m3"), 1800.0),
         H_eff_MJ_kg=(_num(props.get("H_eff_MJ_kg"), 15.0) if is_abl else None),
         oxidation_dwell_s=None,
+        # Bespoke ablators have no flight record; the tripwire falls back to the
+        # nominal H_eff (conservative — it may over-flag burn-through).
+        demonstrated_load_MJ_m2=None, demonstrated_load_source="",
+        H_eff_bound_MJ_kg=(_num(props.get("H_eff_MJ_kg"), 15.0) if is_abl else None),
     )
     TPS_MATERIALS[key] = entry
     return key
@@ -304,45 +327,70 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     dt = np.diff(t, prepend=t[0])
 
     if is_ablator:
-        # === ABLATOR: recession criterion δ = ∫q̇dt / (ρ·H_eff) ===
+        # === ABLATOR: heat-load vs demonstrated flight record + bounded tripwire.
         # An ablator does NOT fail by exceeding a surface temperature — it
-        # ablates AT its surface temperature and carries the heat away.  The
-        # screening survival question is whether cumulative recession δ exceeds
-        # the available material depth (burn-through).  The effective heat of
-        # ablation H_eff already bundles reradiation and blowing; recession
-        # accrues only while the surface is ablating (T_eq ≥ the material's
-        # onset limit).  Grounded in Duffa §4.3/§4.7 (δ = Q/(ρ·H_eff)); the
-        # peak-surface T_eq is reported but is INFORMATIONAL, not a failure.
-        H_eff = float(mat.get("H_eff_MJ_kg") or 0.0) * 1e6     # J/kg
+        # ablates AT its surface temperature and carries the heat away.  A
+        # point-estimate of recession depth is NOT reported as a verdict: the
+        # effective heat of ablation H_eff varies ~5× with flight regime, so
+        # δ = ∫q̇dt/(ρ·H_eff) inherits that spread while looking precise (this
+        # is what over-flagged the Mk21 at δ/R_n ≈ 0.4; see METHODS §13.6).
+        # Instead:
+        #   (a) the flown ablating heat LOAD is compared against the material
+        #       family's demonstrated flight record (like the UHTC dwell floor);
+        #   (b) burn-through is a BOUND — red fires only if the shield is
+        #       consumed even at the most OPTIMISTIC cited H_eff;
+        #   (c) δ is reported only as a BAND across the cited H_eff range, in
+        #       the full analysis, never as a tier-driving point value.
         rho_abl = float(mat.get("density_kg_m3") or 0.0)
         T_onset = float(mat["continuous_K"])                   # ablation/oxidation onset
         depth = (float(recession_depth_m) if recession_depth_m and recession_depth_m > 0
                  else float(nose_radius_m))
+        H_nom = float(mat.get("H_eff_MJ_kg") or 0.0) * 1e6     # J/kg (nominal, conservative-low)
+        H_bnd = float(mat.get("H_eff_bound_MJ_kg") or mat.get("H_eff_MJ_kg") or 0.0) * 1e6  # optimistic
         out["criteria"]["peak_surface"] = {
             "margin": T_peak / mat["peak_K"], "limit_K": mat["peak_K"],
             "T_eq_peak_K": T_peak,
             "note": "informational for an ablator — it ablates at its surface "
                     "temperature; exceeding T_eq is expected, not a failure"}
-        if H_eff > 0 and rho_abl > 0 and depth > 0:
-            q_recess = np.where(T_eq >= T_onset, q_surf, 0.0)  # incident load while ablating
-            delta_cum = np.cumsum(q_recess * dt) / (rho_abl * H_eff)   # cumulative recession (m)
-            delta_final = float(delta_cum[-1]) if delta_cum.size else 0.0
-            out["criteria"]["recession"] = {
-                "margin": delta_final / depth,
-                "recession_m": delta_final,
-                "recession_over_Rn": delta_final / max(float(nose_radius_m), 1e-6),
-                "depth_m": depth,
-                "H_eff_MJ_kg": mat.get("H_eff_MJ_kg"), "rho_kg_m3": rho_abl,
-                "basis": "effective-heat-of-ablation screen δ = ∫q̇dt/(ρ·H_eff) "
-                         "over the ablating portion (T_eq ≥ onset); burn-through "
-                         "when δ ≥ available depth (default = nose radius)"}
-            bt = np.where(delta_cum >= depth)[0]
-            if bt.size:
-                crossings.append((int(bt[0]), "burn-through (recession exceeds depth)"))
+        # Ablating heat load: the incident load accrued while the surface is at
+        # or above its ablation onset.
+        q_recess = np.where(T_eq >= T_onset, q_surf, 0.0)
+        Q_ablating = float(np.sum(q_recess * dt))              # J/m²
+        record = mat.get("demonstrated_load_MJ_m2")
+        record_J = (float(record) * 1e6) if record else None
+        crit = {
+            "load_MJ_m2": Q_ablating / 1e6,
+            "demonstrated_load_MJ_m2": record,
+            "load_fraction": (Q_ablating / record_J) if record_J else None,
+            "demonstrated_load_source": mat.get("demonstrated_load_source", ""),
+            "depth_m": depth, "rho_kg_m3": rho_abl,
+            "H_eff_nominal_MJ_kg": mat.get("H_eff_MJ_kg"),
+            "H_eff_bound_MJ_kg": mat.get("H_eff_bound_MJ_kg") or mat.get("H_eff_MJ_kg"),
+        }
+        # δ band across the cited H_eff range (context only, full-analysis text).
+        if rho_abl > 0 and H_nom > 0 and depth > 0:
+            crit["delta_nominal_cm"] = 100.0 * Q_ablating / (rho_abl * H_nom)
+            crit["delta_optimistic_cm"] = 100.0 * Q_ablating / (rho_abl * H_bnd)
+            crit["basis"] = (
+                "load compared to the demonstrated flight record; δ shown as a "
+                "band across the cited H_eff range (optimistic..nominal); "
+                "burn-through is a bound at the optimistic H_eff, not a "
+                "point-estimate of recession")
+            # Bounded tripwire: burn-through only if consumed at the OPTIMISTIC H_eff.
+            delta_opt_final = Q_ablating / (rho_abl * H_bnd)
+            crit["burnthrough_bound"] = bool(delta_opt_final >= depth)
+            if delta_opt_final >= depth:
+                delta_opt_cum = np.cumsum(q_recess * dt) / (rho_abl * H_bnd)
+                bt = np.where(delta_opt_cum >= depth)[0]
+                if bt.size:
+                    crossings.append((int(bt[0]),
+                                      "burn-through bound — shield consumed even "
+                                      "at the most optimistic cited H_eff"))
         else:
             out["warnings"].append(
-                "Ablator recession not evaluated (missing H_eff / density / depth) "
-                "— physical numbers only for this location.")
+                "Ablator load/bound not fully evaluated (missing H_eff / density "
+                "/ depth) — physical numbers only for this location.")
+        out["criteria"]["recession"] = crit
     else:
         # === RERADIATIVE / non-ablating: the existing screen (unchanged) ===
         # 1. Peak surface temperature vs short-duration limit
@@ -413,12 +461,19 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                           f"{alt[ci]/1000:.0f} km, {V[ci]/1000:.1f} km/s "
                           f"({mat['label']})")
     elif is_ablator and "recession" in out["criteria"]:
-        # survives by ablation: report the recession it took to get there
+        # survives by ablation: state the load vs the flight record (no
+        # point-estimate of recession — δ is a band in the criteria dict).
         rc = out["criteria"]["recession"]
-        out["verdict"] = (f"no screened burn-through ({mat['label']}); "
-                          f"recedes {rc['recession_m']*100:.1f} cm "
-                          f"({rc['recession_over_Rn']:.2f} R_n, "
-                          f"{rc['margin']:.0%} of {rc['depth_m']*100:.1f} cm depth)")
+        _Q = rc.get("load_MJ_m2", 0.0)
+        _frac = rc.get("load_fraction")
+        if _frac is not None:
+            out["verdict"] = (f"no screened burn-through ({mat['label']}); "
+                              f"ablating load {_Q:,.0f} MJ/m² = {_frac:.0%} of "
+                              f"the demonstrated flight record")
+        else:
+            out["verdict"] = (f"no screened burn-through ({mat['label']}); "
+                              f"ablating load {_Q:,.0f} MJ/m² "
+                              f"(no cited flight-load record for this family)")
     else:
         out["verdict"] = f"no screened thermal failure ({mat['label']})"
     return out
@@ -463,10 +518,16 @@ def _severity(res):
     if not res or not res.get("material"):
         return float("-inf")
     crit = res.get("criteria") or {}
-    # Ablator: severity is the recession margin (δ/depth); T_eq and peak_surface
-    # are informational, NOT failures — an ablator is meant to run hot and recede.
+    # Ablator: severity is the flown load vs the demonstrated flight record
+    # (≥1 = past the record); the burn-through bound outranks everything (a
+    # consumed shield is the true failure).  T_eq / peak_surface are
+    # informational — an ablator is meant to run hot and recede.
     if res.get("is_ablator") and "recession" in crit:
-        return crit["recession"]["margin"]
+        rc = crit["recession"]
+        if rc.get("burnthrough_bound"):
+            return float("inf")
+        lf = rc.get("load_fraction")
+        return float(lf) if lf is not None else 0.0
     # Reradiative: outside-validity is worst, else the worst criterion margin.
     if res.get("T_eq_peak_K", 0.0) >= NOTHING_SURVIVES_K:
         return float("inf")

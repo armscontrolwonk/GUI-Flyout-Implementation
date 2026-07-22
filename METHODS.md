@@ -3092,18 +3092,20 @@ experience," because without the data that distinction isn't ours to make.
 
 A third rule keeps the axes honest: **the ladder answers "does it survive,
 and on what evidence" — a survivable consequence does not drag the tier
-down.**  A ballistic RV whose nose recedes enough to grow dispersion
-(δ/R_n past the shape-change onset), or a glider whose ablative tip alters
-the aeroshape, SURVIVES with a consequence that is itself
-flight-demonstrated (Reentry-F flew ≈0.7 R_n; PANT documented the
-dispersion growth) — that is *within experience*, shown green with an
-"(accuracy degraded)" / "(aeroshape degraded)" headline annotation.  (The
-motivating regression: a Mk21-class RV on an easier-than-design IRBM
-trajectory briefly read "beyond design envelope" because the accuracy
-consequence was allowed to set the survival tier.)  Yellow is reserved for
-genuine envelope exits: the passive→active oxidation edge, or a state the
-screen cannot assess (T_eq past the 4,000 K no-ablation bound).
-Burn-through, melt, and t_fail crossings remain red; a material with anchor
+down.**  A ballistic RV or glider whose ablative nose recedes carries a
+consequence (dispersion growth, aeroshape drift) that is itself flight-
+demonstrated (Lin 1982; PANT; Reentry-F flew ≈0.7 R_n) — so it stays *within
+experience* (green) as long as its flown heat load is within the family
+flight record (§13.6), with the accuracy consequence stated as a report
+sentence, not allowed to set the survival tier.  (The motivating regression:
+a Mk21-class RV on an easier-than-design IRBM trajectory briefly read "beyond
+design envelope" because a recession point-estimate — over-predicted by the
+conservative-low H_eff — was tested against measured-recession thresholds and
+allowed to drive the tier.)  Yellow is reserved for genuine envelope exits:
+the passive→active oxidation edge, an ablator load *past* its flight record,
+or a state the screen cannot assess (T_eq past the 4,000 K no-ablation
+bound).  Burn-through (the bounded tripwire), melt, and t_fail crossings
+remain red; a material with anchor
 data (UHTC, and RCC/C-SiC as curated) uses the demonstrated-envelope
 coverage below.
 
@@ -3186,10 +3188,51 @@ bands.
 
 For ablative ballistic RVs (Form A) the survival question is recession, not a
 surface-temperature limit: an ablator sits *above* its onset temperature and
-survives by receding at its ablation temperature, so the screen integrates
-`δ = ∫q̇dt / (ρ·H_eff)` over the ablating portion and flags burn-through when δ
-exceeds the available depth (heating.py; grounded in Duffa §4.3/§4.7).  `H_eff`
-here is the **effective heat of ablation Q\***, which is *enthalpy- and
+survives by receding at its ablation temperature.
+
+**Verdict logic (revised 2026-07): compare load to the flight record; compute
+only a bound.**  The screen no longer reports a recession *point-estimate* as
+its verdict.  A point value of `δ = ∫q̇dt / (ρ·H_eff)` inherits the ~5× flight-
+regime spread of `H_eff` while *looking* precise — that is what over-flagged an
+Mk21-class RV on an easier-than-design IRBM trajectory at δ/R_n ≈ 0.4 (the
+δ/R_n consequence ladder's thresholds, 0.10 / 0.50, are *measured*-recession
+values, so testing an over-predicted δ against them compares unlike things).
+Instead, mirroring the UHTC dwell-floor treatment (§13.5):
+
+- **Load vs. record.**  The flown ablating heat load Q (the integral of the
+  incident flux while the surface is above its ablation onset) is compared
+  against the material family's **demonstrated flight-load record** — a cited,
+  editable benchmark (Screening Envelope dialog): graphite / bare carbon-carbon
+  ≈ 3,870 MJ/m² (Reentry-F), PICA ≈ 276 MJ/m² (Stardust).  Within the record →
+  *within experience* (green); past it → *beyond design envelope* (yellow, no
+  comparable flight experience — undemonstrated, not impossible); carbon-
+  phenolic and the low-density ablators have **no cited integrated-load anchor**
+  in the open record, so they read "survives by design; recession is a
+  refinement question" until the tripwire (an OPEN data item — the record gives
+  durations, not loads).
+- **Burn-through is a BOUND, not a point.**  Red ("cannot survive") fires only
+  if the shield is consumed even at the **most optimistic cited `H_eff`**
+  (`H_eff_bound_MJ_kg`) — so a computed failure is a genuine bound, never a
+  point-estimate that could be an artifact of the conservative-low `H_eff`.
+  Validated both directions by `test_form_a_bounds.py`: the tripwire must NOT
+  fire for the recovered Stardust/Hayabusa capsules, and DOES fire for a 2 mm
+  shield under Stardust's load.
+- **δ survives only as context.**  The full analysis still prints δ as a *band*
+  across the cited `H_eff` range (optimistic..nominal) — "a band, not a
+  prediction" — never as a tier-driving number.  The accuracy consequence
+  (recession-driven dispersion) is a cited sentence (Lin 1982; PANT; Reentry-F
+  flew ≈0.7 R_n), promoted to the report lead only past ~50% of the record; it
+  never drags the *survival* tier down (survival and accuracy are separate
+  axes — §13.5).  An ablator's "Peak T_eq" is suppressed entirely: an ablating
+  surface caps its own temperature, so a T_eq for it is a flux restated in
+  kelvin, not a temperature anything experiences.
+
+The `H_eff` bands, the Reentry-F tuning trace, and the capsule bounds below are
+the evidentiary base for the load records and the tripwire bound — `H_eff` is
+no longer a buried constant that silently sets a verdict; its one remaining role
+(bracketing the tripwire) is stated in the report.
+
+`H_eff` is the **effective heat of ablation Q\***, which is *enthalpy- and
 regime-dependent*, not a fixed constant — so the catalog nominals
 (carbon-phenolic 15, PICA 35, carbon-carbon 40 MJ/kg) are deliberately set at
 the **conservative (severe-regime) end** of the cited data, which makes the
@@ -3329,10 +3372,15 @@ forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
 
 The survivability screen rests on a small set of **benchmark numbers**: the
 UHTC demonstrated dwell floor, the operational and flight-demonstrated MaRV
-g-ceilings, the nose-recession accuracy ladder (`δ/R_n` shape-change onset and
-severe-blunting steps, plus the glider ablative-tip flag), and the two
-model-conservatism knobs (the body-acreage flux fraction and the windward AoA
-band).  These are the numbers a **policy-focused modeler** is most likely to
+g-ceilings, the **ablator demonstrated-load records** (graphite / bare
+carbon-carbon from Reentry-F, PICA from Stardust — the ablator analogue of the
+UHTC dwell floor; §13.6), and the two model-conservatism knobs (the
+body-acreage flux fraction and the windward AoA band).  (The `δ/R_n`
+shape-change / severe-blunting / glider-tip numbers were retired from the
+dialog when the ablator verdict moved from a computed recession to a
+load-vs-record comparison — §13.6; they survive as the cited δ ladder inside
+the report's accuracy warning text, not as tier-driving thresholds.)  These
+are the numbers a **policy-focused modeler** is most likely to
 want to move — a new flight extends how long an object is *demonstrated* to
 glide, or how hard a MaRV is *demonstrated* to pull — so Thrusty makes exactly
 this set editable (Analysis ▸ Screening Envelope…, `ScreeningEnvelopeDialog`)

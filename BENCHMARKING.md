@@ -1387,7 +1387,8 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
 | `uhtc` `oxidation_dwell_s` (current code) | 300 s (demonstrated floor, floor-not-cliff) | **implemented** — the uncited 120 s placeholder is retired; the code now carries the cited floor (Monteverde 2013, 300 s @ 1973 K zero recession; sharp-tip extension 575 s, Monteverde 2012) and the Form B coverage verdict treats crossing it as extrapolation, not failure (SRD §11.4) | ✔ cited |
-| ablator `H_eff_MJ_kg` nominals | CP 15 / PICA 35 / C/C 40 | Q\* is enthalpy- and regime-dependent; every nominal now has a cited basis. **CP 15 = the measured char-removal-regime value** (Sutton TN D-5930 Table I: 14–20 MJ/kg at ≥2.4 atm; clean rows 68–195). **PICA**: Winter et al. AIAA 2014-1151 arc-jet point, implied Q\* 38–77 MJ/kg at 10.36 MW/m² — nominal 35 at/below its low edge. **C/C**: Perini/Scala diffusion-limit theory (5.8·h_t) + Reentry-F flight bracket + Nestler severe-regime floor | ✔ all three nominals cited (regime-labeled) |
+| ablator demonstrated-load record (verdict driver) | graphite/C-C 3,870 MJ/m² (Reentry-F); PICA 276 MJ/m² (Stardust); carbon-phenolic **none** | The Form A ablator verdict compares flown load to these (like the UHTC dwell floor), NOT a computed δ (see METHODS §13.6). Graphite: Reentry-F Q ≈ 3.87 GJ/m² (pixel-traced, ±20%). PICA: Stardust Q 276 MJ/m² wired, recovered. **carbon-phenolic has no cited integrated-load anchor** — the open record gives durations (NRC), not loads — so it reads "survives by design" until the tripwire (**OPEN** data item) | ✔ graphite/PICA cited; ⚠ CP load OPEN |
+| ablator `H_eff_MJ_kg` — role now = tripwire bound only | nominal CP 15 / PICA 35 / C/C 40; **optimistic bound** CP 20 / PICA 77 / C/C 175 | `H_eff` no longer sets a verdict via a δ point-estimate; it (a) brackets the reported δ *band* (nominal, conservative-low edge) and (b) at its most OPTIMISTIC cited value gates the **burn-through tripwire** (red only if the shield is consumed even there). Nominals: **CP 15** = measured char-removal-regime (Sutton TN D-5930: 14–20 MJ/kg at ≥2.4 atm; clean rows 68–195). **PICA 35 / bound 77**: Winter AIAA 2014-1151 arc-jet, implied Q\* 38–77 MJ/kg. **C/C 40 / bound 175**: Reentry-F flight bracket 70–175 + Scala/Perini theory; Nestler severe-regime floor | ✔ nominals + bounds cited (regime-labeled) |
 | CP char-removal onset | ≥2.4 atm stagnation (air, K_O₂ 0.23); ~6 atm (air-N₂ mixes); zero recession in pure N₂ | Sutton, NASA TN D-5930 (1970), Langley ceramic-heated + arc tunnels, Narmco 4028 CP, ρ 1392 kg/m³ — read from primary, PDF repo `data/`; the CP analogue of the C/C mechanical-erosion bounds (Nestler ≥80 atm gouging, Schneider >55 atm) | ✔ cited |
 | Form A capsule bounds | Stardust 5.1×, Hayabusa 31× (predicted/measured) | Stardust measured 5.7±0.3 mm near-stagnation Core 1 — **firsthand ×2**: Stackpoole, Sepka, Cozmuta & Kontinos AIAA 2008-1202 (the primary; Table 1, error ±3–5%, calc FIAT v2.44 + PICA v3.3 conv+rad; PDF in repo `data/`) and Kontinos & Stackpoole AIAA 2008-1197 (identical reproduction).  Primary's own reading: the flank 25% discrepancy is within the model's arc-jet calibration scatter; the 61% near-stagnation over-prediction "not fully understood."  Hayabusa measured ~0.3 mm (laser scan, error <10%), calc/meas ≈3×, peak convective 5.3 MW/m² — **firsthand**, Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549 (Hayabusa pulse duration in the bound test is a labeled 60 s estimate from the paper's heating window) | ✔ cited (both capsules firsthand; Stardust doubly) |
 | Reentry-F H_eff bracket | 70–175 MJ/kg, central ≈114 (flight graphite, 5–60 atm) | derived: Q ≈ 3.87 GJ/m² ±20%, **pixel-traced** from the nominal-trajectory figure (γ_E 21.2°, V_E 20,300 ft/s; the figure Berry reproduces as his Fig. 6 [LWP-460]; embedded scan extracted from the Berry PDF, per-ruler tick calibration, apex-first slope tracking, overlay-QC'd — method + summary `benchmarks/form_a/reentryf_nominal_qdot.csv`, full trace `reentryf_qdot_trace_full.csv`) ÷ (ρ 1.73 g/cc vendor-nominal × 0.6–1.0 in axial-recession spread, CR-154044 0.77 in central); apex 348 MW/m² @ ~431.7 s (~47 kft), the 318 MW/m² `_BENCHMARKS` pin = LWP window-max quote; validation: traced in-window range 10.2–30.2×10³ vs LWP's quoted 9–28×10³ Btu/ft²·s + Sutton-Graves apex check ~340–380 MW/m²; 100→50 kft window ~8 s; supersedes both the ~1 GJ/m² order-of-magnitude read and the intermediate 2.85 GJ/m² eyeball table (wrong curve through the mid-rise, caught by overlay QC); Q_MJ stays None in code — preflight-nominal, no flight-measured stagnation heating exists (TM X-2560) | ⚠ labeled derived (pixel-traced; nominal 40 over-predicts ~2.9×, conservative) |
@@ -1402,12 +1403,16 @@ reverse.
 
 ### User-adjustable screening thresholds (`thresholds.py`) + deferred spreadsheets
 
-A curated **~9-number envelope subset** of the thresholds above is now
+A curated **~8-number envelope subset** of the thresholds above is now
 user-editable at runtime (Analysis ▸ Screening Envelope…): the UHTC dwell
-floor, the two MaRV g-ceilings, the `δ/R_n` accuracy-ladder steps + glider-tip
-flag, and the two model-conservatism knobs (acreage flux fraction, windward AoA
-band).  These are the numbers a **policy modeler** is likeliest to move when a
-new open-source flight/test lands — the *envelope*, not the material coupons.
+floor, the two MaRV g-ceilings, the two **ablator demonstrated-load records**
+(graphite/C-C, PICA), and the two model-conservatism knobs (acreage flux
+fraction, windward AoA band).  (The `δ/R_n` accuracy-ladder steps + glider-tip
+flag were retired from the dialog when the ablator verdict moved from a computed
+recession to a load-vs-record comparison — METHODS §13.6 — and survive as the
+cited δ ladder in the report's warning text.)  These are the numbers a **policy
+modeler** is likeliest to move when a new open-source flight/test lands — the
+*envelope*, not the material coupons.
 The registry (`thresholds.REGISTRY`) carries each default's citation of record
 (the same provenance as the audit table above); a user edit lives only in an
 overlay (`benchmark_overrides.json`) and always restores, and any modified
@@ -1424,3 +1429,14 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 (mirroring the booster/RO XLSX templates) than by a threshold dialog.  When
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
+
+**OPEN anchor — carbon-phenolic demonstrated load.**  The two ablator load
+records shipped are graphite/C-C (Reentry-F, 3,870 MJ/m²) and PICA (Stardust,
+276 MJ/m²).  **Carbon-phenolic has no cited integrated stagnation-load anchor**
+in the open record — NRC 2008 gives glide *durations* (Mk-500 300 s, AMaRV
+800 s) and the AMaRV *g*-number, but not a load in MJ/m².  Until one is found,
+carbon-phenolic ablators read "survives by design (no burn-through); recession
+is a refinement question" and can never post a beyond-record (yellow) verdict —
+only the burn-through bound (red) or within-experience (green).  A recovered- or
+reconstructed-flight carbon-phenolic stagnation load would close this and is the
+next Form A anchor to mine.

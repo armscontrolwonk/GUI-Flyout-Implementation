@@ -1,27 +1,30 @@
 """Form A ablator BOUNDING tests — Stardust and Hayabusa recovered capsules.
 
-These are *bounds, not fits*.  Read benchmarks/form_a and BENCHMARKING.md §"Form A
-anchors" before touching them, and read the two-sentence warning below.
+The ablator verdict no longer computes a recession point-estimate (it compares
+load against a flight record; the survival check is the burn-through BOUND at
+the most optimistic cited H_eff — see METHODS §13.6).  So these capsule tests
+now validate two things, both still bounds, not fits:
 
-WHY THE DIRECTION IS "predicted >= measured", NOT "predicted == measured":
-Recovered-capsule post-flight analysis found equilibrium-style ablation chemistry
-OVER-predicts recession (Hayabusa calc/measured ~= 3x, Suzuki JSR 10.2514/1.A32549;
-Stardust 51-61% over at the near-stagnation core and 22-25% at mid-flank — firsthand
-Kontinos & Stackpoole AIAA 2008-1197 Table 1, from Stackpoole et al. AIAA 2008-1202).
-That chemistry conservatism is larger than the radiative-gas heating the
-convective-only model omits above ~9 km/s, so the two biases net to OVER-prediction.
-The capsules therefore validate the model only as a lower-bounding sanity check:
-the screening recession chain must predict AT LEAST the measured recession.  Do NOT
-"fix" the over-prediction by tuning H_eff upward — that is the failure mode the
-Form A plan §2 exists to prevent.  The in-envelope TUNING anchor is Reentry-F.
+1. THE CONSERVATIVE δ STILL BOUNDS.  The reported δ band's NOMINAL edge (the
+   conservative-low H_eff, the same value the old point-estimate used) must
+   still predict AT LEAST the measured recession — the screen may over-predict,
+   never under-predict.  Direction is "predicted >= measured", NOT "==":
+   equilibrium-style ablation chemistry OVER-predicts recession (Hayabusa
+   calc/measured ~= 3x, Suzuki JSR 10.2514/1.A32549; Stardust 51-61% over near
+   the stagnation core — firsthand Kontinos & Stackpoole AIAA 2008-1197 Table 1,
+   from Stackpoole et al. AIAA 2008-1202); that conservatism exceeds the
+   radiative-gas heating the convective-only model omits above ~9 km/s, so the
+   biases net to over-prediction.  Do NOT "fix" it by raising H_eff.
 
-Each case reconstructs the documented stagnation heat pulse (half-sine calibrated to
-the documented peak flux + integrated load / design environment, at the real capsule
-nose radius) and runs it through the SAME heating.heating_figure_of_merit code path
-the GUI uses, then reads criteria.recession.recession_m.  The half-sine is a
-transparent stand-in for a full entry-trajectory reconstruction (which is not in the
-repo); it is calibrated to reproduce the cited integrated load, not asserted to be the
-true trajectory.
+2. THE TRIPWIRE MUST NOT FIRE for a survived capsule.  Both Stardust and
+   Hayabusa were recovered intact, so the burn-through bound (shield consumed
+   even at the optimistic H_eff) must be FALSE against a realistic shield depth.
+   The complementary check: a genuinely under-shielded case DOES trip.
+
+Each case reconstructs the documented stagnation heat pulse (half-sine
+calibrated to the cited peak flux + integrated load, at the real capsule nose
+radius) and runs it through the SAME heating.heating_figure_of_merit code path
+the GUI uses.
 
 Run:  PYTHONPATH=. python -m pytest test_form_a_bounds.py -q
 """
@@ -48,7 +51,8 @@ def _half_sine_pulse(q_peak_W_m2, tau_s, V_entry_m_s, nose_radius_m, n=400):
     return t, rho, V
 
 
-def _run_recession(material, q_peak_MW, tau_s, V_entry_km_s, nose_radius_m):
+def _run_recession(material, q_peak_MW, tau_s, V_entry_km_s, nose_radius_m,
+                   depth_m=0.0):
     q_peak = q_peak_MW * 1e6
     V = V_entry_km_s * 1e3
     t, rho, Varr = _half_sine_pulse(q_peak, tau_s, V, nose_radius_m)
@@ -56,7 +60,8 @@ def _run_recession(material, q_peak_MW, tau_s, V_entry_km_s, nose_radius_m):
     rng = np.linspace(0.0, 1e6, t.size)
     fom = heating.heating_figure_of_merit(
         t, rho, Varr, alt, rng,
-        nose_radius_m=nose_radius_m, emissivity=0.90, material=material)
+        nose_radius_m=nose_radius_m, emissivity=0.90, material=material,
+        recession_depth_m=depth_m)
     rec = fom["criteria"].get("recession")
     assert rec is not None, f"no recession criterion for {material}: {fom.get('warnings')}"
     return fom, rec
@@ -96,35 +101,58 @@ _HAYABUSA_MEAS_MM = 0.3      # measured max recession, laser scan, error <10% (F
 
 
 def test_stardust_bound():
-    """PICA screening recession must bound Stardust's measured 5.7 mm (Core 1) from above."""
-    fom, rec = _run_recession("pica", _STARDUST_QPK_MW, _STARDUST_TAU, 12.9, _STARDUST_RN)
-    pred_mm = rec["recession_m"] * 1e3
+    """PICA conservative δ must bound Stardust's measured 5.7 mm (Core 1) from
+    above, AND the burn-through tripwire must NOT fire (the capsule survived)."""
+    # Realistic PICA forebody thickness for Stardust ≈ 5.8 cm (recovered).
+    fom, rec = _run_recession("pica", _STARDUST_QPK_MW, _STARDUST_TAU, 12.9,
+                              _STARDUST_RN, depth_m=0.058)
+    pred_mm = rec["delta_nominal_cm"] * 10.0    # conservative-low H_eff edge
     ratio = pred_mm / _STARDUST_MEAS_MM
-    print(f"[stardust_bound] predicted {pred_mm:.2f} mm vs measured "
-          f"{_STARDUST_MEAS_MM} mm -> ratio {ratio:.2f}x "
+    print(f"[stardust_bound] conservative δ {pred_mm:.2f} mm vs measured "
+          f"{_STARDUST_MEAS_MM} mm -> ratio {ratio:.2f}x; "
+          f"tripwire={rec['burnthrough_bound']} "
           f"(load {fom['integrated_load_MJ_m2']:.0f} MJ/m^2)")
     assert pred_mm >= _STARDUST_MEAS_MM, (
-        f"BOUND VIOLATED: predicted {pred_mm:.2f} mm < measured {_STARDUST_MEAS_MM} mm. "
-        f"This indicates a broken Q pipeline or bad H_eff, NOT a radiative shortfall "
-        f"(see Form A plan §2 / test docstring). Halt and investigate.")
+        f"BOUND VIOLATED: conservative δ {pred_mm:.2f} mm < measured "
+        f"{_STARDUST_MEAS_MM} mm. Broken Q pipeline or bad H_eff (see docstring).")
     assert ratio > 1.0
+    assert rec["burnthrough_bound"] is False, (
+        "TRIPWIRE FIRED for the recovered Stardust capsule — the burn-through "
+        "bound must not trip for a survived flight.")
 
 
 def test_hayabusa_bound():
-    """Carbon-phenolic screening recession must bound Hayabusa's measured ~0.3 mm."""
-    fom, rec = _run_recession("carbon_phenolic", _HAYABUSA_QPK_MW, _HAYABUSA_TAU, 12.2, _HAYABUSA_RN)
-    pred_mm = rec["recession_m"] * 1e3
+    """Carbon-phenolic conservative δ must bound Hayabusa's measured ~0.3 mm,
+    AND the tripwire must NOT fire (the capsule survived)."""
+    fom, rec = _run_recession("carbon_phenolic", _HAYABUSA_QPK_MW, _HAYABUSA_TAU,
+                              12.2, _HAYABUSA_RN, depth_m=0.02)
+    pred_mm = rec["delta_nominal_cm"] * 10.0
     ratio = pred_mm / _HAYABUSA_MEAS_MM
-    print(f"[hayabusa_bound] predicted {pred_mm:.2f} mm vs measured "
-          f"{_HAYABUSA_MEAS_MM} mm -> ratio {ratio:.2f}x "
+    print(f"[hayabusa_bound] conservative δ {pred_mm:.2f} mm vs measured "
+          f"{_HAYABUSA_MEAS_MM} mm -> ratio {ratio:.2f}x; "
+          f"tripwire={rec['burnthrough_bound']} "
           f"(load {fom['integrated_load_MJ_m2']:.0f} MJ/m^2)")
     assert pred_mm >= _HAYABUSA_MEAS_MM, (
-        f"BOUND VIOLATED: predicted {pred_mm:.2f} mm < measured {_HAYABUSA_MEAS_MM} mm. "
-        f"Halt and investigate (see test docstring).")
+        f"BOUND VIOLATED: conservative δ {pred_mm:.2f} mm < measured "
+        f"{_HAYABUSA_MEAS_MM} mm. Halt and investigate (see docstring).")
     assert ratio > 1.0
+    assert rec["burnthrough_bound"] is False, (
+        "TRIPWIRE FIRED for the recovered Hayabusa capsule.")
+
+
+def test_tripwire_fires_when_undershielded():
+    """The complement: a genuinely under-shielded ablator DOES trip the bound.
+    Stardust's load through a 2 mm PICA skin is consumed even at the optimistic
+    H_eff — burn-through bound must be True."""
+    fom, rec = _run_recession("pica", _STARDUST_QPK_MW, _STARDUST_TAU, 12.9,
+                              _STARDUST_RN, depth_m=0.002)
+    assert rec["burnthrough_bound"] is True, (
+        "Tripwire failed to fire for a 2 mm shield under Stardust's load.")
+    assert fom.get("compromise") is not None
 
 
 if __name__ == "__main__":
     test_stardust_bound()
     test_hayabusa_bound()
+    test_tripwire_fires_when_undershielded()
     print("Form A bound tests passed.")
