@@ -113,7 +113,7 @@ def nas_tps_tier(glide_time_s):
 
 def format_ladder(glide_time_s=None):
     """Plain-text NRC-2008 ladder, with the current glide time placed on it if
-    given.  Feeds the GUI 'Heating Survivability' panel; testable without a GUI."""
+    given.  Feeds the Reentry Survivability report; testable without a GUI."""
     lines = ["TPS-class ladder — NRC 2008 (CPGS reentry-body lineage, pp. 119-121)", ""]
     cur = nas_tps_tier(glide_time_s) if glide_time_s else None
     for lbl, s, mat, tier in NAS_LINEAGE:
