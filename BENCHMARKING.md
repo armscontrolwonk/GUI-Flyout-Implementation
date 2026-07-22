@@ -1387,7 +1387,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
 | `uhtc` `oxidation_dwell_s` (current code) | 300 s (demonstrated floor, floor-not-cliff) | **implemented** — the uncited 120 s placeholder is retired; the code now carries the cited floor (Monteverde 2013, 300 s @ 1973 K zero recession; sharp-tip extension 575 s, Monteverde 2012) and the Form B coverage verdict treats crossing it as extrapolation, not failure (SRD §11.4) | ✔ cited |
-| ablator demonstrated-load record (verdict driver) | graphite/C-C 3,870 MJ/m² (Reentry-F); PICA 276 MJ/m² (Stardust); carbon-phenolic **none** | The Form A ablator verdict compares flown load to these (like the UHTC dwell floor), NOT a computed δ (see METHODS §13.6). Graphite: Reentry-F Q ≈ 3.87 GJ/m² (pixel-traced, ±20%). PICA: Stardust Q 276 MJ/m² wired, recovered. **carbon-phenolic has no cited integrated-load anchor** — the open record gives durations (NRC), not loads — so it reads "survives by design" until the tripwire (**OPEN** data item) | ✔ graphite/PICA cited; ⚠ CP load OPEN |
+| ablator demonstrated-load record (verdict driver) | graphite/C-C 3,870 MJ/m² (Reentry-F); PICA 276 MJ/m² (Stardust); carbon-phenolic 60 MJ/m² (Pioneer Venus LP) | The Form A ablator verdict compares flown load to these (like the UHTC dwell floor), NOT a computed δ (see METHODS §13.6). Graphite: Reentry-F Q ≈ 3.87 GJ/m² (pixel-traced, ±20%). PICA: Stardust Q 276 MJ/m² wired, recovered. **CP: Pioneer Venus Large Probe ~60 MJ/m²** (Cabrera & West 2026, DOI 10.2514/1.A36431, coupled reconstruction validated to ≤6% vs flight TCs; figure-integrated ±25%; short radiation-heavy CO₂ pulse → deliberately conservative as a load record; Hayabusa CP corroborates ~2–3× higher, pulse-duration-soft — see the CLOSED note below) | ✔ all three cited (CP labeled figure-integrated) |
 | ablator `H_eff_MJ_kg` — role now = tripwire bound only | nominal CP 15 / PICA 35 / C/C 40; **optimistic bound** CP 20 / PICA 77 / C/C 175 | `H_eff` no longer sets a verdict via a δ point-estimate; it (a) brackets the reported δ *band* (nominal, conservative-low edge) and (b) at its most OPTIMISTIC cited value gates the **burn-through tripwire** (red only if the shield is consumed even there). Nominals: **CP 15** = measured char-removal-regime (Sutton TN D-5930: 14–20 MJ/kg at ≥2.4 atm; clean rows 68–195). **PICA 35 / bound 77**: Winter AIAA 2014-1151 arc-jet, implied Q\* 38–77 MJ/kg. **C/C 40 / bound 175**: Reentry-F flight bracket 70–175 + Scala/Perini theory; Nestler severe-regime floor | ✔ nominals + bounds cited (regime-labeled) |
 | CP char-removal onset | ≥2.4 atm stagnation (air, K_O₂ 0.23); ~6 atm (air-N₂ mixes); zero recession in pure N₂ | Sutton, NASA TN D-5930 (1970), Langley ceramic-heated + arc tunnels, Narmco 4028 CP, ρ 1392 kg/m³ — read from primary, PDF repo `data/`; the CP analogue of the C/C mechanical-erosion bounds (Nestler ≥80 atm gouging, Schneider >55 atm) | ✔ cited |
 | Form A capsule bounds | Stardust 5.1×, Hayabusa 31× (predicted/measured) | Stardust measured 5.7±0.3 mm near-stagnation Core 1 — **firsthand ×2**: Stackpoole, Sepka, Cozmuta & Kontinos AIAA 2008-1202 (the primary; Table 1, error ±3–5%, calc FIAT v2.44 + PICA v3.3 conv+rad; PDF in repo `data/`) and Kontinos & Stackpoole AIAA 2008-1197 (identical reproduction).  Primary's own reading: the flank 25% discrepancy is within the model's arc-jet calibration scatter; the 61% near-stagnation over-prediction "not fully understood."  Hayabusa measured ~0.3 mm (laser scan, error <10%), calc/meas ≈3×, peak convective 5.3 MW/m² — **firsthand**, Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549 (Hayabusa pulse duration in the bound test is a labeled 60 s estimate from the paper's heating window) | ✔ cited (both capsules firsthand; Stardust doubly) |
@@ -1403,10 +1403,10 @@ reverse.
 
 ### User-adjustable screening thresholds (`thresholds.py`) + deferred spreadsheets
 
-A curated **~8-number envelope subset** of the thresholds above is now
+A curated **~9-number envelope subset** of the thresholds above is now
 user-editable at runtime (Analysis ▸ Screening Envelope…): the UHTC dwell
-floor, the two MaRV g-ceilings, the two **ablator demonstrated-load records**
-(graphite/C-C, PICA), and the two model-conservatism knobs (acreage flux
+floor, the two MaRV g-ceilings, the three **ablator demonstrated-load records**
+(graphite/C-C, PICA, carbon-phenolic), and the two model-conservatism knobs (acreage flux
 fraction, windward AoA band).  (The `δ/R_n` accuracy-ladder steps + glider-tip
 flag were retired from the dialog when the ablator verdict moved from a computed
 recession to a load-vs-record comparison — METHODS §13.6 — and survive as the
@@ -1430,13 +1430,36 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
-**OPEN anchor — carbon-phenolic demonstrated load.**  The two ablator load
-records shipped are graphite/C-C (Reentry-F, 3,870 MJ/m²) and PICA (Stardust,
-276 MJ/m²).  **Carbon-phenolic has no cited integrated stagnation-load anchor**
-in the open record — NRC 2008 gives glide *durations* (Mk-500 300 s, AMaRV
-800 s) and the AMaRV *g*-number, but not a load in MJ/m².  Until one is found,
-carbon-phenolic ablators read "survives by design (no burn-through); recession
-is a refinement question" and can never post a beyond-record (yellow) verdict —
-only the burn-through bound (red) or within-experience (green).  A recovered- or
-reconstructed-flight carbon-phenolic stagnation load would close this and is the
-next Form A anchor to mine.
+**CLOSED (2026-07-22) — carbon-phenolic demonstrated load: Pioneer Venus Large
+Probe, ~60 MJ/m².**  Was OPEN ("NRC gives durations, not loads").  Closed by
+**Cabrera & West 2026** (read from primary, uploaded to the project archive):
+Jannuel V. V. Cabrera & Thomas K. West IV, "Pioneer Venus Large Probe
+Stagnation Point Entry Heating with Coupled Ablation," *J. Spacecraft &
+Rockets* 63(2), Mar–Apr 2026, DOI 10.2514/1.A36431 (NASA Langley; presented as
+AIAA 2024-3560).  A trajectory-based LAURA/HARA **coupled-ablation
+reconstruction** of the Dec 9, 1978 entry (11.584 km/s, γ −31.829°,
+β 190 kg/m², Rₙ 0.355 m, CP heatshield 1.0 cm stagnation / 0.75 cm flank),
+validated against the flight stagnation thermocouple to a **24 K maximum
+discrepancy (≤6%)** — the paper's own hypothesis for the fit is exactly the
+coupled finite-rate chemistry.  Coupled peak fluxes: **radiative
+2,027 W/cm² (20.3 MW/m²) at 18.6 s; convective 1,382 W/cm² (13.8 MW/m²) at
+19.2 s**; peak wall temperature **4,032 K** (sublimation regime); ablation-
+induced convective blockage 47–63% vs non-ablating; stagnation recession
+"only 20% of the Galileo result."  **Integrated load: ~60 MJ/m²**
+(trapezoid integration of the Fig. 7 coupled curves, ~33 rad + ~31 conv
+MJ/m², labeled **figure-integrated ±~25%** — same discipline as the
+Reentry-F pixel trace, coarser method).  Regime caveats carried in the
+source string: **97.4% CO₂ atmosphere, radiation-heavy, ~4–6 s pulse** — this
+anchor demonstrates CP's *flux/temperature* capability (34 MW/m² combined,
+4,032 K wall on a 1 cm shield) far more than its long-dwell load capability,
+so as a LOAD record it is deliberately conservative.  **Hayabusa (CP,
+recovered; Suzuki JSR 2014, already in repo) corroborates a higher load** —
+our half-sine reconstruction integrates ~200 MJ/m² at the nominal 60 s pulse
+(~100 at the conservative 30 s end) — but its pulse duration is a labeled
+estimate (3× window), so the PV number, with the tighter provenance chain,
+sets the wired record and Hayabusa rides as corroboration.  (This also
+corrects the earlier OPEN note: a CP load anchor *was* derivable from the
+in-repo Suzuki data; what was missing was one with tight provenance.)
+Bonus datum: the paper's 4,032 K coupled peak wall temperature is consistent
+with (slightly above) our CP `peak_K` 3,900 — the catalog value reads as
+mildly conservative against a validated flight reconstruction.

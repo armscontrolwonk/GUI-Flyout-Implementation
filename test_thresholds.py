@@ -31,6 +31,8 @@ def test_registry_defaults_match_live_constants():
         heating.TPS_MATERIALS["carbon_carbon"]["demonstrated_load_MJ_m2"]
     assert d["pica_load_floor_MJ_m2"] == \
         heating.TPS_MATERIALS["pica"]["demonstrated_load_MJ_m2"]
+    assert d["cp_load_floor_MJ_m2"] == \
+        heating.TPS_MATERIALS["carbon_phenolic"]["demonstrated_load_MJ_m2"]
     assert d["marv_g_operational"] == sr._MARV_G_OPERATIONAL
     assert d["marv_g_demonstrated"] == sr._MARV_G_DEMONSTRATED
 

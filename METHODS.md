@@ -3203,13 +3203,16 @@ Instead, mirroring the UHTC dwell-floor treatment (§13.5):
   incident flux while the surface is above its ablation onset) is compared
   against the material family's **demonstrated flight-load record** — a cited,
   editable benchmark (Screening Envelope dialog): graphite / bare carbon-carbon
-  ≈ 3,870 MJ/m² (Reentry-F), PICA ≈ 276 MJ/m² (Stardust).  Within the record →
+  ≈ 3,870 MJ/m² (Reentry-F), PICA ≈ 276 MJ/m² (Stardust), carbon-phenolic
+  ≈ 60 MJ/m² (Pioneer Venus Large Probe — Cabrera & West 2026 coupled
+  reconstruction; a short radiation-heavy CO₂ pulse, so deliberately
+  conservative as a load record; Hayabusa corroborates higher — BENCHMARKING
+  "CLOSED — carbon-phenolic demonstrated load").  Within the record →
   *within experience* (green); past it → *beyond design envelope* (yellow, no
-  comparable flight experience — undemonstrated, not impossible); carbon-
-  phenolic and the low-density ablators have **no cited integrated-load anchor**
-  in the open record, so they read "survives by design; recession is a
-  refinement question" until the tripwire (an OPEN data item — the record gives
-  durations, not loads).
+  comparable flight experience — undemonstrated, not impossible); the
+  low-density ablators (SIRCA, ablative C-C blend, silica phenolic) still have
+  **no cited integrated-load anchor** and read "survives by design; recession
+  is a refinement question" until the tripwire.
 - **Burn-through is a BOUND, not a point.**  Red ("cannot survive") fires only
   if the shield is consumed even at the **most optimistic cited `H_eff`**
   (`H_eff_bound_MJ_kg`) — so a computed failure is a genuine bound, never a
@@ -3373,8 +3376,9 @@ forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
 The survivability screen rests on a small set of **benchmark numbers**: the
 UHTC demonstrated dwell floor, the operational and flight-demonstrated MaRV
 g-ceilings, the **ablator demonstrated-load records** (graphite / bare
-carbon-carbon from Reentry-F, PICA from Stardust — the ablator analogue of the
-UHTC dwell floor; §13.6), and the two model-conservatism knobs (the
+carbon-carbon from Reentry-F, PICA from Stardust, carbon-phenolic from the
+Pioneer Venus Large Probe — the ablator analogue of the UHTC dwell floor;
+§13.6), and the two model-conservatism knobs (the
 body-acreage flux fraction and the windward AoA band).  (The `δ/R_n`
 shape-change / severe-blunting / glider-tip numbers were retired from the
 dialog when the ablator verdict moved from a computed recession to a
