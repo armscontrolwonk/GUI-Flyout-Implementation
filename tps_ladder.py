@@ -120,11 +120,12 @@ def format_ladder(glide_time_s=None):
         secs = "~tens of s" if s is None else f"{s:>5.0f} s"
         mark = ""
         if cur and s is not None and cur["nearest"][0] == lbl:
-            mark = "  <- nearest anchor"
+            mark = "  <- nearest rung (design lineage, not a demonstration of this vehicle)"
         lines.append(f"  {secs:>11}   {_TIER[tier]['name']:<12} {mat}{mark}")
     lines.append("")
     lines.append(f"  the step: ablation <-> reradiation at ~{CROSSOVER_S:.0f} s "
-                 f"(binding F.o.M. switches Q -> T_w)")
+                 f"(the binding constraint switches from total heat load to "
+                 f"wall temperature)")
     if cur:
         lines += ["",
                   f"This vehicle  ({glide_time_s:.0f} s glide):",
