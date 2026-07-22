@@ -6,7 +6,7 @@ object that *survived* and want to adjust the ENVELOPE — how long a glider is
 demonstrated to endure, how hard a MaRV is demonstrated to pull, how much heat
 load an ablator family has flown and survived — in light of a new flight or
 test, than to integrate new coupon data for one material.  So the first
-editable surface is these ~8 curated ENVELOPE numbers, not the full material
+editable surface is these ~9 curated ENVELOPE numbers, not the full material
 catalog or the anchor datasets (both deferred to a future spreadsheet project).
 
 The numbers are curated BY USER STORY, not by where they live in code: each is
@@ -62,6 +62,10 @@ REGISTRY = [
          label="PICA demonstrated load", units="MJ/m²",
          default=276.0, kind="float", lo=1.0, hi=100000.0,
          source="Stardust PICA forebody flew Q ≈ 276 MJ/m² and was recovered (Stackpoole et al. AIAA 2008-1202)"),
+    dict(key="cp_load_floor_MJ_m2", group="Ablator flight record",
+         label="Carbon-phenolic demonstrated load", units="MJ/m²",
+         default=60.0, kind="float", lo=1.0, hi=100000.0,
+         source="Pioneer Venus Large Probe survived ~60 MJ/m² (Cabrera & West 2026, coupled reconstruction; figure-integrated ±25%, short CO₂ pulse — conservative; Hayabusa corroborates higher)"),
     # ---- Model conservatism -------------------------------------------------
     dict(key="acreage_flux_fraction", group="Model conservatism",
          label="Body-acreage flux fraction", units="× body stagnation",
@@ -187,5 +191,8 @@ def apply():
     _pica = heating.TPS_MATERIALS.get("pica")
     if _pica is not None:
         _pica["demonstrated_load_MJ_m2"] = c["pica_load_floor_MJ_m2"]
+    _cp = heating.TPS_MATERIALS.get("carbon_phenolic")
+    if _cp is not None:
+        _cp["demonstrated_load_MJ_m2"] = c["cp_load_floor_MJ_m2"]
     sr._MARV_G_OPERATIONAL = c["marv_g_operational"]
     sr._MARV_G_DEMONSTRATED = c["marv_g_demonstrated"]
