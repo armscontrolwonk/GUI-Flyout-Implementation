@@ -27,9 +27,10 @@ def test_registry_defaults_match_live_constants():
     assert d["uhtc_dwell_floor_s"] == heating.TPS_MATERIALS["uhtc"]["oxidation_dwell_s"]
     assert d["acreage_flux_fraction"] == heating.BODY_FLUX_FRACTION
     assert (d["windward_alpha_lo"], d["windward_alpha_hi"]) == heating._WINDWARD_ALPHA_BAND
-    assert d["shape_change_onset"] == sr.SHAPE_CHANGE_ONSET
-    assert d["severe_blunting"] == sr.SEVERE_BLUNTING
-    assert d["glider_tip_flag"] == sr.GLIDER_ABL_TIP_FLAG
+    assert d["graphite_load_floor_MJ_m2"] == \
+        heating.TPS_MATERIALS["carbon_carbon"]["demonstrated_load_MJ_m2"]
+    assert d["pica_load_floor_MJ_m2"] == \
+        heating.TPS_MATERIALS["pica"]["demonstrated_load_MJ_m2"]
     assert d["marv_g_operational"] == sr._MARV_G_OPERATIONAL
     assert d["marv_g_demonstrated"] == sr._MARV_G_DEMONSTRATED
 
@@ -52,10 +53,10 @@ def test_set_override_and_current():
 
 def test_setting_back_to_default_clears_override():
     _reset()
-    e = thresholds._BY_KEY["shape_change_onset"]
-    thresholds.set_override("shape_change_onset", 0.2)
+    e = thresholds._BY_KEY["acreage_flux_fraction"]
+    thresholds.set_override("acreage_flux_fraction", 0.2)
     assert thresholds.is_modified()
-    thresholds.set_override("shape_change_onset", e["default"])
+    thresholds.set_override("acreage_flux_fraction", e["default"])
     assert not thresholds.is_modified()          # equals default => cleared
     _reset()
 
@@ -125,22 +126,22 @@ def test_windward_kwarg_default_follows_module_attr():
 def test_save_load_round_trip(tmp_path):
     _reset()
     path = str(tmp_path / "ov.json")
-    thresholds.set_override("severe_blunting", 0.6)
+    thresholds.set_override("pica_load_floor_MJ_m2", 300.0)
     thresholds.save(path)
     assert os.path.exists(path)
     with open(path) as f:
-        assert json.load(f) == {"severe_blunting": 0.6}
+        assert json.load(f) == {"pica_load_floor_MJ_m2": 300.0}
     thresholds.reset()
     assert not thresholds.is_modified()
     thresholds.load(path)
-    assert thresholds.current()["severe_blunting"] == 0.6
+    assert thresholds.current()["pica_load_floor_MJ_m2"] == 300.0
     _reset()
 
 
 def test_save_at_defaults_removes_overlay(tmp_path):
     _reset()
     path = str(tmp_path / "ov.json")
-    thresholds.set_override("severe_blunting", 0.6)
+    thresholds.set_override("pica_load_floor_MJ_m2", 300.0)
     thresholds.save(path)
     assert os.path.exists(path)
     thresholds.reset()

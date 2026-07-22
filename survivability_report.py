@@ -20,6 +20,7 @@ flight-anchored (the user-benchmarkable part, design doc §10).
 """
 
 from __future__ import annotations
+import re
 import numpy as np
 
 import heating
@@ -74,23 +75,25 @@ def survival_tier(status, coverage=None):
             return 'beyond'
         if 'too long' in ex:       # past demonstrated dwell, still passive: design vouches
             return 'design'
-    if status == 'analysis':       # screen can't assess (e.g. T_eq past 4,000 K)
+    if status in ('analysis', 'beyond'):
+        # 'analysis' = screen can't assess (e.g. T_eq past 4,000 K);
+        # 'beyond'   = ablator load past its demonstrated flight record.
         return 'beyond'
     return 'experience'
 
-# δ/R_n consequence ladder (design doc §3; crosscheck §10.2).  Flight anchors:
+# δ/R_n consequence ladder (design doc §3; crosscheck §10.2).  These are NO
+# LONGER verdict thresholds: the ablator verdict compares flown load against a
+# flight record (§13.6), not a computed δ against these steps.  They are kept as
+# the CITED δ ladder referenced in the report's accuracy-warning text — the
+# provenance behind "accuracy effects are documented from small shape changes
+# onward":
 #   0.1  — Lin 1982 (TRW-SCATHE): 0.1 R_N at 67 kft already "mildly indented";
 #          PANT: asymmetric recession → dispersion well below blunting levels.
 #   0.5–1 — Reentry-F flew its full mission at ≈0.7 R_n radial blunting.
-#   burn-through — solid-tip LENGTH governs (Reentry-F ~7.7 R_n axial);
-#          heating.py's recession criterion supplies the depth-based margin.
+#   glider tip — Murbach 1993/AEOLUS (SWERVE C-C nose) + AHW's move to
+#          non-ablating tips: any meaningful recession corrupts the aeroshape.
 SHAPE_CHANGE_ONSET = 0.10
 SEVERE_BLUNTING    = 0.50
-# INTERNAL INFERENCE, not a literature number (see BENCHMARKING.md "Threshold
-# provenance audit"): derived from Murbach 1993/AEOLUS (SWERVE flew a
-# carbon-carbon nose/LE) plus AHW's move to non-ablating tips — any meaningful
-# recession on a glider tip/LE corrupts the aeroshape.  No source gives a
-# tolerance number; 0.05 is a screening flag, not a cited threshold.
 GLIDER_ABL_TIP_FLAG = 0.05
 
 # ---------------------------------------------------------------------------
@@ -381,42 +384,116 @@ def _load_MJ(t, q):
     return np.concatenate([[0.0], np.cumsum(dQ)]) / 1e6
 
 
-def _accuracy_band(d_over_rn, burn_margin):
-    """(band, sentence, anchor) from the δ/R_n consequence ladder."""
-    if burn_margin is not None and burn_margin >= 1.0:
-        return ("BURN-THROUGH",
-                "nosetip consumed — failure",
-                "Reentry-F (solid-tip length governs, ~7.7 R_n axial)")
-    if d_over_rn is None:
-        return ("N/A", "no recession computed (non-ablating or no material)", "")
-    if d_over_rn < SHAPE_CHANGE_ONSET:
-        return ("NOMINAL",
-                "shape change negligible — accuracy preserved",
-                "Lin 1982 ('mildly indented' begins ≈0.1 R_n)")
-    if d_over_rn < SEVERE_BLUNTING:
-        return ("ACCURACY-DEGRADED",
-                "shape-change onset — dispersion growth likely (CEP "
-                "degradation); vehicle survives",
-                "PANT (ADA019186); Lin 1982")
-    return ("SEVERE BLUNTING",
-            "large shape change — survivable (Reentry-F flew ≈0.7 R_n) but "
-            "accuracy heavily degraded; β falls, range/dispersion shift",
-            "Reentry-F (NASA CR-154044)")
+# Load fraction above which the accuracy consequence is worth a LEAD sentence
+# (below it, recession is a full-analysis footnote only).  Display choice, not
+# physics — the accuracy anchors themselves are the citations in the warning.
+_ABLATOR_LEAD_FRACTION = 0.50
+
+
+def _ablator_regime(rc, nose_label="nose"):
+    """Classify an ablator location from its load-vs-record criteria dict.
+
+    Returns dict(status, load_sentence, accuracy_sentence, context, fix,
+    lead_accuracy) or None if `rc` is absent:
+      status          : 'survive' | 'beyond' | 'fail'   (feeds survival_tier)
+      load_sentence   : the always-shown lead sentence — the flown load placed
+                        against the flight record
+      accuracy_sentence : the recession/accuracy consequence (or None)
+      lead_accuracy   : whether accuracy_sentence belongs in the LEAD (past
+                        ~50% of the record) vs. full-analysis only
+      context         : extra full-analysis lines (δ band, record provenance)
+      fix             : "what would change the verdict" phrase, or None
+    The accuracy consequence (recession-driven dispersion) is flight-
+    demonstrated (Lin 1982; PANT; Reentry-F flew ≈0.7 R_n), so it never drives
+    the SURVIVAL tier.  Yellow is reserved for a load past the flight record;
+    red for the burn-through BOUND only.
+    """
+    if rc is None:
+        return None
+    Q = rc.get('load_MJ_m2', 0.0)
+    frac = rc.get('load_fraction')
+    src = rc.get('demonstrated_load_source', '')
+    lbl = f"The {nose_label}"
+    band = None
+    if rc.get('delta_optimistic_cm') is not None:
+        band = (f"δ across the cited H_eff range ({rc.get('H_eff_bound_MJ_kg')}–"
+                f"{rc.get('H_eff_nominal_MJ_kg')} MJ/kg): "
+                f"{rc['delta_optimistic_cm']:.1f}–{rc['delta_nominal_cm']:.1f} cm "
+                f"— a band, not a prediction.")
+    acc = ("Recession in this regime is measured, not hypothetical — accuracy "
+           "effects are documented from small shape changes onward (Lin 1982; "
+           "PANT ADA019186; Reentry-F flew ≈0.7 R_n, NASA CR-154044).")
+    prov = f"Demonstrated record: {src}." if src else ""
+
+    if rc.get('burnthrough_bound'):
+        return dict(status='fail', lead_accuracy=False,
+            load_sentence=(f"{lbl} heat load exceeds the shield's capacity even "
+                           f"at the most optimistic cited heat of ablation — a "
+                           f"bound, not an estimate, and it is crossed."),
+            accuracy_sentence=None, context=[band] if band else [],
+            fix="more capable TPS, a blunter nose, or a less demanding trajectory")
+
+    if frac is None:
+        return dict(status='survive', lead_accuracy=False,
+            load_sentence=(f"{lbl} carries an ablating heat load of "
+                           f"{Q:,.0f} MJ/m² and does not burn through. This "
+                           f"material family has no cited flight-load anchor to "
+                           f"compare against, so recession is a refinement "
+                           f"question here, not a survival one."),
+            accuracy_sentence=None, context=[acc] + ([band] if band else []),
+            fix=None)
+
+    if frac > 1.0:
+        return dict(status='beyond', lead_accuracy=False,
+            load_sentence=(f"{lbl} carries {Q:,.0f} MJ/m² — about {frac:.1f}× "
+                           f"the largest load in the open flight record for "
+                           f"this material family. No comparable flight "
+                           f"experience supports survival here; the burn-through "
+                           f"bound is not crossed, so this is undemonstrated, "
+                           f"not impossible."),
+            accuracy_sentence=None, context=[prov, acc] + ([band] if band else []),
+            fix="a lower-load (shorter or steeper) trajectory, or more capable TPS")
+
+    if frac >= _ABLATOR_LEAD_FRACTION:
+        return dict(status='survive', lead_accuracy=True,
+            load_sentence=(f"{lbl} carries {Q:,.0f} MJ/m² — the upper part of "
+                           f"the flight record for this material family "
+                           f"({frac:.0%} of it). Survival at this load is "
+                           f"flight-demonstrated."),
+            accuracy_sentence=("But vehicles in this regime measurably recede, "
+                               "so accuracy — not survival — is the open "
+                               "question."),
+            context=[prov, acc] + ([band] if band else []), fix=None)
+
+    return dict(status='survive', lead_accuracy=False,
+        load_sentence=(f"{lbl} carries {Q:,.0f} MJ/m² — about {frac:.0%} of the "
+                       f"flight record for this material family, a load "
+                       f"vehicles of this class carry routinely."),
+        accuracy_sentence=None, context=[prov, acc] + ([band] if band else []),
+        fix=None)
 
 
 def _loc_line(name, L):
-    """One per-location margin line for the budget table."""
+    """One per-location margin line for the budget table.  Ablators show flux +
+    load (an ablating surface caps its own temperature, so a T_eq for it is a
+    flux restated in kelvin — not a temperature anything experiences)."""
     if not L or not L.get('material'):
         return f"  {name:<5s} (no TPS material set)"
     mat = str(L.get('material'))
-    T = float(L.get('T_eq_peak_K', 0.0) or 0.0)
     crit = L.get('criteria') or {}
     cmp_ = L.get('compromise')
+    T = float(L.get('T_eq_peak_K', 0.0) or 0.0)
     if L.get('is_ablator') and 'recession' in crit:
         rc = crit['recession']
-        det = (f"recedes {rc['recession_m']*100:.1f} cm "
-               f"({rc['margin']:.0%} of layer)")
-    elif T >= heating.NOTHING_SURVIVES_K:
+        q = float(L.get('q_peak_MW_m2', 0.0) or 0.0)
+        frac = rc.get('load_fraction')
+        rec = (f"{frac:.0%} of flight-record load" if frac is not None
+               else "no cited load record")
+        if cmp_:
+            rec = cmp_['mode']
+        return (f"  {name:<5s} {mat:<18s} q̇ {q:>6,.1f} MW/m²  "
+                f"load {rc.get('load_MJ_m2', 0):>5,.0f} MJ/m²  {rec}")
+    if T >= heating.NOTHING_SURVIVES_K:
         det = f"T_eq {T:,.0f} K ≥ 4,000 K screen — beyond screening"
     elif cmp_:
         det = f"{cmp_['mode']} at t={cmp_['t_s']:.0f} s"
@@ -498,12 +575,19 @@ def build_report(result) -> dict:
     ]
 
     # ---- budget ------------------------------------------------------------
+    # An ablator caps its own surface temperature by ablating, so a "Peak T_eq"
+    # for an ablating nose is a flux restated in kelvin, not a temperature
+    # anything experiences — show the flux + load line instead.
+    _nose_abl = bool(nose.get('is_ablator'))
     budget = [
         "─── Heating budget ─────────────────────────────────────────",
         f"  Peak stagnation flux:  {fom.get('q_peak_MW_m2', 0):.1f} MW/m²"
         f"   (pulse width {_fwhm_s(t, q):.0f} s)",
         f"  Integrated load:       {fom.get('integrated_load_MJ_m2', 0):,.0f} MJ/m²",
-        f"  Peak T_eq:             {fom.get('T_eq_peak_K', 0):,.0f} K",
+    ]
+    if not _nose_abl:
+        budget.append(f"  Peak T_eq:             {fom.get('T_eq_peak_K', 0):,.0f} K")
+    budget += [
         f"  Reentry-arc duration:  {dur:,.0f} s",
         "─── Per-location margins ───────────────────────────────────",
         _loc_line("nose", nose),
@@ -515,32 +599,34 @@ def build_report(result) -> dict:
     j = ["─── Judgement ──────────────────────────────────────────────"]
     status = 'survive'
 
-    # nose recession numbers (shared by A and the glider tip flag)
+    # Ablator load-vs-record regime (nose) — shared by the lead and judgement.
     rc = (nose.get('criteria') or {}).get('recession')
-    d_over_rn = rc.get('recession_over_Rn') if rc else None
-    burn_margin = rc.get('margin') if rc else None
+    _nose_lbl_raw = (_nose_mat.get('label') if _nose_mat else None) \
+        or prof.get('nose_material') or 'nose'
+    _nose_lbl = re.sub(r'\s*\(.*\)$', '', _nose_lbl_raw)   # drop a trailing "(...)"
+    regime = (_ablator_regime(rc, f"{_nose_lbl} nose")
+              if nose.get('is_ablator') else None)
 
     if form == 'A':
-        band, sentence, anchor = _accuracy_band(d_over_rn, burn_margin)
-        if rc:
-            j.append(f"  Nose recession δ = {rc['recession_m']*100:.1f} cm "
-                     f"→ δ/R_n = {d_over_rn:.2f}   band: {band}")
-        if band == "BURN-THROUGH" or t_fail is not None:
+        if regime is not None:
+            status = regime['status']
+            j.append("  " + regime['load_sentence'])
+            if regime['accuracy_sentence']:
+                j.append("  " + regime['accuracy_sentence'])
+            for c in regime['context']:
+                if c:
+                    j.append(f"  {c}")
+        elif t_fail is not None:
             status = 'fail'
-            when = f" at t≈{t_fail:,.0f} s" if t_fail is not None else ""
-            j.append(f"  FAILS{when} — {sentence}.")
-        elif float(nose.get('T_eq_peak_K', 0)) >= heating.NOTHING_SURVIVES_K \
-                and not nose.get('is_ablator'):
+            j.append(f"  CANNOT SURVIVE at t≈{t_fail:,.0f} s — "
+                     f"{_fail_mode or 'thermal limit exceeded'}.")
+        elif float(nose.get('T_eq_peak_K', 0)) >= heating.NOTHING_SURVIVES_K:
             status = 'analysis'
             j.append("  BEYOND SCREENING — reradiative surface above the "
                      "4,000 K no-ablation screen; needs ablation analysis.")
-        elif band in ("ACCURACY-DEGRADED", "SEVERE BLUNTING"):
-            status = 'degraded'
-            j.append(f"  SURVIVES, ACCURACY DEGRADED — {sentence}.")
         else:
-            j.append(f"  SURVIVES, ACCURACY PRESERVED — {sentence}.")
-        if anchor:
-            j.append(f"  Anchor: {anchor}")
+            j.append("  SURVIVES — reradiative nose within its surface limits; "
+                     "no recession (accuracy preserved).")
         j.append("  (Loft/depress trade: run a burnout-angle sweep to see "
                  "flux vs load across shaping.)")
 
@@ -572,6 +658,23 @@ def build_report(result) -> dict:
             if body_loc is not None and body_loc.get('material') \
                     and not body_loc.get('compromise'):
                 j.append(f"  Body holds the full {dur:,.0f}-s glide.")
+        elif regime is not None:
+            # Ablative-nosed glider: same load-vs-record regime as Form A.
+            status = regime['status']
+            j.append("  " + regime['load_sentence'])
+            if regime['accuracy_sentence']:
+                j.append("  " + regime['accuracy_sentence'])
+            for c in regime['context']:
+                if c:
+                    j.append(f"  {c}")
+            # glider ablative-tip aeroshape note (SWERVE→AHW): recession on a
+            # glider tip corrupts the aeroshape it steers with — a design
+            # signal, not a survival-tier driver (gliders moved to non-ablating
+            # UHTC tips for exactly this reason).
+            j.append("  Note: an ablative glider tip recedes as it steers — the "
+                     "aeroshape drifts even when the TPS survives; gliders moved "
+                     "to non-ablating (UHTC-class) tips for this reason "
+                     "[SWERVE→AHW].")
         else:
             # survives — but distinguish honest survive from beyond-screening
             _worst_T = float(nose.get('T_eq_peak_K', 0) or 0)
@@ -587,15 +690,6 @@ def build_report(result) -> dict:
                     j.append(f"  Body holds the full {dur:,.0f}-s glide.")
             else:
                 j.append(f"  TPS SURVIVES THE FULL {dur:,.0f}-s GLIDE.")
-        # glider ablative-tip rule (SWERVE→AHW): meaningful recession on a
-        # glider tip corrupts the aeroshape regardless of survival.
-        if d_over_rn is not None and d_over_rn >= GLIDER_ABL_TIP_FLAG:
-            if status == 'survive':
-                status = 'degraded'
-            j.append(f"  Ablative tip recedes δ/R_n = {d_over_rn:.2f} — on a "
-                     f"glider any meaningful recession corrupts the aeroshape: "
-                     f"needs a non-ablating tip (UHTC-class).  "
-                     f"[SWERVE→AHW rule]")
         if fam == 'analytic':
             j.append("  Family note: analytic (idealized smooth capture) — "
                      "as-flown numerical modes typically read 2–4× higher "
@@ -684,12 +778,8 @@ def build_report(result) -> dict:
     if coverage is not None and coverage.get('exits') and tier in ('design', 'beyond'):
         tier_label += "  (" + " + ".join(sorted(coverage['exits'])) + ")"
     if status == 'degraded':
-        # Survival is demonstrated; the consequence rides as an annotation.
-        tier_label += ("  (accuracy degraded)" if form == 'A'
-                       else "  (aeroshape degraded)"
-                       if (d_over_rn is not None
-                           and d_over_rn >= GLIDER_ABL_TIP_FLAG)
-                       else "  (degraded — see report)")
+        # Survival is demonstrated; a screening overlay flagged a consequence.
+        tier_label += "  (degraded — see report)"
     _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
     headline = f"{tier_label}   —   Form {form} ({_form_name})"
     if _mods:
@@ -706,22 +796,17 @@ def build_report(result) -> dict:
     lead = [f"{_name} — {_mode_phrase}, {dur:,.0f}-s reentry arc."]
     because, fix = [], None
     if form == 'A':
-        _band, _, _ = _accuracy_band(d_over_rn, burn_margin)
-        _dr = (f" (δ/R_n = {d_over_rn:.2f})"
-               if d_over_rn is not None else "")
-        if status == 'fail':
+        if regime is not None:
+            because.append(regime['load_sentence'])
+            if regime['accuracy_sentence'] and regime['lead_accuracy']:
+                because.append(regime['accuracy_sentence'])
+            fix = regime['fix']
+        elif status == 'fail':
             _when = f" at t≈{t_fail:,.0f} s" if t_fail is not None else ""
-            if _band == "BURN-THROUGH":
-                because.append(f"The nose tip is consumed{_when} — the "
-                               f"ablator burns through before impact.")
-                fix = ("a thicker ablator, a blunter nose, or a less "
-                       "demanding trajectory")
-            else:
-                because.append(f"The {_fail_loc or 'nose'} TPS "
-                               f"fails{_when}: "
-                               f"{_fail_mode or 'thermal limit exceeded'}.")
-                fix = ("more capable TPS, a blunter nose, or a less "
-                       "demanding trajectory")
+            because.append(f"The {_fail_loc or 'nose'} TPS fails{_when}: "
+                           f"{_fail_mode or 'thermal limit exceeded'}.")
+            fix = ("more capable TPS, a blunter nose, or a less demanding "
+                   "trajectory")
         elif status == 'analysis':
             because.append(
                 f"The nose reaches {float(nose.get('T_eq_peak_K', 0) or 0):,.0f} K — "
@@ -729,25 +814,14 @@ def build_report(result) -> dict:
                 f"this screen cannot assess it; it needs a dedicated ablation "
                 f"analysis.")
             fix = "a blunter nose (flux falls as 1/√R_n) or an ablative tip"
-        elif status == 'degraded':
-            if _band == "SEVERE BLUNTING":
-                because.append(
-                    f"The vehicle survives, but the nose blunts "
-                    f"heavily{_dr} — survivable (Reentry-F flew ≈0.7 R_n) "
-                    f"but accuracy is heavily degraded.")
-            else:
-                because.append(
-                    f"The vehicle survives, but the nose recedes "
-                    f"enough{_dr} to change its shape — dispersion grows "
-                    f"and accuracy degrades.")
-            fix = "a blunter or thicker tip, or a gentler trajectory"
         else:
-            because.append(f"The vehicle survives with negligible shape "
-                           f"change{_dr} — accuracy preserved.")
+            because.append("The vehicle survives — the reradiating nose stays "
+                           "within its surface limits and does not recede "
+                           "(accuracy preserved).")
     else:
         _body_holds = bool(body_loc is not None and body_loc.get('material')
                            and not body_loc.get('compromise'))
-        if status == 'fail' and t_fail is not None:
+        if status == 'fail' and t_fail is not None and regime is None:
             _rng = np.asarray(arc['range'], float)
             _rf = float(np.interp(t_fail, t, _rng)) / 1000.0
             _re = float(_rng[-1]) / 1000.0
@@ -759,10 +833,16 @@ def build_report(result) -> dict:
                 f"thermally capped at ≈{_rf:,.0f} of the {_re:,.0f}-km aero "
                 f"range.")
             fix = "a shorter or steeper profile, or more capable TPS"
+        elif regime is not None:
+            # Ablative-nosed glider: load-vs-record regime (same as Form A).
+            because.append(regime['load_sentence'])
+            if regime['accuracy_sentence'] and regime['lead_accuracy']:
+                because.append(regime['accuracy_sentence'])
+            if regime['status'] != 'fail' and _body_holds:
+                because.append("The body TPS holds the full glide.")
+            fix = regime['fix']
         elif coverage is not None and coverage.get('exits'):
             _ceil_C = (float(_nose_mat['continuous_K']) - 273.15) if _nose_mat else 1650.0
-            _nose_lbl = (_nose_mat.get('label') if _nose_mat else None) \
-                or prof.get('nose_material') or 'hot-structure'
             _dwell_cl = (
                 f"the demonstrated test record ends at "
                 f"{coverage['floor_s']:.0f} s, so most of this dwell is "
@@ -794,16 +874,9 @@ def build_report(result) -> dict:
                                 if _body_holds else ""))
             fix = "a blunter nose (flux falls as 1/√R_n) or an ablative tip"
         elif status == 'degraded':
-            if d_over_rn is not None and d_over_rn >= GLIDER_ABL_TIP_FLAG:
-                because.append(
-                    f"The TPS survives the heat, but the ablative tip recedes "
-                    f"(δ/R_n = {d_over_rn:.2f}) — on a glider any meaningful "
-                    f"recession corrupts the aeroshape it steers with.")
-                fix = "a non-ablating (UHTC-class) tip"
-            else:
-                because.append("The TPS survives, but a screening overlay "
-                               "degrades the verdict — see the full analysis "
-                               "below.")
+            because.append("The TPS survives, but a screening overlay "
+                           "(windward-flank heating) flags a consequence — "
+                           "see the full analysis below.")
         else:
             because.append(f"Nose and body both hold the full {dur:,.0f}-s "
                            f"glide within the demonstrated record.")

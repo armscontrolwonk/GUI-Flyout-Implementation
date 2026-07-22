@@ -240,7 +240,7 @@ tabbed notebook**.
 | **Plots** | Altitude-vs-range, altitude-vs-time, speed-vs-time, and dynamic pressure / Mach curves on a Matplotlib canvas |
 | **Flight Timeline** | Tabular milestone events (ignition, burnout, apogee, shroud jettison, reentry, impact) with lat/lon/alt/speed/range |
 | **Booster Parameters** | Read-only summary of the active booster's mass, geometry, propulsion, and payload |
-| **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs on the nose-recession accuracy ladder (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C). For UHTC hot-structure gliders the verdict is moving from a pass/fail dwell to a **demonstrated-envelope coverage** statement — how much of the glide lies *within* the flight/arc-jet/furnace record (`SURVIVABILITY_REPORT_DESIGN.md` §11) — backed by a living anchor dataset in `BENCHMARKING.md` — ~18 flight/arc-jet/plasma-torch/furnace sources across every UHTC class (ZrB₂-SiC, HfB₂-SiC, HfB₂/HfC-MoSi₂, complex- and carbide-borides), each row with verified numbers and an exact citation, spanning ~1650–2700 °C and 3×10⁻³–1 atm. Survivals bound the envelope from below, failures cap it from above; a new flight strengthens the dataset as a data edit, not a code change. For Form A ablators the same discipline applies to the recession chain: the `H_eff` (effective-heat-of-ablation) nominals are conservative-low values inside cited Q\* bands, bound-tested against the recovered Stardust and Hayabusa capsules (model must predict ≥ measured recession — bounds, not fits), with radiative-heating and equilibrium-chemistry conservatism logged as P3 items. `BENCHMARKING.md` is the citation of record for the full paper set |
+| **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs compare their flown ablator heat load against the material family's demonstrated flight record (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C). For UHTC hot-structure gliders the verdict is moving from a pass/fail dwell to a **demonstrated-envelope coverage** statement — how much of the glide lies *within* the flight/arc-jet/furnace record (`SURVIVABILITY_REPORT_DESIGN.md` §11) — backed by a living anchor dataset in `BENCHMARKING.md` — ~18 flight/arc-jet/plasma-torch/furnace sources across every UHTC class (ZrB₂-SiC, HfB₂-SiC, HfB₂/HfC-MoSi₂, complex- and carbide-borides), each row with verified numbers and an exact citation, spanning ~1650–2700 °C and 3×10⁻³–1 atm. Survivals bound the envelope from below, failures cap it from above; a new flight strengthens the dataset as a data edit, not a code change. For Form A ablators the same discipline applies: the verdict compares the flown heat load against a cited demonstrated flight-load record (graphite/C-C from Reentry-F, PICA from Stardust), and computes only a **burn-through bound** (red fires only if the shield is consumed even at the most optimistic cited `H_eff`) — no recession point-estimate. The bound is validated against the recovered Stardust and Hayabusa capsules (the tripwire must not fire for a survived flight; the conservative δ still over-predicts measured recession — bounds, not fits), with radiative-heating and equilibrium-chemistry conservatism logged as P3 items. `BENCHMARKING.md` is the citation of record for the full paper set |
 | **SLV Performance** | Algebraic payload-to-orbit analysis (circular or elliptical orbit) |
 
 ### Dialogs
@@ -288,8 +288,8 @@ tabbed notebook**.
   standalone too (`python mass_estimator.py --demo`). Full method notes in
   `MASS_ESTIMATOR.md`.
 - **Screening Envelope** (Analysis menu) — view and, if new data warrants,
-  adjust the ~9 **benchmark thresholds** behind the survivability screen (glide
-  endurance, maneuver g-ceiling, the nose-recession accuracy ladder, and the
+  adjust the ~8 **benchmark thresholds** behind the survivability screen (glide
+  endurance, maneuver g-ceiling, the ablator demonstrated-load records, and the
   model-conservatism knobs). Each row shows the current value, the greyed
   **shipped default**, and the default's citation; the shipped defaults are
   frozen, an edit lives only in an overlay file (`benchmark_overrides.json`),
@@ -302,13 +302,13 @@ tabbed notebook**.
 
 The survivability verdict rests on a small set of **benchmark numbers** — how
 long a glider is *demonstrated* to endure, how hard a MaRV is *demonstrated* to
-pull, where nose recession first disperses a ballistic RV, and a couple of
-model-conservatism factors. New flights and tests move these numbers, so the
-tool lets a user view and change them (Analysis ▸ Screening Envelope…), while
-**always** being able to return to the shipped defaults.
+pull, how much heat load an ablator family has *flown and survived*, and a
+couple of model-conservatism factors. New flights and tests move these numbers,
+so the tool lets a user view and change them (Analysis ▸ Screening Envelope…),
+while **always** being able to return to the shipped defaults.
 
 **Why the thresholds, and only the thresholds.** Thrusty exposes exactly one
-editable surface — these ~9 curated *envelope* numbers — and defers the full
+editable surface — these ~8 curated *envelope* numbers — and defers the full
 material catalog and the anchor datasets to a future spreadsheet project. The
 reasoning: a Thrusty user is a **policy-focused modeler**. That person is far
 likelier to model a reentry object that *survived* and want to adjust the

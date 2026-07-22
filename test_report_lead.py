@@ -52,17 +52,18 @@ def test_lead_and_divider_glider():
     assert "Monteverde" in full and "Heating budget" in full
 
 
-def test_lead_ballistic_degraded_and_fail():
+def test_lead_ballistic_load_record_and_fail():
+    # An Mk21-class C/C nose on an easier-than-design IRBM trajectory carries a
+    # load well within the graphite flight record — WITHIN EXPERIENCE (green),
+    # stated as a fraction of the record, with NO computed δ point-estimate and
+    # NO accuracy annotation (its load is below the lead-mention fraction).
     deg = sr.build_report(_fly_ballistic("Mk21", "Generic ICBM"))
     lead = _lead(deg["body"])
-    assert "accuracy degrades" in lead or "accuracy is heavily degraded" in lead
-    assert "What would change the verdict" in lead
-    # An Mk21-class RV surviving with flight-demonstrated recession is WITHIN
-    # EXPERIENCE (green) with the consequence annotated — not 'beyond design
-    # envelope' (the accuracy axis must not drag the survival tier down).
     assert deg["tier"] == "experience"
     assert "WITHIN EXPERIENCE" in deg["headline"]
-    assert "(accuracy degraded)" in deg["headline"]
+    assert "% of the flight record" in lead
+    assert "δ/R_n" not in lead                 # no recession point-estimate
+    assert "accuracy degraded" not in deg["headline"]
 
     fail = sr.build_report(_fly_ballistic("Hwasong-11", "Scud-B (R-17)"))
     lead = _lead(fail["body"])
@@ -78,6 +79,50 @@ def test_coverage_text_uses_tier_vocabulary():
     assert "RED (too long)" not in body and "RED (too hot)" not in body
     # too-hot exit fires in this fixture → yellow 'beyond design' wording
     assert "yellow 'beyond design' band" in body
+
+
+def _rc(load, record, burn=False):
+    """A minimal recession-criteria dict as heating.py produces it."""
+    return dict(load_MJ_m2=load, demonstrated_load_MJ_m2=record,
+                load_fraction=(load / record if record else None),
+                demonstrated_load_source="TestSource 2026", burnthrough_bound=burn,
+                delta_optimistic_cm=0.3, delta_nominal_cm=1.1,
+                H_eff_bound_MJ_kg=175, H_eff_nominal_MJ_kg=40)
+
+
+def test_ablator_regime_four_bands():
+    # within record, low fraction → green, load sentence, NO lead accuracy
+    r = sr._ablator_regime(_rc(800, 3870))
+    assert r["status"] == "survive" and r["lead_accuracy"] is False
+    assert "% of the flight record" in r["load_sentence"]
+
+    # within record, high fraction (≥50%) → green, accuracy sentence in the LEAD
+    r = sr._ablator_regime(_rc(3000, 3870))
+    assert r["status"] == "survive" and r["lead_accuracy"] is True
+    assert r["accuracy_sentence"] and "accuracy" in r["accuracy_sentence"]
+
+    # beyond the record → yellow (beyond), NOT red; names the multiple
+    r = sr._ablator_regime(_rc(12000, 3870))
+    assert r["status"] == "beyond"
+    assert "×" in r["load_sentence"] and "undemonstrated" in r["load_sentence"]
+
+    # no cited record for the family → green (survives by design), never beyond
+    r = sr._ablator_regime(_rc(5000, None))
+    assert r["status"] == "survive"
+    assert "no cited flight-load anchor" in r["load_sentence"]
+
+    # burn-through bound crossed → red, regardless of record
+    r = sr._ablator_regime(_rc(800, 3870, burn=True))
+    assert r["status"] == "fail" and "bound" in r["load_sentence"]
+
+
+def test_ablator_budget_omits_teq():
+    # An ablator's Peak T_eq (a flux restated in kelvin) is suppressed in the
+    # budget; the reradiative Hwasong-11 steel nose keeps its T_eq line.
+    abl = sr.build_report(_fly_ballistic("Mk21", "Generic ICBM"))["body"]
+    assert "Peak T_eq" not in abl.split("═══ Full")[1].split("Reentry-arc")[0]
+    metal = sr.build_report(_fly_ballistic("Hwasong-11", "Scud-B (R-17)"))["body"]
+    assert "Peak T_eq" in metal
 
 
 def test_ladder_marker_is_lineage_not_anchor():

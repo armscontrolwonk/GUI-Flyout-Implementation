@@ -3,11 +3,11 @@
 Design decision (see README "Adjustable screening thresholds"): a Thrusty user
 is a policy-focused modeler.  That person is far likelier to model a reentry
 object that *survived* and want to adjust the ENVELOPE — how long a glider is
-demonstrated to endure, how hard a MaRV is demonstrated to pull — in light of a
-new flight or test, than to integrate new coupon data for one material.  So the
-first editable surface is these ~9 curated ENVELOPE numbers, not the full
-material catalog or the anchor datasets (both deferred to a future spreadsheet
-project).
+demonstrated to endure, how hard a MaRV is demonstrated to pull, how much heat
+load an ablator family has flown and survived — in light of a new flight or
+test, than to integrate new coupon data for one material.  So the first
+editable surface is these ~8 curated ENVELOPE numbers, not the full material
+catalog or the anchor datasets (both deferred to a future spreadsheet project).
 
 The numbers are curated BY USER STORY, not by where they live in code: each is
 pulled from wherever its consumer reads it (a module scalar, a material field).
@@ -49,19 +49,19 @@ REGISTRY = [
          label="Flight-demonstrated maneuver ceiling", units="g", default=100.0,
          kind="float", lo=1.0, hi=1000.0,
          source="AMaRV flight-measured (Bell XI accelerometers) — Yengst 2010"),
-    # ---- Accuracy ladder (ballistic RV) -------------------------------------
-    dict(key="shape_change_onset", group="Accuracy ladder",
-         label="δ/R_n shape-change onset", units="δ/R_n", default=0.10,
-         kind="float", lo=0.0, hi=1.0,
-         source="Lin 1982 (TRW-SCATHE); PANT — asymmetric recession → dispersion"),
-    dict(key="severe_blunting", group="Accuracy ladder",
-         label="δ/R_n severe blunting", units="δ/R_n", default=0.50,
-         kind="float", lo=0.0, hi=2.0,
-         source="Reentry-F flew its full mission at ≈0.7 R_n radial blunting"),
-    dict(key="glider_tip_flag", group="Accuracy ladder",
-         label="Glider ablative-tip recession flag", units="δ/R_n", default=0.05,
-         kind="float", lo=0.0, hi=1.0,
-         source="SWERVE→AHW aeroshape rule — INFERENCE, not a cited threshold"),
+    # ---- Ablator flight record ----------------------------------------------
+    # Demonstrated stagnation heat load per material family: the ablator
+    # analogue of the UHTC dwell floor.  The verdict compares the flown load
+    # against these — it no longer computes a recession point-value (see
+    # METHODS §13.6).  A new recovered flight is a data edit here.
+    dict(key="graphite_load_floor_MJ_m2", group="Ablator flight record",
+         label="Graphite / bare-C-C demonstrated load", units="MJ/m²",
+         default=3870.0, kind="float", lo=1.0, hi=100000.0,
+         source="Reentry-F graphite nosetip flew Q ≈ 3.87 GJ/m² (NASA CR-154044 / LWP-460, pixel-traced, ±20%)"),
+    dict(key="pica_load_floor_MJ_m2", group="Ablator flight record",
+         label="PICA demonstrated load", units="MJ/m²",
+         default=276.0, kind="float", lo=1.0, hi=100000.0,
+         source="Stardust PICA forebody flew Q ≈ 276 MJ/m² and was recovered (Stackpoole et al. AIAA 2008-1202)"),
     # ---- Model conservatism -------------------------------------------------
     dict(key="acreage_flux_fraction", group="Model conservatism",
          label="Body-acreage flux fraction", units="× body stagnation",
@@ -179,8 +179,13 @@ def apply():
     _uhtc = heating.TPS_MATERIALS.get("uhtc")
     if _uhtc is not None:
         _uhtc["oxidation_dwell_s"] = c["uhtc_dwell_floor_s"]
-    sr.SHAPE_CHANGE_ONSET = c["shape_change_onset"]
-    sr.SEVERE_BLUNTING = c["severe_blunting"]
-    sr.GLIDER_ABL_TIP_FLAG = c["glider_tip_flag"]
+    # Ablator demonstrated-load records (per material family).
+    for _key in ("carbon_carbon", "carbon_ablator"):
+        _m = heating.TPS_MATERIALS.get(_key)
+        if _m is not None and _m.get("demonstrated_load_MJ_m2") is not None:
+            _m["demonstrated_load_MJ_m2"] = c["graphite_load_floor_MJ_m2"]
+    _pica = heating.TPS_MATERIALS.get("pica")
+    if _pica is not None:
+        _pica["demonstrated_load_MJ_m2"] = c["pica_load_floor_MJ_m2"]
     sr._MARV_G_OPERATIONAL = c["marv_g_operational"]
     sr._MARV_G_DEMONSTRATED = c["marv_g_demonstrated"]
