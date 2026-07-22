@@ -6113,11 +6113,9 @@ class BoosterFlyoutApp(tk.Tk):
                         ax.axvspan(_b0, _b1, color=_band_col.get(_c, "#888888"),
                                    alpha=0.14, linewidth=0)
                 ax.set_title(
-                    "shading = time segments of nose surface temp vs the "
-                    "survival ladder (not the flux/load axes)\n"
+                    "shading = nose temperature vs the survival ladder:  "
                     "green within experience · blue within design · yellow "
-                    "beyond design (see report — not a failure prediction by "
-                    "itself)",
+                    "beyond design",
                     fontsize=6.5, color="#555555", loc="left")
             ax.plot(pl['t'], pl['q_MW'], color="#aa2222", linewidth=1.4,
                     label="q̇ (MW/m²)")

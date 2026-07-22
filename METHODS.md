@@ -3072,6 +3072,17 @@ differs by material; the headline your eye reads is always one of these four
 | **Beyond design envelope** | yellow | past design too — undemonstrated *and* unsupported; less likely |
 | **Cannot survive** | red | a **computed** failure — burn-through, melt, a t_fail crossing |
 
+The report body is layered as an **inverted pyramid** for the policy reader:
+a plain-language lead (what was flown; why the verdict is what it is —
+binding location + mechanism; what would change it; one NRC design-lineage
+context sentence, phrased so the lineage rungs are never mistaken for a
+demonstration of the flown material), then a "Full analysis" divider, below
+which the complete engineering text — heating budget, per-location margins,
+judgement with citations, the NRC ladder — is unchanged.  The coverage text
+names the tier bands the plot actually shades (blue "within design" for
+too-long, yellow "beyond design" for too-hot); pinned by
+`test_report_lead.py`.
+
 Two honesty rules are built into the ladder: **red is reserved for a computed
 failure** (never a soft "probably won't"), and **blue is only reachable for a
 material with a demonstrated envelope to extrapolate past** — the direct

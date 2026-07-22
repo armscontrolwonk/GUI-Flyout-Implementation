@@ -223,26 +223,27 @@ def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
                      f"(floor {floor_s:.0f} s — Monteverde-2013-ZS, "
                      f"1973 K · 300 s; sharp-tip extension 575 s).")
         if "too long" in exits:
-            lines.append(f"  RED (too long): dwell outruns the demonstrated "
-                         f"floor — the test record simply ENDS here.  The "
-                         f"data is a floor, not a fence (nearly every anchor "
-                         f"is a survival where the test stopped), so survival "
-                         f"past the floor is plausible but undemonstrated — "
-                         f"this is extrapolation, not a failure prediction.  "
+            lines.append(f"  TOO LONG (blue 'within design' band): dwell "
+                         f"outruns the demonstrated floor — the test record "
+                         f"simply ENDS here.  The data is a floor, not a "
+                         f"fence (nearly every anchor is a survival where "
+                         f"the test stopped), so survival past the floor is "
+                         f"plausible but undemonstrated — this is "
+                         f"extrapolation, not a failure prediction.  "
                          f"Fix: shorten exposure.")
         if "too hot" in exits:
-            lines.append(f"  RED (too hot): surface crosses the "
-                         f"passive→active oxidation boundary — unlike "
-                         f"'too long', this red has failure-side physics "
-                         f"behind it: protective silica is lost, heating "
-                         f"jumps (~+400 K, Marschall) and recession runs "
-                         f"~10× faster per unit flux (Zhang 2008, ~5 µm/s "
-                         f"active).  Rapid degradation expected, though not "
-                         f"an asserted kill at screening tier.  "
+            lines.append(f"  TOO HOT (yellow 'beyond design' band): surface "
+                         f"crosses the passive→active oxidation boundary — "
+                         f"unlike 'too long', this exit has failure-side "
+                         f"physics behind it: protective silica is lost, "
+                         f"heating jumps (~+400 K, Marschall) and recession "
+                         f"runs ~10× faster per unit flux (Zhang 2008, "
+                         f"~5 µm/s active).  Rapid degradation expected, "
+                         f"though not an asserted kill at screening tier.  "
                          f"Anchor: {pa_anchor}.  Fix: loft / blunt tip / "
                          f"lower flux.")
         if not exits:
-            lines.append("  AMBER: inside the demonstrated envelope, "
+            lines.append("  Within the demonstrated envelope (green band), "
                          "consuming recession margin.")
         lines.append("  * Demonstrated at ground-facility pressure "
                      "(anchors span 3×10⁻³–1 atm, but long-dwell points are "
@@ -461,12 +462,14 @@ def build_report(result) -> dict:
     # t_fail: earliest compromise across locations (absolute mission time —
     # heating.py evaluated the arc on t_arr, so compromise t_s is absolute).
     t_fail = None
+    _fail_loc = _fail_mode = None
     for name_, L in locs.items():
         if uhtc_nose and name_ == 'nose':
             continue                      # coverage verdict owns the nose
         c = (L or {}).get('compromise')
         if c and (t_fail is None or c['t_s'] < t_fail):
             t_fail = float(c['t_s'])
+            _fail_loc, _fail_mode = name_, c.get('mode')
 
     # ---- header ------------------------------------------------------------
     mode_str = ('ballistic' if form == 'A' else prof.get('guidance', ''))
@@ -676,7 +679,146 @@ def build_report(result) -> dict:
     if _mods:
         headline += "  *"
 
-    body = "\n".join(hdr) + "\n\n" + "\n".join(budget) + "\n" \
+    # ── Plain-language lead (inverted pyramid) ───────────────────────────────
+    # Three layers a policy reader needs, in order: what was flown, why the
+    # verdict is what it is (binding location + mechanism), and what would
+    # change it.  The full engineering analysis — citations intact — follows
+    # below the divider, unchanged.
+    _name = prof.get('name') or '(unnamed)'
+    _mode_phrase = ('ballistic reentry' if form == 'A'
+                    else f"{prof.get('guidance', 'glide')} glide")
+    lead = [f"{_name} — {_mode_phrase}, {dur:,.0f}-s reentry arc."]
+    because, fix = [], None
+    if form == 'A':
+        _band, _, _ = _accuracy_band(d_over_rn, burn_margin)
+        _dr = (f" (δ/R_n = {d_over_rn:.2f})"
+               if d_over_rn is not None else "")
+        if status == 'fail':
+            _when = f" at t≈{t_fail:,.0f} s" if t_fail is not None else ""
+            if _band == "BURN-THROUGH":
+                because.append(f"The nose tip is consumed{_when} — the "
+                               f"ablator burns through before impact.")
+                fix = ("a thicker ablator, a blunter nose, or a less "
+                       "demanding trajectory")
+            else:
+                because.append(f"The {_fail_loc or 'nose'} TPS "
+                               f"fails{_when}: "
+                               f"{_fail_mode or 'thermal limit exceeded'}.")
+                fix = ("more capable TPS, a blunter nose, or a less "
+                       "demanding trajectory")
+        elif status == 'analysis':
+            because.append(
+                f"The nose reaches {float(nose.get('T_eq_peak_K', 0) or 0):,.0f} K — "
+                f"hotter than any non-ablating surface can reradiate away, so "
+                f"this screen cannot assess it; it needs a dedicated ablation "
+                f"analysis.")
+            fix = "a blunter nose (flux falls as 1/√R_n) or an ablative tip"
+        elif status == 'degraded':
+            if _band == "SEVERE BLUNTING":
+                because.append(
+                    f"The vehicle survives, but the nose blunts "
+                    f"heavily{_dr} — survivable (Reentry-F flew ≈0.7 R_n) "
+                    f"but accuracy is heavily degraded.")
+            else:
+                because.append(
+                    f"The vehicle survives, but the nose recedes "
+                    f"enough{_dr} to change its shape — dispersion grows "
+                    f"and accuracy degrades.")
+            fix = "a blunter or thicker tip, or a gentler trajectory"
+        else:
+            because.append(f"The vehicle survives with negligible shape "
+                           f"change{_dr} — accuracy preserved.")
+    else:
+        _body_holds = bool(body_loc is not None and body_loc.get('material')
+                           and not body_loc.get('compromise'))
+        if status == 'fail' and t_fail is not None:
+            _rng = np.asarray(arc['range'], float)
+            _rf = float(np.interp(t_fail, t, _rng)) / 1000.0
+            _re = float(_rng[-1]) / 1000.0
+            because.append(
+                f"The {_fail_loc or 'nose'} TPS likely fails at "
+                f"t≈{t_fail - t0:,.0f} s "
+                f"({_fail_mode or 'thermal limit exceeded'}) — "
+                f"{(t_fail - t0)/max(dur, 1e-9):.0%} into the glide; range is "
+                f"thermally capped at ≈{_rf:,.0f} of the {_re:,.0f}-km aero "
+                f"range.")
+            fix = "a shorter or steeper profile, or more capable TPS"
+        elif coverage is not None and coverage.get('exits'):
+            _ceil_C = (float(_nose_mat['continuous_K']) - 273.15) if _nose_mat else 1650.0
+            _nose_lbl = (_nose_mat.get('label') if _nose_mat else None) \
+                or prof.get('nose_material') or 'hot-structure'
+            _dwell_cl = (
+                f"the demonstrated test record ends at "
+                f"{coverage['floor_s']:.0f} s, so most of this dwell is "
+                f"extrapolation, not demonstration"
+                if 'too long' in coverage['exits'] else
+                f"within the {coverage['floor_s']:.0f}-s demonstrated dwell "
+                f"record")
+            because.append(
+                f"The {_nose_lbl} nose runs above {_ceil_C:.0f} °C for "
+                f"{coverage['dwell_s']:,.0f} s — {_dwell_cl}.")
+            if 'too hot' in coverage['exits']:
+                because.append(
+                    "The surface crosses into active oxidation — the "
+                    "protective silica layer is lost and degradation "
+                    "accelerates; this is the failure-side edge of the "
+                    "envelope, not just missing data.")
+            if _body_holds:
+                because.append(f"The body TPS holds the full glide; the nose "
+                               f"is the binding problem.")
+            fix = ("loft, blunt the tip, or fly a lower-flux profile"
+                   if 'too hot' in coverage['exits']
+                   else "shorten the hot dwell (a steeper or shorter glide)")
+        elif status == 'analysis':
+            because.append(
+                f"The nose reaches {float(nose.get('T_eq_peak_K', 0) or 0):,.0f} K — "
+                f"hotter than any non-ablating surface can reradiate away, so "
+                f"this screen cannot assess it; it needs a dedicated ablation "
+                f"analysis." + ("  The body TPS holds the full glide."
+                                if _body_holds else ""))
+            fix = "a blunter nose (flux falls as 1/√R_n) or an ablative tip"
+        elif status == 'degraded':
+            if d_over_rn is not None and d_over_rn >= GLIDER_ABL_TIP_FLAG:
+                because.append(
+                    f"The TPS survives the heat, but the ablative tip recedes "
+                    f"(δ/R_n = {d_over_rn:.2f}) — on a glider any meaningful "
+                    f"recession corrupts the aeroshape it steers with.")
+                fix = "a non-ablating (UHTC-class) tip"
+            else:
+                because.append("The TPS survives, but a screening overlay "
+                               "degrades the verdict — see the full analysis "
+                               "below.")
+        else:
+            because.append(f"Nose and body both hold the full {dur:,.0f}-s "
+                           f"glide within the demonstrated record.")
+    lead += ["", " ".join(because)]
+    if fix:
+        lead += ["", f"What would change the verdict: {fix}."]
+    # NRC lineage context, written to keep the two ladders distinct: the NRC
+    # rungs are a DESIGN LINEAGE (what TPS class each mission duration
+    # historically required), not a demonstration of the flown material.
+    if form in ('B', 'C') and dur > 60.0:
+        _ctx = (f"For context: gliders of this class historically used "
+                f"ablative carbon-phenolic to ~800 s (NRC 2008, AMaRV "
+                f"lineage); past ~{tps_ladder.CROSSOVER_S:,.0f} s the record "
+                f"steps to advanced carbon-carbon.")
+        if uhtc_nose and coverage is not None:
+            _ctx += (f"  This vehicle instead flies a reradiating UHTC nose — "
+                     f"a different material with a different failure mode, "
+                     f"whose own demonstrated record ends at "
+                     f"{coverage['floor_s']:.0f} s.")
+        elif _nose_mat and _nose_mat.get('is_ablator'):
+            _ctx += (f"  This vehicle flies an ablative "
+                     f"{_nose_mat.get('label', 'nose')}, judged here by "
+                     f"recession, not dwell.")
+        lead += ["", _ctx]
+    if _mods:
+        lead += ["", "* Screening benchmarks modified from the shipped "
+                     "defaults — see Modified benchmarks below."]
+
+    _divider = "═══ Full analysis " + "═" * 42
+    body = "\n".join(lead) + "\n\n" + _divider + "\n\n" \
+           + "\n".join(hdr) + "\n\n" + "\n".join(budget) + "\n" \
            + "\n".join(j) + "\n" + "\n".join(tail) + "\n"
 
     plot = dict(
