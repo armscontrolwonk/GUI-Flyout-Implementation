@@ -240,7 +240,6 @@ tabbed notebook**.
 | **Plots** | Altitude-vs-range, altitude-vs-time, speed-vs-time, and dynamic pressure / Mach curves on a Matplotlib canvas |
 | **Flight Timeline** | Tabular milestone events (ignition, burnout, apogee, shroud jettison, reentry, impact) with lat/lon/alt/speed/range |
 | **Booster Parameters** | Read-only summary of the active booster's mass, geometry, propulsion, and payload |
-| **Heating Survivability** | Reentry aerothermal screening estimate for the reentry object (Sutton-Graves + radiative-equilibrium) |
 | **Reentry Survivability** | Mode-keyed survivability *report* (`SURVIVABILITY_REPORT_DESIGN.md`): flux/load plot + a judgement with consequences — ballistic RVs on the nose-recession accuracy ladder (Form A), gliders on survival-time vs glide-time + the NRC-2008 TPS duration ladder (Form B), maneuvering vehicles add the terminal-dive transient (Form C). For UHTC hot-structure gliders the verdict is moving from a pass/fail dwell to a **demonstrated-envelope coverage** statement — how much of the glide lies *within* the flight/arc-jet/furnace record (`SURVIVABILITY_REPORT_DESIGN.md` §11) — backed by a living anchor dataset in `BENCHMARKING.md` — ~18 flight/arc-jet/plasma-torch/furnace sources across every UHTC class (ZrB₂-SiC, HfB₂-SiC, HfB₂/HfC-MoSi₂, complex- and carbide-borides), each row with verified numbers and an exact citation, spanning ~1650–2700 °C and 3×10⁻³–1 atm. Survivals bound the envelope from below, failures cap it from above; a new flight strengthens the dataset as a data edit, not a code change. For Form A ablators the same discipline applies to the recession chain: the `H_eff` (effective-heat-of-ablation) nominals are conservative-low values inside cited Q\* bands, bound-tested against the recovered Stardust and Hayabusa capsules (model must predict ≥ measured recession — bounds, not fits), with radiative-heating and equilibrium-chemistry conservatism logged as P3 items. `BENCHMARKING.md` is the citation of record for the full paper set |
 | **SLV Performance** | Algebraic payload-to-orbit analysis (circular or elliptical orbit) |
 
@@ -744,7 +743,7 @@ through-wall TPS design analysis. See `HEATING_MODEL_CROSSCHECK.md`.
 | **Dynamic pressure / Mach plot** | Displayed in the Plots tab alongside altitude curves |
 | **Flight Timeline** | Tabular milestones in the Flight Timeline tab |
 | **Booster Parameters** | Summary in the Booster Parameters tab |
-| **Heating Survivability** | Reentry aerothermal screening in its tab |
+| **Reentry Survivability** | Mode-keyed screening report + flux/load plot in its tab |
 | **Folium map** | File → Export Folium Map; interactive HTML map with ground track, milestone markers, debris arcs, and leader-line labels |
 | **KML** | File → Export KML; opens in Google Earth |
 | **Trajectory CSV** | File → Save Trajectory; time-series state vector |

@@ -347,7 +347,7 @@ reproduces exactly: CTM ~tens of s / Mk-500 RB **300 s** / AMaRV **800 s** → C
 carbon-phenolic (ablation-limited, binding `Q`); FALCON **3,000 s** → ADVANCED carbon-carbon
 (reradiation-limited, binding `T_w`); HTV-2 **3,600 s** (1 h soak) → FRONTIER C/C + UHTC LE. The
 `nas_tps_tier(glide_time_s)` lookup places any glide/reentry duration on this ladder; Thrusty feeds it
-the reentry-arc span (`heating_fom['duration_s']`), surfaced in the **Heating Survivability** panel.
+the reentry-arc span (`heating_fom['duration_s']`), surfaced in the **Reentry Survivability** report.
 Peak flux is velocity-locked, so the material step is driven by **duration (load/soak)**, not a hotter
 peak — the physics of D-glide_heating.
 

@@ -10,9 +10,10 @@ ballistic trajectory," or "this TPS thickness of this type likely fails after
 direction** — the band constants are explicitly the user-benchmarkable part.
 
 Resolved decisions (user):
-1. **New "Reentry Survivability" tab** paralleling SLV Performance; the current
-   Heating Survivability tab stays until the new one proves out, then is
-   deleted.
+1. **New "Reentry Survivability" tab** paralleling SLV Performance; the interim
+   Heating Survivability tab stayed until the new one proved out, then was
+   deleted (2026-07-22, with `heating.survivability_summary` — the report's
+   4-tier verdict is now the single survivability display).
 2. **Loft/MET context only on sweep** — no auto-comparison run per flyout.  The
    Parametric Sweep gains heating outputs (below) so the loft/depress trade is
    read off a sweep, exactly like range.
