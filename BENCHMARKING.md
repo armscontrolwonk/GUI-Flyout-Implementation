@@ -1000,6 +1000,55 @@ orders of magnitude greater than the gravitational force" (Ch. 5 intro), and
 a Ch. 13 worked transient of 25.7 g at α = 60° with endo-maneuvering loads
 "an order of magnitude larger" causing little bending (distributed load).
 
+#### Heating-chain verification: Finke, IDA P-2395 (read from primary, archived 2026-07-22)
+
+Reinald G. Finke, *Calculation of Reentry-Vehicle Temperature History*, IDA
+Paper P-2395, September 1990 (SDIO/ENA contract MDA 903 89 C 0003; DTIC
+**ADA231552**, approved for public release; uploaded to the project archive).
+Built to support POET interceptor-seeker detection analysis, it is an
+**independent 1990 implementation of Thrusty's exact heating architecture**:
+trajectory (RANGE) → stagnation flux → "inertialess" radiative-equilibrium
+T_eq → per-location heating ratios → 1-D transient material response (TRIDE),
+on a hypothetical high-β ICBM RV (R_n 0.077 m, β ≈ 1500 lb/ft² ≈ 7,320 kg/m²,
+V_entry ≈ 7.06 km/s, γ −24.8°, range 10,020 km; glass-fiber-phenolic shield,
+0.5 cm).  What it contributes:
+
+- **T_eq chain verification (PINNED).**  His laminar correlation
+  (q ∝ √ρ·V^3.15, stated "in numerical agreement with Detra, Kemp, and
+  Riddell as validated … in Perini, 1975") produces a Fig.-2 T_eq-vs-altitude
+  curve that Sutton-Graves + our atmosphere reproduces to **1.3% at 37 km and
+  9% at 60 km** (digitized-by-eye targets ~4,200 K / ~2,600 K, ±15% band) —
+  `test_finke_check.py`.  An SDIO-era independent build of the same method
+  family agreeing at the few-percent level is the cleanest cross-check the
+  T_eq chain has.
+- **Hemisphere heating distribution** (his Fig. 3, Kemp-Riddell 1959 theory +
+  shock-tube data): q/q_s = 1.0 / 0.93 / 0.72 / 0.45 / 0.22 at s/R = 0° /
+  20° / 40° / 60° / 80°, with the **conical surface held at the shoulder value
+  0.22 × nose-stagnation** (constant-pressure-on-cone argument).  Frame
+  conversion: 0.22 of the R_n = 0.077 m nose flux ≈ 0.5 × a *body-radius-
+  referenced* stagnation flux for his geometry — vs our Lu/Shi & Zhang
+  cone-TAIL 0.13.  Not a conflict: near-shoulder (his, held constant = an
+  aft-conservative bound) vs far-tail (ours).  The pair brackets laminar
+  acreage heating ~0.13–0.5 × body-referenced stagnation, corroborating the
+  existing "flank can run above the 0.13 tail value" warning with a cited
+  forward-cone number.
+- **Rarefied/transition bridging** (logged as a model caveat, METHODS §13.3):
+  free-molecule heating (Gilbert & Scala) crosses laminar-continuum at
+  ρ_c/ρ₀ = (2.023×10⁻⁸/R_n)·V^0.3 — ≈ 92 km for his geometry; he bridges with
+  q̄ = (q_FM⁻ⁿ + q_L⁻ⁿ)^(−1/n), n = 2 (vs Matting 1971).  Thrusty applies
+  Sutton-Graves (continuum) everywhere, which **over-predicts above the
+  crossover** (free-molecule q ∝ ρ is the lesser there) — conservative in
+  sign and negligible in integrated load, but onset-altitude timing reads
+  slightly early/hot above ~90 km.
+- **Screening-convention corroboration:** his "ablation temperature,
+  arbitrarily taken as an even 2000 K" for the phenolic shield equals our
+  phenolic-family ablation-onset `continuous_K` = 2000 K (pinned in the same
+  test); and his emissivity sweep (0.25–1.0 changes surface T only ~100–300 K
+  in the heating window) documents that conduction, not reradiation, disperses
+  the early-entry heating — context for how weakly ε drives the screening
+  verdicts.  (The paper's own purpose — low-ε coatings to cut IR
+  detectability — is outside Thrusty's scope but explains the SDIO interest.)
+
 #### Form A — CLOSED (changelog)
 
 The Form A ablator campaign (plan: retire the `H_eff_MJ_kg` screening
