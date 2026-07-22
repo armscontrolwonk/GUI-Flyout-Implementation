@@ -57,6 +57,12 @@ def test_lead_ballistic_degraded_and_fail():
     lead = _lead(deg["body"])
     assert "accuracy degrades" in lead or "accuracy is heavily degraded" in lead
     assert "What would change the verdict" in lead
+    # An Mk21-class RV surviving with flight-demonstrated recession is WITHIN
+    # EXPERIENCE (green) with the consequence annotated — not 'beyond design
+    # envelope' (the accuracy axis must not drag the survival tier down).
+    assert deg["tier"] == "experience"
+    assert "WITHIN EXPERIENCE" in deg["headline"]
+    assert "(accuracy degraded)" in deg["headline"]
 
     fail = sr.build_report(_fly_ballistic("Hwasong-11", "Scud-B (R-17)"))
     lead = _lead(fail["body"])

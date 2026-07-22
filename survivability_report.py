@@ -56,6 +56,15 @@ def survival_tier(status, coverage=None):
     melt, a t_fail crossing.  BLUE ('within design') is only reachable for a
     material with a demonstrated envelope to extrapolate past (the payoff of a
     curated anchor dataset); a material without one shows green/yellow/red only.
+
+    'degraded' maps to EXPERIENCE, not beyond: it means the vehicle SURVIVES
+    with a consequence (recession-induced accuracy loss, glider aeroshape
+    change) that is itself flight-demonstrated (Reentry-F flew ≈0.7 R_n;
+    PANT documented the dispersion growth).  The survival ladder answers
+    "does it survive, and on what evidence" — the consequence is annotated on
+    the headline, not allowed to drag the survival verdict to yellow.  (A
+    Mk21-class RV on an easier-than-design trajectory that recedes 0.4 R_n is
+    within experience; calling it 'beyond design envelope' overclaims.)
     """
     if status == 'fail':
         return 'fail'
@@ -65,7 +74,7 @@ def survival_tier(status, coverage=None):
             return 'beyond'
         if 'too long' in ex:       # past demonstrated dwell, still passive: design vouches
             return 'design'
-    if status in ('analysis', 'degraded'):
+    if status == 'analysis':       # screen can't assess (e.g. T_eq past 4,000 K)
         return 'beyond'
     return 'experience'
 
@@ -674,6 +683,13 @@ def build_report(result) -> dict:
     tier_label, tier_color = SURVIVAL_TIERS[tier]
     if coverage is not None and coverage.get('exits') and tier in ('design', 'beyond'):
         tier_label += "  (" + " + ".join(sorted(coverage['exits'])) + ")"
+    if status == 'degraded':
+        # Survival is demonstrated; the consequence rides as an annotation.
+        tier_label += ("  (accuracy degraded)" if form == 'A'
+                       else "  (aeroshape degraded)"
+                       if (d_over_rn is not None
+                           and d_over_rn >= GLIDER_ABL_TIP_FLAG)
+                       else "  (degraded — see report)")
     _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
     headline = f"{tier_label}   —   Form {form} ({_form_name})"
     if _mods:
