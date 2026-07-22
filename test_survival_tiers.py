@@ -23,11 +23,15 @@ def test_classifier_all_four_reachable():
     hot = {'exits': {'too hot'}}
     # green — plain survive, demonstrated
     assert sr.survival_tier('survive', None) == 'experience'
+    # green — degraded means SURVIVES with a flight-demonstrated consequence
+    # (recession-accuracy, aeroshape); the consequence is a headline
+    # annotation, not a survival-envelope exit (Mk21 on an easy trajectory
+    # must not read 'beyond design envelope').
+    assert sr.survival_tier('degraded', None) == 'experience'
     # blue — past the demonstrated dwell floor but still passive (design vouches)
     assert sr.survival_tier('survive', long_) == 'design'
-    # yellow — passive→active transition, or degraded/analysis
+    # yellow — passive→active transition, or the screen cannot assess
     assert sr.survival_tier('survive', hot) == 'beyond'
-    assert sr.survival_tier('degraded', None) == 'beyond'
     assert sr.survival_tier('analysis', None) == 'beyond'
     # red — computed failure always wins, even with coverage exits present
     assert sr.survival_tier('fail', None) == 'fail'

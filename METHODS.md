@@ -3089,12 +3089,23 @@ material with a demonstrated envelope to extrapolate past** — the direct
 payoff of a curated anchor dataset.  A material with no curated envelope can
 only land green / yellow / red; it cannot claim "within design but beyond
 experience," because without the data that distinction isn't ours to make.
-Per-material mapping: an ablator's tier follows its recession margin
-(comfortable → green, thin → yellow, burn-through → red); a limit-only
-hot-structure/metal/tile follows T_eq vs its continuous (green) / peak (blue
-short-excursion) limits with sustained soak → yellow and melt/heat-sink-out →
-red; a material with anchor data (UHTC, and RCC/C-SiC as curated) uses the
-demonstrated-envelope coverage below.
+
+A third rule keeps the axes honest: **the ladder answers "does it survive,
+and on what evidence" — a survivable consequence does not drag the tier
+down.**  A ballistic RV whose nose recedes enough to grow dispersion
+(δ/R_n past the shape-change onset), or a glider whose ablative tip alters
+the aeroshape, SURVIVES with a consequence that is itself
+flight-demonstrated (Reentry-F flew ≈0.7 R_n; PANT documented the
+dispersion growth) — that is *within experience*, shown green with an
+"(accuracy degraded)" / "(aeroshape degraded)" headline annotation.  (The
+motivating regression: a Mk21-class RV on an easier-than-design IRBM
+trajectory briefly read "beyond design envelope" because the accuracy
+consequence was allowed to set the survival tier.)  Yellow is reserved for
+genuine envelope exits: the passive→active oxidation edge, or a state the
+screen cannot assess (T_eq past the 4,000 K no-ablation bound).
+Burn-through, melt, and t_fail crossings remain red; a material with anchor
+data (UHTC, and RCC/C-SiC as curated) uses the demonstrated-envelope
+coverage below.
 
 For UHTC hot-structure gliders that judgement is
 deliberately **not** a pass/fail number.  The flight and arc-jet record
