@@ -3034,8 +3034,20 @@ the heating model simple and the failure modes obvious:
   reducing T_wall; transient conduction matters for vehicles with
   high-thermal-capacity TPS where the surface is still warming during
   peak heating.
+- **No rarefied/transition regime.** Sutton-Graves (laminar continuum)
+  is applied at every altitude.  Above the free-molecule crossover —
+  ρ_c/ρ₀ = (2.023×10⁻⁸/R_n)·V^0.3, ≈ 90–95 km for cm-scale nose radii at
+  ICBM speeds — the true (free-molecule) heating is *lower* (q ∝ ρ vs
+  ∝ √ρ), so the continuum-everywhere choice over-predicts there:
+  conservative in sign, negligible in integrated load, but heating-onset
+  altitudes read slightly early/hot.  Finke (IDA P-2395, 1990; DTIC
+  ADA231552, read from primary) gives the standard fix — a bridging
+  function q̄ = (q_FM⁻ⁿ + q_L⁻ⁿ)^(−1/n) — if onset timing above ~90 km
+  ever matters.  The same paper independently reproduces this section's
+  entire T_eq chain to 1–9% (`test_finke_check.py`; BENCHMARKING
+  "Heating-chain verification").
 
-All four omissions can be addressed by post-processing the trajectory
+All five omissions can be addressed by post-processing the trajectory
 in a more capable aerothermal tool (CBAERO, MINIVER, or CFD); the
 trajectory itself is what Thrusty is built to produce, and the
 single-point heating estimate provides the validation hook against
