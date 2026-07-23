@@ -1109,6 +1109,58 @@ Net: a CFD-tier study pair independently endorses Thrusty's recession model
 and UHTC/C-C material numbers, and supplies the tool's first CFD-vs-S-G flux
 anchor (with the catalycity bracket made explicit).
 
+#### The CFD lineage closed: Hassan 1998 + Kuntz 1999 (read from primary, archived 2026-07-23)
+
+Hassan, Kuntz & Potter, "Coupled Fluid/Thermal Prediction of Ablating
+Hypersonic Vehicles," AIAA 98-0168, and Kuntz, Hassan & Potter, "An Iterative
+Approach for Coupling Fluid/Thermal Predictions of Ablating Hypersonic
+Vehicles," AIAA 99-3460 (both Sandia) — the ORIGINAL SACCARA/COYOTE/ACE
+coupled system on the IRV-2 carbon-carbon nosetip, i.e. the direct ancestors
+of the Sockalingam & Tabiei pair above (same vehicle, same trajectory table).
+What they contribute:
+
+- **Validation chain closed, three codes deep.**  Hassan's trajectory-point-1
+  stagnation flux is ~600 W/cm² — the number Sockalingam's FLUENT reproduced
+  (601.99) and our `test_sockalingam_cfd.py` anchor compares S-G against.
+  SACCARA (1998) → FLUENT (2009) → S-G (this tool) now form one lineage on
+  one point, with S-G at its documented noncatalytic edge (0.73× fully-
+  catalytic).
+- **The robustness lesson runs OUR way.**  The high-fidelity loose coupling
+  went numerically unstable during heavy ablation (blowing feedback;
+  oscillations; "the decision was made to terminate the computations when
+  the convective heat flux became negative" at 19.5 s) — Kuntz 1999 exists
+  to fix it, iteratively, at 14 CPU-hours for the first trajectory point.
+  And the benchmark both papers validate against is **ASCC, "an
+  analytical/correlation-based code … shown to compare very well with
+  flight data for ablating axisymmetric sphere cones … a good benchmark
+  since it has flight data incorporated into its correlations"** — i.e.,
+  Thrusty's methodological class was the trusted reference inside a
+  national-lab CFD program.  A screening tier with no blowing-feedback loop
+  cannot go unstable the way their coupling did.
+- **Neglected-area ledger (from what they model and we don't):**
+  1. **Transition placement (top OPEN candidate).**  They place
+     boundary-layer transition with simple algebraic criteria (LORN /
+     Polansky + Anderson, via ASCC) and show late-trajectory turbulent cone
+     heating matters.  Thrusty carries the "turbulent flank ~3–5×" warning
+     but never places transition — the one neglect with a correlation-tier
+     fix on the shelf.
+  2. **Shape-change feedback (tripwire caveat, P3-class).**  Their ablating
+     tip receded ~21 mm (more than its initial 19 mm radius) with late
+     heating reaching ~7,000 W/cm² as sharpening + turbulence fed back.
+     Our fixed-geometry flux history under-counts that extreme, so the
+     burn-through bound fires LATE in severe-recession regimes; mitigated
+     because the load-vs-record verdict goes yellow far before any current
+     use case approaches that regime.
+  3. **Multi-D conduction: defensible as-is.**  Hassan's "1-D techniques
+     might fail" caution is about NOSETIPS (steep 2-D solid gradients at
+     transition); our bondline screen runs on the acreage panel where
+     planar 1-D is the right geometry (Finke: surface-parallel gradients
+     2–3% of through-wall).
+- **Alternate convention datum:** Sandia's C-C ablation threshold is
+  1,000 K (COYOTE boundary condition), vs Dec & Braun's 2,000 K for CP and
+  our 2,000 K family onset — recorded so the onset convention's spread is
+  on the ledger.
+
 #### Method-stack validation: Dec & Braun 2006 (read from primary, archived 2026-07-23)
 
 John A. Dec (NASA Langley) & Robert D. Braun (Georgia Tech), "An Approximate

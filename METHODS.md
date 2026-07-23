@@ -3233,7 +3233,12 @@ Instead, mirroring the UHTC dwell-floor treatment (§13.5):
   point-estimate that could be an artifact of the conservative-low `H_eff`.
   Validated both directions by `test_form_a_bounds.py`: the tripwire must NOT
   fire for the recovered Stardust/Hayabusa capsules, and DOES fire for a 2 mm
-  shield under Stardust's load.
+  shield under Stardust's load.  P3-class caveat (Hassan 1998 / Kuntz 1999,
+  BENCHMARKING "CFD lineage"): the flux history is fixed-geometry, so in
+  severe-recession regimes where the ablating tip reshapes and heating feeds
+  back (their IRV-2 receded past its own initial nose radius, late heating
+  ~70 MW/m²) the bound fires LATE — mitigated because the load-vs-record
+  verdict goes yellow well before any current use case nears that regime.
 - **δ survives only as context.**  The full analysis still prints δ as a *band*
   across the cited `H_eff` range (optimistic..nominal) — "a band, not a
   prediction" — never as a tier-driving number.  The accuracy consequence
