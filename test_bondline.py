@@ -43,6 +43,20 @@ def test_uncited_material_not_evaluated():
     assert r["evaluated"] is False
 
 
+def test_sirca_now_evaluates_with_ratio_cited_k():
+    # SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (Murbach 1997
+    # SSC97-V-2) → the bondline screen now runs for SIRCA bodies, and the low
+    # k means a SIRCA layer insulates better than the same silica-phenolic
+    # thickness under the same soak.
+    assert abs(heating.TPS_MATERIALS["sirca"]["k_W_mK"] - 0.04) < 1e-9
+    t, q = _flat(0.5, 800.0)
+    s = heating.bondline_screen(t, q, material="sirca", thickness_m=0.02)
+    sp = heating.bondline_screen(t, q, material="silica_phenolic", thickness_m=0.02)
+    assert s["evaluated"] and sp["evaluated"]
+    assert s["T_bond_peak_C"] < sp["T_bond_peak_C"]
+    assert "Murbach" in heating.TPS_MATERIALS["sirca"]["k_source"]
+
+
 def test_steady_state_bounds_and_insulated_back():
     # Long constant flux → surface approaches T_eq; insulated back face → the
     # bondline converges up toward the surface temperature (never above it).
