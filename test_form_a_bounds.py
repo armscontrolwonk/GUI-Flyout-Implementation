@@ -169,6 +169,22 @@ def test_family_generic_carbon_carries_the_record():
     assert regime["status"] == "survive"
 
 
+def test_sirca_h_eff_from_tpsx_curve():
+    """SIRCA-14A H_eff wired from the TPSX id-41 pressure curve (22.5–40.5
+    kPa): nominal 37.4 MJ/kg = the curve's high-pressure MINIMUM (still
+    labeled optimistic for steep entries — RV stagnation pressures exceed the
+    curve's 0.4 atm ceiling and Q* falls with pressure); bound 165 MJ/kg =
+    top of the mid-pressure cluster, with the 2.1 GJ/kg recession→0 artifact
+    point excluded (BENCHMARKING documents the exclusion).  The bound is no
+    longer collapsed onto the nominal, so the SIRCA tripwire is a real bound
+    again."""
+    m = heating.TPS_MATERIALS["sirca"]
+    assert m["H_eff_MJ_kg"] == 37.4
+    assert m["H_eff_bound_MJ_kg"] == 165.0
+    assert m["H_eff_bound_MJ_kg"] > m["H_eff_MJ_kg"]
+    assert m["density_kg_m3"] == 224.0 and m["c_J_kgK"] == 1200.0
+
+
 def test_tripwire_fires_when_undershielded():
     """The complement: a genuinely under-shielded ablator DOES trip the bound.
     Stardust's load through a 2 mm PICA skin is consumed even at the optimistic
