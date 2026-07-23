@@ -3511,6 +3511,40 @@ low-altitude ballistic acreage (a Mk21-class terminal bondline sees turbulent
 augmentation) — leaving the shipped fleet's verdicts unchanged only because
 their margins are large, not because the gate is inert.
 
+### 13.12 Survival map (`survivability_report._survival_map`)
+
+Between the plain-language lead and the "Full analysis" divider, the report
+prints a one-glance **station × question matrix** — the hinge into the detail
+and its table of contents.  Rows are stations in the order the heat visits
+them (outside-in, front-to-back: **nose → body skin → windward flank →
+interior**); columns are the three ladder questions every material answers
+(**surface holds? / endures the duration? / within the flown record?**).
+Presentation choices, each deliberate:
+
+* **One number per cell** — the single figure the cell's tier was decided on
+  (a load fraction, a dwell vs its floor, a bondline temperature vs its
+  limit).  The matrix says *where to look*; the full analysis below says what
+  happened.  Cells are colorized in the GUI with the §13.5 tier colors.
+* **Cell roster follows the material's failure axes.**  An ablator answers
+  surface (burn-through bound) and record (load vs the family flight record)
+  but has no separate duration question; a UHTC nose maps its coverage
+  verdict onto all three (P→A boundary / dwell vs floor / coverage fraction);
+  a reradiative skin answers surface (peak T_eq vs limit) and duration (soak
+  dwell, or the heat-sink melt budget when that is the crossed criterion).
+* **"—" is one glyph for two things** — physically-N/A and
+  not-computed-at-screening-tier; the full analysis carries the distinction.
+  Rows with no populated cell are dropped (a ballistic RV's map is shorter
+  than a MaRV's).  The windward row appears only when the windward criterion
+  is computed (non-ablator body) — for an ablator body T_eq is not the
+  failure axis and the flux-only estimate stays in the Form C block.
+* **The Regime line is prose, not cells** — the transition-gate state
+  (§13.11) and validity guards (e.g. radiative gas heating past ~9 km/s)
+  answer none of the three questions, so forcing them into cells would be
+  false symmetry.
+
+`test_survival_map.py` pins the placement, the per-material cell logic, and
+that every colorization span lands exactly on its cell text.
+
 ---
 
 ## 14. Outputs, events, and milestones

@@ -503,6 +503,146 @@ def _loc_line(name, L):
     return f"  {name:<5s} {mat:<18s} T_eq {T:>7,.0f} K   {det}"
 
 
+# ── Survival map: the one-glance station × question matrix ──────────────────
+# Rows are stations in the order the heat visits them (outside-in, front-to-
+# back: nose → body skin → windward flank → interior); columns are the three
+# ladder questions.  Each populated cell shows the ONE number its tier was
+# decided on — the matrix says WHERE to look, the full analysis below says
+# what happened.  "—" covers both physically-N/A and not-computed-at-
+# screening-tier; the full analysis carries that distinction.  The Regime
+# line is prose (validity guards and the transition state answer none of the
+# three questions — forcing them into cells would be false symmetry).
+_MAP_COLS = ("Surface holds?", "Endures duration?", "Within flown record?")
+_MAP_C0 = (18, 39, 60)          # column start offsets (chars); labels at col 2
+
+
+def _record_anchor(src):
+    """Short anchor name from a demonstrated-load citation ('Reentry-F
+    graphite ... flew' → 'Reentry-F graphite')."""
+    words = str(src or "").split()
+    return " ".join(words[:2]) if words else "flight record"
+
+
+def _map_skin_cells(L, coverage=None):
+    """(surface, duration, record) cells for one skin location; each cell is
+    (text, tier_key) or None (rendered as '—')."""
+    if not L or not L.get('material'):
+        return (None, None, None)
+    crit = L.get('criteria') or {}
+    T = float(L.get('T_eq_peak_K', 0.0) or 0.0)
+    if coverage is not None:
+        # UHTC hot-structure nose: the coverage verdict owns all three cells.
+        ex = coverage.get('exits') or set()
+        surf = (f"{T:,.0f} K of {coverage['pa_K']:,.0f} K",
+                'beyond' if 'too hot' in ex else 'experience')
+        if coverage['dwell_s'] > 0:
+            dur = (f"{coverage['dwell_s']:,.0f} s of {coverage['floor_s']:.0f} s",
+                   'design' if 'too long' in ex else 'experience')
+        else:
+            dur = ("0 s above ceiling", 'experience')
+        rec_tier = ('beyond' if 'too hot' in ex else
+                    'design' if 'too long' in ex else 'experience')
+        rec = (f"{coverage['coverage']:.0%} of dwell in envelope", rec_tier)
+        return (surf, dur, rec)
+    if L.get('is_ablator') and 'recession' in crit:
+        # Ablator: surface = the burn-through bound; record = load vs the
+        # family flight record.  Duration is not a separate ablator question.
+        rc = crit['recession']
+        surf = (("burn-through bound", 'fail') if rc.get('burnthrough_bound')
+                else ("no burn-through", 'experience'))
+        frac = rc.get('load_fraction')
+        if frac is None:
+            rec = ("no cited flight record", 'experience')
+        else:
+            num = f"{frac:.1f}×" if frac >= 2.0 else f"{frac:.0%}"
+            rec = (f"{num} of {_record_anchor(rc.get('demonstrated_load_source'))}",
+                   'beyond' if frac > 1.0 else 'experience')
+        return (surf, None, rec)
+    # Reradiative skin: surface = peak T_eq vs limit; duration = soak dwell
+    # (or the heat-sink melt budget when that criterion is the one crossed).
+    if T >= heating.NOTHING_SURVIVES_K:
+        return (("past 4,000 K screen", 'beyond'), None, None)
+    surf = dur = None
+    ps = crit.get('peak_surface')
+    if ps:
+        surf = (f"{T:,.0f} K of {ps['limit_K']:,.0f} K",
+                'fail' if ps['margin'] > 1.0 else 'experience')
+    sk = crit.get('soak')
+    if sk:
+        _t = ('design' if (sk['margin'] >= 1.0 and sk.get('floor'))
+              else 'fail' if sk['margin'] >= 1.0 else 'experience')
+        dur = (f"{sk['time_above_s']:,.0f} s of {sk['dwell_s']:,.0f} s", _t)
+    hs = crit.get('heat_sink')
+    if hs and hs.get('margin', float('inf')) <= 1.0:
+        dur = (f"{hs['Q_absorbed_MJ']:,.0f} of {hs['Q_melt_MJ']:,.0f} MJ", 'fail')
+    return (surf, dur, None)
+
+
+def _survival_map(nose, body_loc, coverage, windward, bondline, warnings):
+    """Assemble the matrix.  Returns (lines, spans); spans are
+    (line_idx_within_block, char_start, char_end, tier_key) for the GUI to
+    colorize — line 0 is the '─── Survival map' header."""
+    rows = [("Nose", _map_skin_cells(nose, coverage))]
+    if body_loc is not None and body_loc.get('material'):
+        rows.append(("Body skin", _map_skin_cells(body_loc)))
+    if windward and windward.get('T_eq_windward_K'):
+        wc = (windward.get('criteria') or {}).get('windward_surface')
+        Tw = windward['T_eq_windward_K']
+        if wc:
+            over = (Tw['lo'] > wc['limit_continuous_K']
+                    or Tw['hi'] > wc['limit_peak_K'])
+            rows.append(("Windward flank",
+                         ((f"{Tw['hi']:,.0f} K of {wc['limit_continuous_K']:,.0f} K",
+                           'beyond' if over else 'experience'), None, None)))
+    if bondline and bondline.get('evaluated'):
+        rows.append(("Interior",
+                     (None,
+                      (f"{bondline['T_bond_peak_C']:,.0f} of "
+                       f"{bondline['limit_C']:.0f} °C",
+                       'beyond' if bondline['crossed'] else 'experience'),
+                      None)))
+    rows = [(lbl, cells) for lbl, cells in rows if any(cells)]
+    if not rows:
+        return [], []
+
+    lines = ["─── Survival map ───────────────────────────────────────────"]
+    hdr = ""
+    for col, c0 in zip(_MAP_COLS, _MAP_C0):
+        hdr = (hdr.ljust(c0) if len(hdr) < c0 else hdr + " ") + col
+    lines.append(hdr)
+    spans = []
+    for lbl, cells in rows:
+        line = "  " + lbl
+        for cell, c0 in zip(cells, _MAP_C0):
+            line = line.ljust(c0) if len(line) < c0 else line + " "
+            if cell is None:
+                line += "—"
+            else:
+                spans.append((len(lines), len(line), len(line) + len(cell[0]),
+                              cell[1]))
+                line += cell[0]
+        lines.append(line)
+    # Regime line: the located rows' remainder — transition state (where the
+    # gate feeds a computed screen) and validity guards.
+    bits = []
+    tr = (windward if (windward and windward.get('transition_state'))
+          else bondline if (bondline and bondline.get('evaluated')
+                            and bondline.get('transition_state')) else None)
+    if tr:
+        st = tr['transition_state']
+        _fp = float(tr.get('transition_factor_peak', 1.0) or 1.0)
+        bits.append(
+            "acreage boundary layer laminar throughout" if st == 'laminar'
+            else f"acreage boundary layer {st} at low altitude "
+                 + (f"(flank flux ×{_fp:.1f})" if _fp >= 1.05
+                    else "(just past onset)"))
+    if any('radiative gas heating NOT assessed' in w for w in (warnings or [])):
+        bits.append("radiative gas heating not assessed (V > 9 km/s)")
+    if bits:
+        lines.append("  Regime: " + "; ".join(bits) + ".")
+    return lines, spans
+
+
 def build_report(result) -> dict:
     """Assemble the survivability report.
 
@@ -955,8 +1095,15 @@ def build_report(result) -> dict:
         lead += ["", "* Screening benchmarks modified from the shipped "
                      "defaults — see Modified benchmarks below."]
 
+    # ── Survival map: the hinge between the lead and the full analysis — a
+    # one-glance station × question matrix; each cell elaborated below it.
+    _map_lines, _map_spans = _survival_map(
+        nose, body_loc, coverage, (fom or {}).get('windward'), _bl,
+        fom.get('warnings'))
+    _map_block = ("\n".join(_map_lines) + "\n\n") if _map_lines else ""
+
     _divider = "═══ Full analysis " + "═" * 42
-    body = "\n".join(lead) + "\n\n" + _divider + "\n\n" \
+    body = "\n".join(lead) + "\n\n" + _map_block + _divider + "\n\n" \
            + "\n".join(hdr) + "\n\n" + "\n".join(budget) + "\n" \
            + "\n".join(j) + "\n" + "\n".join(tail) + "\n"
 
@@ -972,4 +1119,4 @@ def build_report(result) -> dict:
                if coverage is not None else None),
     )
     return dict(status=status, tier=tier, headline=headline, body=body,
-                form=form, plot=plot)
+                form=form, plot=plot, map_spans=_map_spans)
