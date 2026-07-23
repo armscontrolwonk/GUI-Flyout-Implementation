@@ -3245,7 +3245,11 @@ Instead, mirroring the UHTC dwell-floor treatment (§13.5):
 The `H_eff` bands, the Reentry-F tuning trace, and the capsule bounds below are
 the evidentiary base for the load records and the tripwire bound — `H_eff` is
 no longer a buried constant that silently sets a verdict; its one remaining role
-(bracketing the tripwire) is stated in the report.
+(bracketing the tripwire) is stated in the report.  The closed-form recession
+screen itself (δ = ∫q̇dt/(ρ·H_eff), material ablating at a fixed temperature) is
+independently corroborated by a CFD-tier study: Tabiei & Sockalingam 2011
+(FLUENT/LS-DYNA coupled multiphysics) uses the identical ṡ = q_w/(ρ·Q\*) form
+for surface recession (BENCHMARKING "Methods + material corroboration").
 
 `H_eff` is the **effective heat of ablation Q\***, which is *enthalpy- and
 regime-dependent*, not a fixed constant — so the catalog nominals
