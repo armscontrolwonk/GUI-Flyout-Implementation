@@ -1604,6 +1604,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); low-side corroborated by Gasch & Johnson 2010 (TaSi₂ *reduces* oxide/depletion at 1500–1690 °C, HfB₂-SiC arcjet) and the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
 | bondline limit | 250 °C | Dec & Braun, NASA NTRS 20060004824 (ablative TPS sizing tool — now READ FROM PRIMARY, archived; their whole sizing iterates shield thickness to hold bondline ≤ 250 °C); Orion 260 °C NTRS 20080013535.  NOW COMPUTED: `heating.bondline_screen` (METHODS §13.10) screens the body-TPS bondline against this limit every run; editable in the Screening Envelope dialog | ✔ cited + computed |
+| SIRCA through-thickness k (bondline screen) | ≈0.04 W/m·K | ratio-derived: SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (0.35/9), Murbach SSC97-V-2 (read from primary, repo `data/`; Ames, citing the SIRCA developers — consistent with Tran et al. SIRCA-15F); density ratio ~1/10 corroborated by the paper's own mass table (5 cm SIRCA 25.5 kg vs 2.5 cm silica phenolic 93 kg) | ⚠ labeled ratio-derived |
 | tile/RCC/material limits | per-material peak/continuous K | HEATING_TPS_REFERENCES.md §2 (TPSX, KSC STS ref, NTRS 19940030739, Peters 2024, …) | ✔ cited per entry |
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
@@ -1650,6 +1651,40 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 (mirroring the booster/RO XLSX templates) than by a threshold dialog.  When
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
+
+**MINED (2026-07-23) — Murbach SWERVE/AEOLUS pack (read from primary; PDFs in
+repo `data/`).**  Hunted for a silica-phenolic/SIRCA H_eff bound (the open
+tripwire caveat); the pack does NOT contain heat-of-ablation values, but
+yields:
+- **SWERVE TPS identified firsthand** (Murbach AIAA 93-0313): body acreage =
+  **silica phenolic over machined aluminum**; nose tip, wing LEs, control
+  surfaces = carbon-carbon (heating calc radii R_n 2.5 cm / LE 4 cm; 2.5 cm
+  TPS = 93 kg on the 2.75 m vehicle).  Silica phenolic is therefore
+  flight-flown acreage TPS on exactly the vehicle class Thrusty models — but
+  the flown heat load is unpublished, so no `demonstrated_load` is wired
+  (reconstruction from the Williamson 92-3989 flight profile = P3 item).
+- **CMA material response, SWERVE-derived shield** (SSC97-V-2 Table 1, Mars
+  entry, sidewall assumed 5% of stagnation): silica-phenolic sidewall at
+  0.68 MW/m² / 1411 K → **zero surface recession** (char 0.30 cm, pyrolysis
+  2.64 cm, aluminum structure 483 K behind 5 cm); wing LE at 4.65 MW/m² /
+  2200 K → 1.0 cm recession; C-C stagnation at 13.6 MW/m² / 3055 K → 3.43 cm.
+  The zero-recession sidewall point corroborates the 1700 K ablation-onset
+  gate on the silica_phenolic entry; the tripwire caveat (bound = nominal,
+  uncited) REMAINS OPEN for silica phenolic/SIRCA.
+- **SIRCA k closed (ratio-derived)** — see the audit-table row; wired as
+  `sirca.k_W_mK = 0.04`, so the bondline screen now evaluates SIRCA bodies.
+- **UHTC corroboration (1997-era)**: Ames UHTC "demonstrated in both ground
+  and flight tests to withstand temperatures of up to 3033 K without
+  ablation" — an early, pre-SHARP-B1 datum consistent with the anchor set's
+  demonstrated peaks (not added as an anchor: no flux/dwell given).
+- **Lineage note**: Murbach 2012 (LPI 4244) counts **four SWERVE flights,
+  "November 2011 the most recent"** — i.e. the AHW flight counted inside the
+  SWERVE line by its own program family.  Griswold 1982 (SAE 820850) adds
+  HPSP geometry only (7.92 m, 10.5° cone, 7.6 cm wall, 1814–2268 kg dry) —
+  crew-systems content otherwise; the deep TPS source for that vehicle is the
+  1983 SRI/DARPA Spaceplane report (49 MB, in the user's Drive folder — NOT
+  yet read: exceeds the Drive download limit and the reader tool needs
+  access approval).
 
 **FIXED (2026-07-23) — family-generic `carbon_ablator` now carries the
 graphite-family record.**  The generic "Ablative carbon-carbon" entry shipped

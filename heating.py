@@ -134,13 +134,22 @@ TPS_MATERIALS = {
                             demonstrated_load_MJ_m2=60, H_eff_bound_MJ_kg=20, k_W_mK=1.5,
                             k_source="char k at ~1900 K (Cabrera & West 2026 Table A4, Sutton's data) — conservative-high",
                             demonstrated_load_source="Pioneer Venus Large Probe CP heatshield survived ~60 MJ/m² stagnation (Cabrera & West 2026, JSR 63(2) coupled reconstruction; figure-integrated ±25%; short radiation-heavy CO₂ pulse — conservative as a load record; Hayabusa CP corroborates ~2-3× higher, pulse-duration-soft)"),
+    # silica_phenolic is flight-flown ACREAGE TPS on this exact vehicle class:
+    # SWERVE's body TPS was silica phenolic over machined aluminum (C-C tip/
+    # leading edges) — Murbach AIAA 93-0313, firsthand.  CMA response for the
+    # SWERVE-derived shield (Murbach SSC97-V-2 Table 1, Mars entry): ZERO
+    # surface recession at 0.68 MW/m² / 1411 K sidewall (char 0.3 cm,
+    # pyrolysis 2.6 cm, aluminum 483 K behind 5 cm); 1.0 cm recession at the
+    # 4.65 MW/m² / 2200 K wing LE.  No flown-load record wired: the flown
+    # SWERVE heat load is not published (reconstruction = a P3 item).
     "silica_phenolic": dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="Silica phenolic",
                             group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10, k_W_mK=0.35,
                             k_source="glass-fiber phenolic virgin k (Handbook of Materials Science III, via Finke IDA P-2395); char k uncited — margin near the limit is soft"),
     "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="SIRCA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15),
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15, k_W_mK=0.04,
+                            k_source="ratio-derived: SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (0.35/9 ≈ 0.04) — Murbach 1997 SSC97-V-2 (Ames, citing the SIRCA developers), consistent with Tran et al. SIRCA-15F"),
     "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=77,
