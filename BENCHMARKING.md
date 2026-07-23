@@ -1021,13 +1021,17 @@ V_entry ≈ 7.06 km/s, γ −24.8°, range 10,020 km; glass-fiber-phenolic shiel
   −3% T at ICBM speed; both ∝ √ρ, so the ratio is velocity-only).  S-G sits
   mildly on the LOW (optimistic) side of the DKR family at high speed — a
   documented family spread inside the screening tier's stated uncertainty,
-  with the sign now on the record.  The Fig.-2 endpoint comparison (1.3% at
-  37 km, **9% at 60 km ≈ 41% in flux**) is CONTEXT ONLY: its residual is
-  dominated by digitizing a steep curve (~2%/km in T) on a scanned 1990
-  plot — a ±3–4 km x-axis read alone is ±6–8% in T — stacked on the
-  1962-vs-modern atmosphere and a constant-V assumption; it measures the
-  comparison apparatus, not model error.  Both tiers pinned in
-  `test_finke_check.py`.
+  with the sign now on the record.  The Fig.-2 curve comparison is now
+  **pixel-traced** (tick-calibrated axes, nearest-run tracker, frame masking;
+  `benchmarks/verification/digitize_finke_fig2.py` + QC overlay + the CSV),
+  replacing an earlier eyeball read whose ±3–4 km x-axis uncertainty on a
+  ~2%/km curve alone injected ±6–8% in T — which had made 60 km look like a
+  9% outlier.  Digitized, the residual collapses to a **steady ~5% across
+  37 / 60 / 80 km** (Thrusty 4,144 / 2,834 / 1,969 K vs trace 4,324 / 3,006 /
+  2,076 K; ratios 0.958 / 0.943 / 0.949) — the SAME sign and size as the
+  exact correlation ratio (S-G ~3% low on T at 7 km/s) plus the 1962-vs-modern
+  atmosphere.  No 9% outlier survives the trace.  Both tiers pinned in
+  `test_finke_check.py` (exact ratio band 0.86–0.92; traced-curve band ±8%).
 - **Hemisphere heating distribution** (his Fig. 3, Kemp-Riddell 1959 theory +
   shock-tube data): q/q_s = 1.0 / 0.93 / 0.72 / 0.45 / 0.22 at s/R = 0° /
   20° / 40° / 60° / 80°, with the **conical surface held at the shoulder value

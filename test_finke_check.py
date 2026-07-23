@@ -26,13 +26,17 @@ Two tiers of comparison, deliberately separated:
    S-G sits mildly on the LOW side of the DKR family at ICBM speeds (−11%
    flux = −3% T at 7 km/s), a documented family spread well inside the
    screening tier's stated uncertainty.
-2. FIGURE (context only, loose band): the Fig.-2 endpoint comparison.  Its
-   ±15% band is dominated by DIGITIZATION of a steep curve on a scanned
-   1990 plot (T_eq falls ~2%/km there, so a ±3–4 km x-axis read = ±6–8% in
-   T), stacked on the 1962-vs-modern atmosphere and a constant-V
-   assumption.  Wiring-time readings (1.3% at 37 km, 9% at 60 km) measure
-   that apparatus, not model error — the exact check above is the honest
-   statement of method agreement.
+2. FIGURE (context, now tightened): the Fig.-2 T_eq-vs-altitude curve.  The
+   targets were PIXEL-TRACED, not eyeballed — tick-calibrated axes, a
+   nearest-run curve tracker, frame-line masking (benchmarks/verification/
+   digitize_finke_fig2.py + the QC overlay), replacing the earlier ±3–4 km
+   eyeball (which on a curve falling ~2%/km injected ±6–8% in T by itself).
+   The residual now sits at a steady ~5% (Thrusty reads ~4–6% BELOW the
+   trace across 37/60/80 km) — the same SIGN and MAGNITUDE the exact
+   correlation ratio predicts (S-G ~3% low on T at 7 km/s), so what's left
+   is real method spread plus the 1962-vs-modern atmosphere, not read noise.
+   Digitizing collapsed the apparent 9% outlier at 60 km to a consistent
+   ~5% across the curve.
 """
 
 import numpy as np
@@ -43,8 +47,9 @@ from atmosphere import atmosphere
 _RN = 0.077          # m — Finke's nose radius
 _V = 7000.0          # m/s — near-constant above ~30 km at his β
 
-# (altitude_km, Finke Fig. 2 T_eq in K — digitized by eye, ε = 1)
-_FINKE_POINTS = [(37.0, 4200.0), (60.0, 2600.0)]
+# (altitude_km, Finke Fig. 2 T_eq in K — PIXEL-TRACED, ε = 1; median of ±0.5 km
+# around each altitude via digitize_finke_fig2.py, tick-calibrated).
+_FINKE_POINTS = [(37.0, 4324.0), (60.0, 3006.0), (80.0, 2076.0)]
 
 
 def test_finke_correlation_exact():
@@ -73,14 +78,19 @@ def test_finke_correlation_exact():
 
 
 def test_finke_teq_curve():
+    # Pixel-traced targets (not eyeballed), so the band is tightened to ±8%:
+    # Thrusty reads a steady ~4-6% below the trace, matching the exact
+    # correlation ratio's sign and size (S-G ~3% low on T at 7 km/s) plus the
+    # 1962-vs-modern atmosphere.  A drift outside this band means the S-G
+    # constant, the atmosphere, or the trace changed — not read noise.
     for h_km, T_finke in _FINKE_POINTS:
         rho = atmosphere(h_km * 1e3)[2]
         q = heating._stag_flux(np.array([rho]), np.array([_V]), _RN)[0]
         T = (q / heating.SIGMA) ** 0.25          # ε=1, matching "inertialess" T_eq
         ratio = T / T_finke
-        assert 0.85 <= ratio <= 1.15, (
-            f"T_eq at {h_km} km: Thrusty {T:.0f} K vs Finke ~{T_finke:.0f} K "
-            f"(ratio {ratio:.2f}) — outside the ±15% verification band")
+        assert 0.92 <= ratio <= 1.08, (
+            f"T_eq at {h_km} km: Thrusty {T:.0f} K vs Finke trace "
+            f"{T_finke:.0f} K (ratio {ratio:.3f}) — outside the ±8% band")
 
 
 def test_finke_ablation_onset_convention_matches():
