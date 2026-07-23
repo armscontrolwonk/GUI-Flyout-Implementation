@@ -1652,6 +1652,33 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
+**CROSS-CHECKED (2026-07-23) — all 14 Thrusty material entries vs TPSX,
+field-by-field.**  Every entry has a TPSX counterpart; every overlapping
+field (ρ, c, k, limits, H_eff) compared.  Dispositions:
+- **Matches ≤5%**: all metals (Al/Ti/steel ρ+c), rcc ρ, c_sic ρ+limits,
+  silica_tile ρ+limits, carbon_carbon ρ, carbon_phenolic ρ (Narmco/5055),
+  silica_phenolic ρ+c (Silica Cloth/Phenolic), sirca (all), pica k/H_eff.
+- **WIRED from the audit**: carbon_phenolic c 1500 → **1120 J/kg·K** (Narmco
+  4028, TPSX id 113 — Sutton's exact material) and pica c 1500 → **1200**
+  (TPSX id 43): the bondline soak spans ~300–800 K where the room-T value is
+  both closer and CONSERVATIVE (lower ρc → faster soak-through).  C-HGB
+  bondline moves 341 → 393 °C, still yellow — no verdict class changes.
+- **Regime differences, documented not churned**: hot-structure/heat-sink c
+  values (rcc 1200 vs 712, c_sic 1200 vs 586, silica_tile 1000 vs 628, C-C
+  1500 vs 628) — ours are high-T averages for the melt/soak integral to
+  2000–4000 K, TPSX quotes room temperature; both are "right" at their T.
+- **State/material differences, not conflicts**: carbon_phenolic k 1.5 is
+  deliberately CHAR (Cabrera-West; Narmco 0.367 is virgin, Davy virgin 1.22
+  shows the spread); cc_hot_structure 2170 K is HTV-2-class C/C, not
+  Shuttle-era ACC (1870/1920); carbon_ablator ρ 1450 is the family-generic
+  lower-density entry vs bare C-C 1890; uhtc ρ 6000 sits between ZrB₂-SiC
+  5560 and HfB₂-SiC 9340; silica_phenolic k uses the MX2600 cross-ply 0.71
+  (variant spread 0.52–0.71); pica ρ stays flight-era 270 vs TPSX's early
+  236 ±12.
+- **Drift guard**: `test_tpsx_crosscheck.py` pins every TPSX-wired field to
+  the archived `data/tpsx/catalog.json` itself, and pins the documented
+  divergences (pica ρ, CP char k) so neither side drifts silently.
+
 **CRAWLED (2026-07-23) — the full TPSX curated TPS database (ids 1–260),
 archived to repo `data/tpsx/` (260 material pages + parsed `catalog.json`).**
 The user allowlisted `tpsx.arc.nasa.gov`; the curated NASA Ames TPS set spans

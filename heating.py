@@ -132,7 +132,7 @@ TPS_MATERIALS = {
     #       (Handbook of Materials Science III p.34, via Finke IDA P-2395);
     #       VIRGIN value — char conductivity uncited, so margins near the
     #       limit are soft (flagged in the screen's warnings).
-    "carbon_phenolic": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Carbon phenolic",
+    "carbon_phenolic": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1120, label="Carbon phenolic",
                             group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=60, H_eff_bound_MJ_kg=20, k_W_mK=1.5,
                             k_source="char k at ~1900 K (Cabrera & West 2026 Table A4, Sutton's data) — conservative-high",
@@ -173,7 +173,7 @@ TPS_MATERIALS = {
     # (Tran arc-jet, TPSX #68/#74, nonstp*) becomes the optimistic bound
     # (supersedes Winter-2014's implied 77 top; nominal 35 unchanged).  TPSX
     # density 236 ±12 vs our wired 270 — logged, not churned (BENCHMARKING).
-    "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
+    "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1200, label="PICA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=115, k_W_mK=0.305,
                             k_source="TPSX (NASA Ames) PICA virgin, id 43: 0.305 W/m·K, measured (Tran et al. AIAA 96-1911; TPSX nonstp flag — conservative-high for bondline)",
