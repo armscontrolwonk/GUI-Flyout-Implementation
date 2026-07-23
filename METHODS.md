@@ -3028,12 +3028,14 @@ the heating model simple and the failure modes obvious:
   beyond pure convection. This is small for HGV velocities below
   ~6 km/s but becomes significant for steep ballistic re-entry from
   ICBM trajectories.
-- **No ablation, no wall conduction.** The radiative-equilibrium
-  treatment assumes a steady non-ablating surface. Ablating heat
-  shields absorb part of the incoming flux as mass-loss enthalpy,
-  reducing T_wall; transient conduction matters for vehicles with
-  high-thermal-capacity TPS where the surface is still warming during
-  peak heating.
+- **No ablation cooling in the surface balance.** The radiative-
+  equilibrium surface temperature assumes a steady non-ablating
+  surface; an ablating shield absorbs part of the incoming flux as
+  mass-loss enthalpy, so the real surface runs cooler than T_eq
+  (the surface screen is conservative-high in that regime).  *Wall
+  conduction is now modelled for the interior axis* — see §13.10, the
+  bondline screen — but the surface energy balance itself stays
+  radiative-equilibrium.
 - **No rarefied/transition regime.** Sutton-Graves (laminar continuum)
   is applied at every altitude.  Above the free-molecule crossover —
   ρ_c/ρ₀ = (2.023×10⁻⁸/R_n)·V^0.3, ≈ 90–95 km for cm-scale nose radii at
@@ -3425,6 +3427,47 @@ number, and `build_report` stamps the headline with an asterisk and prints a
 *Modified benchmarks* block naming each changed value, its shipped default, and
 the default's source — so a hand-edited number never rides on the shipped
 numbers' citations.
+
+### 13.10 Interior (bondline) survivability screen (`heating.bondline_screen`)
+
+Every other screen answers "does the *skin* survive."  The bondline screen adds
+the axis a policy reader actually cares about — **does the structure behind the
+TPS survive** — because a vehicle whose skin holds while its interior cooks is a
+failed weapon that looks like a survivor from the outside.
+
+The method is Dec & Braun's approximate TPS-sizing option (NTRS 20060004824),
+reduced to screening tier: **1-D transient conduction** through the body TPS
+layer (implicit finite-difference, Thomas-solved), a **radiative surface energy
+balance** `α·q̇ = εσT_s⁴ + q_cond` (radiation linearized about the previous
+step), and an **insulated back face** (their worst case — no heat leaves the
+structure).  The flux driving it is the same body-acreage flux the body
+location sees (`f × body-scale stagnation`).  The peak bondline temperature over
+the arc is compared against the **TPS-structure design limit** (`BONDLINE_LIMIT_C`,
+default **250 °C** — the ablative-TPS sizing criterion; editable in the Screening
+Envelope dialog).  Crossing it maps to **BEYOND DESIGN ENVELOPE (yellow)** — a
+design-sizing limit, not a demonstrated-death bound — so it escalates
+survive→beyond and **never to red**.
+
+Every simplification is in the conservative (hotter-bondline) direction, and
+labeled: no pyrolysis-gas energy absorption (Dec & Braun quantify this as ~11%
+conservative on required insulation), no ablation heat consumption at the
+surface (the wall is modelled inert — hotter than a real ablator), and
+carbon-phenolic uses its **char** conductivity (higher than virgin → faster
+inward conduction).  The one non-conservative omission — no recession thinning
+of the layer — is flagged when the body TPS thickness is unset (screened at a
+2 cm default).
+
+Honesty gate: the screen evaluates **only for an ablative body with a cited
+through-thickness conductivity** — carbon phenolic (char k ≈ 1.5 W/m·K, Cabrera
+& West 2026 Table A4 / Sutton) and silica phenolic (virgin k ≈ 0.35 W/m·K,
+Handbook of Materials Science via Finke; char k uncited, so near-limit margins
+are flagged soft).  PICA, SIRCA, and the metals/hot-structures return
+"bondline not evaluated" rather than a guessed number — the same discipline as
+the ablator load records.  Method + conservatism validation: Dec & Braun
+reproduce CMA within ~11% in-depth (BENCHMARKING "Method-stack validation");
+`test_bondline.py` pins the four physical regimes (thick/short safe,
+thin/long cooks, steady-state bound, uncited-declines) and the report
+escalation.
 
 ---
 
