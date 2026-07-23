@@ -1604,7 +1604,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); low-side corroborated by Gasch & Johnson 2010 (TaSi₂ *reduces* oxide/depletion at 1500–1690 °C, HfB₂-SiC arcjet) and the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
 | bondline limit | 250 °C | Dec & Braun, NASA NTRS 20060004824 (ablative TPS sizing tool — now READ FROM PRIMARY, archived; their whole sizing iterates shield thickness to hold bondline ≤ 250 °C); Orion 260 °C NTRS 20080013535.  NOW COMPUTED: `heating.bondline_screen` (METHODS §13.10) screens the body-TPS bondline against this limit every run; editable in the Screening Envelope dialog | ✔ cited + computed |
-| SIRCA through-thickness k (bondline screen) | ≈0.04 W/m·K | ratio-derived: SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (0.35/9), Murbach SSC97-V-2 (read from primary, repo `data/`; Ames, citing the SIRCA developers — consistent with Tran et al. SIRCA-15F); density ratio ~1/10 corroborated by the paper's own mass table (5 cm SIRCA 25.5 kg vs 2.5 cm silica phenolic 93 kg) | ⚠ labeled ratio-derived |
+| SIRCA-14A properties (bondline k + H_eff + ρ/c) | k 0.0629 W/m·K; H_eff nominal 37.4 / bound 165 MJ/kg; ρ 224 kg/m³ (±4.8%, measured); c 1200 J/kg·K; ε 0.921 (measured, not wired — profile emissivity governs) | **TPSX id 41** (NASA Ames TPS Materials db, SIRCA-14A virgin; page captured 2026-07-23; POC F. Milos; refs Tran et al. TPSX #70–73).  H_eff from TPSX's 5-point curve vs pressure — see the CLOSED note for the full curve, the 2.1 GJ/kg exclusion, and the pressure-range caveat.  Supersedes the Murbach-1997 ratio estimate k ≈ 0.04 (1/9 of silica-phenolic; the ratio predicted within ~35% — decent for a ratio) | ✔ cited (TPSX; k/H_eff carry TPSX's own nonstp/source-unknown flags) |
 | tile/RCC/material limits | per-material peak/continuous K | HEATING_TPS_REFERENCES.md §2 (TPSX, KSC STS ref, NTRS 19940030739, Peters 2024, …) | ✔ cited per entry |
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
@@ -1652,6 +1652,41 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
+**CLOSED (2026-07-23) — SIRCA H_eff bound + properties: TPSX id 41
+(SIRCA-14A virgin).**  Was the "bound = nominal, uncited" tripwire caveat for
+SIRCA.  Closed from the NASA Ames TPSX Material Properties Database entry
+(page + property-curve captured by the user 2026-07-23; POC F. S. Milos; refs
+H. K. Tran et al., TPSX #70–73; the archive-of-record here is this note —
+TPSX has no export yet and the domain is blocked from the dev environment).
+The **effective-heat-of-ablation curve is tabulated vs PRESSURE** (no
+temperatures given), 5 points:
+
+| H_eff (J/kg) | pressure (Pa) | | H_eff (J/kg) | pressure (Pa) |
+|---|---|---|---|---|
+| 2.10e9 | 22,494 | | 1.03e8 | 31,107 |
+| 1.60e8 | 25,331 | | 3.74e7 | 40,530 |
+| 1.65e8 | 28,574 | | | |
+
+Wiring (METHODS §13.6 discipline): **nominal 37.4 MJ/kg** = the curve's
+high-pressure minimum (also the value TPSX itself quotes as the
+standard-conditions figure).  **Bound 165 MJ/kg** = the top of the
+mid-pressure cluster (103–165 MJ/kg at 25–31 kPa).  The 2.10 **G**J/kg point
+at 22.5 kPa is **EXCLUDED from the bound** — a near-zero-recession artifact
+(Q\* diverges as recession → 0 at benign pressure); using it would render the
+tripwire unfireable.  This exclusion is a judgement call, recorded here so it
+can be contested.  Two labeled caveats: (1) the curve spans only 0.22–0.40
+atm — ballistic-RV stagnation pressures run well above it, and Q\* FALLS with
+pressure (the Dec & Braun PICA lesson), so even the 37.4 nominal may be
+optimistic for a steep entry; SIRCA is a benign-regime acreage/backshell
+material and the entry is labeled accordingly.  (2) TPSX flags its own k and
+H_eff rows "nonstp"/source-unknown.  Also wired from the same page: ρ 224
+kg/m³ (measured ±4.8%), c 1200 J/kg·K, k 0.0629 W/m·K; ε 0.921 measured (not
+wired — the profile emissivity governs; noted for a future per-material
+emissivity pass).  Entry relabeled **SIRCA-14A** (AIM-10 tile + silicone,
+TRL 6, "high heating rate, low heat load" per TPSX — apt for what the screen
+uses it for).  The silica-phenolic H_eff-bound caveat REMAINS OPEN — TPSX
+likely has silica-phenolic entries; same capture route would close it.
+
 **MINED (2026-07-23) — Murbach SWERVE/AEOLUS pack (read from primary; PDFs in
 repo `data/`).**  Hunted for a silica-phenolic/SIRCA H_eff bound (the open
 tripwire caveat); the pack does NOT contain heat-of-ablation values, but
@@ -1670,9 +1705,12 @@ yields:
   2200 K → 1.0 cm recession; C-C stagnation at 13.6 MW/m² / 3055 K → 3.43 cm.
   The zero-recession sidewall point corroborates the 1700 K ablation-onset
   gate on the silica_phenolic entry; the tripwire caveat (bound = nominal,
-  uncited) REMAINS OPEN for silica phenolic/SIRCA.
-- **SIRCA k closed (ratio-derived)** — see the audit-table row; wired as
-  `sirca.k_W_mK = 0.04`, so the bondline screen now evaluates SIRCA bodies.
+  uncited) remains open for silica phenolic (the SIRCA side was closed the
+  same day via TPSX — see the CLOSED note above).
+- **SIRCA k (ratio-derived, superseded same day)** — first wired as
+  `sirca.k_W_mK = 0.04` from Murbach's 1/9 ratio, enabling the bondline
+  screen for SIRCA bodies; superseded hours later by the TPSX measured-table
+  0.0629 (the ratio landed within ~35%).
 - **UHTC corroboration (1997-era)**: Ames UHTC "demonstrated in both ground
   and flight tests to withstand temperatures of up to 3033 K without
   ablation" — an early, pre-SHARP-B1 datum consistent with the anchor set's

@@ -43,18 +43,26 @@ def test_uncited_material_not_evaluated():
     assert r["evaluated"] is False
 
 
-def test_sirca_now_evaluates_with_ratio_cited_k():
-    # SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (Murbach 1997
-    # SSC97-V-2) → the bondline screen now runs for SIRCA bodies, and the low
-    # k means a SIRCA layer insulates better than the same silica-phenolic
-    # thickness under the same soak.
-    assert abs(heating.TPS_MATERIALS["sirca"]["k_W_mK"] - 0.04) < 1e-9
+def test_sirca_now_evaluates_with_tpsx_k():
+    # SIRCA-14A k = 0.0629 W/m·K (TPSX id 41; supersedes the Murbach-1997
+    # ratio estimate 0.04) → the bondline screen runs for SIRCA bodies.
+    # The low DENSITY matters more than the low k: SIRCA's thermal
+    # diffusivity k/(ρc) slightly EXCEEDS silica phenolic's (2.3e-7 vs
+    # 2.1e-7 m²/s), so at EQUAL thickness it soaks through FASTER under a
+    # sustained load — SIRCA's insulation lever is thickness bought with its
+    # 7.6× lower density (per-mass, not per-centimeter).
+    m = heating.TPS_MATERIALS["sirca"]
+    sp_m = heating.TPS_MATERIALS["silica_phenolic"]
+    assert abs(m["k_W_mK"] - 0.0629) < 1e-9
+    a_s = m["k_W_mK"] / (m["density_kg_m3"] * m["c_J_kgK"])
+    a_sp = sp_m["k_W_mK"] / (sp_m["density_kg_m3"] * sp_m["c_J_kgK"])
+    assert a_s > a_sp                     # the counterintuitive ordering, pinned
     t, q = _flat(0.5, 800.0)
-    s = heating.bondline_screen(t, q, material="sirca", thickness_m=0.02)
-    sp = heating.bondline_screen(t, q, material="silica_phenolic", thickness_m=0.02)
-    assert s["evaluated"] and sp["evaluated"]
-    assert s["T_bond_peak_C"] < sp["T_bond_peak_C"]
-    assert "Murbach" in heating.TPS_MATERIALS["sirca"]["k_source"]
+    s2 = heating.bondline_screen(t, q, material="sirca", thickness_m=0.02)
+    s5 = heating.bondline_screen(t, q, material="sirca", thickness_m=0.05)
+    assert s2["evaluated"] and s5["evaluated"]
+    assert s5["T_bond_peak_C"] < s2["T_bond_peak_C"]   # thicker = cooler
+    assert "TPSX" in m["k_source"]
 
 
 def test_steady_state_bounds_and_insulated_back():

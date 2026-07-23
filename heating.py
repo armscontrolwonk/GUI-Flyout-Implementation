@@ -146,10 +146,23 @@ TPS_MATERIALS = {
                             group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10, k_W_mK=0.35,
                             k_source="glass-fiber phenolic virgin k (Handbook of Materials Science III, via Finke IDA P-2395); char k uncited — margin near the limit is soft"),
-    "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="SIRCA (low-density ablator)",
-                            group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15, k_W_mK=0.04,
-                            k_source="ratio-derived: SIRCA k ≈ 1/9 of the silica-phenolic flight baseline (0.35/9 ≈ 0.04) — Murbach 1997 SSC97-V-2 (Ames, citing the SIRCA developers), consistent with Tran et al. SIRCA-15F"),
+    # SIRCA-14A per TPSX id 41 (NASA Ames TPS Materials db, virgin; page
+    # captured 2026-07-23; POC F. Milos; refs Tran et al., TPSX #70-73):
+    # AIM-10 tile infiltrated w/ silicone, final ρ ≈ 0.224 g/cc (measured,
+    # ±4.8%); c 1200 J/kg·K; k 0.0629 W/m·K (TPSX flags nonstp/source-
+    # unknown).  H_eff from TPSX's 5-point curve vs PRESSURE (22.5–40.5 kPa):
+    # 37.4 MJ/kg at 40.5 kPa rising to 2.1 GJ/kg at 22.5 kPa.  Wiring:
+    # nominal = 37.4 (the curve's high-pressure MINIMUM — and RV stagnation
+    # pressures exceed the curve's 0.4 atm ceiling, so even the nominal may
+    # be optimistic for steep entries: Q* is pressure-sensitive and this
+    # screen is pressure-blind, the Dec & Braun PICA lesson); bound = 165
+    # (top of the 25–31 kPa cluster 103–165; the 2.1 GJ/kg point is EXCLUDED
+    # from the bound as a recession→0 artifact — documented in BENCHMARKING,
+    # never silently dropped).
+    "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1200, label="SIRCA-14A (low-density ablator)",
+                            group="ablative", is_ablator=True, density_kg_m3=224,  H_eff_MJ_kg=37.4, oxidation_dwell_s=None,
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=165.0, k_W_mK=0.0629,
+                            k_source="TPSX (NASA Ames) SIRCA-14A virgin, id 41: 0.0629 W/m·K (TPSX flags nonstp/source-unknown); supersedes the Murbach-1997 ratio estimate 0.04"),
     "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=77,
