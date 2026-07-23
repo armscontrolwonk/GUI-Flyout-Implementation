@@ -3474,6 +3474,43 @@ reproduce CMA within ~11% in-depth (BENCHMARKING "Method-stack validation");
 thin/long cooks, steady-state bound, uncited-declines) and the report
 escalation.
 
+### 13.11 Boundary-layer transition gate (`heating.transition_factor`)
+
+The acreage/flank boundary layer runs laminar high in the atmosphere and trips
+turbulent as the vehicle descends into denser air; turbulent acreage heating
+runs 3–5× the laminar value.  Thrusty places transition **in the trajectory
+(when), not on the body (where)** — a screening gate on the freestream Reynolds
+number based on nose radius, **Re_Rₙ = ρ·V·R_n / μ(T_∞)** (Sutherland
+viscosity).  Below the onset threshold the flow is laminar (factor 1); across
+[onset, fully-turbulent] the turbulent flux ratio ramps in, computed from how
+far past onset the flow is and **clamped to the cited 3–5× band** (St_lam ∝
+Re^−½, St_turb ∝ Re^−⅕ → the ratio grows with Re).  The per-sample factor
+multiplies the laminar flank flux (`windward_flank_flux`) and the bondline
+acreage flux (§13.10) before their peaks, so augmentation applies exactly where
+on the arc it occurs.  The **nose stagnation point is always laminar and is
+untouched** — transition is a downstream/acreage phenomenon.
+
+The two thresholds are **calibrated and verified against Kuntz 1999
+(AIAA 99-3460) Table 1** — the IRV-2 CFD case, which tabulates the flow state at
+every trajectory point.  The freestream-Re criterion reproduces it: onset at
+Re_Rₙ ≈ 2×10⁶ brackets pt15 laminar (1.72×10⁶) / pt16 transitional (2.07×10⁶);
+fully-turbulent at ≈ 3.5×10⁶ brackets pt19 transitional (3.32×10⁶) / pt20
+turbulent (3.89×10⁶).  The *spatial* criterion (local Re_x) is deliberately not
+used: it is not single-valued in the data (~10⁷ on the cone vs ~10⁶ at the
+sphere-cone juncture — the reason the source needed two separate correlations),
+whereas the nose-radius Reynolds onset is the classic nosetip-transition scaling
+(PANT lineage) and captures the *when* a screen needs.  Both thresholds are
+editable in the Screening Envelope dialog (`re_rn_transition_onset`,
+`re_rn_fully_turbulent`); `test_transition.py` pins the Kuntz reproduction.
+
+This upgrades the former static *"turbulent flank ~3–5×"* warning into a
+computed, trajectory-resolved factor.  Because transition is a low-altitude
+phenomenon, it is correctly dormant for high-altitude HGV cruise (Re_Rₙ stays
+below onset — C-HGB/HTV-2 flanks read laminar) and active for the fast,
+low-altitude ballistic acreage (a Mk21-class terminal bondline sees turbulent
+augmentation) — leaving the shipped fleet's verdicts unchanged only because
+their margins are large, not because the gate is inert.
+
 ---
 
 ## 14. Outputs, events, and milestones

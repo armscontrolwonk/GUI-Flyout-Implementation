@@ -6,7 +6,7 @@ object that *survived* and want to adjust the ENVELOPE — how long a glider is
 demonstrated to endure, how hard a MaRV is demonstrated to pull, how much heat
 load an ablator family has flown and survived — in light of a new flight or
 test, than to integrate new coupon data for one material.  So the first
-editable surface is these ~10 curated ENVELOPE numbers, not the full material
+editable surface is these ~12 curated ENVELOPE numbers, not the full material
 catalog or the anchor datasets (both deferred to a future spreadsheet project).
 
 The numbers are curated BY USER STORY, not by where they live in code: each is
@@ -71,6 +71,15 @@ REGISTRY = [
          label="TPS-structure bondline limit", units="°C", default=250.0,
          kind="float", lo=50.0, hi=1000.0,
          source="Ablative-TPS sizing criterion — Dec & Braun NTRS 20060004824 (≤250 °C); Orion used 260 °C (NTRS 20080013535)"),
+    # ---- Boundary-layer transition ------------------------------------------
+    dict(key="re_rn_transition_onset", group="Transition gate",
+         label="Acreage transition-onset Re_Rn", units="Re_Rn", default=2.0e6,
+         kind="float", lo=1.0e5, hi=1.0e8,
+         source="Kuntz 1999 Table 1 (IRV-2): laminar 1.72e6 / transitional 2.07e6 bracket"),
+    dict(key="re_rn_fully_turbulent", group="Transition gate",
+         label="Acreage fully-turbulent Re_Rn", units="Re_Rn", default=3.5e6,
+         kind="float", lo=1.0e5, hi=1.0e8,
+         source="Kuntz 1999 Table 1 (IRV-2): transitional 3.32e6 / turbulent 3.89e6 bracket"),
     # ---- Model conservatism -------------------------------------------------
     dict(key="acreage_flux_fraction", group="Model conservatism",
          label="Body-acreage flux fraction", units="× body stagnation",
@@ -200,5 +209,7 @@ def apply():
     if _cp is not None:
         _cp["demonstrated_load_MJ_m2"] = c["cp_load_floor_MJ_m2"]
     heating.BONDLINE_LIMIT_C = c["bondline_limit_C"]
+    heating.RE_RN_TRANSITION_ONSET = c["re_rn_transition_onset"]
+    heating.RE_RN_FULLY_TURBULENT = c["re_rn_fully_turbulent"]
     sr._MARV_G_OPERATIONAL = c["marv_g_operational"]
     sr._MARV_G_DEMONSTRATED = c["marv_g_demonstrated"]

@@ -45,15 +45,33 @@ def test_windward_gt_leeward_ordering():
 
 def test_alpha0_flux_equals_acreage_fraction():
     # At α=0 the windward flux must equal BODY_FLUX_FRACTION · body-stagnation
-    # flux — byte-consistent with the two-location acreage screen.
-    t, rho, V, alt, rng = _arc()
+    # flux — byte-consistent with the two-location acreage screen.  Use a
+    # high-altitude arc that stays LAMINAR (transition factor = 1) so the
+    # acreage identity holds unaugmented.
+    t, rho, V, alt, rng = _arc(h0=70e3, h1=45e3, v0=6500.0, v1=6000.0)
     r = heating.windward_flank_flux(
         t, rho, V, alt, rng, body_radius_m=0.3, flank_half_angle_deg=8.0,
         alpha_band_deg=(0.0, 0.0), body_material="cc_hot_structure")
+    assert r["transition_state"] == "laminar"
     q_stag_body = heating._stag_flux(rho, V, 0.3)
     expect_MW = heating.BODY_FLUX_FRACTION * float(np.max(q_stag_body)) / 1e6
     assert abs(r["q_windward_MW_m2"]["lo"] - expect_MW) < 1e-6
     assert abs(r["amplification"]["lo"] - 1.0) < 1e-9
+
+
+def test_low_altitude_flank_gets_turbulent_augmentation():
+    # A low-altitude arc trips the acreage boundary layer turbulent, so the
+    # flank flux is augmented above the laminar acreage fraction (transition
+    # gate, §13.11).  Use a small nose radius so Re_Rn reaches the turbulent
+    # regime.
+    t, rho, V, alt, rng = _arc(h0=40e3, h1=6e3, v0=5500.0, v1=4600.0)
+    r = heating.windward_flank_flux(
+        t, rho, V, alt, rng, body_radius_m=0.2, nose_radius_m=0.02,
+        flank_half_angle_deg=8.0, alpha_band_deg=(0.0, 0.0),
+        body_material="cc_hot_structure")
+    assert r["transition_state"] in ("transitional", "turbulent")
+    assert r["transition_factor_peak"] > 1.0
+    assert 1.0 < r["transition_factor_peak"] <= 5.0 + 1e-9
 
 
 def test_band_stamp_and_op_point():

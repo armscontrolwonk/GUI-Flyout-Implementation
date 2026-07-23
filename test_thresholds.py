@@ -34,6 +34,8 @@ def test_registry_defaults_match_live_constants():
     assert d["cp_load_floor_MJ_m2"] == \
         heating.TPS_MATERIALS["carbon_phenolic"]["demonstrated_load_MJ_m2"]
     assert d["bondline_limit_C"] == heating.BONDLINE_LIMIT_C
+    assert d["re_rn_transition_onset"] == heating.RE_RN_TRANSITION_ONSET
+    assert d["re_rn_fully_turbulent"] == heating.RE_RN_FULLY_TURBULENT
     assert d["marv_g_operational"] == sr._MARV_G_OPERATIONAL
     assert d["marv_g_demonstrated"] == sr._MARV_G_DEMONSTRATED
 

@@ -288,9 +288,10 @@ tabbed notebook**.
   standalone too (`python mass_estimator.py --demo`). Full method notes in
   `MASS_ESTIMATOR.md`.
 - **Screening Envelope** (Analysis menu) — view and, if new data warrants,
-  adjust the ~10 **benchmark thresholds** behind the survivability screen (glide
+  adjust the ~12 **benchmark thresholds** behind the survivability screen (glide
   endurance, maneuver g-ceiling, the ablator demonstrated-load records, the
-  bondline structure limit, and the model-conservatism knobs). Each row shows the current value, the greyed
+  bondline structure limit, the boundary-layer transition Re, and the
+  model-conservatism knobs). Each row shows the current value, the greyed
   **shipped default**, and the default's citation; the shipped defaults are
   frozen, an edit lives only in an overlay file (`benchmark_overrides.json`),
   and **Restore All Defaults** discards it. A changed number self-discloses in
@@ -308,7 +309,7 @@ so the tool lets a user view and change them (Analysis ▸ Screening Envelope…
 while **always** being able to return to the shipped defaults.
 
 **Why the thresholds, and only the thresholds.** Thrusty exposes exactly one
-editable surface — these ~10 curated *envelope* numbers — and defers the full
+editable surface — these ~12 curated *envelope* numbers — and defers the full
 material catalog and the anchor datasets to a future spreadsheet project. The
 reasoning: a Thrusty user is a **policy-focused modeler**. That person is far
 likelier to model a reentry object that *survived* and want to adjust the
