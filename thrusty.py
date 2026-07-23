@@ -6038,6 +6038,12 @@ class BoosterFlyoutApp(tk.Tk):
         for tag, colour in (_tier_tags + [("none", "#555555")]):
             self._surv_text.tag_configure(
                 tag, foreground=colour, font=("TkFixedFont", 11, "bold"))
+        # Survival-map cell tags: tier colours at body size (the matrix cells
+        # are colorized in place; bold same-size keeps the columns aligned).
+        for tag, colour in _tier_tags:
+            self._surv_text.tag_configure(
+                "map_" + tag, foreground=colour,
+                font=("TkFixedFont", 9, "bold"))
 
         self._surv_set_text(
             None, "",
@@ -6050,7 +6056,7 @@ class BoosterFlyoutApp(tk.Tk):
             "flux pulse q̇(t) and the running load Q(t) — the pulse shape is\n"
             "the mode's signature.")
 
-    def _surv_set_text(self, tier, headline, body):
+    def _surv_set_text(self, tier, headline, body, map_spans=None):
         self._surv_text.configure(state=tk.NORMAL)
         self._surv_text.delete("1.0", tk.END)
         if tier is not None:
@@ -6058,6 +6064,17 @@ class BoosterFlyoutApp(tk.Tk):
                     "fail": "✗  ", "none": "•  "}.get(tier, "")
             self._surv_text.insert(tk.END, mark + headline + "\n\n", tier)
         self._surv_text.insert(tk.END, body)
+        # Colorize the survival-map cells: spans are (line-within-block, c0,
+        # c1, tier) relative to the "─── Survival map" header line, so the
+        # block is self-locating however the body around it is composed.
+        if map_spans:
+            idx = self._surv_text.search("─── Survival map", "1.0")
+            if idx:
+                base = int(idx.split(".")[0])
+                for ln, c0, c1, tk_key in map_spans:
+                    self._surv_text.tag_add(
+                        "map_" + tk_key, f"{base + ln}.{c0}",
+                        f"{base + ln}.{c1}")
         self._surv_text.configure(state=tk.DISABLED)
 
     def _populate_survivability(self, r):
@@ -6088,7 +6105,7 @@ class BoosterFlyoutApp(tk.Tk):
                     f"(lofted = flux-stressed, depressed = load-stressed).\n")
         self._surv_set_text(
             rep.get('tier') if rep.get('form') else 'none',
-            rep['headline'], body)
+            rep['headline'], body, rep.get('map_spans'))
 
         self._surv_fig.clf()
         pl = rep.get('plot')

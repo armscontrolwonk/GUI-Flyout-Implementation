@@ -820,6 +820,10 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                               material=str(body_material), thickness_m=_body_depth,
                               emissivity=emissivity)
         if _bl.get("evaluated"):
+            # Carry the gate's state on the result so the report's survival-map
+            # regime line can name it on every form (not just Form C).
+            _bl["transition_state"] = _ts_b
+            _bl["transition_factor_peak"] = float(np.max(_tf_b))
             if _ts_b != "laminar":
                 _bl.setdefault("warnings", []).append(
                     f"Acreage boundary layer {_ts_b} at low altitude — flux "
