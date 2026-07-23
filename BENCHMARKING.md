@@ -1651,6 +1651,17 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
+**FIXED (2026-07-23) — family-generic `carbon_ablator` now carries the
+graphite-family record.**  The generic "Ablative carbon-carbon" entry shipped
+without `demonstrated_load_MJ_m2` / `H_eff_bound_MJ_kg`, so (a) it compared
+against no flight record and (b) the burn-through *bound* silently collapsed
+to the conservative nominal H_eff — the point-estimate behavior METHODS §13.6
+bans (a C-HGB-class carbon nose at ~97% of the Reentry-F load read false-red).
+It now carries the same family-level Reentry-F record (3,870 MJ/m²) and
+optimistic bound (175 MJ/kg) as `carbon_carbon`, and the dialog's graphite row
+drives both entries (`thresholds.apply` already looped over the pair);
+regression pinned in `test_form_a_bounds.py`.
+
 **CLOSED (2026-07-22) — carbon-phenolic demonstrated load: Pioneer Venus Large
 Probe, ~60 MJ/m².**  Was OPEN ("NRC gives durations, not loads").  Closed by
 **Cabrera & West 2026** (read from primary, uploaded to the project archive):

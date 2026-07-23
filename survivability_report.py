@@ -512,8 +512,10 @@ def _loc_line(name, L):
 # screening-tier; the full analysis carries that distinction.  The Regime
 # line is prose (validity guards and the transition state answer none of the
 # three questions — forcing them into cells would be false symmetry).
+# Cells are TAB-separated: the GUI aligns columns with pixel tab stops (a
+# character grid breaks when cells render bold — bold fixed fonts don't share
+# regular metrics on every platform, e.g. macOS).
 _MAP_COLS = ("Surface holds?", "Endures duration?", "Within flown record?")
-_MAP_C0 = (18, 39, 60)          # column start offsets (chars); labels at col 2
 
 
 def _record_anchor(src):
@@ -606,15 +608,12 @@ def _survival_map(nose, body_loc, coverage, windward, bondline, warnings):
         return [], []
 
     lines = ["─── Survival map ───────────────────────────────────────────"]
-    hdr = ""
-    for col, c0 in zip(_MAP_COLS, _MAP_C0):
-        hdr = (hdr.ljust(c0) if len(hdr) < c0 else hdr + " ") + col
-    lines.append(hdr)
+    lines.append("\t" + "\t".join(_MAP_COLS))
     spans = []
     for lbl, cells in rows:
         line = "  " + lbl
-        for cell, c0 in zip(cells, _MAP_C0):
-            line = line.ljust(c0) if len(line) < c0 else line + " "
+        for cell in cells:
+            line += "\t"
             if cell is None:
                 line += "—"
             else:
@@ -1087,9 +1086,9 @@ def build_report(result) -> dict:
                      f"whose own demonstrated record ends at "
                      f"{coverage['floor_s']:.0f} s.")
         elif _nose_mat and _nose_mat.get('is_ablator'):
-            _ctx += (f"  This vehicle flies an ablative "
-                     f"{_nose_mat.get('label', 'nose')}, judged here by "
-                     f"recession, not dwell.")
+            _ctx += (f"  This vehicle flies an ablative nose "
+                     f"({_nose_mat.get('label', '?')}), judged here by its "
+                     f"flown heat load, not dwell.")
         lead += ["", _ctx]
     if _mods:
         lead += ["", "* Screening benchmarks modified from the shipped "

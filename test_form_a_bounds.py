@@ -140,6 +140,35 @@ def test_hayabusa_bound():
         "TRIPWIRE FIRED for the recovered Hayabusa capsule.")
 
 
+def test_family_generic_carbon_carries_the_record():
+    """Regression: the family-generic 'carbon_ablator' entry must carry the
+    SAME graphite-family flight record and optimistic H_eff bound as
+    'carbon_carbon' (records are family-level, METHODS §13.6).  When these
+    were unset, the burn-through BOUND silently collapsed to the conservative
+    nominal H_eff — the banned point-estimate — and a C-HGB-class carbon nose
+    flying ~97% of the Reentry-F load read false-red."""
+    m = heating.TPS_MATERIALS["carbon_ablator"]
+    cc = heating.TPS_MATERIALS["carbon_carbon"]
+    assert m["demonstrated_load_MJ_m2"] == cc["demonstrated_load_MJ_m2"] == 3870
+    assert m["H_eff_bound_MJ_kg"] == cc["H_eff_bound_MJ_kg"] == 175
+    assert "Reentry-F" in m["demonstrated_load_source"]
+
+    # The C-HGB-class case: ~13.6 MW/m² peak, ablating load just under the
+    # Reentry-F record, on a 2 cm generic-carbon tip.  Survives with the load
+    # stated against the record; the tripwire must NOT fire.
+    fom, rec = _run_recession("carbon_ablator", 13.6, 435.0, 5.2, 0.02)
+    print(f"[chgb_regression] load {rec['load_MJ_m2']:.0f} MJ/m^2 = "
+          f"{rec['load_fraction']:.0%} of record; "
+          f"tripwire={rec['burnthrough_bound']}")
+    assert rec["burnthrough_bound"] is False, (
+        "TRIPWIRE FIRED at a Reentry-F-class load on a carbon nose — the "
+        "bound must use the cited optimistic H_eff, not the nominal.")
+    assert rec["load_fraction"] is not None and rec["load_fraction"] < 1.1
+    import survivability_report as sr
+    regime = sr._ablator_regime(rec)
+    assert regime["status"] == "survive"
+
+
 def test_tripwire_fires_when_undershielded():
     """The complement: a genuinely under-shielded ablator DOES trip the bound.
     Stardust's load through a 2 mm PICA skin is consumed even at the optimistic

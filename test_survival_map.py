@@ -86,7 +86,7 @@ def test_spans_land_on_cells():
             assert tier in sr.SURVIVAL_TIERS
             cell = lines[ln][c0:c1]
             assert cell == cell.strip() and cell   # exact, no padding bleed
-            assert lines[ln][c0 - 1] == " "        # starts on a boundary
+            assert lines[ln][c0 - 1] == "\t"       # starts on a tab boundary
 
 
 # ── Cell logic units (synthetic locations) ───────────────────────────────────
