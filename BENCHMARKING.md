@@ -1145,17 +1145,20 @@ verification pedigree attached:
   project's benchmarking discipline exists to honor.)
 - **PICA pressure caveat** folded into the H_eff provenance row (Q\* is
   pressure-blind; ~3.2× under-prediction at the Apollo 14 km/s extreme).
-- **The one simplified method Thrusty lacks — bondline screening:** their
-  second component is a 1-D finite-difference in-depth conduction solve
-  (Arrhenius 3-component decomposition, no pyrolysis-gas energy absorption —
-  quantified as ~11% conservative on insulation thickness) iterated to hold
-  the TPS-structure **bondline ≤ 250 °C**.  Thrusty cites the 250 °C limit
-  but computes nothing behind the wall ("not a through-wall TPS design
-  analysis").  This paper is the ready-made method + citation of record if
-  an interior-survivability screen is ever wanted; it would need thermal
-  conductivity added to the material catalog (their Table-1 database names
-  the citable materials: T-300 C-C, FM5055, FM5504, PICA, SLA-561V + 8
-  substructure materials).  OPEN (decision pending, not data).
+- **Bondline screening — BUILT (2026-07-23).**  Their second component — a
+  1-D finite-difference in-depth conduction solve iterated to hold the
+  TPS-structure **bondline ≤ 250 °C** — is now implemented at screening tier
+  as `heating.bondline_screen` (METHODS §13.10): implicit FD conduction
+  through the body TPS, radiative surface balance, insulated back face,
+  sans decomposition/pyrolysis (the omission Dec & Braun quantify as ~11%
+  conservative on insulation).  Crossing maps to BEYOND DESIGN ENVELOPE
+  (yellow) — a sizing criterion, never red.  Evaluates only where k is
+  citable: carbon phenolic (char k 1.5 W/m·K, Cabrera & West 2026 Table A4 /
+  Sutton) and silica phenolic (virgin k 0.35, Handbook via Finke — char k
+  uncited, near-limit margins flagged soft); PICA/SIRCA honestly decline
+  (OPEN: their k needs a citable source, e.g. TPSX).  The bondline limit is
+  editable in the Screening Envelope dialog (`bondline_limit_C`); pinned by
+  `test_bondline.py`.
 
 #### Form A — CLOSED (changelog)
 
@@ -1539,7 +1542,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | HfB₂-TaSi₂ / complex-boride oxide-detachment cap | ~2700–2800 K tip | Di Maso thesis (HfB₂-TaSi₂ cone, CFD tip); De Prisco 2026 (ZrB₂-TiB₂-SiC hemi, *JECS* 46 118184) | ✔ cited |
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); low-side corroborated by Gasch & Johnson 2010 (TaSi₂ *reduces* oxide/depletion at 1500–1690 °C, HfB₂-SiC arcjet) and the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
-| bondline limit | 250 °C | Dec & Braun, NASA NTRS 20060004824 (ablative TPS sizing tool — now READ FROM PRIMARY, archived; their whole sizing iterates shield thickness to hold bondline ≤ 250 °C); Orion 260 °C NTRS 20080013535.  NOTE: cited but NOT COMPUTED in Thrusty — no through-wall conduction model; Dec & Braun's approximate 1-D finite-difference option is the named upgrade path (see "Method-stack validation" block) | ✔ cited (primary in hand) |
+| bondline limit | 250 °C | Dec & Braun, NASA NTRS 20060004824 (ablative TPS sizing tool — now READ FROM PRIMARY, archived; their whole sizing iterates shield thickness to hold bondline ≤ 250 °C); Orion 260 °C NTRS 20080013535.  NOW COMPUTED: `heating.bondline_screen` (METHODS §13.10) screens the body-TPS bondline against this limit every run; editable in the Screening Envelope dialog | ✔ cited + computed |
 | tile/RCC/material limits | per-material peak/continuous K | HEATING_TPS_REFERENCES.md §2 (TPSX, KSC STS ref, NTRS 19940030739, Peters 2024, …) | ✔ cited per entry |
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
@@ -1560,7 +1563,7 @@ reverse.
 
 ### User-adjustable screening thresholds (`thresholds.py`) + deferred spreadsheets
 
-A curated **~9-number envelope subset** of the thresholds above is now
+A curated **~10-number envelope subset** of the thresholds above is now
 user-editable at runtime (Analysis ▸ Screening Envelope…): the UHTC dwell
 floor, the two MaRV g-ceilings, the three **ablator demonstrated-load records**
 (graphite/C-C, PICA, carbon-phenolic), and the two model-conservatism knobs (acreage flux

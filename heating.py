@@ -112,13 +112,25 @@ TPS_MATERIALS = {
                             group="ablative", is_ablator=True, density_kg_m3=1800, H_eff_MJ_kg=40, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=3870, H_eff_bound_MJ_kg=175,
                             demonstrated_load_source="Reentry-F graphite nosetip flew Q ≈ 3.87 GJ/m² (NASA CR-154044 / LWP-460, pixel-traced, ±20%)"),
+    # k_W_mK: through-thickness thermal conductivity for the bondline screen
+    # (§13.10) — wired ONLY where citable; None = bondline not evaluated.
+    #   carbon_phenolic 1.5  — CHAR value at ~1900 K (Cabrera & West 2026
+    #       Table A4, Sutton's data: 1.502 W/mK at 1923 K; virgin runs
+    #       0.48–0.77, Table A3) — char > virgin, conservative-HIGH for
+    #       bondline conduction.
+    #   silica_phenolic 0.35 — glass-fiber phenolic 0.20 Btu/hr·ft·°F
+    #       (Handbook of Materials Science III p.34, via Finke IDA P-2395);
+    #       VIRGIN value — char conductivity uncited, so margins near the
+    #       limit are soft (flagged in the screen's warnings).
     "carbon_phenolic": dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Carbon phenolic",
                             group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=60, H_eff_bound_MJ_kg=20,
+                            demonstrated_load_MJ_m2=60, H_eff_bound_MJ_kg=20, k_W_mK=1.5,
+                            k_source="char k at ~1900 K (Cabrera & West 2026 Table A4, Sutton's data) — conservative-high",
                             demonstrated_load_source="Pioneer Venus Large Probe CP heatshield survived ~60 MJ/m² stagnation (Cabrera & West 2026, JSR 63(2) coupled reconstruction; figure-integrated ±25%; short radiation-heavy CO₂ pulse — conservative as a load record; Hayabusa CP corroborates ~2-3× higher, pulse-duration-soft)"),
     "silica_phenolic": dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="Silica phenolic",
                             group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10),
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10, k_W_mK=0.35,
+                            k_source="glass-fiber phenolic virgin k (Handbook of Materials Science III, via Finke IDA P-2395); char k uncited — margin near the limit is soft"),
     "sirca":           dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="SIRCA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=15, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15),
@@ -510,6 +522,119 @@ _WINDWARD_DELTA_FLOOR = 5.0           # deg; numerical guard — A(α) diverges 
 # reattachment line, so it never asserts a hard fail even when True.
 WINDWARD_DRIVES_VERDICT = False
 
+# --- Interior (bondline) screen (METHODS §13.10) -----------------------------
+# TPS-structure bondline design limit: the ablative-TPS sizing criterion the
+# industry iterates shield thickness against (Dec & Braun, NTRS 20060004824 —
+# their tool holds bondline ≤ 250 °C; Orion used 260 °C, NTRS 20080013535).
+# Crossing it maps to BEYOND DESIGN ENVELOPE (yellow) — a design limit, not a
+# demonstrated-death bound — never red.  thresholds.apply() drives this.
+BONDLINE_LIMIT_C = 250.0
+
+
+def bondline_screen(t, q_w, *, material, thickness_m, emissivity=0.85,
+                    T0_K=300.0, limit_C=None, n_nodes=24, dt_max_s=1.0):
+    """Screening 1-D transient conduction through the body TPS layer → does
+    the structure behind it (the bondline) stay below the design limit?
+
+    Dec & Braun's (NTRS 20060004824) "approximate option," further simplified
+    to screening tier: implicit finite-difference conduction with constant
+    (k, ρ, c), a surface energy balance q̇_net = α·q̇ − εσT_s⁴ (radiation
+    linearized about the previous step), and an insulated back face (their
+    worst case).  Deliberate omissions, direction labeled:
+      + no pyrolysis-gas energy absorption (Dec & Braun quantify this as
+        ~11% conservative on required insulation);
+      + no ablation heat consumption at the surface (inert wall runs hotter);
+      + carbon-phenolic k is the CHAR value (conservative-high);
+      − no recession thinning of the layer (warned when the body δ estimate
+        is a meaningful fraction of the thickness — caller's judgement).
+    Verdict mapping is the CALLER's job; this returns physics + a crossing.
+
+    Returns dict(evaluated, T_bond_peak_K/C, T_surf_peak_K, t_cross_s,
+    crossed, margin, limit_C, k_W_mK, thickness_m, warnings, basis).
+    """
+    if limit_C is None:
+        limit_C = BONDLINE_LIMIT_C           # resolve live (thresholds.apply)
+    mat = TPS_MATERIALS.get(str(material or ""))
+    k = float(mat.get("k_W_mK") or 0.0) if mat else 0.0
+    if not mat or k <= 0.0 or not thickness_m or thickness_m <= 0.0:
+        return dict(evaluated=False, reason=(
+            "no cited through-thickness conductivity for this material"
+            if mat and k <= 0.0 else "material/thickness unset"))
+    rho_m = float(mat.get("density_kg_m3") or 0.0)
+    c_m = float(mat.get("c_J_kgK") or 0.0)
+    if rho_m <= 0 or c_m <= 0:
+        return dict(evaluated=False, reason="material density/heat capacity unset")
+
+    t = np.asarray(t, float); q_w = np.asarray(q_w, float)
+    eps = max(float(emissivity or 0.85), 1e-3)
+    L = float(thickness_m)
+    n = int(n_nodes)
+    dx = L / n
+    limit_K = float(limit_C) + 273.15
+
+    T = np.full(n, float(T0_K))
+    s_coef = 1.0 / (rho_m * c_m * dx)        # (K per J/m² per node)
+    T_bond_pk = T_surf_pk = float(T0_K)
+    t_cross = None
+
+    # March the trajectory intervals with substeps; implicit conduction
+    # (Thomas solve), radiation linearized about the previous surface temp.
+    for i in range(1, t.size):
+        dt_seg = float(t[i] - t[i - 1])
+        if dt_seg <= 0:
+            continue
+        nsub = max(1, int(np.ceil(dt_seg / dt_max_s)))
+        dt = dt_seg / nsub
+        r = k * dt / (rho_m * c_m * dx * dx)
+        for j_ in range(nsub):
+            frac = (j_ + 0.5) / nsub
+            q_now = q_w[i - 1] + frac * (q_w[i] - q_w[i - 1])
+            Ts = T[0]
+            rad_diag = 4.0 * eps * SIGMA * Ts ** 3 * dt * s_coef
+            # tridiagonal assembly
+            a = np.full(n, -r); b = np.full(n, 1.0 + 2.0 * r); c_u = np.full(n, -r)
+            b[0] = 1.0 + r + rad_diag
+            b[-1] = 1.0 + r
+            d = T.copy()
+            d[0] += dt * s_coef * (eps * q_now + 3.0 * eps * SIGMA * Ts ** 4)
+            # Thomas algorithm
+            for m in range(1, n):
+                w = a[m] / b[m - 1]
+                b[m] -= w * c_u[m - 1]
+                d[m] -= w * d[m - 1]
+            T[-1] = d[-1] / b[-1]
+            for m in range(n - 2, -1, -1):
+                T[m] = (d[m] - c_u[m] * T[m + 1]) / b[m]
+        T_surf_pk = max(T_surf_pk, float(T[0]))
+        if float(T[-1]) > T_bond_pk:
+            T_bond_pk = float(T[-1])
+        if t_cross is None and T[-1] >= limit_K:
+            t_cross = float(t[i])
+
+    warnings = [
+        "Inert-wall screening conduction (Dec & Braun approximate option, "
+        "sans pyrolysis/decomposition): no pyrolysis-gas energy absorption "
+        "(~11% conservative on insulation per NTRS 20060004824), no ablation "
+        "heat consumption at the surface, no recession thinning of the layer.",
+    ]
+    if mat.get("k_source"):
+        warnings.append(f"k = {k:g} W/m·K — {mat['k_source']}.")
+    if T_surf_pk > float(mat.get("peak_K") or 1e9):
+        warnings.append(
+            "Surface modeled inert past its ablation temperature — bondline "
+            "estimate runs conservative-high in this regime.")
+
+    return dict(
+        evaluated=True, T_bond_peak_K=T_bond_pk,
+        T_bond_peak_C=T_bond_pk - 273.15, T_surf_peak_K=T_surf_pk,
+        limit_C=float(limit_C), margin=(T_bond_pk - 273.15) / float(limit_C),
+        crossed=bool(t_cross is not None), t_cross_s=t_cross,
+        k_W_mK=k, thickness_m=L,
+        basis=("1-D implicit FD conduction, insulated back face, radiative "
+               "surface balance — bondline vs the ablative-TPS sizing "
+               "criterion (Dec & Braun NTRS 20060004824)"),
+        warnings=warnings)
+
 
 def _severity(res):
     """Rank a single-location FOM result for binding-location selection
@@ -613,8 +738,24 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     binding, other = (nose, body) if name == "nose" else (body, nose)
     other_name = "body" if name == "nose" else "nose"
 
+    # Interior (bondline) screen: 1-D conduction through the body TPS layer,
+    # driven by the same acreage flux the body location sees (f × body-scale
+    # stagnation).  Evaluates only for an ablative body with a cited k.
+    _body_mat = TPS_MATERIALS.get(str(body_material or "")) if body_material else None
+    _bl = None
+    if _body_mat and _body_mat.get("is_ablator") and _body_mat.get("k_W_mK"):
+        _q_body = f * _stag_flux(np.asarray(rho, float), np.asarray(V, float), _R_ref)
+        _bl = bondline_screen(np.asarray(t, float), _q_body,
+                              material=str(body_material), thickness_m=_body_depth,
+                              emissivity=emissivity)
+        if _bl.get("evaluated") and not (body_thickness_m and body_thickness_m > 0):
+            _bl.setdefault("warnings", []).append(
+                "Body TPS thickness unset — bondline screened at the 2 cm "
+                "default layer (flagged).")
+
     out = dict(binding)
     out["binding_location"] = name
+    out["bondline"] = _bl
     out["locations"] = {"nose": nose, "body": body}
     out["verdict"] = f"{name.upper()} binds — {binding['verdict']}"
     if other.get("material"):

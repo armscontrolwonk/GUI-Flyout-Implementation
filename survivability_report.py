@@ -746,6 +746,34 @@ def build_report(result) -> dict:
                          f"block above).")
             j += _maneuver_context(prof.get('pullup_g_max', 0.0))
 
+    # ---- Interior (bondline) screen — all forms -----------------------------
+    # The "does the inside survive" axis: 1-D conduction through the body TPS
+    # to the structure bondline (heating.bondline_screen).  Crossing the design
+    # limit is BEYOND DESIGN ENVELOPE (yellow) — a sizing criterion, not a
+    # demonstrated-death bound — so it escalates survive→beyond, never to fail.
+    _bl = (fom or {}).get('bondline')
+    if _bl and _bl.get('evaluated'):
+        j.append("─── Interior (bondline) screen ─────────────────────────────")
+        _bmat = heating.TPS_MATERIALS.get(str(prof.get('body_material') or ""))
+        _blabel = (_bmat.get('label') if _bmat else None) or prof.get('body_material') or "body TPS"
+        if _bl['crossed']:
+            if status in ('survive', 'degraded'):
+                status = 'beyond'
+            j.append(f"  Bondline reaches {_bl['T_bond_peak_C']:,.0f} °C behind "
+                     f"the {_blabel} layer ({_bl['thickness_m']*100:.1f} cm) — "
+                     f"past the {_bl['limit_C']:.0f} °C structure limit at "
+                     f"t≈{_bl['t_cross_s']:,.0f} s. The skin may hold, but the "
+                     f"structure behind it cooks: BEYOND DESIGN ENVELOPE.")
+            j.append("  Fix: thicker TPS, a lower-load trajectory, or an "
+                     "insulating sub-layer.")
+        else:
+            j.append(f"  Bondline peaks {_bl['T_bond_peak_C']:,.0f} °C behind "
+                     f"the {_blabel} layer ({_bl['thickness_m']*100:.1f} cm) — "
+                     f"within the {_bl['limit_C']:.0f} °C structure limit "
+                     f"({_bl['margin']:.0%} of it).")
+        for w in _bl.get('warnings', []):
+            j.append(f"  {w}")
+
     # ---- NRC ladder (gliders) + method line ---------------------------------
     tail = []
     if form in ('B', 'C') and dur > 60.0:
@@ -755,7 +783,9 @@ def build_report(result) -> dict:
         "Method: screening tier — Sutton-Graves cold-wall stagnation flux +",
         "radiative-equilibrium wall T; consequence bands are qualitative and",
         "flight-anchored (Reentry-F, PANT, Lin 1982, HTV-2, NRC-2008 tiers).",
-        "Not a through-wall TPS design analysis.",
+        "Interior: screening bondline conduction (Dec & Braun approximate",
+        "method, sans pyrolysis) where the body TPS has a cited conductivity;",
+        "not a full charring-ablator (CMA-class) analysis.",
     ]
 
     # ── Modified-benchmark self-disclosure ───────────────────────────────────
@@ -880,6 +910,17 @@ def build_report(result) -> dict:
         else:
             because.append(f"Nose and body both hold the full {dur:,.0f}-s "
                            f"glide within the demonstrated record.")
+    # Interior-survivability sentence in the LEAD when the bondline is the (or
+    # a) reason for a 'beyond' verdict — the skin can survive while the
+    # structure behind it cooks, which a nose/skin verdict alone would miss.
+    if _bl and _bl.get('evaluated') and _bl.get('crossed'):
+        because.append(
+            f"The heat also reaches the structure: the bondline behind the "
+            f"body TPS hits {_bl['T_bond_peak_C']:,.0f} °C, past the "
+            f"{_bl['limit_C']:.0f} °C limit — the skin may hold, but the "
+            f"interior does not.")
+        if not fix:
+            fix = "thicker body TPS, a lower-load trajectory, or an insulating sub-layer"
     lead += ["", " ".join(because)]
     if fix:
         lead += ["", f"What would change the verdict: {fix}."]
