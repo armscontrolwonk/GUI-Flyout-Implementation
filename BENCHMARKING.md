@@ -1109,6 +1109,54 @@ Net: a CFD-tier study pair independently endorses Thrusty's recession model
 and UHTC/C-C material numbers, and supplies the tool's first CFD-vs-S-G flux
 anchor (with the catalycity bracket made explicit).
 
+#### Method-stack validation: Dec & Braun 2006 (read from primary, archived 2026-07-23)
+
+John A. Dec (NASA Langley) & Robert D. Braun (Georgia Tech), "An Approximate
+Ablative Thermal Protection System Sizing Tool for Entry System Design,"
+NTRS **20060004824** — already this ledger's citation for the 250 °C bondline
+limit, now read from primary.  A conceptual-design TPS sizing tool whose
+"approximate option" is, piece for piece, Thrusty's ablator stack — with a
+verification pedigree attached:
+
+- **Sutton-Graves, same constant:** their Eq. 1 uses k = 1.74153×10⁻⁴ (ours:
+  1.7415×10⁻⁴), stated "verified against numerous ground-based test and
+  flight programs and is generally accurate for blunt bodies to within
+  5–10%" — a citable accuracy claim for the S-G tier itself.
+- **Q\* recession, same form, same conservatism claim:** their Eq. 7
+  ṡ = Q̇_hw/(ρ·Q\*) with the caution that steady-state Q\* "is conservative
+  and will generally over predict the actual recession rate," growing as
+  density falls and heat rate rises — the third independent source (with
+  Duffa and Tabiei & Sockalingam) for the exact screen in METHODS §13.6,
+  and an independent statement of its over-predicting sign.
+- **The 2000 K recession threshold, with a physical basis:** "it is known
+  that little recession will occur for carbon phenolic in air when the
+  surface temperature is below 2000 K."  Third independent source on the
+  2000 K convention (Finke's screening choice; our phenolic-family
+  `continuous_K`) — and this one states it as measured behavior, not
+  convention.
+- **Verification pedigree:** the approximate option reproduces CMA (the
+  industry-standard charring-ablator code) within ~11% in-depth in the worst
+  case examined (PICA, 14 km/s), and matches published Mars Pathfinder and
+  Stardust heat-shield sizings — the "conceptual-design grade" certificate
+  for the whole simplified family, from the lab that owns the high-fidelity
+  code.  (Their Pathfinder exercise also demonstrates an UNVERIFIED CMA
+  material model producing a bad answer while the approximate method stayed
+  sane — fidelity is not a substitute for validated inputs, a moral this
+  project's benchmarking discipline exists to honor.)
+- **PICA pressure caveat** folded into the H_eff provenance row (Q\* is
+  pressure-blind; ~3.2× under-prediction at the Apollo 14 km/s extreme).
+- **The one simplified method Thrusty lacks — bondline screening:** their
+  second component is a 1-D finite-difference in-depth conduction solve
+  (Arrhenius 3-component decomposition, no pyrolysis-gas energy absorption —
+  quantified as ~11% conservative on insulation thickness) iterated to hold
+  the TPS-structure **bondline ≤ 250 °C**.  Thrusty cites the 250 °C limit
+  but computes nothing behind the wall ("not a through-wall TPS design
+  analysis").  This paper is the ready-made method + citation of record if
+  an interior-survivability screen is ever wanted; it would need thermal
+  conductivity added to the material catalog (their Table-1 database names
+  the citable materials: T-300 C-C, FM5055, FM5504, PICA, SLA-561V + 8
+  substructure materials).  OPEN (decision pending, not data).
+
 #### Form A — CLOSED (changelog)
 
 The Form A ablator campaign (plan: retire the `H_eff_MJ_kg` screening
@@ -1491,13 +1539,13 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | HfB₂-TaSi₂ / complex-boride oxide-detachment cap | ~2700–2800 K tip | Di Maso thesis (HfB₂-TaSi₂ cone, CFD tip); De Prisco 2026 (ZrB₂-TiB₂-SiC hemi, *JECS* 46 118184) | ✔ cited |
 | additive inversion | TaSi₂ best @ 1627 °C, destroyed @ 1927 °C | Levine et al. 2003 furnace (NTRS 20040033992); low-side corroborated by Gasch & Johnson 2010 (TaSi₂ *reduces* oxide/depletion at 1500–1690 °C, HfB₂-SiC arcjet) and the Di Maso cone at temperature | ✔ cited |
 | acreage flux fraction | 0.13 × stagnation | Lu, Shi, Zhang et al. 2024 (IJHMT 225; validated <9 %) | ✔ cited |
-| bondline limit | 250 °C | NASA NTRS 20060004824 (ablative TPS sizing); Orion 260 °C NTRS 20080013535 | ✔ cited |
+| bondline limit | 250 °C | Dec & Braun, NASA NTRS 20060004824 (ablative TPS sizing tool — now READ FROM PRIMARY, archived; their whole sizing iterates shield thickness to hold bondline ≤ 250 °C); Orion 260 °C NTRS 20080013535.  NOTE: cited but NOT COMPUTED in Thrusty — no through-wall conduction model; Dec & Braun's approximate 1-D finite-difference option is the named upgrade path (see "Method-stack validation" block) | ✔ cited (primary in hand) |
 | tile/RCC/material limits | per-material peak/continuous K | HEATING_TPS_REFERENCES.md §2 (TPSX, KSC STS ref, NTRS 19940030739, Peters 2024, …) | ✔ cited per entry |
 | analytic-honesty factor | ×2–4 | **internal**: paired analytic/numerical C-HGB runs in this tool | ⚠ labeled internal |
 | `NOTHING_SURVIVES_K` | 4000 K | **modeling-validity bound** (radiative-equilibrium model invalid above all usable materials), not an empirical limit | ⚠ labeled model bound |
 | `uhtc` `oxidation_dwell_s` (current code) | 300 s (demonstrated floor, floor-not-cliff) | **implemented** — the uncited 120 s placeholder is retired; the code now carries the cited floor (Monteverde 2013, 300 s @ 1973 K zero recession; sharp-tip extension 575 s, Monteverde 2012) and the Form B coverage verdict treats crossing it as extrapolation, not failure (SRD §11.4) | ✔ cited |
 | ablator demonstrated-load record (verdict driver) | graphite/C-C 3,870 MJ/m² (Reentry-F); PICA 276 MJ/m² (Stardust); carbon-phenolic 60 MJ/m² (Pioneer Venus LP) | The Form A ablator verdict compares flown load to these (like the UHTC dwell floor), NOT a computed δ (see METHODS §13.6). Graphite: Reentry-F Q ≈ 3.87 GJ/m² (pixel-traced, ±20%). PICA: Stardust Q 276 MJ/m² wired, recovered. **CP: Pioneer Venus Large Probe ~60 MJ/m²** (Cabrera & West 2026, DOI 10.2514/1.A36431, coupled reconstruction validated to ≤6% vs flight TCs; figure-integrated ±25%; short radiation-heavy CO₂ pulse → deliberately conservative as a load record; Hayabusa CP corroborates ~2–3× higher, pulse-duration-soft — see the CLOSED note below) | ✔ all three cited (CP labeled figure-integrated) |
-| ablator `H_eff_MJ_kg` — role now = tripwire bound only | nominal CP 15 / PICA 35 / C/C 40; **optimistic bound** CP 20 / PICA 77 / C/C 175 | `H_eff` no longer sets a verdict via a δ point-estimate; it (a) brackets the reported δ *band* (nominal, conservative-low edge) and (b) at its most OPTIMISTIC cited value gates the **burn-through tripwire** (red only if the shield is consumed even there). Nominals: **CP 15** = measured char-removal-regime (Sutton TN D-5930: 14–20 MJ/kg at ≥2.4 atm; clean rows 68–195). **PICA 35 / bound 77**: Winter AIAA 2014-1151 arc-jet, implied Q\* 38–77 MJ/kg. **C/C 40 / bound 175**: Reentry-F flight bracket 70–175 + Scala/Perini theory; Nestler severe-regime floor; **conservative-low end independently cited at 32 MJ/kg** (Klein, Berry & Miles 1989, *J. Appl. Phys.* 65(9) 3425 — thermochemical heat of ablation of solid carbon; adopted as Q\* by the Tabiei & Sockalingam 2011 FLUENT/LS-DYNA study), corroborating that the shipped nominal 40 sits at the low/conservative edge of the literature and the 40–175 spread brackets it | ✔ nominals + bounds cited (regime-labeled) |
+| ablator `H_eff_MJ_kg` — role now = tripwire bound only | nominal CP 15 / PICA 35 / C/C 40; **optimistic bound** CP 20 / PICA 77 / C/C 175 | `H_eff` no longer sets a verdict via a δ point-estimate; it (a) brackets the reported δ *band* (nominal, conservative-low edge) and (b) at its most OPTIMISTIC cited value gates the **burn-through tripwire** (red only if the shield is consumed even there). Nominals: **CP 15** = measured char-removal-regime (Sutton TN D-5930: 14–20 MJ/kg at ≥2.4 atm; clean rows 68–195). **PICA 35 / bound 77**: Winter AIAA 2014-1151 arc-jet, implied Q\* 38–77 MJ/kg.  **PICA pressure caveat (Dec & Braun 2006, read from primary):** PICA ablation is pressure-sensitive and the Q\* method is pressure-blind — their Apollo 14 km/s case shows Q\* UNDER-predicting PICA recession ~3.2× vs CMA (1.19 vs 3.83 cm) at high surface pressure.  The PICA analogue of the Nestler ≥80 atm C/C floor: at high-pressure/steep-entry extremes the tripwire's not-firing is weaker evidence for PICA than for dense ablators (the capsule bound-test guards the nominal edge; Stardust itself was benign-pressure). **C/C 40 / bound 175**: Reentry-F flight bracket 70–175 + Scala/Perini theory; Nestler severe-regime floor; **conservative-low end independently cited at 32 MJ/kg** (Klein, Berry & Miles 1989, *J. Appl. Phys.* 65(9) 3425 — thermochemical heat of ablation of solid carbon; adopted as Q\* by the Tabiei & Sockalingam 2011 FLUENT/LS-DYNA study), corroborating that the shipped nominal 40 sits at the low/conservative edge of the literature and the 40–175 spread brackets it | ✔ nominals + bounds cited (regime-labeled) |
 | CP char-removal onset | ≥2.4 atm stagnation (air, K_O₂ 0.23); ~6 atm (air-N₂ mixes); zero recession in pure N₂ | Sutton, NASA TN D-5930 (1970), Langley ceramic-heated + arc tunnels, Narmco 4028 CP, ρ 1392 kg/m³ — read from primary, PDF repo `data/`; the CP analogue of the C/C mechanical-erosion bounds (Nestler ≥80 atm gouging, Schneider >55 atm) | ✔ cited |
 | Form A capsule bounds | Stardust 5.1×, Hayabusa 31× (predicted/measured) | Stardust measured 5.7±0.3 mm near-stagnation Core 1 — **firsthand ×2**: Stackpoole, Sepka, Cozmuta & Kontinos AIAA 2008-1202 (the primary; Table 1, error ±3–5%, calc FIAT v2.44 + PICA v3.3 conv+rad; PDF in repo `data/`) and Kontinos & Stackpoole AIAA 2008-1197 (identical reproduction).  Primary's own reading: the flank 25% discrepancy is within the model's arc-jet calibration scatter; the 61% near-stagnation over-prediction "not fully understood."  Hayabusa measured ~0.3 mm (laser scan, error <10%), calc/meas ≈3×, peak convective 5.3 MW/m² — **firsthand**, Suzuki et al. *JSR* 51(1) 2014, DOI 10.2514/1.A32549 (Hayabusa pulse duration in the bound test is a labeled 60 s estimate from the paper's heating window) | ✔ cited (both capsules firsthand; Stardust doubly) |
 | Reentry-F H_eff bracket | 70–175 MJ/kg, central ≈114 (flight graphite, 5–60 atm) | derived: Q ≈ 3.87 GJ/m² ±20%, **pixel-traced** from the nominal-trajectory figure (γ_E 21.2°, V_E 20,300 ft/s; the figure Berry reproduces as his Fig. 6 [LWP-460]; embedded scan extracted from the Berry PDF, per-ruler tick calibration, apex-first slope tracking, overlay-QC'd — method + summary `benchmarks/form_a/reentryf_nominal_qdot.csv`, full trace `reentryf_qdot_trace_full.csv`) ÷ (ρ 1.73 g/cc vendor-nominal × 0.6–1.0 in axial-recession spread, CR-154044 0.77 in central); apex 348 MW/m² @ ~431.7 s (~47 kft), the 318 MW/m² `_BENCHMARKS` pin = LWP window-max quote; validation: traced in-window range 10.2–30.2×10³ vs LWP's quoted 9–28×10³ Btu/ft²·s + Sutton-Graves apex check ~340–380 MW/m²; 100→50 kft window ~8 s; supersedes both the ~1 GJ/m² order-of-magnitude read and the intermediate 2.85 GJ/m² eyeball table (wrong curve through the mid-rise, caught by overlay QC); Q_MJ stays None in code — preflight-nominal, no flight-measured stagnation heating exists (TM X-2560) | ⚠ labeled derived (pixel-traced; nominal 40 over-predicts ~2.9×, conservative) |
