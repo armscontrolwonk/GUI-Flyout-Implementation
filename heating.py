@@ -522,6 +522,72 @@ _WINDWARD_DELTA_FLOOR = 5.0           # deg; numerical guard — A(α) diverges 
 # reattachment line, so it never asserts a hard fail even when True.
 WINDWARD_DRIVES_VERDICT = False
 
+# --- Boundary-layer transition gate (METHODS §13.11) -------------------------
+# The acreage/flank boundary layer trips laminar→turbulent as the vehicle
+# descends into denser air.  Placed IN THE TRAJECTORY (when), not on the body
+# (where) — a screening gate on the freestream Reynolds number based on nose
+# radius, Re_Rn = ρ·V·R_n/μ.  Calibrated + verified against Kuntz 1999
+# (AIAA 99-3460) Table 1, the IRV-2 CFD case: laminar at Re_Rn 1.7e6 (13.96 km),
+# transition first appears at 2.1e6 (12.7 km), fully turbulent by 3.9e6
+# (5.5 km).  The SPATIAL criterion (local Re_x) is NOT single-valued in that
+# data — ~1e7 on the cone vs ~1e6 at the sphere-cone juncture — which is why a
+# screening gate uses the nose-radius Reynolds onset, the classic nosetip-
+# transition scaling (PANT lineage), not an on-body placement.  Feeds the
+# windward-flank and bondline ACREAGE flux; the nose stagnation point is always
+# laminar and is untouched.  thresholds.apply() drives the two Re thresholds.
+RE_RN_TRANSITION_ONSET = 2.0e6     # Re_Rn at which acreage transition begins
+RE_RN_FULLY_TURBULENT  = 3.5e6     # Re_Rn at which the acreage is fully turbulent
+# Both calibrated to Kuntz 1999 Table 1 (IRV-2, R_n 1.905 cm): onset brackets
+# pt15 laminar (Re_Rn 1.72e6) / pt16 transitional (2.07e6); fully-turbulent
+# brackets pt19 transitional (3.32e6) / pt20 turbulent (3.89e6).
+# Turbulent-to-laminar acreage flux ratio, clamped to the cited 3–5× band
+# (turbulent flank runs 3–5× the laminar value; T_eq ~1.3–1.5×).  Computed
+# within the band from how far past onset the flow is (St_lam∝Re^−½,
+# St_turb∝Re^−⅕ → the ratio grows with Re).
+_TURB_FLUX_RATIO_LO = 3.0
+_TURB_FLUX_RATIO_HI = 5.0
+
+
+def _sutherland_mu(T_K):
+    """Dynamic viscosity of air, Sutherland's law (Pa·s)."""
+    T = np.asarray(T_K, float)
+    return 1.716e-5 * (T / 273.15) ** 1.5 * (273.15 + 110.4) / (T + 110.4)
+
+
+def transition_factor(rho, V, alt, nose_radius_m, *,
+                      onset=None, fully=None):
+    """Acreage boundary-layer transition gate → a per-sample turbulent flux
+    multiplier for the flank/acreage heating (1.0 = laminar).
+
+    Re_Rn = ρ·V·R_n/μ(T_∞); laminar below `onset`, ramping to the turbulent
+    flux ratio by `fully`.  Returns (factor_array, Re_Rn_array, state) where
+    state ∈ 'laminar' | 'transitional' | 'turbulent' over the arc, plus the
+    peak Re_Rn.  Resolves the two Re thresholds from the module attrs at call
+    time so thresholds.apply() drives them.
+    """
+    onset = RE_RN_TRANSITION_ONSET if onset is None else float(onset)
+    fully = RE_RN_FULLY_TURBULENT if fully is None else float(fully)
+    fully = max(fully, onset * 1.0001)
+    rho = np.asarray(rho, float); V = np.asarray(V, float)
+    Rn = float(nose_radius_m or 0.0)
+    if Rn <= 0.0:
+        z = np.zeros(np.broadcast(rho, V).shape)
+        return (np.ones_like(z) if z.shape else 1.0), z, "laminar"
+    import atmosphere as _atm
+    T = np.asarray(_atm.atmosphere(np.asarray(alt, float))[0], float)
+    Re_Rn = rho * V * Rn / _sutherland_mu(T)
+    # transitional fraction 0→1 across [onset, fully]
+    frac = np.clip((Re_Rn - onset) / (fully - onset), 0.0, 1.0)
+    # turbulent flux ratio within the cited band, growing with Re past `fully`
+    over = np.clip(np.log(np.maximum(Re_Rn, 1.0) / fully) / np.log(3.0), 0.0, 1.0)
+    ratio = _TURB_FLUX_RATIO_LO + over * (_TURB_FLUX_RATIO_HI - _TURB_FLUX_RATIO_LO)
+    factor = 1.0 + frac * (ratio - 1.0)
+    peak = float(np.max(Re_Rn)) if Re_Rn.size else 0.0
+    state = ("turbulent" if peak >= fully else
+             "transitional" if peak >= onset else "laminar")
+    return factor, Re_Rn, state
+
+
 # --- Interior (bondline) screen (METHODS §13.10) -----------------------------
 # TPS-structure bondline design limit: the ablative-TPS sizing criterion the
 # industry iterates shield thickness against (Dec & Braun, NTRS 20060004824 —
@@ -744,14 +810,24 @@ def heating_fom_per_location(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     _body_mat = TPS_MATERIALS.get(str(body_material or "")) if body_material else None
     _bl = None
     if _body_mat and _body_mat.get("is_ablator") and _body_mat.get("k_W_mK"):
-        _q_body = f * _stag_flux(np.asarray(rho, float), np.asarray(V, float), _R_ref)
+        # Acreage flux, turbulent-augmented at low altitude (transition gate,
+        # §13.11) — a turbulent acreage cooks the interior faster.
+        _Rt = nose_radius_m if nose_radius_m and nose_radius_m > 0 else _R_ref
+        _tf_b, _, _ts_b = transition_factor(np.asarray(rho, float),
+                                            np.asarray(V, float), alt, _Rt)
+        _q_body = f * _stag_flux(np.asarray(rho, float), np.asarray(V, float), _R_ref) * _tf_b
         _bl = bondline_screen(np.asarray(t, float), _q_body,
                               material=str(body_material), thickness_m=_body_depth,
                               emissivity=emissivity)
-        if _bl.get("evaluated") and not (body_thickness_m and body_thickness_m > 0):
-            _bl.setdefault("warnings", []).append(
-                "Body TPS thickness unset — bondline screened at the 2 cm "
-                "default layer (flagged).")
+        if _bl.get("evaluated"):
+            if _ts_b != "laminar":
+                _bl.setdefault("warnings", []).append(
+                    f"Acreage boundary layer {_ts_b} at low altitude — flux "
+                    f"turbulent-augmented before conduction (transition gate).")
+            if not (body_thickness_m and body_thickness_m > 0):
+                _bl.setdefault("warnings", []).append(
+                    "Body TPS thickness unset — bondline screened at the 2 cm "
+                    "default layer (flagged).")
 
     out = dict(binding)
     out["binding_location"] = name
@@ -834,8 +910,14 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
                     warnings=["no body/nose radius for the windward acreage scale"],
                     delta_deg=delta, criteria={})
 
-    # α=0 flank flux over the (glide-masked) arc, then peak.
-    q_flank0 = float(body_flux_fraction) * _stag_flux(rho, V, R_body)
+    # α=0 flank flux over the (glide-masked) arc, then peak.  The acreage
+    # boundary layer trips turbulent at low altitude (transition gate, §13.11):
+    # multiply the laminar flank flux by the per-sample turbulent factor before
+    # taking the peak, so the peak reflects turbulent augmentation where it
+    # actually occurs on the arc.
+    _R_trans = float(nose_radius_m) if nose_radius_m and nose_radius_m > 0 else R_body
+    _tf, _re_rn, _tstate = transition_factor(rho, V, alt, _R_trans)
+    q_flank0 = float(body_flux_fraction) * _stag_flux(rho, V, R_body) * _tf
     q_stag_nose = _stag_flux(rho, V, float(nose_radius_m)) if nose_radius_m and nose_radius_m > 0 else None
     mask = np.ones(t.shape, bool) if glide_mask is None else np.asarray(glide_mask, bool)
     if mask.shape != q_flank0.shape or not mask.any():
@@ -843,6 +925,7 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
         if glide_mask is not None:
             warnings.append("glide-phase mask empty — windward evaluated over the full arc.")
     q_flank0_pk = float(np.max(q_flank0[mask])) if q_flank0[mask].size else 0.0
+    _tf_pk = float(np.max(np.asarray(_tf)[mask])) if np.ndim(_tf) and np.asarray(_tf)[mask].size else float(np.max(_tf) if np.ndim(_tf) else _tf)
 
     a_lo, a_hi = float(alpha_band_deg[0]), float(alpha_band_deg[1])
     A_lo, _ = windward_amplification(delta, a_lo)
@@ -894,9 +977,18 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
     else:
         verdict = "windward flux/T_eq only (no body TPS material set)"
 
-    warnings.append(
-        "Laminar windward estimate — turbulent flank runs ~3–5× higher "
-        "(T_eq ~1.3–1.5×); flag, not a computed value.")
+    # Transition state → a computed turbulent factor (was a static 3–5× flag).
+    _re_pk = float(np.max(_re_rn)) if np.ndim(_re_rn) and np.asarray(_re_rn).size else float(_re_rn)
+    if _tstate == "laminar":
+        warnings.append(
+            f"Acreage boundary layer laminar over the glide (peak Re_Rn "
+            f"{_re_pk:.1e} < {RE_RN_TRANSITION_ONSET:.0e} onset) — no turbulent "
+            f"augmentation (Kuntz 1999 transition gate, §13.11).")
+    else:
+        warnings.append(
+            f"Acreage boundary layer {_tstate}: flux ×{_tf_pk:.1f} applied to "
+            f"the flank at peak (Re_Rn to {_re_pk:.1e}; turbulent 3–5× band, "
+            f"Kuntz 1999 transition gate, §13.11).")
     warnings.append(
         "Control-fin / body-fin gap interference heating can reach 10–80× the "
         "fin-off flank value at reattachment (Alviani 2022, AEDC Mach-6); "
@@ -913,6 +1005,7 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
         delta_deg=delta, alpha_band_deg=(a_lo, a_hi), alpha_op_deg=alpha_op_deg,
         amplification={"lo": A_lo, "op": A_op, "hi": A_hi},
         q_flank0_peak_MW_m2=q_flank0_pk / 1e6, body_material=str(body_material or ""),
+        transition_state=_tstate, transition_factor_peak=_tf_pk, Re_Rn_peak=_re_pk,
         criteria=criteria, verdict=verdict,
         thompson_band="engineering-code AoA uncertainty ~15–40% (Thompson 1989)",
         warnings=warnings)

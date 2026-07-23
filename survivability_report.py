@@ -725,10 +725,19 @@ def build_report(result) -> dict:
                             status = 'analysis'
                 elif _w.get('verdict'):
                     j.append(f"  {_w['verdict']}.")
-                j.append(f"  {_w.get('thompson_band', '')}; laminar — turbulent "
-                         f"flank ~3–5× higher; control-fin gap interference "
-                         f"10–80× at reattachment (Alviani 2022) — flags, not "
-                         f"computed at screening tier.")
+                # Boundary-layer transition (computed gate, §13.11).
+                _tst = _w.get('transition_state')
+                if _tst and _tst != 'laminar':
+                    j.append(f"  Acreage boundary layer {_tst} at low altitude "
+                             f"(Re_Rn to {_w.get('Re_Rn_peak', 0):.1e}) — flank "
+                             f"flux ×{_w.get('transition_factor_peak', 1):.1f} "
+                             f"applied (Kuntz 1999 gate; turbulent 3–5× band).")
+                else:
+                    j.append(f"  Acreage boundary layer laminar over the glide "
+                             f"(Re_Rn {_w.get('Re_Rn_peak', 0):.1e} below onset).")
+                j.append(f"  {_w.get('thompson_band', '')}; control-fin gap "
+                         f"interference 10–80× at reattachment (Alviani 2022) — "
+                         f"flagged, not computed at screening tier.")
 
             # Terminal-dive transient block (screening): the low-AoA arc below
             # the commanded dive altitude (or 15 km for dive-at-target) — the

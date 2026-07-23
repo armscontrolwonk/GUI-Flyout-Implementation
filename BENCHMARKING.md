@@ -1138,12 +1138,21 @@ What they contribute:
   national-lab CFD program.  A screening tier with no blowing-feedback loop
   cannot go unstable the way their coupling did.
 - **Neglected-area ledger (from what they model and we don't):**
-  1. **Transition placement (top OPEN candidate).**  They place
-     boundary-layer transition with simple algebraic criteria (LORN /
-     Polansky + Anderson, via ASCC) and show late-trajectory turbulent cone
-     heating matters.  Thrusty carries the "turbulent flank ~3–5×" warning
-     but never places transition — the one neglect with a correlation-tier
-     fix on the shelf.
+  1. **Transition placement — BUILT (2026-07-23).**  Kuntz Table 1's
+     transition-location column IS a ready-made verification dataset, and one
+     variable places transition cleanly: the freestream Reynolds number based
+     on nose radius, Re_Rn.  `heating.transition_factor` (METHODS §13.11) gates
+     the acreage/flank turbulent augmentation on it — onset Re_Rn ≈ 2×10⁶
+     (brackets Kuntz pt15 laminar 1.72e6 / pt16 transitional 2.07e6), fully
+     turbulent ≈ 3.5×10⁶ (brackets pt19 transitional 3.32e6 / pt20 turbulent
+     3.89e6).  The turbulent flux factor is computed within the cited 3–5×
+     band.  The former static "turbulent flank ~3–5×" warning is now a
+     computed, trajectory-resolved number; both Re thresholds are editable in
+     the Screening Envelope dialog; pinned by `test_transition.py`.  (The
+     *spatial* Re_x criterion was rejected: NOT single-valued in Kuntz's data
+     — ~1e7 on the cone vs ~1e6 at the sphere-cone juncture — which is exactly
+     why the source needed two correlations; the nose-radius Reynolds onset is
+     the screening-right nosetip-transition scaling, PANT lineage.)
   2. **Shape-change feedback (tripwire caveat, P3-class).**  Their ablating
      tip receded ~21 mm (more than its initial 19 mm radius) with late
      heating reaching ~7,000 W/cm² as sharpening + turbulence fed back.
@@ -1615,7 +1624,7 @@ reverse.
 
 ### User-adjustable screening thresholds (`thresholds.py`) + deferred spreadsheets
 
-A curated **~10-number envelope subset** of the thresholds above is now
+A curated **~12-number envelope subset** of the thresholds above is now
 user-editable at runtime (Analysis ▸ Screening Envelope…): the UHTC dwell
 floor, the two MaRV g-ceilings, the three **ablator demonstrated-load records**
 (graphite/C-C, PICA, carbon-phenolic), and the two model-conservatism knobs (acreage flux
