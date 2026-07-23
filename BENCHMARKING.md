@@ -1013,14 +1013,21 @@ on a hypothetical high-β ICBM RV (R_n 0.077 m, β ≈ 1500 lb/ft² ≈ 7,320 kg
 V_entry ≈ 7.06 km/s, γ −24.8°, range 10,020 km; glass-fiber-phenolic shield,
 0.5 cm).  What it contributes:
 
-- **T_eq chain verification (PINNED).**  His laminar correlation
+- **T_eq chain verification (PINNED, two tiers).**  His laminar correlation
   (q ∝ √ρ·V^3.15, stated "in numerical agreement with Detra, Kemp, and
-  Riddell as validated … in Perini, 1975") produces a Fig.-2 T_eq-vs-altitude
-  curve that Sutton-Graves + our atmosphere reproduces to **1.3% at 37 km and
-  9% at 60 km** (digitized-by-eye targets ~4,200 K / ~2,600 K, ±15% band) —
-  `test_finke_check.py`.  An SDIO-era independent build of the same method
-  family agreeing at the few-percent level is the cleanest cross-check the
-  T_eq chain has.
+  Riddell as validated … in Perini, 1975") is printed in closed form, so the
+  load-bearing check is **exact, digitization-free**: ratioed at identical
+  (ρ, V), S-G/DKR flux = 1.01 at 3 km/s → **0.89 at 7 km/s** (−11% flux =
+  −3% T at ICBM speed; both ∝ √ρ, so the ratio is velocity-only).  S-G sits
+  mildly on the LOW (optimistic) side of the DKR family at high speed — a
+  documented family spread inside the screening tier's stated uncertainty,
+  with the sign now on the record.  The Fig.-2 endpoint comparison (1.3% at
+  37 km, **9% at 60 km ≈ 41% in flux**) is CONTEXT ONLY: its residual is
+  dominated by digitizing a steep curve (~2%/km in T) on a scanned 1990
+  plot — a ±3–4 km x-axis read alone is ±6–8% in T — stacked on the
+  1962-vs-modern atmosphere and a constant-V assumption; it measures the
+  comparison apparatus, not model error.  Both tiers pinned in
+  `test_finke_check.py`.
 - **Hemisphere heating distribution** (his Fig. 3, Kemp-Riddell 1959 theory +
   shock-tube data): q/q_s = 1.0 / 0.93 / 0.72 / 0.45 / 0.22 at s/R = 0° /
   20° / 40° / 60° / 80°, with the **conical surface held at the shoulder value
