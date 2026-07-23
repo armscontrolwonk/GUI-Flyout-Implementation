@@ -37,32 +37,29 @@ def test_thin_layer_long_soak_cooks_interior():
 
 
 def test_uncited_material_not_evaluated():
-    # PICA has no cited k → the screen honestly declines rather than guessing.
+    # Bare carbon-carbon carries no cited through-thickness k → the screen
+    # honestly declines rather than guessing.  (PICA moved off this list when
+    # TPSX id 43 supplied its measured k.)
     t, q = _flat(1.0, 500.0)
-    r = heating.bondline_screen(t, q, material="pica", thickness_m=0.05)
+    r = heating.bondline_screen(t, q, material="carbon_carbon", thickness_m=0.05)
     assert r["evaluated"] is False
 
 
-def test_sirca_now_evaluates_with_tpsx_k():
-    # SIRCA-14A k = 0.0629 W/m·K (TPSX id 41; supersedes the Murbach-1997
-    # ratio estimate 0.04) → the bondline screen runs for SIRCA bodies.
-    # The low DENSITY matters more than the low k: SIRCA's thermal
-    # diffusivity k/(ρc) slightly EXCEEDS silica phenolic's (2.3e-7 vs
-    # 2.1e-7 m²/s), so at EQUAL thickness it soaks through FASTER under a
-    # sustained load — SIRCA's insulation lever is thickness bought with its
-    # 7.6× lower density (per-mass, not per-centimeter).
-    m = heating.TPS_MATERIALS["sirca"]
-    sp_m = heating.TPS_MATERIALS["silica_phenolic"]
-    assert abs(m["k_W_mK"] - 0.0629) < 1e-9
-    a_s = m["k_W_mK"] / (m["density_kg_m3"] * m["c_J_kgK"])
-    a_sp = sp_m["k_W_mK"] / (sp_m["density_kg_m3"] * sp_m["c_J_kgK"])
-    assert a_s > a_sp                     # the counterintuitive ordering, pinned
+def test_low_density_ablators_evaluate_with_tpsx_k():
+    # SIRCA-14A (TPSX id 41, k 0.0629) and PICA (TPSX id 43, k 0.305
+    # measured, Tran AIAA 96-1911) both evaluate; thicker = cooler.  No
+    # cross-material diffusivity ordering is pinned — that ordering flipped
+    # twice as measured k values replaced estimates (0.04→0.0629 SIRCA,
+    # 0.35→0.71 silica phenolic), i.e. it is data, not physics.
+    assert abs(heating.TPS_MATERIALS["sirca"]["k_W_mK"] - 0.0629) < 1e-9
+    assert abs(heating.TPS_MATERIALS["pica"]["k_W_mK"] - 0.305) < 1e-9
     t, q = _flat(0.5, 800.0)
-    s2 = heating.bondline_screen(t, q, material="sirca", thickness_m=0.02)
-    s5 = heating.bondline_screen(t, q, material="sirca", thickness_m=0.05)
-    assert s2["evaluated"] and s5["evaluated"]
-    assert s5["T_bond_peak_C"] < s2["T_bond_peak_C"]   # thicker = cooler
-    assert "TPSX" in m["k_source"]
+    for mat in ("sirca", "pica"):
+        thin = heating.bondline_screen(t, q, material=mat, thickness_m=0.02)
+        thick = heating.bondline_screen(t, q, material=mat, thickness_m=0.05)
+        assert thin["evaluated"] and thick["evaluated"]
+        assert thick["T_bond_peak_C"] < thin["T_bond_peak_C"]
+        assert "TPSX" in heating.TPS_MATERIALS[mat]["k_source"]
 
 
 def test_steady_state_bounds_and_insulated_back():

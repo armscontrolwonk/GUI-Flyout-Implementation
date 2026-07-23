@@ -77,7 +77,10 @@ TPS_MATERIALS = {
     # --- non-ablating hot structures (the material IS the structure) ---
     "rcc":             dict(peak_K=1922, continuous_K=1811, melt_K=None, c_J_kgK=1200, label="Coated carbon-carbon (RCC)",
                             group="hot_structure", is_ablator=False, density_kg_m3=1600, H_eff_MJ_kg=None, oxidation_dwell_s=None),
-    "c_sic":           dict(peak_K=1970, continuous_K=1970, melt_K=None, c_J_kgK=1200, label="C/SiC (coated CMC)",
+    # C/SiC limits per TPSX id 26: multiple-use 1920 K (continuous), single-
+    # use 1980 K (peak) — replaces the flat screening 1970/1970 estimate with
+    # NASA's own database values (crawl archived in data/tpsx/).
+    "c_sic":           dict(peak_K=1980, continuous_K=1920, melt_K=None, c_J_kgK=1200, label="C/SiC (coated CMC)",
                             group="hot_structure", is_ablator=False, density_kg_m3=2000, H_eff_MJ_kg=None, oxidation_dwell_s=None),
     "cc_hot_structure":dict(peak_K=2170, continuous_K=2170, melt_K=None, c_J_kgK=1200, label="C/C hot structure (HTV-2)",
                             group="hot_structure", is_ablator=False, density_kg_m3=1800, H_eff_MJ_kg=None, oxidation_dwell_s=None),
@@ -144,8 +147,8 @@ TPS_MATERIALS = {
     # SWERVE heat load is not published (reconstruction = a P3 item).
     "silica_phenolic": dict(peak_K=1700, continuous_K=1700, melt_K=1700, c_J_kgK=1000, label="Silica phenolic",
                             group="ablative", is_ablator=True, density_kg_m3=1700, H_eff_MJ_kg=10, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10, k_W_mK=0.35,
-                            k_source="glass-fiber phenolic virgin k (Handbook of Materials Science III, via Finke IDA P-2395); char k uncited — margin near the limit is soft"),
+                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=10, k_W_mK=0.710,
+                            k_source="TPSX id 162, MX2600 (90°, cross-ply = through-thickness) virgin: 0.710 W/m·K (TPSX source-field 'unknown'; the classic RV silica-phenolic) — supersedes the 0.35 glass-fiber Handbook value (Finke IDA P-2395), conservative-high for bondline; char k still uncited"),
     # SIRCA-14A per TPSX id 41 (NASA Ames TPS Materials db, virgin; page
     # captured 2026-07-23; POC F. Milos; refs Tran et al., TPSX #70-73):
     # AIM-10 tile infiltrated w/ silicone, final ρ ≈ 0.224 g/cc (measured,
@@ -163,9 +166,17 @@ TPS_MATERIALS = {
                             group="ablative", is_ablator=True, density_kg_m3=224,  H_eff_MJ_kg=37.4, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=165.0, k_W_mK=0.0629,
                             k_source="TPSX (NASA Ames) SIRCA-14A virgin, id 41: 0.0629 W/m·K (TPSX flags nonstp/source-unknown); supersedes the Murbach-1997 ratio estimate 0.04"),
+    # PICA k + H_eff bound per TPSX id 43 (virgin; crawl archived in
+    # data/tpsx/): k 0.305 W/m·K MEASURED (Tran et al. AIAA 96-1911, TPSX
+    # nonstp flag — conservative-high for the bondline screen) closes the
+    # "low-density ablator k" ledger item; H_eff 115 ±5.8 MJ/kg MEASURED
+    # (Tran arc-jet, TPSX #68/#74, nonstp*) becomes the optimistic bound
+    # (supersedes Winter-2014's implied 77 top; nominal 35 unchanged).  TPSX
+    # density 236 ±12 vs our wired 270 — logged, not churned (BENCHMARKING).
     "pica":            dict(peak_K=3600, continuous_K=2000, melt_K=3600, c_J_kgK=1500, label="PICA (low-density ablator)",
                             group="ablative", is_ablator=True, density_kg_m3=270,  H_eff_MJ_kg=35, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=77,
+                            demonstrated_load_MJ_m2=276, H_eff_bound_MJ_kg=115, k_W_mK=0.305,
+                            k_source="TPSX (NASA Ames) PICA virgin, id 43: 0.305 W/m·K, measured (Tran et al. AIAA 96-1911; TPSX nonstp flag — conservative-high for bondline)",
                             demonstrated_load_source="Stardust PICA forebody flew Q ≈ 276 MJ/m² and was recovered (Stackpoole et al. AIAA 2008-1202)"),
 }
 
