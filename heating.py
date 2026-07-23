@@ -105,9 +105,16 @@ TPS_MATERIALS = {
     #                             tripwire (red fires only if the shield is
     #                             consumed even at this best case).  The nominal
     #                             H_eff_MJ_kg drives only the reported δ band.
+    # carbon_ablator is the family-generic carbon entry: it carries the SAME
+    # graphite/C-C family flight record + optimistic H_eff bound as
+    # carbon_carbon (records are family-level, METHODS §13.6).  Leaving these
+    # unset silently collapsed the burn-through BOUND to the conservative
+    # nominal H_eff — turning the tripwire back into the banned point-estimate
+    # (a C-HGB-class carbon nose at ~97% of the Reentry-F load read false-red).
     "carbon_ablator":  dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Ablative carbon-carbon",
                             group="ablative", is_ablator=True, density_kg_m3=1450, H_eff_MJ_kg=15, oxidation_dwell_s=None,
-                            demonstrated_load_MJ_m2=None, demonstrated_load_source="", H_eff_bound_MJ_kg=15),
+                            demonstrated_load_MJ_m2=3870, H_eff_bound_MJ_kg=175,
+                            demonstrated_load_source="Reentry-F graphite nosetip flew Q ≈ 3.87 GJ/m² (NASA CR-154044 / LWP-460, pixel-traced, ±20%; family-level record)"),
     "carbon_carbon":   dict(peak_K=3900, continuous_K=2000, melt_K=3900, c_J_kgK=1500, label="Bare carbon-carbon (nose)",
                             group="ablative", is_ablator=True, density_kg_m3=1800, H_eff_MJ_kg=40, oxidation_dwell_s=None,
                             demonstrated_load_MJ_m2=3870, H_eff_bound_MJ_kg=175,

@@ -6038,12 +6038,20 @@ class BoosterFlyoutApp(tk.Tk):
         for tag, colour in (_tier_tags + [("none", "#555555")]):
             self._surv_text.tag_configure(
                 tag, foreground=colour, font=("TkFixedFont", 11, "bold"))
-        # Survival-map cell tags: tier colours at body size (the matrix cells
-        # are colorized in place; bold same-size keeps the columns aligned).
+        # Survival-map cell tags: tier colours at body size, colorized in
+        # place.  Columns are TAB-separated and aligned with pixel tab stops
+        # measured from the BOLD cell font (bold fixed fonts don't share
+        # regular metrics on every platform — a character grid drifts).
         for tag, colour in _tier_tags:
             self._surv_text.tag_configure(
                 "map_" + tag, foreground=colour,
                 font=("TkFixedFont", 9, "bold"))
+        import tkinter.font as _tkfont
+        _cellf = _tkfont.Font(font=("TkFixedFont", 9, "bold"))
+        _t0 = _cellf.measure("  Windward flank  ")     # widest row label
+        _tw = _cellf.measure("X" * 22)                 # widest cell + gap
+        self._surv_text.tag_configure(
+            "mapgrid", tabs=(_t0, _t0 + _tw, _t0 + 2 * _tw))
 
         self._surv_set_text(
             None, "",
@@ -6071,10 +6079,15 @@ class BoosterFlyoutApp(tk.Tk):
             idx = self._surv_text.search("─── Survival map", "1.0")
             if idx:
                 base = int(idx.split(".")[0])
-                for ln, c0, c1, tk_key in map_spans:
+                # Tab-stop alignment on every tabbed line of the block.
+                ln = base + 1
+                while "\t" in self._surv_text.get(f"{ln}.0", f"{ln}.end"):
+                    self._surv_text.tag_add("mapgrid", f"{ln}.0", f"{ln}.end")
+                    ln += 1
+                for ln_, c0, c1, tk_key in map_spans:
                     self._surv_text.tag_add(
-                        "map_" + tk_key, f"{base + ln}.{c0}",
-                        f"{base + ln}.{c1}")
+                        "map_" + tk_key, f"{base + ln_}.{c0}",
+                        f"{base + ln_}.{c1}")
         self._surv_text.configure(state=tk.DISABLED)
 
     def _populate_survivability(self, r):

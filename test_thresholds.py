@@ -29,6 +29,9 @@ def test_registry_defaults_match_live_constants():
     assert (d["windward_alpha_lo"], d["windward_alpha_hi"]) == heating._WINDWARD_ALPHA_BAND
     assert d["graphite_load_floor_MJ_m2"] == \
         heating.TPS_MATERIALS["carbon_carbon"]["demonstrated_load_MJ_m2"]
+    # family-level: the generic carbon entry rides the same graphite record
+    assert d["graphite_load_floor_MJ_m2"] == \
+        heating.TPS_MATERIALS["carbon_ablator"]["demonstrated_load_MJ_m2"]
     assert d["pica_load_floor_MJ_m2"] == \
         heating.TPS_MATERIALS["pica"]["demonstrated_load_MJ_m2"]
     assert d["cp_load_floor_MJ_m2"] == \
