@@ -17,11 +17,22 @@ fair constant-velocity assumption for the two comparison altitudes.  The two
 targets are DIGITIZED BY EYE from Fig. 2 (labeled as such): T_eq ≈ 4,200 K
 near 37 km ("20 s before impact" tick) and ≈ 2,600 K near 60 km ("30 s").
 
-Passing within ±15% verifies Thrusty's Sutton-Graves + radiative-equilibrium
-chain against an independent, SDIO-era implementation of the same method
-family (S-G vs DKR exponent 3 vs 3.15, and atmosphere differences, account
-for the residual).  Measured agreement at wiring time: 1.3% (37 km), 9%
-(60 km).
+Two tiers of comparison, deliberately separated:
+
+1. EXACT (the load-bearing check): Finke prints his correlation in closed
+   form, so S-G can be ratioed against it at identical (ρ, V) with NO
+   figure-reading in the loop.  Both scale as √ρ, so the ratio depends only
+   on velocity: S-G/DKR flux = 1.01 at 3 km/s falling to 0.89 at 7.2 km/s —
+   S-G sits mildly on the LOW side of the DKR family at ICBM speeds (−11%
+   flux = −3% T at 7 km/s), a documented family spread well inside the
+   screening tier's stated uncertainty.
+2. FIGURE (context only, loose band): the Fig.-2 endpoint comparison.  Its
+   ±15% band is dominated by DIGITIZATION of a steep curve on a scanned
+   1990 plot (T_eq falls ~2%/km there, so a ±3–4 km x-axis read = ±6–8% in
+   T), stacked on the 1962-vs-modern atmosphere and a constant-V
+   assumption.  Wiring-time readings (1.3% at 37 km, 9% at 60 km) measure
+   that apparatus, not model error — the exact check above is the honest
+   statement of method agreement.
 """
 
 import numpy as np
@@ -34,6 +45,31 @@ _V = 7000.0          # m/s — near-constant above ~30 km at his β
 
 # (altitude_km, Finke Fig. 2 T_eq in K — digitized by eye, ε = 1)
 _FINKE_POINTS = [(37.0, 4200.0), (60.0, 2600.0)]
+
+
+def test_finke_correlation_exact():
+    """S-G vs Finke's printed DKR-family correlation at identical (ρ, V) —
+    digitization-free.  Both ∝ √ρ, so the flux ratio is a pure function of
+    velocity; pin the band 0.85–1.05 across 3–7.2 km/s and the known
+    low-side value ~0.89 at 7 km/s."""
+    BTU = 11356.5                       # W/m² per Btu/ft²/s
+    rho0, Rn_ft = 1.225, _RN / 0.3048
+    rho = 1e-3                          # arbitrary — cancels in the ratio
+    for V_kms in (3.0, 5.0, 6.0, 7.0, 7.2):
+        V = V_kms * 1e3
+        q_sg = 1.7415e-4 * np.sqrt(rho / _RN) * V ** 3
+        q_fk = (865 / np.sqrt(Rn_ft)) * np.sqrt(rho / rho0) \
+            * ((V / 0.3048) / 1e4) ** 3.15 * BTU
+        r = q_sg / q_fk
+        assert 0.85 <= r <= 1.05, (
+            f"S-G/DKR flux ratio {r:.3f} at {V_kms} km/s outside the "
+            f"documented family band")
+    # the ICBM-speed value: S-G reads ~11% below DKR (mildly optimistic side)
+    V = 7000.0
+    r7 = (1.7415e-4 * np.sqrt(rho / _RN) * V ** 3) / (
+        (865 / np.sqrt(Rn_ft)) * np.sqrt(rho / rho0)
+        * ((V / 0.3048) / 1e4) ** 3.15 * BTU)
+    assert 0.86 <= r7 <= 0.92
 
 
 def test_finke_teq_curve():
