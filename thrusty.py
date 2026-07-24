@@ -5566,7 +5566,6 @@ class BoosterFlyoutApp(tk.Tk):
         # ascent strip is built inside it as a plain frame — one consolidated
         # panel instead of a separate "Ascent Mode" box.
         fpf.pack(fill=tk.X, padx=6, pady=3)
-        ttk.Separator(fpf, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=6, pady=(2, 4))
 
         # ── Ascent strip — mode + hot-loop pitch controls ────────────
         gf = ttk.Frame(fpf)
@@ -5756,9 +5755,12 @@ class BoosterFlyoutApp(tk.Tk):
         # (Hwasong-11 / MaRV class).  A reentry-PLAN field like the glide law:
         # live here, written through to the active plan on every run, so the
         # same aeroshell can be A/B'd separating vs. integrated in two clicks.
+        # Separation and Mode rows share fixed label width + combobox width so
+        # the two dropdowns align as one column with left-justified labels.
         _sepbar = ttk.Frame(rf)
         _sepbar.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(3, 0))
-        ttk.Label(_sepbar, text="Separation:").pack(side=tk.LEFT)
+        ttk.Label(_sepbar, text="Separation:", width=11,
+                  anchor=tk.W).pack(side=tk.LEFT)
         self._SEP_LABELS = {
             'separating_ro': "Separates at burnout",
             'body':          "Non-separating (body reenters)",
@@ -5768,8 +5770,8 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_sep_cb = ttk.Combobox(
             _sepbar, textvariable=self._main_sep_var,
             values=list(self._SEP_LABELS.values()),
-            state="readonly", width=28)
-        self._main_sep_cb.pack(side=tk.LEFT, padx=(6, 0))
+            state="readonly", width=32)
+        self._main_sep_cb.pack(side=tk.LEFT, padx=(4, 0))
         self._main_sep_cb.bind(
             "<<ComboboxSelected>>",
             lambda _e: (self._refresh_glider_status_line(),
@@ -5801,14 +5803,15 @@ class BoosterFlyoutApp(tk.Tk):
         # dropdown already enforces it.)
         _modebar = ttk.Frame(_gmf)
         _modebar.grid(row=0, column=0, columnspan=2,
-                      sticky=tk.W, padx=8, pady=(2, 0))
-        ttk.Label(_modebar, text="Mode:").pack(side=tk.LEFT, padx=(0, 4))
+                      sticky=tk.W, padx=6, pady=(2, 0))
+        ttk.Label(_modebar, text="Mode:", width=11,
+                  anchor=tk.W).pack(side=tk.LEFT)
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         self._main_guidance_cb = ttk.Combobox(
             _modebar, textvariable=self._main_guidance_var,
             values=[lbl for _k, lbl in self._REENTRY_MODE_NUMERICAL],
             state="readonly", width=32)
-        self._main_guidance_cb.pack(side=tk.LEFT)
+        self._main_guidance_cb.pack(side=tk.LEFT, padx=(4, 0))
         self._main_guidance_cb.bind("<<ComboboxSelected>>",
                                      lambda _e: self._on_glider_guidance_changed())
 
