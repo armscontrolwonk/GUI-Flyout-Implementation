@@ -5396,13 +5396,21 @@ class BoosterFlyoutApp(tk.Tk):
             paned.sashpos(0, max(120, target))
         self.after_idle(_init_sash)
 
-        # Pinned results strip — always visible above the notebook tabs
+        # Pinned results strip — always visible above the notebook tabs.
+        # Mockup recipe (design/thrusty-mockup.html): white row + bottom
+        # hairline; metric = UPPERCASE muted label + mono ink value; state
+        # pill at the right.  _results_strip_var keeps the legacy one-line
+        # text alongside (nothing else displays it; cheap compatibility).
         self._results_strip_var = tk.StringVar(value="")
-        results_strip = ttk.Frame(right, relief=tk.GROOVE, borderwidth=1)
-        results_strip.pack(fill=tk.X, padx=2, pady=(0, 3))
-        ttk.Label(results_strip, textvariable=self._results_strip_var,
-                  anchor=tk.W).pack(
-            fill=tk.X, padx=8, pady=3)
+        _strip_outer = tk.Frame(right, bg=theme.BG)
+        _strip_outer.pack(fill=tk.X, padx=2, pady=(0, 3))
+        results_strip = tk.Frame(_strip_outer, bg=theme.BG)
+        results_strip.pack(fill=tk.X, padx=10, pady=(6, 5))
+        tk.Frame(_strip_outer, bg=theme.LINE, height=1).pack(fill=tk.X)
+        self._strip_metrics = tk.Frame(results_strip, bg=theme.BG)
+        self._strip_metrics.pack(side=tk.LEFT)
+        self._strip_pill = theme.StatusPill(results_strip)
+        self._strip_pill.widget().pack(side=tk.RIGHT)
 
         self._right_nb = ttk.Notebook(right)
         self._right_nb.pack(fill=tk.BOTH, expand=True)
@@ -6353,6 +6361,25 @@ class BoosterFlyoutApp(tk.Tk):
         # Initialise axes with placeholder labels
         self._init_axes()
         self._canvas.draw()
+
+    def _set_strip(self, pairs, state=None, dot=None):
+        """Render the results strip (mockup recipe): pairs of
+        (label, value) — muted UPPERCASE sans label + mono ink value — and
+        optionally update the state pill.  Also mirrors the legacy one-line
+        text into _results_strip_var."""
+        for w in self._strip_metrics.winfo_children():
+            w.destroy()
+        for i, (lbl, val) in enumerate(pairs):
+            cell = tk.Frame(self._strip_metrics, bg=theme.BG)
+            cell.pack(side=tk.LEFT, padx=(0 if i == 0 else 16, 0))
+            tk.Label(cell, text=str(lbl).upper(), bg=theme.BG, fg=theme.SUB,
+                     font=theme.ui_sans(self, 10)).pack(side=tk.LEFT, padx=(0, 5))
+            tk.Label(cell, text=str(val), bg=theme.BG, fg=theme.INK,
+                     font=theme.ui_mono(self, 11)).pack(side=tk.LEFT)
+        if state is not None:
+            self._strip_pill.set(state, dot or theme.GREEN)
+        self._results_strip_var.set(
+            "  |  ".join(f"{l}: {v}" for l, v in pairs))
 
     def _init_axes(self):
         for ax, title, xl, yl in [
@@ -9884,9 +9911,17 @@ class BoosterFlyoutApp(tk.Tk):
             _strip = (f"No sub-orbital solution — exceeds orbital velocity.  "
                       f"Apogee: {apogee_km*scale:.1f} {ulbl}")
             self._status_var.set("Max Range: " + _strip)
+            self._set_strip([("Apogee", f"{apogee_km*scale:,.1f} {ulbl}")],
+                            state="No sub-orbital solution", dot=theme.RED)
         elif orbital:
             _strip = (f"In orbit.  Apogee: {apogee_km*scale:.1f} {ulbl}" + _oe_str)
             self._status_var.set(_strip)
+            _pairs = [("Apogee", f"{apogee_km*scale:,.1f} {ulbl}")]
+            if oe:
+                _pairs += [("Orbit", f"{oe['perigee_km']:.0f}×{oe['apogee_km']:.0f} km"),
+                           ("Incl", f"{oe['inclination_deg']:.1f}°"),
+                           ("Period", f"{oe['period_min']:.1f} min")]
+            self._set_strip(_pairs, state="In orbit", dot=theme.GREEN)
         else:
             _spd_str = f"{imp_spd_kms:.2f} km/s" if imp_spd_kms is not None else "—"
             _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
@@ -9895,6 +9930,13 @@ class BoosterFlyoutApp(tk.Tk):
                       f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
                       f"Impact spd: {_spd_str}")
             self._status_var.set("Done.  " + _strip)
+            self._set_strip(
+                [("Range", f"{rng_km*scale:,.1f} {ulbl}"),
+                 ("Apogee", f"{apogee_km*scale:,.1f} {ulbl}"),
+                 ("ToF", f"{tof_s:.0f} s"),
+                 ("Impact", f"{r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E"),
+                 ("Impact spd", _spd_str)],
+                state="Flyout complete", dot=theme.GREEN)
         # Surface the static-margin / trim-gate verdict when it changed the
         # reentry: an unstable body was flipped to a tumbling (ballistic)
         # descent, or a stable body was L/D-limited by its control authority.
@@ -9904,7 +9946,6 @@ class BoosterFlyoutApp(tk.Tk):
             self._status_var.set(
                 self._status_var.get()
                 + f"   ⚠ reentry: SM {_sm:+.1f} cal — {_tg['verdict']}")
-        self._results_strip_var.set(_strip)
         # Rendering runs here (scheduled via after(), OUTSIDE the flyout's
         # try/except).  Guard it: an unhandled exception here fires after
         # _plot_results has already cla()'d every axis but before its final
