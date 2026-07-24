@@ -1653,6 +1653,56 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
+**MINED (2026-07-24) — Williamson AIAA 92-3989 (Sandia, "Hypersonic Flight
+Testing"), read from primary; PDF in `data/`.  VERDICT: does NOT close the
+silica-phenolic load record.**
+
+This paper was named in an earlier ledger note as the route to reconstruct
+SWERVE's flown heat load.  That recommendation was made **without having read
+it** and is now withdrawn — exactly the failure mode the read-from-primary rule
+exists to prevent.  The paper is a *methodology* survey (ground test vs CFD vs
+flight test; instrumentation; postflight estimation).  It contains **no
+trajectory, no heat flux, and no integrated load for any identified vehicle**,
+so no flown load can be reconstructed from it.  Its Fig. 25 is the closest
+thing — measured-vs-computed in-depth thermocouple temperatures at three depths
+on a *carbon*-phenolic heatshield, with boundary-layer transition marked at
+63.4 kft — but the vehicle is unnamed, the trajectory is absent, and the
+material is not silica phenolic.  **The silica-phenolic tripwire caveat stays
+OPEN**, and may simply not be closable from open literature; the honest posture
+is to keep it disclosed rather than manufacture a number.
+
+What the paper *does* contribute, all of it logged rather than wired:
+
+- **Transition prediction is unreliable, flight-proven** — the load-bearing
+  finding, now a standing caveat on our transition gate (METHODS §13.11).
+  GELMA and NASP Re_θ criteria vs Sandia ballistic flight data: *"the
+  predictions are not good … clearly indicative of our inability to predict
+  transition"* (Figs. 28–29); laminar and turbulent conditions overlap in the
+  same (Re_θ, M_e) region (Fig. 27); photodiodes show the flow oscillating
+  between states (Fig. 26).
+- **Ablation prediction is poor before flight** — *"heatshield blowing and
+  nosetip ablations have never been predicted well for new materials prior to
+  flight."*  A flight-grounded Sandia endorsement of the bounding philosophy in
+  §13.6 (bounds, never point estimates).
+- **Recession shifts static margin in flight** (Fig. 24): *"the nosetip
+  ablation increased static margin late in the flight.  In other instances, it
+  has been observed to decrease static margin."*  Thrusty's `trim_gate` treats
+  static margin as fixed — a known unmodeled coupling, logged.
+- **Carbon phenolic is the best-characterized ablator**: with a standard CP
+  heatshield *"the agreement is very good.  This is usually not true when a new
+  heatshield material is used."*  Supports the relative confidence ordering of
+  our ablator catalog.
+- **STARS booster envelope — a NEW verification datum, with a flag.**
+  Williamson: STARS boosts *"500 lb. to 900 lb. … to between 18,500 ft/sec and
+  17,000 ft/sec with −55 deg to −35 deg flight path inclinations"*
+  (= 227–408 kg to 5.18–5.64 km/s).  First look: Thrusty's `STARS-1` flying the
+  450 kg (992 lb) AHW reaches **5.88 km/s peak** — a heavier-than-envelope
+  payload reaching a *higher* speed than the envelope's ceiling, i.e. ~4–13%
+  optimistic in the wrong direction.  NOT yet a finding: peak-on-arc is not
+  burnout, the run's γ was not matched to Williamson's −35°/−55° band, and
+  "STARS" may denote a different configuration than our `STARS-1`.  Logged as
+  an OPEN verification item needing a like-for-like comparison.
+
 **CLOSED (2026-07-24) — radiative gas heating above ~9 km/s.**  Was the
 standing *"convective-only model; radiative gas heating NOT assessed"* caveat
 and a P3 ledger item.  Closed with **Tauber & Sutton 1991** (Earth/air) wired

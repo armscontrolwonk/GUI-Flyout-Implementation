@@ -3503,6 +3503,23 @@ whereas the nose-radius Reynolds onset is the classic nosetip-transition scaling
 editable in the Screening Envelope dialog (`re_rn_transition_onset`,
 `re_rn_fully_turbulent`); `test_transition.py` pins the Kuntz reproduction.
 
+**Standing caveat — transition placement is genuinely unreliable, and flight
+data says so.**  Williamson (Sandia, AIAA 92-3989, read from primary, PDF in
+`data/`) compares two standard engineering criteria — the G.E. Low Mass
+Addition (GELMA) criterion and the NASP Re_θ = 150·M_e rule — against Sandia
+ballistic flight data and finds *"the predictions are not good … clearly
+indicative of our inability to predict transition"* (Figs. 28–29).  His Fig. 27
+shows laminar and turbulent local conditions **overlapping heavily in the same
+(Re_θ, M_e) region**, i.e. identical conditions producing either state, and
+photodiode data on a maneuvering vehicle (Fig. 26) show the flow *"jumped back
+and forth between laminar and turbulent."*  He also notes transition visibly
+shifting the flight-derived C_mα, C_Nα and static margin (Figs. 22–24).
+Thrusty's gate is calibrated to a **single** CFD case (Kuntz IRV-2) and returns
+a single sharp onset; the honest reading is that it places transition to
+within a band that flight data does not resolve, and that the 3–5× turbulent
+augmentation is the load-bearing output, not the exact instant.  This is why
+the gate feeds a *screening* flux multiplier and never a hard verdict.
+
 This upgrades the former static *"turbulent flank ~3–5×"* warning into a
 computed, trajectory-resolved factor.  Because transition is a low-altitude
 phenomenon, it is correctly dormant for high-altitude HGV cruise (Re_Rₙ stays
