@@ -1,20 +1,12 @@
 # Thrusty — UI Design Spec ("Journal / Minimal")
 
-> **Implementation status — V1 tried and PARTIALLY ROLLED BACK (2026-07-24).**
-> The ttk/`clam` widget restyle and app-wide retypography were built, judged
-> on screen, and reverted: replacing native macOS aqua widgets with clam's
-> flat approximations looked worse, and Tk cannot close that gap.  Widgets
-> are NATIVE.  What survives (in `theme.py`) is the part the toolkit fully
-> delivers: the **plot style** (§7 — ink primary curves, one reserved
-> red-orange for every secondary axis, hidden top/right spines, faint grid)
-> and the **timeline row tints**.  §§3–6 (typography, rail, chrome, status
-> strip) are RETIRED for Tk; they remain here as the design record and would
-> apply as written only to a future non-Tk front end.
->
-> **Carve-outs (unchanged):** the four survival-tier colors are semantic and
-> exempt (`survivability_report.SURVIVAL_TIERS`, METHODS §13.5 — tier-blue is
-> a verdict, not an accent); native macOS menu bar and window chrome are
-> kept; plot font sizes untouched.
+> **Implementation status — FULLY REVERTED (2026-07-24).**  V1 was built in
+> two stages and both were judged on screen and reverted: first the
+> ttk/`clam` widget restyle (flat approximations of native aqua widgets),
+> then the Matplotlib journal plot style and timeline tints.  The app is
+> back to its native look in full.  This document is retained as the design
+> RECORD for a follow-on discussion about how to adapt the style to what
+> Tk + native macOS can actually carry — nothing in it is currently wired.
 
 Implementation reference for the Thrusty desktop app (Python/Tkinter +
 Matplotlib).  This documents the *visual system* only; behavior/physics are
