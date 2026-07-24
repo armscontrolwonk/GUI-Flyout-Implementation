@@ -5548,11 +5548,10 @@ class BoosterFlyoutApp(tk.Tk):
 
         _site_values, self._site_map = _load_launch_sites()
         self._site_var = tk.StringVar(value="")
-        self._site_cb = ttk.Combobox(lf, textvariable=self._site_var,
-                                     values=_site_values, state="readonly", width=26)
+        self._site_cb = theme.Dropdown(
+            lf, self._site_var, values=_site_values,
+            command=lambda: self._on_site_selected(None))
         self._site_cb.pack(fill=tk.X, pady=(0, 2))
-        self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
-        _bind_typeahead(self._site_cb)
 
         sb = tk.Frame(lf, bg=theme.BG)
         sb.pack(fill=tk.X, pady=(2, 6))
@@ -5572,13 +5571,13 @@ class BoosterFlyoutApp(tk.Tk):
             r = tk.Frame(lf, bg=theme.BG)
             r.pack(fill=tk.X, pady=3)
             tk.Label(r, text=label, width=9, anchor=tk.W, bg=theme.BG,
-                     fg=theme.INK, font=theme.ui_sans(parent, 12)
+                     fg=theme.INK, font=theme.ui_sans(parent, theme.FS["label"])
                      ).pack(side=tk.LEFT, padx=(0, 2))
             wrap, _ = theme.underline_entry(r, var, width=10)
             wrap.pack(side=tk.LEFT)
             tk.Label(r, text=unit, bg=theme.BG, fg=theme.SUB,
-                     font=theme.ui_sans(parent, 11)).pack(side=tk.LEFT,
-                                                          padx=(5, 0))
+                     font=theme.ui_sans(parent, theme.FS["unit"])
+                     ).pack(side=tk.LEFT, padx=(5, 0))
             if link:
                 theme.LinkButton(r, link, link_cmd).pack(side=tk.RIGHT,
                                                          padx=(0, 6))
@@ -6378,9 +6377,9 @@ class BoosterFlyoutApp(tk.Tk):
             cell = tk.Frame(self._strip_metrics, bg=theme.BG)
             cell.pack(side=tk.LEFT, padx=(0 if i == 0 else 16, 0))
             tk.Label(cell, text=str(lbl).upper(), bg=theme.BG, fg=theme.SUB,
-                     font=theme.ui_sans(self, 10)).pack(side=tk.LEFT, padx=(0, 5))
+                     font=theme.ui_sans(self, theme.FS["strip_label"])).pack(side=tk.LEFT, padx=(0, 5))
             tk.Label(cell, text=str(val), bg=theme.BG, fg=theme.INK,
-                     font=theme.ui_mono(self, 11)).pack(side=tk.LEFT)
+                     font=theme.ui_mono(self, theme.FS["strip_value"])).pack(side=tk.LEFT)
         if state is not None:
             self._strip_pill.set(state, dot or theme.GREEN)
         self._results_strip_var.set(

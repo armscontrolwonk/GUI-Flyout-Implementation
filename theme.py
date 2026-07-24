@@ -150,7 +150,7 @@ class StatusPill:
     def _paint(self):
         c = self._c
         c.delete("all")
-        f = ui_sans(c, 10)
+        f = ui_sans(c, FS["pill"])
         w = 30 + c.tk.call("font", "measure", f, self._text)
         c.configure(width=w + 2)
         _round_rect(c, 1, 1, w, 23, 11, fill=PILL_BG, outline=PILL_BORDER)
@@ -166,6 +166,11 @@ class StatusPill:
 UNDERLINE = "#cfcfcf"
 DISABLED  = "#c8c8c8"
 
+# Font sizes (pt) — tuned to match the original app's density (user call:
+# the first card render was too large; CSS px ≈ 0.75 pt).
+FS = {"section": 9, "label": 10, "field": 10, "unit": 9, "link": 10,
+      "drop": 10, "strip_label": 8, "strip_value": 10, "pill": 9}
+
 
 def card(parent, title):
     """Rail group card.  Returns (outer, body): pack `outer`; build fields
@@ -176,7 +181,7 @@ def card(parent, title):
     body = tk.Frame(outer, bg=BG)
     body.pack(fill="both", expand=True, padx=10, pady=(8, 10))
     tk.Label(body, text=title.upper(), bg=BG, fg=SUB,
-             font=ui_sans(parent, 10, bold=True)).pack(anchor="w", pady=(0, 6))
+             font=ui_sans(parent, FS["section"], bold=True)).pack(anchor="w", pady=(0, 6))
     return outer, body
 
 
@@ -188,8 +193,9 @@ def underline_entry(parent, textvariable, width=10, mono=True):
     e = tk.Entry(wrap, textvariable=textvariable, bd=0, relief="flat",
                  bg=BG, fg=INK, insertbackground=INK, highlightthickness=0,
                  width=width,
-                 font=ui_mono(parent, 12) if mono else ui_sans(parent, 12))
-    e.pack(fill="x", ipady=4)
+                 font=ui_mono(parent, FS["field"]) if mono
+                      else ui_sans(parent, FS["field"]))
+    e.pack(fill="x", ipady=3)
     tk.Frame(wrap, bg=UNDERLINE, height=1).pack(fill="x")
     return wrap, e
 
@@ -198,7 +204,8 @@ class LinkButton:
     """Underlined text link standing in for a button.  Supports
     .config(state=tk.NORMAL/tk.DISABLED) like the ttk.Buttons it replaces."""
 
-    def __init__(self, parent, text, command=None, size=11):
+    def __init__(self, parent, text, command=None, size=None):
+        size = FS["link"] if size is None else size
         import tkinter as tk
         self._tk = tk
         self._f  = ui_sans(parent, size)
@@ -232,3 +239,132 @@ class LinkButton:
     def _click(self, _e):
         if self._enabled and self._command:
             self._command()
+
+
+
+class Dropdown:
+    """The mockup's underline dropdown: current value + accent chevron over a
+    1px rule; click opens a borderless popup list (scroll + type-to-jump).
+    Drop-in for readonly ttk.Combobox call sites: .config(values=...) works,
+    `command` fires on selection (in place of <<ComboboxSelected>>), and the
+    shared textvariable carries the value.  Separator rows (starting '─')
+    are shown but not selectable."""
+
+    def __init__(self, parent, textvariable, values=(), command=None,
+                 size=None):
+        import tkinter as tk
+        self._tkmod = tk
+        self._var = textvariable
+        self._values = list(values)
+        self._command = command
+        self._size = FS["drop"] if size is None else size
+        self._outer = tk.Frame(parent, bg=BG)
+        row = tk.Frame(self._outer, bg=BG)
+        row.pack(fill="x")
+        self._val = tk.Label(row, textvariable=self._var, anchor="w", bg=BG,
+                             fg=INK, font=ui_sans(parent, self._size),
+                             cursor="hand2")
+        self._val.pack(side="left", fill="x", expand=True, ipady=3, padx=(2, 0))
+        self._chev = tk.Label(row, text="▾", bg=BG, fg=ACCENT,
+                              font=ui_sans(parent, self._size), cursor="hand2")
+        self._chev.pack(side="right", padx=(0, 3))
+        tk.Frame(self._outer, bg=UNDERLINE, height=1).pack(fill="x")
+        for w in (self._val, self._chev):
+            w.bind("<Button-1>", lambda _e: self._open())
+        self._pop = None
+
+    def pack(self, **kw):  self._outer.pack(**kw);  return self
+    def grid(self, **kw):  self._outer.grid(**kw);  return self
+
+    def config(self, values=None, state=None, **_kw):
+        if values is not None:
+            self._values = list(values)
+    configure = config
+
+    def __setitem__(self, key, val):
+        if key == "values":
+            self._values = list(val)
+
+    def set(self, value):  self._var.set(value)
+    def get(self):         return self._var.get()
+
+    def _close(self):
+        if self._pop is not None:
+            try:
+                self._pop.destroy()
+            except Exception:
+                pass
+            self._pop = None
+
+    def _open(self):
+        tk = self._tkmod
+        if self._pop is not None:
+            self._close()
+            return
+        x = self._outer.winfo_rootx()
+        y = self._outer.winfo_rooty() + self._outer.winfo_height()
+        w = max(self._outer.winfo_width(), 120)
+        pop = tk.Toplevel(self._outer)
+        pop.overrideredirect(True)
+        pop.geometry(f"+{x}+{y}")
+        frame = tk.Frame(pop, bg=BG, highlightthickness=1,
+                         highlightbackground=UNDERLINE)
+        frame.pack()
+        n = len(self._values)
+        lb = tk.Listbox(frame, height=min(max(n, 1), 16), activestyle="none",
+                        font=ui_sans(self._outer, self._size), bg=BG, fg=INK,
+                        bd=0, highlightthickness=0, relief="flat",
+                        selectbackground="#e7ecf3", selectforeground=INK,
+                        width=max(w // max(self._size - 3, 6), 24))
+        for v in self._values:
+            lb.insert("end", v)
+        if n > 16:
+            sb = tk.Scrollbar(frame, orient="vertical", command=lb.yview)
+            lb.configure(yscrollcommand=sb.set)
+            sb.pack(side="right", fill="y")
+        lb.pack(side="left", fill="both", expand=True)
+        cur = self._var.get()
+        if cur in self._values:
+            i = self._values.index(cur)
+            lb.selection_set(i)
+            lb.see(i)
+
+        def _choose(_e=None):
+            sel = lb.curselection()
+            if sel:
+                v = lb.get(sel[0])
+                if not str(v).startswith("─"):
+                    self._var.set(v)
+                    self._close()
+                    if self._command:
+                        self._command()
+                    return
+            self._close()
+
+        _buf = {"s": "", "after": None}
+
+        def _type(e):
+            if e.keysym in ("Return", "KP_Enter"):
+                _choose(); return
+            if e.keysym == "Escape":
+                self._close(); return
+            ch = e.char
+            if not ch or not ch.isprintable():
+                return
+            if _buf["after"]:
+                lb.after_cancel(_buf["after"])
+            _buf["s"] += ch.lower()
+            _buf["after"] = lb.after(800, lambda: _buf.update(s="", after=None))
+            for i, v in enumerate(self._values):
+                if str(v).lower().startswith(_buf["s"]):
+                    lb.selection_clear(0, "end")
+                    lb.selection_set(i)
+                    lb.see(i)
+                    break
+
+        lb.bind("<ButtonRelease-1>", _choose)
+        lb.bind("<Key>", _type)
+        pop.bind("<FocusOut>", lambda _e: self._close())
+        pop.bind("<Escape>", lambda _e: self._close())
+        self._pop = pop
+        lb.focus_set()
