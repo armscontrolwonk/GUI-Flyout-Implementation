@@ -3520,6 +3520,30 @@ within a band that flight data does not resolve, and that the 3–5× turbulent
 augmentation is the load-bearing output, not the exact instant.  This is why
 the gate feeds a *screening* flux multiplier and never a hard verdict.
 
+**The sharpest counter-example is SWERVE — the vehicle class Thrusty models.**
+Iliff & Shafer (NASA Dryden, AIAA 93-0311, read from primary, PDF in `data/`)
+report the third SWERVE flight — a 5.25° ablating slender cone, i.e. almost
+exactly a Thrusty reentry object — and find the boundary layer was
+**turbulent at Mach 12 and laminar at Mach 8** (their words: *"Surprisingly,
+the flight data exhibited a turbulent boundary layer at Mach 12 and a laminar
+boundary layer at Mach 8"*).  Their Fig. 23 shows the flight temperature
+tracking the *turbulent* prediction early and falling toward the *laminar*
+one later; Fig. 24 shows that when the vehicle changed attitude the windward
+ray went laminar→turbulent while the leeward ray went turbulent→laminar; and
+Fig. 25 shows laminar and turbulent flight points **overlapping in the same
+(Re_s, M_e) region**, with the GELMA criterion line failing to separate them.
+
+This is a direct falsification of the *monotonic* assumption our gate makes:
+Re_Rₙ rises as the vehicle descends, so the gate can only ever go
+laminar → transitional → turbulent, never back.  A real ablating, maneuvering
+cone did the reverse — plausibly because ablation blowing stabilises the
+boundary layer and nosetip shape change alters the entropy layer, neither of
+which the gate models.  Read the gate accordingly: it is a **conservative
+screening switch for when turbulent-level acreage heating is credible**, not a
+prediction of the boundary-layer state at a given instant.  For an ablating
+vehicle the state may reverse, and for a maneuvering one it differs
+windward-to-leeward at the same instant.
+
 This upgrades the former static *"turbulent flank ~3–5×"* warning into a
 computed, trajectory-resolved factor.  Because transition is a low-altitude
 phenomenon, it is correctly dormant for high-altitude HGV cruise (Re_Rₙ stays

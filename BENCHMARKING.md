@@ -1653,6 +1653,63 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
 
+**MINED (2026-07-24) — Iliff & Shafer AIAA 93-0311 (NASA Dryden, "A Comparison
+of Hypersonic Flight and Prediction Results"), read from primary; PDF in
+`data/`.  The SWERVE source that Williamson is not.**
+
+Covers X-15, Reentry F, SWERVE and the Space Shuttle.  Four results:
+
+1. **SWERVE geometry VERIFIED against a published source — 3 for 3.**  Iliff
+   gives the third SWERVE vehicle as a 5.25° half-angle cone, "a little over
+   100 in." long, nose-tip/base-radius ratio ~0.07.  Thrusty's
+   `ro_library/SWERVE.ro.json` yields **5.23°** (atan[(D/2)/L]), **0.070**, and
+   **2.60 m** — matching to within 0.02° and 0.001 on the radius ratio.  The
+   shipped SWERVE object's geometry is now externally verified, not just
+   internally consistent.
+
+2. **Transition ran BACKWARDS on SWERVE — the sharpest caveat yet on our
+   transition gate (METHODS §13.11).**  *"Surprisingly, the flight data
+   exhibited a turbulent boundary layer at Mach 12 and a laminar boundary
+   layer at Mach 8"* — the reverse of the monotonic laminar→turbulent march
+   our Re_Rₙ gate can produce.  Fig. 24: on an attitude change the windward
+   ray went laminar→turbulent while the leeward went turbulent→laminar, at the
+   same instant.  Fig. 25: laminar and turbulent flight points **overlap** in
+   (Re_s, M_e), with the GELMA line failing to separate them.  Likely physics:
+   ablation blowing stabilises the boundary layer and nosetip shape change
+   alters the entropy layer — neither modeled.  This matters more than the
+   Williamson caveat because SWERVE *is* the vehicle class Thrusty models.
+
+3. **SWERVE's heat-shield material is now UNCERTAIN — flagging our own data.**
+   Iliff says only *"The heat shield and nose tip were ablative materials"* —
+   no material named.  Our `SWERVE.ro.json` carries `body_tps_material:
+   silica_phenolic`, which traces to Murbach AIAA 93-0313 — but re-reading
+   that passage, the silica-phenolic-over-machined-aluminum description is of
+   Murbach's **Mars baseline vehicle** (a SWERVE-*derived* design), not
+   necessarily the as-flown terrestrial SWERVE.  Meanwhile the one
+   heatshield-temperature figure in Williamson 92-3989 — the paper Iliff cites
+   as *the* SWERVE reference — is a **carbon**-phenolic shield at the L/2
+   station with in-depth thermocouples and transition marked.  Suggestive, not
+   conclusive (Williamson's figure names no vehicle and his paper spans several
+   Sandia flights).  **Logged as an open question, not changed**: the honest
+   status is that SWERVE's acreage TPS is "an ablative, probably a phenolic,
+   specific resin/reinforcement unconfirmed."
+
+4. **The silica-phenolic record gap may be chasing a phantom.**  If SWERVE's
+   shield was carbon phenolic rather than silica phenolic, then "reconstruct
+   SWERVE's flown load to close the silica-phenolic record" was wrong twice
+   over — wrong source (Williamson has no trajectory) *and* wrong material.
+   Combined with TPSX carrying no H_eff for any of its 23 silica-phenolic
+   entries, the realistic status is that **the silica-phenolic load record may
+   not be closable from open literature**, and the right posture is the current
+   one: keep the caveat disclosed rather than manufacture a number.
+
+Also usable, not yet wired: Iliff's Tables 1-2 give PNS wall temperatures for
+the SWERVE flight conditions (T_w 4000 °R at Mach 12 turbulent, 2000 °R at
+Mach 8 laminar) and trimmed control deflections (δ_TRIM 4.11° / 3.1°), and
+Fig. 20 gives the third flight's maneuver (−10° AoA pullout at Mach 12, t=20 s,
+4° control deflection; back to 0° AoA by t=60 s at ~Mach 8) — a candidate Form
+C verification case if a SWERVE glide is ever validated end-to-end.
+
 **MINED (2026-07-24) — Williamson AIAA 92-3989 (Sandia, "Hypersonic Flight
 Testing"), read from primary; PDF in `data/`.  VERDICT: does NOT close the
 silica-phenolic load record.**
