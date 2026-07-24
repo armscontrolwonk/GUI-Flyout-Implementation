@@ -1616,7 +1616,8 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | Reentry-F H_eff bracket | 70–175 MJ/kg, central ≈114 (flight graphite, 5–60 atm) | derived: Q ≈ 3.87 GJ/m² ±20%, **pixel-traced** from the nominal-trajectory figure (γ_E 21.2°, V_E 20,300 ft/s; the figure Berry reproduces as his Fig. 6 [LWP-460]; embedded scan extracted from the Berry PDF, per-ruler tick calibration, apex-first slope tracking, overlay-QC'd — method + summary `benchmarks/form_a/reentryf_nominal_qdot.csv`, full trace `reentryf_qdot_trace_full.csv`) ÷ (ρ 1.73 g/cc vendor-nominal × 0.6–1.0 in axial-recession spread, CR-154044 0.77 in central); apex 348 MW/m² @ ~431.7 s (~47 kft), the 318 MW/m² `_BENCHMARKS` pin = LWP window-max quote; validation: traced in-window range 10.2–30.2×10³ vs LWP's quoted 9–28×10³ Btu/ft²·s + Sutton-Graves apex check ~340–380 MW/m²; 100→50 kft window ~8 s; supersedes both the ~1 GJ/m² order-of-magnitude read and the intermediate 2.85 GJ/m² eyeball table (wrong curve through the mid-rise, caught by overlay QC); Q_MJ stays None in code — preflight-nominal, no flight-measured stagnation heating exists (TM X-2560) | ⚠ labeled derived (pixel-traced; nominal 40 over-predicts ~2.9×, conservative) |
 | C/C severe-regime Q\* cap | ~10–20 MJ/kg at 80–168 atm (band validity floor) | Nestler 1979 (NTRS 19790010869, read from primary, repo `data/`): measured 3-D C/C steady-state recession 0.508–0.787 cm/s at 80–168 atm / T_w 4,000–4,167 K / H_CL 6.9–11.6 MJ/kg, roughness-augmented heating 1.4–1.5×, gouging onset ~60–77 atm along 45° weave rays; Q\* derived via the paper's own energy balance with a flagged nominal ρ ≈ 1.9 g/cc and Fig.-5 H_w.  Corroborated by Perini 1971: JANAF sublimation theory under-estimates measured loss up to 70% at the p = 4 atm / 4000 K extreme (erosion / higher-order species) | ⚠ measured rates cited; Q\* labeled derived |
 | C/C diffusion-limit Q\* (theory anchor) | Q\* ≈ h_t/0.1725 ≈ 5.8 × total enthalpy (cold-wall, moderate regime) | Scala's CO-diffusion-limit correlation with blowing offset (ṁ = 0.1725·ρₑuₑC_H₀), via Perini, *Review of Graphite Ablation Theory and Experimental Data*, JHU/APL ANSP-M-1, Dec 1971 (OSTI 4286220), Eq. 28 — read from primary, repo `data/`; diffusion-limit data scatter +10/−50% about theory.  Independent check on the Reentry-F flight-derived central: 18.6/0.1725 ≈ 108 vs 114 MJ/kg (~6%) | ✔ cited |
-| Stardust radiative fraction | 9% of peak rate / 4% of load (stagnation); CEV-scale ~40% of peak flux | Kontinos & Stackpoole AIAA 2008-1197 (auxiliary computations; §II for CEV comparison) — scales the P3-radiative item | ✔ cited |
+| Stardust radiative fraction | 9% of peak rate / 4% of load (stagnation); CEV-scale ~40% of peak flux | Kontinos & Stackpoole AIAA 2008-1197 (auxiliary computations; §II for CEV comparison).  **NOW THE VERIFICATION ANCHOR** for the computed radiative model: Tauber-Sutton returns ~23% of total at Stardust's conditions, a 2.6× over-prediction (R_n 0.20 m is below the correlation's 0.3 m floor — flagged extrapolated).  `test_radiative.py` pins the DIRECTION so a retune cannot silently flip it to under-prediction | ✔ cited + computed |
+| radiative gas heating (Earth) | q̇_r = 4.736e4·R_n^a·ρ^1.22·f_E(V) W/cm², a = 1.072e6·V^−1.88·ρ^−0.325 (capped), f_E from Table 1 (9–16 km/s) | **Tauber & Sutton 1991**, *JSR* 28(1):40–42 — read from primary, PDF in `data/`.  Wired as `heating.radiative_flux`, ADDED to the convective flux (METHODS §13.12).  Stated envelope V 10–16 km/s, ρ 6.66e-5–6.31e-4 kg/m³, R_n 0.3–3 m; paper's own accuracy ±20% at 54 km, ±8% at 66 km.  Equilibrium + cold wall → conservative-high where extrapolated.  **Exactly zero below 9 km/s, so no shipped verdict moves** (RVs ~7, HGVs ~5–6 km/s) | ✔ cited |
 
 Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
 each is labeled with its true epistemic status in code and report text.  If a
@@ -1651,6 +1652,43 @@ heavier, spreadsheet-shaped import job better served by an XLSX round-trip
 (mirroring the booster/RO XLSX templates) than by a threshold dialog.  When
 that project happens, it slots beneath this same frozen-default + self-disclose
 discipline.
+
+**CLOSED (2026-07-24) — radiative gas heating above ~9 km/s.**  Was the
+standing *"convective-only model; radiative gas heating NOT assessed"* caveat
+and a P3 ledger item.  Closed with **Tauber & Sutton 1991** (Earth/air) wired
+as `heating.radiative_flux` and added to the convective flux (METHODS §13.12);
+both papers read from primary and archived in `data/`.  Four things worth
+recording:
+
+1. **No shipped verdict moves.**  The correlation is defined at/above 9 km/s
+   and returns exactly zero below, so every RV (~7 km/s) and HGV (~5–6 km/s)
+   in the fleet is numerically untouched — pinned by a byte-equality test.
+   It bites only on capsule-class entries (Stardust 12.9, Hayabusa 12.2 km/s)
+   and any max-energy case a user builds.
+2. **Verified as an UPPER BOUND against Stardust.**  Equilibrium + cold wall,
+   fitted for R_n 0.3–3 m; Stardust is 0.20 m and enters high, where the shock
+   layer is nonequilibrium and optically thin.  The correlation returns ~23% of
+   total flux vs the ~9% flight-derived fraction — **2.6× conservative**, and
+   correctly self-flagged as extrapolated.  The test pins the direction.
+3. **A real regression was caught and fixed.**  Folding radiative into the
+   ablator *load* integral pushed the RECOVERED Stardust capsule to **1.26× its
+   own demonstrated record** — a false "beyond the flight record" verdict.
+   Root cause: every load record and every H_eff in the catalog is
+   convective-basis, and our Stardust reconstruction closes at 1.00× on that
+   basis.  Fix: the record ladder and burn-through bound integrate the
+   CONVECTIVE flux only; radiative raises T_eq and the reported peak, and is
+   disclosed.  Guarded by a dedicated test.
+4. **Bonus — the carbon-phenolic record gained independent corroboration.**
+   The companion Venus paper (Tauber, Palmer & Prabhu, NTRS 20120001655)
+   publishes a CFD radiative pulse for the Pioneer Venus Large Probe — the same
+   flight our CP load record comes from.  Integrating it gives **≈46 MJ/m² of
+   radiative load alone** against the **60 MJ/m² total** record (Cabrera & West
+   2026, who call the pulse radiation-heavy): 76%, entirely consistent.  Two
+   independent NASA reconstructions of the same entry agreeing at that level
+   materially firms up what had been the weakest of the three ablator records.
+   That paper also serves as an exact, digitization-free verification of the
+   correlation FAMILY — it publishes both CFD and fitted-equation columns, and
+   we reproduce its Eq. (2) to within 0.4% at all ten points.
 
 **CROSS-CHECKED (2026-07-23) — all 14 Thrusty material entries vs TPSX,
 field-by-field.**  Every entry has a TPSX counterpart; every overlapping

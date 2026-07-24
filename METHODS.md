@@ -3545,6 +3545,69 @@ Presentation choices, each deliberate:
 `test_survival_map.py` pins the placement, the per-material cell logic, and
 that every colorization span lands exactly on its cell text.
 
+### 13.12 Radiative gas heating (`heating.radiative_flux`)
+
+Above roughly 9 km/s the shock layer itself becomes an important radiator, and
+a convective-only screen understates the environment.  Thrusty computes the
+stagnation-point radiative flux with the **Tauber & Sutton 1991** Earth/air
+correlation (*JSR* 28(1):40–42, read from primary, PDF in `data/`):
+
+> q̇_r = C · R_n^a · ρ^b · f_E(V)  [W/cm²],  C = 4.736×10⁴, b = 1.22,
+> a = 1.072×10⁶ · V^−1.88 · ρ^−0.325 (capped: a ≤ 0.6 for 1 ≤ R_n ≤ 2 m,
+> a ≤ 0.5 for 2 < R_n ≤ 3 m, a ≤ 1 always), with f_E(V) the paper's Table 1
+> (9–16 km/s, linear interpolation).
+
+The result is **added to the Sutton-Graves convective flux** to form the total
+surface flux that drives peak T_eq and the reradiative surface criteria, and
+its peak plus the radiative fraction are disclosed in the report warnings.
+This retires the former *"convective-only model; radiative gas heating NOT
+assessed"* caveat.
+
+**Nothing in the shipped fleet moves.**  The correlation is defined only at and
+above 9 km/s and returns exactly zero below it, so ballistic RVs (~7 km/s) and
+HGVs (~5–6 km/s) are numerically untouched — pinned by
+`test_radiative.py::test_shipped_fleet_flux_unchanged_by_radiative`.  Radiative
+heating matters for the capsule-class anchors (Stardust 12.9 km/s, Hayabusa
+12.2 km/s) and for any max-energy or lunar-return case a user constructs.
+
+**Epistemic status — an upper bound, deliberately.**  The correlation assumes
+thermochemical *equilibrium* and a cold wall, and was fitted for blunt bodies
+(R_n 0.3–3 m).  Small, fast, high-altitude probes fly with a chemically
+nonequilibrium, optically thin shock layer that radiates *less*, so the
+correlation over-predicts there.  Verified: against Stardust's flight-derived
+radiative fraction (~9 % of peak rate; Kontinos & Stackpoole AIAA 2008-1197)
+the correlation returns ~23 % of total — a **2.6× over-prediction**, correctly
+flagged as extrapolated (R_n 0.20 m is below the 0.3 m floor).  The validity
+envelope is checked at the peak-radiative sample and the report says when the
+correlation is being extrapolated.  The test pins the *direction*: a future
+retune may not silently flip it to under-prediction.
+
+**Basis discipline — the record ladder stays convective.**  The ablator
+load-vs-flight-record comparison and the burn-through bound (§13.6) integrate
+the **convective** flux only.  Every demonstrated-load record and every H_eff
+in the catalog was derived on a convective basis, and Thrusty's own Stardust
+reconstruction closes at 1.00× of its record on that basis.  Folding the
+over-predicted equilibrium radiative term into that integral pushed the
+*recovered* Stardust capsule to 1.26× its own record — a false "beyond the
+flight record" verdict.  Radiative heating therefore raises T_eq and the
+reported peak flux, and is disclosed, but does not enter the record ladder.
+Guarded by `test_radiative.py::test_record_ladder_stays_on_the_convective_basis`.
+
+**Verification of the correlation family.**  The companion Venus paper
+(Tauber, Palmer & Prabhu, NTRS 20120001655) publishes both CFD values *and*
+its own fitted-equation values for the Pioneer Venus Large Probe, so our
+coding of that correlation family is checked against published numbers at both
+ends — no digitization anywhere.  We reproduce its Eq. (2) column to within
+0.4 % at all ten tabulated points.
+
+**Bonus corroboration of the carbon-phenolic record.**  Integrating the
+radiative pulse that this independent NASA team computed for the Pioneer Venus
+Large Probe gives ≈ 46 MJ/m² of *radiative* load over the tabulated window,
+against the ≈ 60 MJ/m² *total* load record Thrusty carries for carbon phenolic
+(Cabrera & West 2026, who describe the pulse as radiation-heavy).  Two
+independent reconstructions of the same flight agreeing at that level firms up
+what had been the weakest of the three ablator records.
+
 ---
 
 ## 14. Outputs, events, and milestones
