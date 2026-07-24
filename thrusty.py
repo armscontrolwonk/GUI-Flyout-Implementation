@@ -5776,19 +5776,11 @@ class BoosterFlyoutApp(tk.Tk):
                         self._update_loadout_state(),
                         self._update_params_display()))
 
-        # Row 3: status line — terminal vehicle summary (L/D, separation type)
-        self._glider_status_var = tk.StringVar(
-            value="Reentry object not configured for maneuvering"
-            " — set L/D in Edit Reentry Object…")
-        self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
-                                             foreground="#555555",
-                                             wraplength=self._left_wrap,
-                                             justify=tk.LEFT)
-        self._glider_status_lbl.grid(row=3, column=0, columnspan=2,
-                                      sticky=tk.W, padx=8, pady=(2, 2))
-        # register for dynamic re-wrap so the summary never clips at any
-        # pane width (it was truncating at "— edit…").
-        self._left_hints.append(self._glider_status_lbl)
+        # No status line: the strip explains only non-obvious inputs (house
+        # rule) — vehicle properties (L/D, g-limit) live in Edit Reentry
+        # Object….  The StringVar survives because several refresh paths
+        # still write it (harmlessly, no widget displays it).
+        self._glider_status_var = tk.StringVar(value="")
 
         # Row 1: reentry-mode detail frame.  Always visible; combobox at the
         # top selects the mode, rest of rows show/hide per selection.
@@ -5864,10 +5856,8 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_dt_lon_var = tk.StringVar(value="0.0")
         self._main_dt_radius_var = tk.StringVar(value="20")
 
-        self._main_edit_hint = self._mk_hint(
-            _gmf, "Dive, banks, aero model: Edit…")
-        self._main_edit_hint.grid(row=3, column=0, columnspan=2,
-                                  sticky=tk.W, padx=(8, 0), pady=(6, 1))
+        # (No editor-pointer hint: house rule — only explain inputs that
+        # might not be obvious.  Edit… is the affordance.)
 
         # Grid _glider_main_frame in its parent (rf); set mode-driven visibility.
         self._on_glider_guidance_changed()
@@ -6758,13 +6748,6 @@ class BoosterFlyoutApp(tk.Tk):
         key = self._current_reentry_mode_key()
         _uses_zeta = key in ("damped_glide", "dynamic_equilibrium_glide")
         _is_dyn    = key == "dynamic_equilibrium_glide"
-
-        # The Edit… pointer shows for every glide mode (terminal dive, aero,
-        # banks and dive-at-target all live in the editor now); it is hidden
-        # only for pure ballistic reentry.
-        if getattr(self, '_main_edit_hint', None) is not None:
-            (self._main_edit_hint.grid_remove() if is_ballistic
-             else self._main_edit_hint.grid())
 
         # The ζ row is the only per-mode strip knob: shown for the ζ-using glide
         # laws (damped ratio / dynamic tracking gain), hidden otherwise.  The
@@ -9057,20 +9040,22 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_booster_changed()
 
     def _update_flight_plan_summary(self):
-        """One-line summary of the active plan under the combobox."""
+        """Caption under the plan combobox.  House rule: only say what is
+        NOT evident in the fields below — mode and burnout angle are the
+        Mode/Burnout widgets right there, so the caption carries only the
+        fairing jettison (shown nowhere else in the strip), or nothing."""
         try:
             p = get_booster(self._booster_var.get())
         except Exception:
             self._fp_summary_var.set("")
             return
-        _mode = {"pitch_program": "pitch", "true_gravity_turn": "gravity turn",
-                 "orbital_insertion": "orbital"}.get(p.guidance, p.guidance)
-        parts = [_mode, f"burnout {p.burnout_angle_deg:g}°"]
         if getattr(p, 'shroud_mass_kg', 0.0) > 0:
-            parts.append("fairing @ "
-                         + (f"{p.shroud_jettison_alt_km:g} km"
-                            if p.shroud_jettison_alt_km > 0 else "heating"))
-        self._fp_summary_var.set(" · ".join(parts))
+            self._fp_summary_var.set(
+                "fairing jettison @ "
+                + (f"{p.shroud_jettison_alt_km:g} km"
+                   if p.shroud_jettison_alt_km > 0 else "heating-based"))
+        else:
+            self._fp_summary_var.set("")
 
     def _ask_new_plan_name_and_law(self, booster_name):
         """Modal prompt for a new flight plan's name AND its guidance law.
