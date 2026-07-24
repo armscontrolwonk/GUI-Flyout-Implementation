@@ -1,24 +1,20 @@
 # Thrusty — UI Design Spec ("Journal / Minimal")
 
-> **Implementation status.**  V1 (the "global coat") is BUILT: `theme.py`
-> tokens, app-wide named-font typography (sans text / mono numbers), `clam`
-> ttk restyle, Matplotlib journal rc + ink/accent2 axis mapping, timeline
-> tints, brand stripe.  V2 (rail underline controls), V3 (status strip +
-> tab underlines), V4 (dialogs) are pending.
+> **Implementation status — V1 tried and PARTIALLY ROLLED BACK (2026-07-24).**
+> The ttk/`clam` widget restyle and app-wide retypography were built, judged
+> on screen, and reverted: replacing native macOS aqua widgets with clam's
+> flat approximations looked worse, and Tk cannot close that gap.  Widgets
+> are NATIVE.  What survives (in `theme.py`) is the part the toolkit fully
+> delivers: the **plot style** (§7 — ink primary curves, one reserved
+> red-orange for every secondary axis, hidden top/right spines, faint grid)
+> and the **timeline row tints**.  §§3–6 (typography, rail, chrome, status
+> strip) are RETIRED for Tk; they remain here as the design record and would
+> apply as written only to a future non-Tk front end.
 >
-> **Agreed carve-outs from "solely visual" (2026-07-24):**
-> 1. **Semantic colors are exempt from the palette rules.**  The four
->    survival-tier colors (`survivability_report.SURVIVAL_TIERS`: green =
->    experience, blue = design, yellow = beyond, red = fail) are the
->    evidence ladder (METHODS §13.5), not decoration.  They survive the
->    retheme untouched; tier-blue is a verdict, not an accent.
-> 2. **Native macOS menu bar and window chrome are kept.**  §4's in-window
->    menu/title bar describes the HTML mockup; Tk menus stay in the system
->    bar.  The 3px brand stripe is retained (top of the content area).
-> 3. **The status strip (§6) is a deliberate small re-layout**, scheduled
->    with V3, not V1.
-> 4. Plot font SIZES are untouched (the 6-plot grid uses deliberately small
->    type); the journal rc governs colors/spines/grids only.
+> **Carve-outs (unchanged):** the four survival-tier colors are semantic and
+> exempt (`survivability_report.SURVIVAL_TIERS`, METHODS §13.5 — tier-blue is
+> a verdict, not an accent); native macOS menu bar and window chrome are
+> kept; plot font sizes untouched.
 
 Implementation reference for the Thrusty desktop app (Python/Tkinter +
 Matplotlib).  This documents the *visual system* only; behavior/physics are

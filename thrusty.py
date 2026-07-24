@@ -5133,7 +5133,6 @@ class BoosterFlyoutApp(tk.Tk):
                          'tabbingMode', self._w, 'disallowed')
         except tk.TclError:
             pass   # non-macOS platforms ignore this silently
-        theme.apply_theme(self)   # Journal/Minimal visual system (V1)
         # Bespoke app icon (assets/thrusty.png, transparent PNG).  On macOS
         # aqua Tk this sets the running app's DOCK icon (replacing the stock
         # Python rocket); on Windows/Linux it sets the window/taskbar icon.
@@ -5326,7 +5325,6 @@ class BoosterFlyoutApp(tk.Tk):
     # Top-level layout
     # ------------------------------------------------------------------
     def _build_ui(self):
-        theme.brand_stripe(self).pack(fill=tk.X, side=tk.TOP)
         top = ttk.Frame(self)
         top.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
