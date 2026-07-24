@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9ecf2;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#2f6fed;text-decoration:none}
+  a:hover{color:#1f57cf}
+  button{font-family:'IBM Plex Sans',system-ui,sans-serif}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#cfd6e2;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#b7c0d0;background-clip:content-box}
+</style>
+</helmet>
+<div style="--ink:#1a1a1a;--sub:#9a9a9a;--line:#ececec;--line2:#d8d8d8;--bg:#ffffff;--panel:#ffffff;--accent:#334155;--accent2:#cf5a2e;--red:#9a3535;--green:#3f6b4f;--plot-grid:linear-gradient(#f3f3f3 1px,transparent 1px),linear-gradient(90deg,#f3f3f3 1px,transparent 1px);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1b2230;">
+
+  <div style="width:min(1600px,100%);height:min(1040px,calc(100vh - 40px));background:var(--bg);border-radius:14px;box-shadow:0 28px 64px -22px rgba(20,30,60,.38),0 2px 8px rgba(20,30,60,.12);overflow:hidden;display:flex;flex-direction:column;border:1px solid rgba(20,30,60,.08);position:relative;">
+
+    <div style="height:3px;flex:none;background:linear-gradient(90deg,var(--accent),var(--accent2));"></div>
+
+    <!-- title bar -->
+    <div style="height:52px;flex:none;display:flex;align-items:center;gap:14px;padding:0 18px;background:#ffffff;border-bottom:1px solid #1a1a1a;position:relative;">
+      <div style="display:flex;gap:8px;">
+        <span style="width:13px;height:13px;border-radius:50%;background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);"></span>
+        <span style="width:13px;height:13px;border-radius:50%;background:#febc2e;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);"></span>
+        <span style="width:13px;height:13px;border-radius:50%;background:#28c840;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);"></span>
+      </div>
+      <div style="width:118px;height:26px;flex:none;margin-left:2px;">
+        <image-slot id="thrusty-logo-blk2" src="assets/thrusty-wordmark.png" shape="rect" fit="contain" placeholder="Thrusty"></image-slot>
+      </div>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);font:500 15px 'IBM Plex Sans';letter-spacing:.01em;color:#8a8a8a;">A Booster Performance Calculator</div>
+    </div>
+
+    <!-- click-away backdrop -->
+    <sc-if value="{{ anyMenu }}" hint-placeholder-val="{{ true }}">
+      <div onClick="{{ closeMenu }}" style="position:fixed;inset:0;z-index:50;"></div>
+    </sc-if>
+
+    <!-- menu bar -->
+    <div style="height:28px;flex:none;display:flex;align-items:center;gap:2px;padding:0 10px;background:#ffffff;border-bottom:1px solid var(--line);position:relative;z-index:55;">
+      <div style="position:relative;">
+        <div onClick="{{ tgFile }}" onMouseEnter="{{ hvFile }}" style="{{ csFile }}">File</div>
+        <sc-if value="{{ mFile }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:256px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Save Trajectory…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export Timeline…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export Missile Definition…</div>
+            <div style="height:1px;background:var(--line);margin:5px 8px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export Folium Map…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export KML…</div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:relative;">
+        <div onClick="{{ tgAnalysis }}" onMouseEnter="{{ hvAnalysis }}" style="{{ csAnalysis }}">Analysis</div>
+        <sc-if value="{{ mAnalysis }}" hint-placeholder-val="{{ true }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:262px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Parametric Sweep…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Aim at Target (liquid)…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Engine Cutoff (liquid)…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Re-entry Query…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Dry Mass Estimator…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Screening Envelope…</div>
+            <div style="height:1px;background:var(--line);margin:5px 8px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Reference Data<span style="color:var(--sub);font-size:16px;">›</span></div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:relative;">
+        <div onClick="{{ tgPlots }}" onMouseEnter="{{ hvPlots }}" style="{{ csPlots }}">Plots</div>
+        <sc-if value="{{ mPlots }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:238px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Altitude vs Time</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Speed vs Time</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Altitude vs Range</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Ground Track</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Dyn. Pressure / Mach</div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:relative;">
+        <div onClick="{{ tgCarto }}" onMouseEnter="{{ hvCarto }}" style="{{ csCarto }}">Cartography</div>
+        <sc-if value="{{ mCarto }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:238px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export Folium Map…</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Export KML…</div>
+            <div style="height:1px;background:var(--line);margin:5px 8px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Ground Track Overlay</div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:relative;">
+        <div onClick="{{ tgView }}" onMouseEnter="{{ hvView }}" style="{{ csView }}">View</div>
+        <sc-if value="{{ mView }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:210px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8"><span style="color:var(--accent);width:14px;">✓</span>Units: km</div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8"><span style="width:14px;"></span>Units: nmi</div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8"><span style="width:14px;"></span>Units: miles</div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:relative;">
+        <div onClick="{{ tgHelp }}" onMouseEnter="{{ hvHelp }}" style="{{ csHelp }}">Help</div>
+        <sc-if value="{{ mHelp }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 5px);left:0;z-index:60;min-width:206px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -8px rgba(20,30,60,.3);padding:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">About Thrusty</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-radius:6px;font:400 13px 'IBM Plex Sans';color:var(--ink);cursor:pointer;" style-hover="background:#eef2f8">Documentation</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- main body -->
+    <div style="flex:1;display:flex;min-height:0;">
+
+      <!-- LEFT CONTROL RAIL -->
+      <div style="width:404px;flex:none;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:9px;background:#fbfcfe;border-right:1px solid var(--line);">
+
+        <section style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;">
+          <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin-bottom:10px;">Booster Type</div>
+          <div style="display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+            <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">AUR+HGB</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:34px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:7px;">
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">New</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Edit…</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Delete</button>
+          </div>
+        </section>
+
+        <section style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;">
+          <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin-bottom:10px;">Reentry Object</div>
+          <div style="display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+            <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">C-HGB</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:34px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:7px;">
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">New</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Edit…</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Delete</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="font:400 13px 'IBM Plex Sans';color:var(--ink);">Loadout:</span>
+            <div style="display:flex;height:30px;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:#fff;">
+              <div style="width:48px;display:flex;align-items:center;justify-content:center;font:500 13px 'IBM Plex Mono';color:var(--ink);">1</div>
+              <div style="display:flex;flex-direction:column;border-left:1px solid var(--line);">
+                <button style="width:24px;height:17px;border:none;border-bottom:1px solid var(--line);background:#f3f6fb;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;" style-hover="background:#e6ecf5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+                <button style="width:24px;height:17px;border:none;background:#f3f6fb;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;" style-hover="background:#e6ecf5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+              </div>
+            </div>
+            <span style="font:400 12px 'IBM Plex Sans';color:var(--sub);white-space:nowrap;">× object carried through boost</span>
+          </div>
+        </section>
+
+        <section style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;">
+          <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin-bottom:10px;">Launch Site</div>
+          <div style="display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+            <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">Cape Canaveral (SLC-41)</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:34px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:7px;">
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">New</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Edit…</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;font:500 12px 'IBM Plex Sans';color:#c8c8c8;cursor:default;">Delete</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:74px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Latitude:</span>
+            <div style="width:118px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">28.5835</div>
+            <span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">°</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:7px;">
+            <span style="width:74px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Longitude:</span>
+            <div style="width:118px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">-80.5830</div>
+            <span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">°</span>
+            <button style="margin-left:auto;height:30px;padding:0 18px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Find…</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:7px;">
+            <span style="width:74px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Azimuth:</span>
+            <div style="width:118px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">103</div>
+            <span style="font:400 12px 'IBM Plex Sans';color:var(--sub);white-space:nowrap;">° (from N)</span>
+            <button style="margin-left:auto;height:30px;padding:0 14px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Estimate…</button>
+          </div>
+        </section>
+
+        <section style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;">
+          <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin-bottom:10px;">Flight Plan</div>
+          <div style="display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+            <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">AUR_simple (3)</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:34px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:7px;">
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">New</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Edit…</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Delete</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:7px;">
+            <span style="width:52px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Mode:</span>
+            <div style="flex:1;display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+              <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">Simple pitch profile</span>
+              <span style="display:flex;align-items:center;justify-content:center;width:32px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:96px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Launch elev.:</span>
+            <div style="width:82px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">80.0</div>
+            <span style="font:400 12px 'IBM Plex Sans';color:var(--sub);white-space:nowrap;">° (90 = vertical)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:96px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Burnout Angle:</span>
+            <div style="width:82px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">38.1</div>
+            <span style="font:400 12px 'IBM Plex Sans';color:var(--sub);white-space:nowrap;">° (Wheelon ε*)</span>
+            <button style="margin-left:auto;height:30px;padding:0 15px;border:1px solid #334155;background:#fff;border-radius:2px;font:600 13px 'IBM Plex Mono';color:#334155;cursor:pointer;" style-hover="color:#1a1a1a">ε*</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:96px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Turn Stop:</span>
+            <div style="width:82px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">75.0</div>
+            <span style="font:400 12px 'IBM Plex Sans';color:var(--sub);white-space:nowrap;">s (default = burn time)</span>
+          </div>
+          <button style="width:100%;height:31px;margin-top:7px;border:1px solid #334155;background:#fff;border-radius:2px;font:500 12px 'IBM Plex Sans';color:#334155;cursor:pointer;" style-hover="color:#1a1a1a">Reset trajectory to defaults</button>
+        </section>
+
+        <section style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;">
+          <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin-bottom:10px;">Reentry Plan</div>
+          <div style="display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+            <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">CHGV_simple</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:34px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:7px;">
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">New</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Edit…</button>
+            <button style="flex:1;height:28px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Delete</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:7px;">
+            <span style="width:88px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Separation:</span>
+            <div style="flex:1;display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+              <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">Separates at burnout</span>
+              <span style="display:flex;align-items:center;justify-content:center;width:32px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:88px;font:400 13px 'IBM Plex Sans';color:var(--ink);">Mode:</span>
+            <div style="flex:1;display:flex;align-items:stretch;height:30px;background:#fff;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;overflow:hidden;cursor:pointer;" style-hover="border-color:#b9c2d2">
+              <span style="flex:1;display:flex;align-items:center;padding:0 2px 0 4px;font:500 13px 'IBM Plex Sans';color:var(--ink);">Damped phugoid glide</span>
+              <span style="display:flex;align-items:center;justify-content:center;width:32px;background:transparent;border-left:none;color:var(--accent);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="width:112px;font:400 13px 'IBM Plex Sans';color:var(--ink);white-space:nowrap;">Damping ratio ζ:</span>
+            <div style="width:82px;height:30px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">0.7</div>
+            <button style="margin-left:auto;height:30px;padding:0 18px;border:none;background:transparent;border-radius:0;font:500 12px 'IBM Plex Sans';color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;" style-hover="color:#1a1a1a">Estimate…</button>
+          </div>
+        </section>
+
+        <div style="display:flex;gap:8px;margin-top:2px;">
+          <button style="flex:1.5;height:36px;border:none;background:var(--accent);color:#fff;border-radius:2px;font:600 14px 'IBM Plex Sans';cursor:pointer;box-shadow:none;display:flex;align-items:center;justify-content:center;gap:7px;" style-hover="background:#245ed8"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run Flyout</button>
+          <button style="flex:1;height:36px;border:1px solid #334155;background:#fff;border-radius:2px;font:500 12px 'IBM Plex Sans';color:#334155;cursor:pointer;" style-hover="color:#1a1a1a">Max Range</button>
+          <button style="flex:.9;height:36px;border:1px solid #e3e3e3;background:#fafafa;border-radius:2px;font:500 13px 'IBM Plex Sans';color:#b3bac6;cursor:default;display:flex;align-items:center;justify-content:center;gap:6px;"><span style="width:9px;height:9px;background:#c3c9d3;border-radius:1.5px;"></span>Stop</button>
+          <button style="flex:1;height:36px;border:1px solid #334155;background:#fff;border-radius:2px;font:500 12px 'IBM Plex Sans';color:#334155;cursor:pointer;" style-hover="color:#1a1a1a">Sweep…</button>
+        </div>
+      </div>
+
+      <!-- RIGHT PANE -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#ffffff;">
+
+        <!-- status strip -->
+        <div style="flex:none;display:flex;align-items:center;flex-wrap:nowrap;gap:16px;padding:10px 20px;background:#fff;border-bottom:1px solid var(--line);overflow:hidden;">
+          <div style="display:flex;align-items:baseline;gap:5px;white-space:nowrap;"><span style="font:500 10px 'IBM Plex Sans';letter-spacing:.03em;color:var(--sub);text-transform:uppercase;">Range</span><span style="font:500 12px 'IBM Plex Mono';color:var(--ink);">4,782.4 km</span></div>
+          <div style="display:flex;align-items:baseline;gap:5px;white-space:nowrap;"><span style="font:500 10px 'IBM Plex Sans';letter-spacing:.03em;color:var(--sub);text-transform:uppercase;">Apogee</span><span style="font:500 12px 'IBM Plex Mono';color:var(--ink);">125.2 km</span></div>
+          <div style="display:flex;align-items:baseline;gap:5px;white-space:nowrap;"><span style="font:500 10px 'IBM Plex Sans';letter-spacing:.03em;color:var(--sub);text-transform:uppercase;">ToF</span><span style="font:500 12px 'IBM Plex Mono';color:var(--ink);">1617 s</span></div>
+          <div style="display:flex;align-items:baseline;gap:5px;white-space:nowrap;"><span style="font:500 10px 'IBM Plex Sans';letter-spacing:.03em;color:var(--sub);text-transform:uppercase;">Impact</span><span style="font:500 12px 'IBM Plex Mono';color:var(--ink);">11.44°N, −38.29°E</span></div>
+          <div style="display:flex;align-items:baseline;gap:5px;white-space:nowrap;"><span style="font:500 10px 'IBM Plex Sans';letter-spacing:.03em;color:var(--sub);text-transform:uppercase;">Impact spd</span><span style="font:500 12px 'IBM Plex Mono';color:var(--ink);">0.37 km/s</span></div>
+          <div style="margin-left:auto;flex:none;display:flex;align-items:center;gap:7px;background:#f1f3f5;border:1px solid #dcdcdc;border-radius:20px;padding:4px 12px;white-space:nowrap;">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--green);"></span>
+            <span style="font:500 11px 'IBM Plex Sans';color:#334155;">Flyout complete</span>
+          </div>
+        </div>
+
+        <!-- tab bar -->
+        <div style="flex:none;display:flex;justify-content:center;padding:16px 0 6px;background:#ffffff;">
+          <div style="display:inline-flex;background:#e7ebf2;border-radius:11px;padding:4px;gap:2px;">
+            <div onClick="{{ goPlots }}" style="{{ tPlots }}">Plots</div>
+            <div onClick="{{ goTimeline }}" style="{{ tTimeline }}">Flight Timeline</div>
+            <div onClick="{{ goBooster }}" style="{{ tBooster }}">Booster Parameters</div>
+            <div onClick="{{ goSlv }}" style="{{ tSlv }}">SLV Performance</div>
+            <div onClick="{{ goReentry }}" style="{{ tReentry }}">Reentry Survivability</div>
+          </div>
+        </div>
+
+        <!-- content region -->
+        <div style="flex:1;overflow-y:auto;">
+
+          <!-- ============ PLOTS ============ -->
+          <sc-if value="{{ isPlots }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:14px 20px 24px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+              <!-- 1 Altitude vs Time -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Altitude vs Time</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Altitude (km)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>125</span><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:20% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,100 L6,84 L10,44 L12.5,0 L16,8 L21.5,44 L28,68 L35,67.2 L47.5,68 L60,71.2 L72.5,80 L80,92 L80.85,100 Z" fill="none"/><path d="M0,100 L6,84 L10,44 L12.5,0 L16,8 L21.5,44 L28,68 L35,67.2 L47.5,68 L60,71.2 L72.5,80 L80,92 L80.85,100" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>400</span><span>800</span><span>1200</span><span>1600</span><span>2000</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Time (s)</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2 Speed vs Time -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Speed vs Time</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Speed (km/s)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span>0</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:20% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,100 L4,30 L7.5,12.5 L12.5,10 L16.5,20 L20,25 L22.5,10 L26,15 L40,40 L60,60 L80,87.5 L80.85,92.5" fill="none" stroke="#cf5a2e" stroke-width="1.8" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><path d="M0,100 L4,22 L7.5,4 L12.5,0 L16.5,10 L20,16 L22.5,0 L26,4 L40,30 L60,54 L80,86 L80.85,92" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                      <div style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:4px;font:500 10px 'IBM Plex Mono';color:var(--ink);">
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px solid #1a1a1a;"></span>Speed</div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px dashed #cf5a2e;"></span>Mach</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>400</span><span>800</span><span>1200</span><span>1600</span><span>2000</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Time (s)</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;font:500 11px 'IBM Plex Mono';color:var(--accent2);padding:0 5px 22px 8px;"><span>20</span><span>16</span><span>12</span><span>8</span><span>4</span><span>0</span></div>
+                  <div style="writing-mode:vertical-rl;font:500 12px 'IBM Plex Sans';color:var(--accent2);text-align:center;padding-bottom:22px;">Mach</div>
+                </div>
+              </div>
+
+              <!-- 3 Altitude vs Range -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Altitude vs Range</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Altitude (km)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>125</span><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:20% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,100 L6,44 L12,4 L18,0 L24,12 L36,52 L44,68 L56,67.2 L70,68 L84,72 L94,84 L95.66,100 Z" fill="none"/><path d="M0,100 L6,44 L12,4 L18,0 L24,12 L36,52 L44,68 L56,67.2 L70,68 L84,72 L94,84 L95.66,100" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>1000</span><span>2000</span><span>3000</span><span>4000</span><span>5000</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Downrange (km)</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4 Ground Track -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Ground Track</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Latitude (°N)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>30</span><span>25</span><span>20</span><span>15</span><span>10</span><span>5</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:20% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M15.7,5.7 C40,8 50,18 53.3,24 S78,60 86.2,74.2" fill="none" stroke="#1a1a1a" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>
+                      <span style="position:absolute;left:15.7%;top:5.7%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--green);border:2px solid #fff;box-shadow:0 0 0 1px var(--green);"></span>
+                      <span style="position:absolute;left:53.3%;top:24%;transform:translate(-50%,-50%);color:var(--red);font:700 14px 'IBM Plex Sans';">✕</span>
+                      <span style="position:absolute;left:86.2%;top:74.2%;transform:translate(-50%,-50%);color:var(--red);font:400 17px 'IBM Plex Sans';">★</span>
+                      <div style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:4px;font:500 10px 'IBM Plex Mono';color:var(--ink);">
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--green);"></span>Launch</div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--red);width:9px;text-align:center;">★</span>Impact</div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--red);width:9px;text-align:center;font-weight:700;">✕</span>Debris</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>-90</span><span>-78</span><span>-66</span><span>-54</span><span>-42</span><span>-30</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Longitude (°E)</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5 Pitch, Azimuth vs Time -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Pitch, Azimuth vs. Time</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Elevation (°)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>80</span><span>64</span><span>48</span><span>32</span><span>16</span><span>0</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:16.6667% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,40 L100,40" fill="none" stroke="#cf5a2e" stroke-width="1.8" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/><path d="M0,0 L62.5,100 L100,100" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                      <div style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:4px;font:500 10px 'IBM Plex Mono';color:var(--ink);">
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px solid #1a1a1a;"></span>Pitch</div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px dashed #94a3b8;"></span>Azimuth</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span><span>120</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Time (s)</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;font:500 11px 'IBM Plex Mono';color:var(--accent2);padding:0 5px 22px 8px;"><span>105</span><span>104</span><span>103</span><span>102</span><span>101</span><span>100</span></div>
+                  <div style="writing-mode:vertical-rl;font:500 12px 'IBM Plex Sans';color:var(--accent2);text-align:center;padding-bottom:22px;">Azimuth (°)</div>
+                </div>
+              </div>
+
+              <!-- 6 Dyn. Pressure, Mach vs Time -->
+              <div style="display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:14px 18px 12px;min-height:262px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="text-align:center;font:600 15px 'IBM Plex Sans';color:var(--ink);margin-bottom:8px;">Dyn. Pressure, Mach vs. Time</div>
+                <div style="display:flex;flex:1;min-height:0;">
+                  <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">q (kPa)</div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>125</span><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                    <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:16.6667% 20%;overflow:hidden;">
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,100 L8.33,93.6 L16.67,68 L25,16 L29.17,4 L35,16 L41.67,52 L50,77.6 L62.5,90.4 L75,96 L100,98.4 Z" fill="none"/><path d="M0,100 L8.33,93.6 L16.67,68 L25,16 L29.17,4 L35,16 L41.67,52 L50,77.6 L62.5,90.4 L75,96 L100,98.4" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><path d="M0,100 L16.67,95 L33.33,85 L50,70 L66.67,50 L83.33,30 L100,12.5" fill="none" stroke="#cf5a2e" stroke-width="1.8" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                      <div style="position:absolute;left:26%;top:6%;font:500 10px 'IBM Plex Mono';color:var(--accent);">max-q</div>
+                      <div style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:4px;font:500 10px 'IBM Plex Mono';color:var(--ink);">
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px solid #1a1a1a;"></span>q</div>
+                        <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px dashed #94a3b8;"></span>Mach</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span><span>120</span></div>
+                    <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">Time (s)</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;font:500 11px 'IBM Plex Mono';color:var(--accent2);padding:0 5px 22px 8px;"><span>20</span><span>16</span><span>12</span><span>8</span><span>4</span><span>0</span></div>
+                  <div style="writing-mode:vertical-rl;font:500 12px 'IBM Plex Sans';color:var(--accent2);text-align:center;padding-bottom:22px;">Mach</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- ============ FLIGHT TIMELINE ============ -->
+          <sc-if value="{{ isTimeline }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Summary</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Range</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">4,782.4 km</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">2,582.3 nmi · 2,971.6 mi</div></div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Apogee</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">125.2 km</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">loc 26.49°N −71.87°E</div></div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Flight time</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">1617 s</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">26 min 57 s</div></div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Impact</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">11.44°N −38.29°E</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">South Atlantic</div></div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Impact speed</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">0.37 km/s</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">Mach 1.1</div></div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:12px 14px;"><div style="font:500 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.04em;color:var(--sub);">Reentry object</div><div style="font:400 20px 'IBM Plex Mono';color:var(--ink);margin-top:3px;">C-HGB</div><div style="font:400 11px 'IBM Plex Mono';color:var(--sub);margin-top:2px;">damped glide</div></div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px 8px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Flight Event Timeline</div>
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Event</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Time (s)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Alt (km)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Range (km)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Gnd Spd (km/s)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Inrtl Spd (km/s)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Accel (m/s²)</th>
+                    <th style="text-align:right;padding:9px 12px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Mass (t)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="background:#f2f4f6;"><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Ignition</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.010</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.411</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">+17.5</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">7.441</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Stage 1 burnout</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">54.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">26.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">25.5</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1.798</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">2.142</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">+46.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">2.478</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Stage 2 ignition</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">54.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">26.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">25.5</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1.798</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">2.142</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">+46.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">2.478</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Stage 2 burnout</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">117.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">81.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">206.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.189</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.591</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">+59.9</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr style="background:#f2f4f6;"><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Apogee</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">253.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">125.2</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">890.9</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.109</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.515</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--sub);border-bottom:1px solid #eef1f6;">−0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Re-entry (100 km)</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">355.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">100.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1407.2</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.155</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.558</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">+0.9</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Max-G (4.2 g)</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">449.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">37.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1880.2</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">4.955</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.354</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--red);border-bottom:1px solid #eef1f6;">−24.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Peak heating (13.6 MW/m²)</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">466.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">32.7</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1961.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">4.663</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.063</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--red);border-bottom:1px solid #eef1f6;">−12.8</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr style="background:#f7f1e8;"><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Stage 1 empty impact</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">469.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">55.2</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.039</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.039</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--sub);border-bottom:1px solid #eef1f6;">+0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.454</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Pull-up start (32 km)</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">471.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">32.4</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1984.1</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">4.604</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">5.004</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--red);border-bottom:1px solid #eef1f6;">−11.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Glide start (40 km)</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">562.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">39.9</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">2380.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">4.249</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">4.649</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--red);border-bottom:1px solid #eef1f6;">−2.6</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.450</td></tr>
+                  <tr style="background:#f7f1e8;"><td style="padding:9px 12px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Stage 2 empty impact</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">766.4</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">1879.2</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.047</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.047</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--sub);border-bottom:1px solid #eef1f6;">+0.0</td><td style="padding:9px 12px;text-align:right;font:500 13px 'IBM Plex Mono';color:var(--ink);border-bottom:1px solid #eef1f6;">0.186</td></tr>
+                  <tr style="background:#f2f4f6;"><td style="padding:9px 12px;font:600 13px 'IBM Plex Sans';color:var(--ink);">Impact</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">1617.0</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">0.0</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">4783.3</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">0.375</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">0.787</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--sub);">—</td><td style="padding:9px 12px;text-align:right;font:600 13px 'IBM Plex Mono';color:var(--ink);">0.450</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- ============ BOOSTER PARAMETERS ============ -->
+          <sc-if value="{{ isBooster }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Summary — AUR+HGB</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:48px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Launch mass</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">7,441 kg</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Total propellant</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">6,351 kg</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Throw weight</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">450 kg</span></div>
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Total length</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">12.8 m</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Liftoff T/W</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">3.14</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Loadout</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">1 × 450 kg</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+              <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Stage 1</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:36px;">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Diameter (m)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">0.88</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Length (m)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">10.20</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Fueled (kg)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">4,963</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Dry mass (kg)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">454</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Empty β</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">95</span></div>
+                  </div>
+                  <div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Thrust (kN)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">229</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">ISP (s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">280</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Burntime (s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">54.0</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Mass flow (kg/s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">83.5</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">T/W ratio</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">3.14</span></div>
+                  </div>
+                </div>
+              </div>
+              <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Stage 2</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:36px;">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Diameter (m)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">0.88</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Length (m)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">2.60</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Fueled (kg)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">2,028</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Dry mass (kg)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">186</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Empty β</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">129</span></div>
+                  </div>
+                  <div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Thrust (kN)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">80</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">ISP (s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">280</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Burntime (s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">63.0</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Mass flow (kg/s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">29.2</span></div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">T/W ratio</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">3.30</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Front End</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:48px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Loadout</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">1 × C-HGB</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Object β</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">23,497 kg/m²</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Object shape</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">Cone</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Object length</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">1.50 m</span></div>
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Per-object mass</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">450 kg</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Object diameter</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">0.58 m</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Glider L/D</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">2.00</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Guidance</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">Skip-glide</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- ============ SLV PERFORMANCE ============ -->
+          <sc-if value="{{ isSlv }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">Target Orbit</div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                <span style="font:400 13px 'IBM Plex Sans';color:var(--ink);">Perigee</span>
+                <div style="width:110px;height:31px;display:flex;align-items:center;padding:0 11px;border:none;border-bottom:1px solid #cfcfcf;border-radius:0;background:#fff;font:500 13px 'IBM Plex Mono';color:var(--ink);">500</div>
+                <span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">km</span>
+                <span style="font:400 13px 'IBM Plex Sans';color:var(--ink);margin-left:14px;">Apogee</span>
+                <div style="width:110px;height:31px;display:flex;align-items:center;padding:0 11px;border:1px solid var(--line2);border-radius:8px;background:#fff;font:500 13px 'IBM Plex Mono';color:#aeb6c4;">—</div>
+                <span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">km (blank = circular)</span>
+                <button style="margin-left:auto;height:28px;padding:0 20px;border:none;background:var(--accent);color:#fff;border-radius:2px;font:600 14px 'IBM Plex Sans';cursor:pointer;box-shadow:none;" style-hover="background:#245ed8">Analyze SLV Performance</button>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);">Results — Schilling / Townsend method</div>
+                <div style="display:flex;align-items:center;gap:8px;background:#fdecec;border:1px solid #f5c2c2;border-radius:20px;padding:5px 14px;"><span style="color:var(--red);font-weight:700;">✕</span><span style="font:600 13px 'IBM Plex Sans';color:#d64545;">CANNOT reach orbit</span></div>
+              </div>
+              <div style="display:flex;gap:24px;flex-wrap:wrap;font:400 13px 'IBM Plex Sans';color:var(--sub);margin-bottom:16px;">
+                <span>Booster <span style="color:var(--ink);font-weight:500;">AUR+HGB (2-stage)</span></span>
+                <span>Target <span style="color:var(--ink);font-weight:500;">500 km circular</span></span>
+                <span>Launch <span style="color:var(--ink);font-weight:500;">28.58° lat, azimuth 103.0°</span></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+                  <div style="font:600 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin-bottom:10px;">Delta-V Budget</div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Stage 1 (280 s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">2,557 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Stage 2 (280 s)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">3,734 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:500 13px 'IBM Plex Sans';color:var(--ink);">Total available</span><span style="font:600 13px 'IBM Plex Mono';color:var(--ink);">6,292 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Circular speed</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">7,617 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Loss penalty</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">1,781 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Rotation benefit</span><span style="font:500 13px 'IBM Plex Mono';color:var(--green);">−398 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:500 13px 'IBM Plex Sans';color:var(--ink);">Total required</span><span style="font:600 13px 'IBM Plex Mono';color:var(--ink);">9,000 m/s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:8px 0 0;"><span style="font:600 13px 'IBM Plex Sans';color:var(--ink);">Margin</span><span style="font:600 13px 'IBM Plex Mono';color:var(--red);">−2,708 m/s</span></div>
+                </div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+                  <div style="font:600 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin-bottom:10px;">Payload Capacity</div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Maximum payload</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">28 kg</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Claimed payload</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">450 kg</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="font:500 13px 'IBM Plex Sans';color:var(--ink);">Payload margin</span><span style="font:600 13px 'IBM Plex Mono';color:var(--red);">−422 kg</span></div>
+                </div>
+                <div style="background:#fafafa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;">
+                  <div style="font:600 11px 'IBM Plex Sans';text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin-bottom:10px;">Schilling Timing</div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Actual burn (Tₐ)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">117.0 s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">3-stage equiv (T₃ₛ)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">142.7 s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Blended (T_mix)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">132.3 s</span></div>
+                  <div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Initial accel (A₀)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">30.81 m/s²</span></div>
+                </div>
+              </div>
+              <div style="font:400 12px 'IBM Plex Sans';color:var(--sub);margin-top:7px;">Method accuracy ±260 m/s RMS in mission ΔV; &lt; 10 % in payload. Ref: Schilling (2009), Townsend / Martin-Marietta (1962).</div>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- ============ REENTRY SURVIVABILITY ============ -->
+          <sc-if value="{{ isReentry }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 22px;">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+              <button style="height:28px;padding:0 18px;border:1px solid #334155;background:#fff;border-radius:2px;font:500 12px 'IBM Plex Sans';color:#334155;cursor:pointer;" style-hover="color:#1a1a1a">Loft / Depress heating sweep…</button>
+              <span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">sweeps burnout angle → peak flux vs integrated load (the loft/depress trade)</span>
+            </div>
+
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:16px 18px 12px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="display:flex;height:280px;">
+                <div style="writing-mode:vertical-rl;transform:rotate(180deg);font:500 12px 'IBM Plex Sans';color:#1a1a1a;text-align:center;">Flux q̇ (MW/m²)</div>
+                <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font:500 11px 'IBM Plex Mono';color:#1a1a1a;padding:0 8px 22px 5px;"><span>15</span><span>12</span><span>9</span><span>6</span><span>3</span><span>0</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+                  <div style="position:relative;flex:1;background:#fff;border:1px solid var(--line2);background-image:var(--plot-grid);background-size:16.6667% 20%;overflow:hidden;">
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;"><path d="M0,100 L8.3,98 L16.7,92.5 L25,77.5 L41.7,50 L58.3,27.5 L75,15 L91.7,6.25 L100,3.2" fill="none" stroke="#cf5a2e" stroke-width="1.8" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><path d="M0,100 L4.2,90 L9.2,9.3 L12.5,33.3 L16.7,58.7 L23.3,62.7 L33.3,66 L50,74 L66.7,82.7 L83.3,91.3 L100,97.3" fill="none" stroke="#1a1a1a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+                    <div style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:4px;font:500 10px 'IBM Plex Mono';color:var(--ink);">
+                      <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px solid #1a1a1a;"></span>Flux q̇</div>
+                      <div style="display:flex;align-items:center;gap:6px;"><span style="width:15px;border-top:2px dashed #cf5a2e;"></span>Integrated load Q</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font:500 11px 'IBM Plex Mono';color:var(--sub);padding-top:6px;"><span>0</span><span>200</span><span>400</span><span>600</span><span>800</span><span>1000</span><span>1200</span></div>
+                  <div style="text-align:center;font:500 12px 'IBM Plex Sans';color:var(--sub);padding-top:3px;">time from reentry-arc start (s)</div>
+                </div>
+                <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;font:500 11px 'IBM Plex Mono';color:var(--accent2);padding:0 5px 22px 8px;"><span>4000</span><span>3200</span><span>2400</span><span>1600</span><span>800</span><span>0</span></div>
+                <div style="writing-mode:vertical-rl;font:500 12px 'IBM Plex Sans';color:var(--accent2);text-align:center;padding-bottom:22px;">Integrated load Q (MJ/m²)</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;background:#e9f7ef;border:1px solid #bfe4cd;border-radius:10px;padding:12px 16px;margin-bottom:14px;"><span style="color:var(--green);font-weight:700;font-size:16px;">✓</span><span style="font:600 14px 'IBM Plex Sans';color:#1f8a52;">WITHIN EXPERIENCE — Form B (glider)</span></div>
+
+            <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+              <div style="font:400 13px 'IBM Plex Sans';color:var(--ink);line-height:1.6;text-wrap:pretty;">C-HGB — damped-glide reentry, 1,261-s arc. The ablative carbon-carbon nose carries <span style="font-family:'IBM Plex Mono';font-weight:500;">3,768 MJ/m²</span> — the upper part of the flight record for this material family (97 % of it). Survival at this load is flight-demonstrated; the body TPS holds the full glide.</div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Survival Map</div>
+                <table style="width:100%;border-collapse:collapse;">
+                  <thead><tr>
+                    <th style="text-align:left;padding:7px 10px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Location</th>
+                    <th style="text-align:left;padding:7px 10px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Surface holds?</th>
+                    <th style="text-align:left;padding:7px 10px;font:600 12px 'IBM Plex Sans';color:var(--sub);background:transparent;border-bottom:1.5px solid #1a1a1a;">Within record?</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr><td style="padding:8px 10px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Nose</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">no burn-through</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">97 %</td></tr>
+                    <tr><td style="padding:8px 10px;font:500 13px 'IBM Plex Sans';color:var(--ink);border-bottom:1px solid #eef1f6;">Body skin</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">1,762 K of 2,700 K</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--green);border-bottom:1px solid #eef1f6;">0 s of 300 s</td></tr>
+                    <tr><td style="padding:8px 10px;font:500 13px 'IBM Plex Sans';color:var(--ink);">Windward flank</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--accent2);">2,261 K of 1,923 K</td><td style="padding:8px 10px;font:500 13px 'IBM Plex Mono';color:var(--sub);">—</td></tr>
+                  </tbody>
+                </table>
+                <div style="font:400 12px 'IBM Plex Sans';color:var(--sub);margin-top:7px;">Regime: boundary-layer laminar throughout.</div>
+              </div>
+              <div style="background:#fff;border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,30,50,.04);">
+                <div style="font:600 12px 'IBM Plex Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Heating Budget</div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Peak stagnation flux</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">13.6 MW/m²</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Pulse width</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">89 s</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Integrated load</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">3,873 MJ/m²</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Reentry-arc duration</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">1,261 s</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef1f6;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">Entry (arc start)</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">5.16 km/s @ γ −5.4°</span></div>
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;"><span style="font:400 13px 'IBM Plex Sans';color:var(--sub);">TPS</span><span style="font:500 13px 'IBM Plex Mono';color:var(--ink);">nose C-ablator · body UHTC 30 cm</span></div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: 'plots', menu: 'analysis' };
+  renderVals() {
+    const { tab, menu } = this.state;
+    const goTab = t => () => this.setState({ tab: t, menu: null });
+    const tabCss = a => `padding:7px 2px;background:transparent;color:${a ? '#1a1a1a' : '#a5a5a5'};font:${a ? 600 : 500} 13px 'IBM Plex Sans';border-bottom:2px solid ${a ? '#334155' : 'transparent'};cursor:pointer;white-space:nowrap;`;
+    const toggleMenu = n => () => this.setState(s => ({ menu: s.menu === n ? null : n }));
+    const hoverMenu = n => () => this.setState(s => (s.menu ? { menu: n } : s));
+    const closeMenu = () => this.setState({ menu: null });
+    const menuCss = n => {
+      const a = menu === n;
+      return `padding:6px 12px;border-radius:6px;font:500 13px 'IBM Plex Sans';cursor:pointer;color:${a ? '#fff' : '#2b3242'};background:${a ? '#334155' : 'transparent'};white-space:nowrap;`;
+    };
+    return {
+      isPlots: tab === 'plots', isTimeline: tab === 'timeline', isBooster: tab === 'booster', isSlv: tab === 'slv', isReentry: tab === 'reentry',
+      tPlots: tabCss(tab === 'plots'), tTimeline: tabCss(tab === 'timeline'), tBooster: tabCss(tab === 'booster'), tSlv: tabCss(tab === 'slv'), tReentry: tabCss(tab === 'reentry'),
+      goPlots: goTab('plots'), goTimeline: goTab('timeline'), goBooster: goTab('booster'), goSlv: goTab('slv'), goReentry: goTab('reentry'),
+      mFile: menu === 'file', mAnalysis: menu === 'analysis', mPlots: menu === 'plots', mCarto: menu === 'carto', mView: menu === 'view', mHelp: menu === 'help',
+      csFile: menuCss('file'), csAnalysis: menuCss('analysis'), csPlots: menuCss('plots'), csCarto: menuCss('carto'), csView: menuCss('view'), csHelp: menuCss('help'),
+      tgFile: toggleMenu('file'), tgAnalysis: toggleMenu('analysis'), tgPlots: toggleMenu('plots'), tgCarto: toggleMenu('carto'), tgView: toggleMenu('view'), tgHelp: toggleMenu('help'),
+      hvFile: hoverMenu('file'), hvAnalysis: hoverMenu('analysis'), hvPlots: hoverMenu('plots'), hvCarto: hoverMenu('carto'), hvView: hoverMenu('view'), hvHelp: hoverMenu('help'),
+      anyMenu: menu !== null, closeMenu,
+    };
+  }
+}
+</script>
+</body>
+</html>
