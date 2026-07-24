@@ -157,3 +157,78 @@ class StatusPill:
         c.create_oval(10, 9, 17, 16, fill=self._dot, outline=self._dot)
         c.create_text(23, 12, text=self._text, anchor="w",
                       font=f, fill=PILL_TEXT)
+
+
+# ── Slice 3: rail card components (mockup recipe) ───────────────────────────
+# Card: white group, 1px hairline, UPPERCASE muted section label.
+# Underline field: borderless entry over a 1px #cfcfcf rule, mono digits.
+# Link button: underlined accent text, hover→ink, disabled #c8c8c8 no rule.
+UNDERLINE = "#cfcfcf"
+DISABLED  = "#c8c8c8"
+
+
+def card(parent, title):
+    """Rail group card.  Returns (outer, body): pack `outer`; build fields
+    into `body`."""
+    import tkinter as tk
+    outer = tk.Frame(parent, bg=BG, bd=0, highlightthickness=1,
+                     highlightbackground=LINE, highlightcolor=LINE)
+    body = tk.Frame(outer, bg=BG)
+    body.pack(fill="both", expand=True, padx=10, pady=(8, 10))
+    tk.Label(body, text=title.upper(), bg=BG, fg=SUB,
+             font=ui_sans(parent, 10, bold=True)).pack(anchor="w", pady=(0, 6))
+    return outer, body
+
+
+def underline_entry(parent, textvariable, width=10, mono=True):
+    """Borderless entry + 1px underline (the mockup's field).  Returns
+    (wrap, entry)."""
+    import tkinter as tk
+    wrap = tk.Frame(parent, bg=BG)
+    e = tk.Entry(wrap, textvariable=textvariable, bd=0, relief="flat",
+                 bg=BG, fg=INK, insertbackground=INK, highlightthickness=0,
+                 width=width,
+                 font=ui_mono(parent, 12) if mono else ui_sans(parent, 12))
+    e.pack(fill="x", ipady=4)
+    tk.Frame(wrap, bg=UNDERLINE, height=1).pack(fill="x")
+    return wrap, e
+
+
+class LinkButton:
+    """Underlined text link standing in for a button.  Supports
+    .config(state=tk.NORMAL/tk.DISABLED) like the ttk.Buttons it replaces."""
+
+    def __init__(self, parent, text, command=None, size=11):
+        import tkinter as tk
+        self._tk = tk
+        self._f  = ui_sans(parent, size)
+        self._fu = self._f + ("underline",)
+        self._command = command
+        self._enabled = True
+        self._lbl = tk.Label(parent, text=text, bg=BG, fg=ACCENT,
+                             font=self._fu, cursor="hand2")
+        self._lbl.bind("<Button-1>", self._click)
+        self._lbl.bind("<Enter>", lambda _e: self._enabled
+                       and self._lbl.config(fg=INK))
+        self._lbl.bind("<Leave>", lambda _e: self._enabled
+                       and self._lbl.config(fg=ACCENT))
+
+    # pack/grid passthroughs so it drops in where a Button was
+    def pack(self, **kw):  self._lbl.pack(**kw);  return self
+    def grid(self, **kw):  self._lbl.grid(**kw);  return self
+
+    def config(self, **kw):
+        state = kw.pop("state", None)
+        if state is not None:
+            self._enabled = str(state) != "disabled"
+            if self._enabled:
+                self._lbl.config(fg=ACCENT, font=self._fu, cursor="hand2")
+            else:
+                self._lbl.config(fg=DISABLED, font=self._f, cursor="arrow")
+        if kw:
+            self._lbl.config(**kw)
+    configure = config
+
+    def _click(self, _e):
+        if self._enabled and self._command:
+            self._command()
