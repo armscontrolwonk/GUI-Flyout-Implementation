@@ -6420,7 +6420,10 @@ class BoosterFlyoutApp(tk.Tk):
         # Alternating row colours; no explicit font — inherits system default
         self._tl_tree.tag_configure("odd",    background="#f5f5f5")
         self._tl_tree.tag_configure("even",   background="#ffffff")
-        self._tl_tree.tag_configure("key",    background="#ddeeff", font="bold")
+        # NOTE: no per-tag font here — font="bold" is parsed by Tk as a font
+        # NAMED "bold" (a fallback face at a different size), which rendered
+        # the key rows smaller than the rest.  The tint alone marks them.
+        self._tl_tree.tag_configure("key",    background="#ddeeff")
         self._tl_tree.tag_configure("debris", background="#fff3cd")
 
         # Logo — overlaid on the treeview using place() so it sits inside
