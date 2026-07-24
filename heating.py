@@ -301,7 +301,7 @@ def _stag_flux(rho, V, radius_m):
 def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                             body_radius_m=0.0, emissivity=0.85, material="",
                             mass_kg=0.0, frontal_area_m2=0.0, soak_dwell_s=120.0,
-                            recession_depth_m=0.0):
+                            recession_depth_m=0.0, include_radiative=True):
     """Evaluate the heating-survivability SCREENING figure of merit over a
     reentry arc.  This is a stagnation-point convective indicator, not a
     through-wall TPS response model; verdicts are screening flags (see the
@@ -316,7 +316,16 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
     alt = np.asarray(alt, float); rng = np.asarray(rng, float)
     eps = max(float(emissivity), 1e-3)
 
-    q_surf = _stag_flux(rho, V, nose_radius_m)               # nose stagnation flux
+    q_conv = _stag_flux(rho, V, nose_radius_m)              # convective (Sutton-Graves)
+    # Radiative gas heating (Tauber-Sutton 1991) — exactly zero below 9 km/s,
+    # so the sub-9 km/s fleet (RVs ~7, HGVs ~5-6 km/s) is untouched.
+    if include_radiative:
+        q_rad, _rad_info = radiative_flux(rho, V, nose_radius_m)
+    else:
+        q_rad = np.zeros_like(q_conv)
+        _rad_info = {"q_rad_peak_MW_m2": 0.0, "valid": True,
+                     "note": "radiative term disabled by caller"}
+    q_surf = q_conv + q_rad                                 # total surface flux
     T_eq = (q_surf / (SIGMA * eps)) ** 0.25
     ipk = int(np.argmax(q_surf)) if q_surf.size else 0
     q_peak = float(q_surf[ipk]) if q_surf.size else 0.0
@@ -333,6 +342,8 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         "benchmark": _nearest_benchmark(q_peak / 1e6, "q_MW"),
         "benchmark_load": _nearest_benchmark(Q_area / 1e6, "Q_MJ"),
         "material": material,
+        "q_rad_peak_MW_m2": _rad_info["q_rad_peak_MW_m2"],
+        "radiative": _rad_info,
         "criteria": {},
         "compromise": None,
         "verdict": "",
@@ -352,10 +363,20 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
         "type are not matched.",
     ]
     _Vmax = float(np.max(V)) if V.size else 0.0
-    if _Vmax > 9000.0:
+    _qr_pk = float(_rad_info["q_rad_peak_MW_m2"])
+    if _qr_pk > 0.0:
+        _frac = _qr_pk / max(q_peak / 1e6, 1e-9)
         out["warnings"].append(
-            f"Convective-only model; radiative gas heating NOT assessed "
-            f"(peak V {_Vmax/1000:.1f} km/s exceeds the ~9 km/s screening envelope).")
+            f"Radiative gas heating COMPUTED and included: peak "
+            f"{_qr_pk:.2f} MW/m² ({_frac:.0%} of the total surface flux) — "
+            f"Tauber-Sutton 1991 equilibrium correlation.  "
+            f"{_rad_info['note']}.  Equilibrium + cold-wall: an UPPER BOUND "
+            f"for small or high-altitude bodies (nonequilibrium and optically "
+            f"thin shock layers radiate less).")
+    elif _Vmax > 9000.0 and not include_radiative:
+        out["warnings"].append(
+            f"Radiative gas heating suppressed by the caller (peak V "
+            f"{_Vmax/1000:.1f} km/s) — convective-only figure.")
 
     mat = TPS_MATERIALS.get(material)
     is_ablator = bool(mat and mat.get("is_ablator"))
@@ -406,7 +427,19 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
                     "temperature; exceeding T_eq is expected, not a failure"}
         # Ablating heat load: the incident load accrued while the surface is at
         # or above its ablation onset.
-        q_recess = np.where(T_eq >= T_onset, q_surf, 0.0)
+        #
+        # BASIS: the integrand is the CONVECTIVE flux, not the total.  Every
+        # demonstrated-load record and every H_eff in the catalog was derived
+        # on a convective basis, and our own Stardust reconstruction closes at
+        # 1.00x of its record on that basis.  Folding in the Tauber-Sutton
+        # equilibrium radiative term — which over-predicts several-fold for
+        # small, high-altitude capsules (test_radiative.py) — pushed the
+        # recovered Stardust capsule to 1.26x its OWN record, i.e. a false
+        # "beyond the flight record" verdict.  Radiative heating still raises
+        # T_eq (the ablation-onset gate just below) and the reported peak
+        # flux, and is disclosed in the warnings; it does not enter the
+        # record ladder or the burn-through bound.
+        q_recess = np.where(T_eq >= T_onset, q_conv, 0.0)
         Q_ablating = float(np.sum(q_recess * dt))              # J/m²
         record = mat.get("demonstrated_load_MJ_m2")
         record_J = (float(record) * 1e6) if record else None
@@ -626,6 +659,98 @@ def transition_factor(rho, V, alt, nose_radius_m, *,
     state = ("turbulent" if peak >= fully else
              "transitional" if peak >= onset else "laminar")
     return factor, Re_Rn, state
+
+
+# --- Stagnation-point RADIATIVE gas heating (METHODS §13.12) --------------
+# Tauber & Sutton 1991, "Stagnation-Point Radiative Heating Relations for
+# Earth and Mars Entries", J. Spacecraft & Rockets 28(1):40-42 (read from
+# primary; PDF in data/).  Earth/air equilibrium correlation, Eqs. (1)-(2):
+#
+#     q_r = C · r_n^a · rho^b · f_E(V)          [W/cm^2]
+#     C = 4.736e4,  b = 1.22
+#     a = 1.072e6 · V^-1.88 · rho^-0.325   (capped, see below)
+#
+# f_E(V) is the paper's Table 1, linear interpolation, defined 9-16 km/s.
+# BELOW 9 km/s the correlation is not defined and radiative heating is
+# negligible — the function returns exactly ZERO there, so every ICBM-RV
+# (~7 km/s) and HGV (~5-6 km/s) case in Thrusty's fleet is untouched.
+#
+# EPISTEMIC STATUS: this is an EQUILIBRIUM, cold-wall correlation built for
+# blunt bodies (r_n 0.3-3 m).  For small, fast, high-altitude probes it runs
+# CONSERVATIVE-HIGH: the flow is chemically nonequilibrium and the shock
+# layer is optically thin, both of which reduce real radiation.  Verified
+# against Stardust in test_radiative.py — the correlation over-predicts the
+# flight-derived radiative fraction (~9% of peak, Kontinos & Stackpoole
+# AIAA 2008-1197) by several fold at r_n 0.23 m.  It is therefore used as an
+# UPPER BOUND, and the validity flags say when it is being extrapolated.
+_TS_C   = 4.736e4        # W/cm^2 (air)
+_TS_B   = 1.22
+_TS_VMIN = 9000.0        # m/s — f_E table floor; below this q_rad := 0
+# Paper Table 1: f_E(V), V in m/s
+_TS_FE_V = np.array([9000., 9250., 9500., 9750., 10000., 10250., 10500.,
+                     10750., 11000., 11500., 12000., 12500., 13000., 13500.,
+                     14000., 14500., 15000., 15500., 16000.])
+_TS_FE_F = np.array([1.5, 4.3, 9.7, 19.5, 35., 55., 81., 115., 151., 238.,
+                     359., 495., 660., 850., 1065., 1313., 1550., 1780., 2040.])
+# Stated validity envelope of Eqs. (1)-(2) (paper, p. 41)
+_TS_VALID_V   = (10000.0, 16000.0)        # m/s
+_TS_VALID_RHO = (6.66e-5, 6.31e-4)        # kg/m^3  (~72-54 km)
+_TS_VALID_RN  = (0.3, 3.0)                # m
+
+
+def radiative_flux(rho, V, nose_radius_m):
+    """Stagnation-point RADIATIVE gas heating, Tauber-Sutton 1991 (Earth/air).
+
+    Returns (q_rad_W_m2, info) where info carries the peak, the validity
+    verdict, and the reason when the correlation is extrapolated.  Exactly
+    zero below 9 km/s (correlation floor; radiative heating is negligible
+    there), so sub-9 km/s cases are numerically untouched.
+
+    Equilibrium + cold-wall: an UPPER BOUND for small/high-altitude bodies
+    (see the module comment and test_radiative.py's Stardust check).
+    """
+    rho = np.asarray(rho, float)
+    V = np.asarray(V, float)
+    r_n = float(nose_radius_m or 0.0)
+    zero = np.zeros(np.broadcast(rho, V).shape)
+    if r_n <= 0.0:
+        return zero, {"q_rad_peak_MW_m2": 0.0, "valid": True,
+                      "note": "no nose radius — radiative not evaluated"}
+
+    hot = (V >= _TS_VMIN) & (rho > 0.0)
+    q = np.zeros_like(zero)
+    if np.any(hot):
+        _V = V[hot]
+        _rho = rho[hot]
+        a = 1.072e6 * _V ** (-1.88) * _rho ** (-0.325)
+        a = np.minimum(a, 1.0)                      # paper: a <= 1 always
+        if 1.0 <= r_n <= 2.0:
+            a = np.minimum(a, 0.6)
+        elif 2.0 < r_n <= 3.0:
+            a = np.minimum(a, 0.5)
+        f_E = np.interp(_V, _TS_FE_V, _TS_FE_F,
+                        left=0.0, right=_TS_FE_F[-1])
+        q[hot] = _TS_C * (r_n ** a) * (_rho ** _TS_B) * f_E * 1.0e4  # -> W/m^2
+
+    peak = float(np.max(q)) if q.size else 0.0
+    # Validity: judged at the peak-radiative sample (where it matters).
+    reasons = []
+    if peak > 0.0:
+        i = int(np.argmax(q))
+        _v, _r = float(V[i]), float(rho[i])
+        if not (_TS_VALID_V[0] <= _v <= _TS_VALID_V[1]):
+            reasons.append(f"V {_v/1000:.1f} km/s outside 10-16 km/s")
+        if not (_TS_VALID_RHO[0] <= _r <= _TS_VALID_RHO[1]):
+            reasons.append(f"rho {_r:.2e} outside {_TS_VALID_RHO[0]:.2e}-"
+                           f"{_TS_VALID_RHO[1]:.2e} kg/m^3")
+        if not (_TS_VALID_RN[0] <= r_n <= _TS_VALID_RN[1]):
+            reasons.append(f"R_n {r_n:.2f} m outside {_TS_VALID_RN[0]}-"
+                           f"{_TS_VALID_RN[1]} m")
+    info = {"q_rad_peak_MW_m2": peak / 1e6,
+            "valid": not reasons,
+            "note": ("within the correlation's stated envelope" if not reasons
+                     else "EXTRAPOLATED — " + "; ".join(reasons))}
+    return q, info
 
 
 # --- Interior (bondline) screen (METHODS §13.10) -----------------------------
