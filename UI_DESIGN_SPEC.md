@@ -1,12 +1,13 @@
 # Thrusty — UI Design Spec ("Journal / Minimal")
 
-> **Implementation status — FULLY REVERTED (2026-07-24).**  V1 was built in
-> two stages and both were judged on screen and reverted: first the
-> ttk/`clam` widget restyle (flat approximations of native aqua widgets),
-> then the Matplotlib journal plot style and timeline tints.  The app is
-> back to its native look in full.  This document is retained as the design
-> RECORD for a follow-on discussion about how to adapt the style to what
-> Tk + native macOS can actually carry — nothing in it is currently wired.
+> **Implementation status — ABANDONED (2026-07-24).**  Three approaches were
+> tried on screen and reverted at the user's call: the V1 clam widget
+> restyle, the plots-only journal style, and the slice-by-slice rail
+> rebuild (status strip, Launch Site card, underline dropdown).  Verdict:
+> too much work for too little progress on Tk.  The app is byte-for-byte
+> back to its pre-overhaul native look; `theme.py` is deleted.  This spec
+> and `design/thrusty-mockup.html` remain as inert design records only —
+> nothing in them is wired.
 
 Implementation reference for the Thrusty desktop app (Python/Tkinter +
 Matplotlib).  This documents the *visual system* only; behavior/physics are

@@ -23,8 +23,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
 matplotlib.use("TkAgg")
-import theme
-theme.apply_matplotlib()   # mockup plot chrome (framed axes, faint grid)
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
@@ -1045,7 +1043,7 @@ class _StageFrame(ttk.LabelFrame):
         fig, ax = _plt.subplots(figsize=(5, 3), tight_layout=True)
         ts = [p[0] for p in pairs]
         fs = [p[1] for p in pairs]
-        ax.step(ts, fs, where='post', color=theme.INK, linewidth=1.5)
+        ax.step(ts, fs, where='post', color='steelblue', linewidth=1.5)
         ax.set_xlabel("t / burn time")
         ax.set_ylabel("F / F_peak")
         ax.set_title(f"Thrust profile: {path}")
@@ -5396,21 +5394,13 @@ class BoosterFlyoutApp(tk.Tk):
             paned.sashpos(0, max(120, target))
         self.after_idle(_init_sash)
 
-        # Pinned results strip — always visible above the notebook tabs.
-        # Mockup recipe (design/thrusty-mockup.html): white row + bottom
-        # hairline; metric = UPPERCASE muted label + mono ink value; state
-        # pill at the right.  _results_strip_var keeps the legacy one-line
-        # text alongside (nothing else displays it; cheap compatibility).
+        # Pinned results strip — always visible above the notebook tabs
         self._results_strip_var = tk.StringVar(value="")
-        _strip_outer = tk.Frame(right, bg=theme.BG)
-        _strip_outer.pack(fill=tk.X, padx=2, pady=(0, 3))
-        results_strip = tk.Frame(_strip_outer, bg=theme.BG)
-        results_strip.pack(fill=tk.X, padx=10, pady=(6, 5))
-        tk.Frame(_strip_outer, bg=theme.LINE, height=1).pack(fill=tk.X)
-        self._strip_metrics = tk.Frame(results_strip, bg=theme.BG)
-        self._strip_metrics.pack(side=tk.LEFT)
-        self._strip_pill = theme.StatusPill(results_strip)
-        self._strip_pill.widget().pack(side=tk.RIGHT)
+        results_strip = ttk.Frame(right, relief=tk.GROOVE, borderwidth=1)
+        results_strip.pack(fill=tk.X, padx=2, pady=(0, 3))
+        ttk.Label(results_strip, textvariable=self._results_strip_var,
+                  anchor=tk.W).pack(
+            fill=tk.X, padx=8, pady=3)
 
         self._right_nb = ttk.Notebook(right)
         self._right_nb.pack(fill=tk.BOTH, expand=True)
@@ -5539,54 +5529,50 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(_lo, text="× object carried through boost").pack(
             side=tk.LEFT, padx=(4, 0))
 
-        # ── Launch site — first mockup rail card (design/thrusty-mockup.html):
-        # white card + hairline, UPPERCASE muted section label, underlined
-        # mono fields with units outside, link-style buttons.  Site dropdown
-        # stays a native Combobox (typeahead/scroll behavior kept).
-        lf_outer, lf = theme.card(parent, "Launch Site")
-        lf_outer.pack(fill=tk.X, padx=6, pady=4)
+        # ── Launch site ────────────────────────────────────────────────
+        lf = ttk.LabelFrame(parent, text="Launch Site")
+        lf.pack(fill=tk.X, padx=6, pady=3)
 
         _site_values, self._site_map = _load_launch_sites()
         self._site_var = tk.StringVar(value="")
-        self._site_cb = theme.Dropdown(
-            lf, self._site_var, values=_site_values,
-            command=lambda: self._on_site_selected(None))
-        self._site_cb.pack(fill=tk.X, pady=(0, 2))
+        self._site_cb = ttk.Combobox(lf, textvariable=self._site_var,
+                                     values=_site_values, state="readonly", width=26)
+        self._site_cb.pack(padx=6, pady=(4, 2))
+        self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
+        _bind_typeahead(self._site_cb)
 
-        sb = tk.Frame(lf, bg=theme.BG)
-        sb.pack(fill=tk.X, pady=(2, 6))
-        theme.LinkButton(sb, "New", self._new_site).pack(
-            side=tk.LEFT, expand=True)
-        theme.LinkButton(sb, "Edit…", self._edit_site).pack(
-            side=tk.LEFT, expand=True)
-        self._site_del_btn = theme.LinkButton(sb, "Delete", self._delete_site)
-        self._site_del_btn.config(state=tk.DISABLED)
-        self._site_del_btn.pack(side=tk.LEFT, expand=True)
+        sb = ttk.Frame(lf)
+        sb.pack(padx=6, pady=(0, 4))
+        ttk.Button(sb, text="New",    width=7,
+                   command=self._new_site).pack(side=tk.LEFT, padx=2)
+        ttk.Button(sb, text="Edit…",  width=7,
+                   command=self._edit_site).pack(side=tk.LEFT, padx=2)
+        self._site_del_btn = ttk.Button(sb, text="Delete", width=7,
+                                        command=self._delete_site,
+                                        state=tk.DISABLED)
+        self._site_del_btn.pack(side=tk.LEFT, padx=2)
 
-        self._launch_lat = tk.StringVar(value="0.0")
-        self._launch_lon = tk.StringVar(value="0.0")
+        lf_grid = ttk.Frame(lf)
+        lf_grid.pack(fill=tk.X)
+        self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
+        self._launch_lon = _dd_row(lf_grid, "Longitude:", row=1, default="0.0")
+        # Buttons live in a shared column (2) so Find… and Estimate… align.
+        ttk.Button(lf_grid, text="Find…", width=10,
+                   command=lambda: self._pick_location(
+                       self._launch_lat, self._launch_lon)
+                   ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=2)
+
+        ttk.Label(lf_grid, text="Azimuth:").grid(row=2, column=0,
+                                                  sticky=tk.W, padx=(8, 2), pady=2)
+        az_frame = ttk.Frame(lf_grid)
+        az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._azimuth_var = tk.StringVar(value="0.0")
-
-        def _site_row(label, var, unit, link=None, link_cmd=None):
-            r = tk.Frame(lf, bg=theme.BG)
-            r.pack(fill=tk.X, pady=3)
-            tk.Label(r, text=label, width=9, anchor=tk.W, bg=theme.BG,
-                     fg=theme.INK, font=theme.ui_sans(parent, theme.FS["label"])
-                     ).pack(side=tk.LEFT, padx=(0, 2))
-            wrap, _ = theme.underline_entry(r, var, width=10)
-            wrap.pack(side=tk.LEFT)
-            tk.Label(r, text=unit, bg=theme.BG, fg=theme.SUB,
-                     font=theme.ui_sans(parent, theme.FS["unit"])
-                     ).pack(side=tk.LEFT, padx=(5, 0))
-            if link:
-                theme.LinkButton(r, link, link_cmd).pack(side=tk.RIGHT,
-                                                         padx=(0, 6))
-        _site_row("Latitude:", self._launch_lat, "°")
-        _site_row("Longitude:", self._launch_lon, "°", "Find…",
-                  lambda: self._pick_location(self._launch_lat,
-                                              self._launch_lon))
-        _site_row("Azimuth:", self._azimuth_var, "°  (from N)", "Estimate…",
-                  self._estimate_azimuth)
+        # Entry width matches the lat/lon rows (_dd_row uses 10).
+        ttk.Entry(az_frame, textvariable=self._azimuth_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=(2, 0))
+        ttk.Button(lf_grid, text="Estimate…", width=10,
+                   command=self._estimate_azimuth
+                   ).grid(row=2, column=2, sticky=tk.W, padx=4, pady=2)
 
         # Flight Plan section takes its place now (after Launch Site), then the
         # ascent strip is built inside it as a plain frame — one consolidated
@@ -6366,25 +6352,6 @@ class BoosterFlyoutApp(tk.Tk):
         self._init_axes()
         self._canvas.draw()
 
-    def _set_strip(self, pairs, state=None, dot=None):
-        """Render the results strip (mockup recipe): pairs of
-        (label, value) — muted UPPERCASE sans label + mono ink value — and
-        optionally update the state pill.  Also mirrors the legacy one-line
-        text into _results_strip_var."""
-        for w in self._strip_metrics.winfo_children():
-            w.destroy()
-        for i, (lbl, val) in enumerate(pairs):
-            cell = tk.Frame(self._strip_metrics, bg=theme.BG)
-            cell.pack(side=tk.LEFT, padx=(0 if i == 0 else 16, 0))
-            tk.Label(cell, text=str(lbl).upper(), bg=theme.BG, fg=theme.SUB,
-                     font=theme.ui_sans(self, theme.FS["strip_label"])).pack(side=tk.LEFT, padx=(0, 5))
-            tk.Label(cell, text=str(val), bg=theme.BG, fg=theme.INK,
-                     font=theme.ui_mono(self, theme.FS["strip_value"])).pack(side=tk.LEFT)
-        if state is not None:
-            self._strip_pill.set(state, dot or theme.GREEN)
-        self._results_strip_var.set(
-            "  |  ".join(f"{l}: {v}" for l, v in pairs))
-
     def _init_axes(self):
         for ax, title, xl, yl in [
             (self._ax_alt,   "Altitude vs Time",       "Time (s)",       "Altitude (km)"),
@@ -6399,12 +6366,12 @@ class BoosterFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
-        self._ax_spd_twin.set_ylabel('Mach', fontsize=8, color=theme.ACCENT2)
-        self._ax_spd_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
-        self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color=theme.ACCENT2)
-        self._ax_guid_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
-        self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color=theme.ACCENT2)
-        self._ax_qmach_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
+        self._ax_spd_twin.set_ylabel('Mach', fontsize=8, color='steelblue')
+        self._ax_spd_twin.tick_params(labelsize=7, colors='steelblue')
+        self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
+        self._ax_guid_twin.tick_params(labelsize=7, colors='darkorange')
+        self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color='darkorange')
+        self._ax_qmach_twin.tick_params(labelsize=7, colors='darkorange')
 
     # ------------------------------------------------------------------
     # Flight Timeline panel
@@ -9915,17 +9882,9 @@ class BoosterFlyoutApp(tk.Tk):
             _strip = (f"No sub-orbital solution — exceeds orbital velocity.  "
                       f"Apogee: {apogee_km*scale:.1f} {ulbl}")
             self._status_var.set("Max Range: " + _strip)
-            self._set_strip([("Apogee", f"{apogee_km*scale:,.1f} {ulbl}")],
-                            state="No sub-orbital solution", dot=theme.RED)
         elif orbital:
             _strip = (f"In orbit.  Apogee: {apogee_km*scale:.1f} {ulbl}" + _oe_str)
             self._status_var.set(_strip)
-            _pairs = [("Apogee", f"{apogee_km*scale:,.1f} {ulbl}")]
-            if oe:
-                _pairs += [("Orbit", f"{oe['perigee_km']:.0f}×{oe['apogee_km']:.0f} km"),
-                           ("Incl", f"{oe['inclination_deg']:.1f}°"),
-                           ("Period", f"{oe['period_min']:.1f} min")]
-            self._set_strip(_pairs, state="In orbit", dot=theme.GREEN)
         else:
             _spd_str = f"{imp_spd_kms:.2f} km/s" if imp_spd_kms is not None else "—"
             _strip = (f"Range: {rng_km*scale:.1f} {ulbl}  |  "
@@ -9934,13 +9893,6 @@ class BoosterFlyoutApp(tk.Tk):
                       f"Impact: {r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E  |  "
                       f"Impact spd: {_spd_str}")
             self._status_var.set("Done.  " + _strip)
-            self._set_strip(
-                [("Range", f"{rng_km*scale:,.1f} {ulbl}"),
-                 ("Apogee", f"{apogee_km*scale:,.1f} {ulbl}"),
-                 ("ToF", f"{tof_s:.0f} s"),
-                 ("Impact", f"{r['impact_lat']:.2f}°N, {r['impact_lon']:.2f}°E"),
-                 ("Impact spd", _spd_str)],
-                state="Flyout complete", dot=theme.GREEN)
         # Surface the static-margin / trim-gate verdict when it changed the
         # reentry: an unstable body was flipped to a tumbling (ballistic)
         # descent, or a stable body was L/D-limited by its control authority.
@@ -9950,6 +9902,7 @@ class BoosterFlyoutApp(tk.Tk):
             self._status_var.set(
                 self._status_var.get()
                 + f"   ⚠ reentry: SM {_sm:+.1f} cal — {_tg['verdict']}")
+        self._results_strip_var.set(_strip)
         # Rendering runs here (scheduled via after(), OUTSIDE the flyout's
         # try/except).  Guard it: an unhandled exception here fires after
         # _plot_results has already cla()'d every axis but before its final
@@ -10096,14 +10049,16 @@ class BoosterFlyoutApp(tk.Tk):
 
         # ── Altitude vs Time (truncate at insertion for orbital) ──────
         _sl = slice(0, _ins_idx + 1) if orbital else slice(None)
-        self._ax_alt.plot(t[_sl], alt[_sl], color=theme.INK, linewidth=1.5)
+        self._ax_alt.plot(t[_sl], alt[_sl], color='royalblue', linewidth=1.5)
         self._ax_alt.set_xlabel("Time (s)", fontsize=8)
         self._ax_alt.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_alt.set_title("Altitude vs Time", fontsize=9)
+        self._ax_alt.fill_between(t[_sl], 0, alt[_sl],
+                                  alpha=0.12, color='royalblue')
 
         # ── Speed vs Time ─────────────────────────────────────────────
         from atmosphere import atmosphere as _atm_fn
-        self._ax_spd.plot(t, spd, color=theme.INK, linewidth=1.5, label='Speed')
+        self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5, label='Speed')
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
@@ -10116,16 +10071,18 @@ class BoosterFlyoutApp(tk.Tk):
             if _snd > 10.0:          # NaN above ~86 km where atmosphere model → 0
                 _mach_s[_i] = _spd_ms[_i] / _snd
         _ax_m = self._ax_spd_twin
-        _ax_m.plot(t, _mach_s, color=theme.ACCENT2, linewidth=1.2, ls=theme.DASH, label='Mach')
-        _ax_m.set_ylabel("Mach", fontsize=8, color=theme.ACCENT2)
-        _ax_m.tick_params(labelsize=7, colors=theme.ACCENT2)
+        _ax_m.plot(t, _mach_s, color='steelblue', linewidth=1.2, ls='--', label='Mach')
+        _ax_m.set_ylabel("Mach", fontsize=8, color='steelblue')
+        _ax_m.tick_params(labelsize=7, colors='steelblue')
         _ax_m.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 
         # ── Altitude vs Range (truncate at insertion for orbital) ─────
-        self._ax_traj.plot(rng[_sl], alt[_sl], color=theme.INK, linewidth=1.5)
+        self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
         self._ax_traj.set_xlabel(f"Downrange ({ulbl})", fontsize=8)
         self._ax_traj.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_traj.set_title("Altitude vs Range", fontsize=9)
+        self._ax_traj.fill_between(rng[_sl], 0, alt[_sl],
+                                   alpha=0.12, color='seagreen')
 
         # ── Ground Track (truncate at perigee / one orbit for orbital) ─
         center_lon = float(lon_arr[0])          # launch meridian as origin
@@ -10149,12 +10106,12 @@ class BoosterFlyoutApp(tk.Tk):
                 i += 1
 
         self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2, zorder=2)
-        self._ax_trk.plot(0.0, lat_arr[0], marker='o', color=theme.GREEN, linestyle='', markersize=7,
+        self._ax_trk.plot(0.0, lat_arr[0], 'go', markersize=7,
                           label="Launch", zorder=5)
 
         if not orbital:
             impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
-            self._ax_trk.plot(impact_lon_c, lat_arr[-1], marker='*', color=theme.ACCENT2, linestyle='', markersize=9,
+            self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
                               label="Impact", zorder=5)
 
         # Orbital event markers (insertion ◆, apogee ▲, perigee ▼)
@@ -10182,7 +10139,7 @@ class BoosterFlyoutApp(tk.Tk):
             if d_lat is None or d_lon is None:
                 continue
             d_lon_c = ((d_lon - center_lon + 180.0) % 360.0) - 180.0
-            self._ax_trk.plot(d_lon_c, d_lat, marker='x', color=theme.ACCENT2, linestyle='', markersize=8,
+            self._ax_trk.plot(d_lon_c, d_lat, 'rx', markersize=8,
                               markeredgewidth=1.8,
                               label="Debris" if not _debris_plotted else "_nolegend_",
                               zorder=5)
@@ -10216,9 +10173,9 @@ class BoosterFlyoutApp(tk.Tk):
         ac     = np.asarray(r.get('az_cmd_deg', []))
 
         if len(t_plot) > 0 and len(pc) == len(t_plot):
-            ax_g.plot(t_plot, pc, color=theme.INK, lw=1.4, label='Pitch (°)')
+            ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
             if len(ac) == len(t_plot):
-                ax_g2.plot(t_plot, ac, color=theme.ACCENT2, lw=1.4,
+                ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
                            ls='--', label='Azimuth (°)')
                 # Adaptive ticks.  A fixed 5° step (MultipleLocator(5)) crams 30+
                 # overlapping labels onto the axis whenever the heading sweeps a
@@ -10239,8 +10196,8 @@ class BoosterFlyoutApp(tk.Tk):
                                                   steps=[1, 2, 2.5, 5, 10]))
                 ax_g2.yaxis.set_label_position('right')
                 ax_g2.yaxis.set_ticks_position('right')
-                ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color=theme.ACCENT2)
-                ax_g2.tick_params(labelsize=7, colors=theme.ACCENT2)
+                ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
+                ax_g2.tick_params(labelsize=7, colors='darkorange')
                 # Combined legend on the primary axis
                 _l1, _lb1 = ax_g.get_legend_handles_labels()
                 _l2, _lb2 = ax_g2.get_legend_handles_labels()
@@ -10255,8 +10212,8 @@ class BoosterFlyoutApp(tk.Tk):
                 if 'burnout' in _ev or 'ignition' in _ev:
                     ax_g.axvline(_t, color='#aaaaaa', lw=0.8, ls=':')
         ax_g.set_xlabel('Time (s)', fontsize=7)
-        ax_g.set_ylabel('Elevation (°)', fontsize=7, color=theme.INK)
-        ax_g.tick_params(labelsize=7, colors=theme.INK)
+        ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
+        ax_g.tick_params(labelsize=7, colors='royalblue')
         ax_g.set_title('Pitch, Azimuth vs. Time', fontsize=8)
         ax_g.grid(True, alpha=0.35)
 
@@ -10288,30 +10245,30 @@ class BoosterFlyoutApp(tk.Tk):
 
             ax_qm  = self._ax_qmach
             ax_mch = self._ax_qmach_twin
-            ax_qm.plot(_tb, _qb, color=theme.INK, lw=1.3, label='q (kPa)')
-            ax_mch.plot(_tb, _mb, color=theme.ACCENT2, lw=1.2, ls=theme.DASH, label='Mach')
+            ax_qm.fill_between(_tb, _qb, alpha=0.18, color='steelblue')
+            ax_qm.plot(_tb, _qb, color='steelblue', lw=1.3, label='q (kPa)')
+            ax_mch.plot(_tb, _mb, color='darkorange', lw=1.2, ls='--', label='Mach')
             # Annotate max-q
             _qmax_i = int(np.argmax(_qb))
-            ax_qm.axvline(_tb[_qmax_i], color=theme.INK, lw=0.8, ls=':', alpha=0.7)
+            ax_qm.axvline(_tb[_qmax_i], color='steelblue', lw=0.8, ls=':', alpha=0.7)
             ax_qm.annotate(
                 f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
                 xy=(_tb[_qmax_i], _qb[_qmax_i]),
                 xytext=(6, -4), textcoords='offset points',
-                fontsize=6, color=theme.INK, va='top')
+                fontsize=6, color='steelblue', va='top')
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')
             ax_qm.set_xlabel('Time (s)', fontsize=7)
-            ax_qm.set_ylabel('q  (kPa)', fontsize=7, color=theme.INK)
-            ax_qm.tick_params(labelsize=7, colors=theme.INK)
+            ax_qm.set_ylabel('q  (kPa)', fontsize=7, color='steelblue')
+            ax_qm.tick_params(labelsize=7, colors='steelblue')
             ax_qm.set_title('Dyn. Pressure, Mach vs. Time', fontsize=8)
             ax_qm.grid(True, alpha=0.35)
-            ax_mch.set_ylabel('Mach', fontsize=7, color=theme.ACCENT2)
-            ax_mch.tick_params(labelsize=7, colors=theme.ACCENT2)
+            ax_mch.set_ylabel('Mach', fontsize=7, color='darkorange')
+            ax_mch.tick_params(labelsize=7, colors='darkorange')
             ax_mch.yaxis.set_label_position('right')
             ax_mch.yaxis.set_ticks_position('right')
 
-        theme.mono_ticks(self._fig)
         self._canvas.draw()
 
     # ------------------------------------------------------------------
