@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
 matplotlib.use("TkAgg")
+import theme
+theme.apply_matplotlib()   # mockup plot chrome (framed axes, faint grid)
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
@@ -1043,7 +1045,7 @@ class _StageFrame(ttk.LabelFrame):
         fig, ax = _plt.subplots(figsize=(5, 3), tight_layout=True)
         ts = [p[0] for p in pairs]
         fs = [p[1] for p in pairs]
-        ax.step(ts, fs, where='post', color='steelblue', linewidth=1.5)
+        ax.step(ts, fs, where='post', color=theme.INK, linewidth=1.5)
         ax.set_xlabel("t / burn time")
         ax.set_ylabel("F / F_peak")
         ax.set_title(f"Thrust profile: {path}")
@@ -6366,12 +6368,12 @@ class BoosterFlyoutApp(tk.Tk):
             ax.set_ylabel(yl, fontsize=8)
             ax.grid(True, alpha=0.35)
             ax.tick_params(labelsize=7)
-        self._ax_spd_twin.set_ylabel('Mach', fontsize=8, color='steelblue')
-        self._ax_spd_twin.tick_params(labelsize=7, colors='steelblue')
-        self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
-        self._ax_guid_twin.tick_params(labelsize=7, colors='darkorange')
-        self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color='darkorange')
-        self._ax_qmach_twin.tick_params(labelsize=7, colors='darkorange')
+        self._ax_spd_twin.set_ylabel('Mach', fontsize=8, color=theme.ACCENT2)
+        self._ax_spd_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
+        self._ax_guid_twin.set_ylabel('Azimuth (°)', fontsize=7, color=theme.ACCENT2)
+        self._ax_guid_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
+        self._ax_qmach_twin.set_ylabel('Mach', fontsize=7, color=theme.ACCENT2)
+        self._ax_qmach_twin.tick_params(labelsize=7, colors=theme.ACCENT2)
 
     # ------------------------------------------------------------------
     # Flight Timeline panel
@@ -10049,16 +10051,14 @@ class BoosterFlyoutApp(tk.Tk):
 
         # ── Altitude vs Time (truncate at insertion for orbital) ──────
         _sl = slice(0, _ins_idx + 1) if orbital else slice(None)
-        self._ax_alt.plot(t[_sl], alt[_sl], color='royalblue', linewidth=1.5)
+        self._ax_alt.plot(t[_sl], alt[_sl], color=theme.INK, linewidth=1.5)
         self._ax_alt.set_xlabel("Time (s)", fontsize=8)
         self._ax_alt.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_alt.set_title("Altitude vs Time", fontsize=9)
-        self._ax_alt.fill_between(t[_sl], 0, alt[_sl],
-                                  alpha=0.12, color='royalblue')
 
         # ── Speed vs Time ─────────────────────────────────────────────
         from atmosphere import atmosphere as _atm_fn
-        self._ax_spd.plot(t, spd, color='firebrick', linewidth=1.5, label='Speed')
+        self._ax_spd.plot(t, spd, color=theme.INK, linewidth=1.5, label='Speed')
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
@@ -10071,18 +10071,16 @@ class BoosterFlyoutApp(tk.Tk):
             if _snd > 10.0:          # NaN above ~86 km where atmosphere model → 0
                 _mach_s[_i] = _spd_ms[_i] / _snd
         _ax_m = self._ax_spd_twin
-        _ax_m.plot(t, _mach_s, color='steelblue', linewidth=1.2, ls='--', label='Mach')
-        _ax_m.set_ylabel("Mach", fontsize=8, color='steelblue')
-        _ax_m.tick_params(labelsize=7, colors='steelblue')
+        _ax_m.plot(t, _mach_s, color=theme.ACCENT2, linewidth=1.2, ls=theme.DASH, label='Mach')
+        _ax_m.set_ylabel("Mach", fontsize=8, color=theme.ACCENT2)
+        _ax_m.tick_params(labelsize=7, colors=theme.ACCENT2)
         _ax_m.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 
         # ── Altitude vs Range (truncate at insertion for orbital) ─────
-        self._ax_traj.plot(rng[_sl], alt[_sl], color='seagreen', linewidth=1.5)
+        self._ax_traj.plot(rng[_sl], alt[_sl], color=theme.INK, linewidth=1.5)
         self._ax_traj.set_xlabel(f"Downrange ({ulbl})", fontsize=8)
         self._ax_traj.set_ylabel(f"Altitude ({ulbl})", fontsize=8)
         self._ax_traj.set_title("Altitude vs Range", fontsize=9)
-        self._ax_traj.fill_between(rng[_sl], 0, alt[_sl],
-                                   alpha=0.12, color='seagreen')
 
         # ── Ground Track (truncate at perigee / one orbit for orbital) ─
         center_lon = float(lon_arr[0])          # launch meridian as origin
@@ -10173,9 +10171,9 @@ class BoosterFlyoutApp(tk.Tk):
         ac     = np.asarray(r.get('az_cmd_deg', []))
 
         if len(t_plot) > 0 and len(pc) == len(t_plot):
-            ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
+            ax_g.plot(t_plot, pc, color=theme.INK, lw=1.4, label='Pitch (°)')
             if len(ac) == len(t_plot):
-                ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
+                ax_g2.plot(t_plot, ac, color=theme.ACCENT2, lw=1.4,
                            ls='--', label='Azimuth (°)')
                 # Adaptive ticks.  A fixed 5° step (MultipleLocator(5)) crams 30+
                 # overlapping labels onto the axis whenever the heading sweeps a
@@ -10196,8 +10194,8 @@ class BoosterFlyoutApp(tk.Tk):
                                                   steps=[1, 2, 2.5, 5, 10]))
                 ax_g2.yaxis.set_label_position('right')
                 ax_g2.yaxis.set_ticks_position('right')
-                ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color='darkorange')
-                ax_g2.tick_params(labelsize=7, colors='darkorange')
+                ax_g2.set_ylabel('Azimuth (°)', fontsize=7, color=theme.ACCENT2)
+                ax_g2.tick_params(labelsize=7, colors=theme.ACCENT2)
                 # Combined legend on the primary axis
                 _l1, _lb1 = ax_g.get_legend_handles_labels()
                 _l2, _lb2 = ax_g2.get_legend_handles_labels()
@@ -10212,8 +10210,8 @@ class BoosterFlyoutApp(tk.Tk):
                 if 'burnout' in _ev or 'ignition' in _ev:
                     ax_g.axvline(_t, color='#aaaaaa', lw=0.8, ls=':')
         ax_g.set_xlabel('Time (s)', fontsize=7)
-        ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
-        ax_g.tick_params(labelsize=7, colors='royalblue')
+        ax_g.set_ylabel('Elevation (°)', fontsize=7, color=theme.INK)
+        ax_g.tick_params(labelsize=7, colors=theme.INK)
         ax_g.set_title('Pitch, Azimuth vs. Time', fontsize=8)
         ax_g.grid(True, alpha=0.35)
 
@@ -10245,30 +10243,30 @@ class BoosterFlyoutApp(tk.Tk):
 
             ax_qm  = self._ax_qmach
             ax_mch = self._ax_qmach_twin
-            ax_qm.fill_between(_tb, _qb, alpha=0.18, color='steelblue')
-            ax_qm.plot(_tb, _qb, color='steelblue', lw=1.3, label='q (kPa)')
-            ax_mch.plot(_tb, _mb, color='darkorange', lw=1.2, ls='--', label='Mach')
+            ax_qm.plot(_tb, _qb, color=theme.INK, lw=1.3, label='q (kPa)')
+            ax_mch.plot(_tb, _mb, color=theme.ACCENT2, lw=1.2, ls=theme.DASH, label='Mach')
             # Annotate max-q
             _qmax_i = int(np.argmax(_qb))
-            ax_qm.axvline(_tb[_qmax_i], color='steelblue', lw=0.8, ls=':', alpha=0.7)
+            ax_qm.axvline(_tb[_qmax_i], color=theme.INK, lw=0.8, ls=':', alpha=0.7)
             ax_qm.annotate(
                 f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
                 xy=(_tb[_qmax_i], _qb[_qmax_i]),
                 xytext=(6, -4), textcoords='offset points',
-                fontsize=6, color='steelblue', va='top')
+                fontsize=6, color=theme.INK, va='top')
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')
             ax_qm.set_xlabel('Time (s)', fontsize=7)
-            ax_qm.set_ylabel('q  (kPa)', fontsize=7, color='steelblue')
-            ax_qm.tick_params(labelsize=7, colors='steelblue')
+            ax_qm.set_ylabel('q  (kPa)', fontsize=7, color=theme.INK)
+            ax_qm.tick_params(labelsize=7, colors=theme.INK)
             ax_qm.set_title('Dyn. Pressure, Mach vs. Time', fontsize=8)
             ax_qm.grid(True, alpha=0.35)
-            ax_mch.set_ylabel('Mach', fontsize=7, color='darkorange')
-            ax_mch.tick_params(labelsize=7, colors='darkorange')
+            ax_mch.set_ylabel('Mach', fontsize=7, color=theme.ACCENT2)
+            ax_mch.tick_params(labelsize=7, colors=theme.ACCENT2)
             ax_mch.yaxis.set_label_position('right')
             ax_mch.yaxis.set_ticks_position('right')
 
+        theme.mono_ticks(self._fig)
         self._canvas.draw()
 
     # ------------------------------------------------------------------
