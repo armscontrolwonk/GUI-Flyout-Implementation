@@ -5796,31 +5796,29 @@ class BoosterFlyoutApp(tk.Tk):
         self._glider_main_frame = _gmf
         _gmf.columnconfigure(1, weight=1)
 
-        # Reentry mode combobox — no label needed; the LabelFrame title suffices.
+        # Reentry mode row — labeled like the Separation control above it.
         # Primary modes first; the analytic equilibrium-glide laws are kept below
         # a (non-selectable) separator as legacy/comparison modes.
         # FAMILY-SCOPED: the values list holds only the active plan's family
         # (numerical EOM or closed-form analytic), set by _scope_mode_choices —
         # the family is the plan's identity, chosen in New Reentry Plan and not
         # crossable from the strip.  Initial values = numerical (the default
-        # family); populate re-scopes from the plan's mode.
+        # family); populate re-scopes from the plan's mode.  (The former
+        # "family: … — fixed for this plan" caption is gone: the family is
+        # visible in New Reentry Plan where it is chosen, and the scoped
+        # dropdown already enforces it.)
+        _modebar = ttk.Frame(_gmf)
+        _modebar.grid(row=0, column=0, columnspan=2,
+                      sticky=tk.W, padx=8, pady=(2, 0))
+        ttk.Label(_modebar, text="Mode:").pack(side=tk.LEFT, padx=(0, 4))
         self._main_guidance_var = tk.StringVar(value="Ballistic (drag · gravity · rotation)")
         self._main_guidance_cb = ttk.Combobox(
-            _gmf, textvariable=self._main_guidance_var,
+            _modebar, textvariable=self._main_guidance_var,
             values=[lbl for _k, lbl in self._REENTRY_MODE_NUMERICAL],
             state="readonly", width=32)
-        self._main_guidance_cb.grid(row=0, column=0, columnspan=2,
-                                     sticky=tk.W, padx=8, pady=(2, 0))
+        self._main_guidance_cb.pack(side=tk.LEFT)
         self._main_guidance_cb.bind("<<ComboboxSelected>>",
                                      lambda _e: self._on_glider_guidance_changed())
-        # Family caption — the read-only identity line, mirroring the flight
-        # plan's "law fixed when the plan was created".
-        self._main_family_var = tk.StringVar(
-            value=f"family: {_FAMILY_LABELS['numerical']} — fixed for this "
-                  f"plan (New… to change)")
-        ttk.Label(_gmf, textvariable=self._main_family_var,
-                  foreground="#888888").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W, padx=8, pady=(0, 1))
 
         # Skip count belonged only to the retired skip_to_equilibrium mode; the
         # control is gone.  The var stays as an inert conduit (scenario
@@ -5849,10 +5847,6 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_zeta_est_btn = ttk.Button(
             _r2, text="Estimate…", width=10, command=self._estimate_main_zeta)
         self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(4, 0))
-        self._main_zeta_hint = ttk.Label(
-            _r2, text="  0 = undamped skip; ~0.7 = a few skips",
-            foreground="#888888")
-        self._main_zeta_hint.pack(side=tk.LEFT)
 
         # Bank schedule and dive-at-target are detail (a 3×3 grid and a
         # lat/lon/radius block) that clutter the strip and are rarely re-tuned,
@@ -5871,8 +5865,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._main_dt_radius_var = tk.StringVar(value="20")
 
         self._main_edit_hint = self._mk_hint(
-            _gmf, "Terminal dive, aero model, bank schedule and dive-at-target: "
-                  "Reentry Plan ▸ Edit…")
+            _gmf, "Dive, banks, aero model: Edit…")
         self._main_edit_hint.grid(row=3, column=0, columnspan=2,
                                   sticky=tk.W, padx=(8, 0), pady=(6, 1))
 
@@ -6698,23 +6691,15 @@ class BoosterFlyoutApp(tk.Tk):
         always shown; this line summarises the terminal vehicle's properties."""
         ro = getattr(self, '_ro', None)
         if ro and ro.glider_enabled and ro.glider_LD > 0:
-            # Separation reads the LIVE strip control (the run-level value),
-            # not the stored object, so a flip is reflected immediately.
-            if getattr(self, '_main_sep_var', None) is not None:
-                sep = ('body' if self._main_sep_var.get()
-                       == self._SEP_LABELS['body'] else 'separating_ro')
-            else:
-                sep = getattr(ro, 'separation_mode', 'separating_ro')
-            sep_lbl = "body" if sep == "body" else "separating reentry object"
+            # Just the glider numbers: the object's NAME is the Reentry Object
+            # dropdown above and separation is the Separation control — this
+            # line only carries what is shown nowhere else in the strip.
             self._glider_status_var.set(
-                f"Reentry object: {ro.name or 'RO'}  "
-                f"({sep_lbl}, L/D {ro.glider_LD:.2f}, "
-                f"g-lim {ro.glider_pullup_g_max:.0f})  "
-                f"— edit in Edit Reentry Object…")
+                f"L/D {ro.glider_LD:.2f} · g-limit "
+                f"{ro.glider_pullup_g_max:.0f}   (Edit Reentry Object…)")
         else:
             self._glider_status_var.set(
-                "Reentry object not configured for maneuvering"
-                " — set L/D in Edit Reentry Object…")
+                "No L/D set — Edit Reentry Object…")
         # Reentry mode combobox is always visible regardless of glider config.
         self._glider_main_frame.grid(row=4, column=0, columnspan=2,
                                       sticky=tk.EW, padx=0, pady=(0, 4))
@@ -6763,10 +6748,6 @@ class BoosterFlyoutApp(tk.Tk):
                 self._main_guidance_cb.configure(values=_vals)
         except tk.TclError:
             pass
-        if hasattr(self, '_main_family_var'):
-            self._main_family_var.set(
-                f"family: {_FAMILY_LABELS[_fam]} — fixed for this plan "
-                f"(New… to change)")
 
     def _on_glider_guidance_changed(self):
         raw = self._main_guidance_var.get()
@@ -6793,14 +6774,10 @@ class BoosterFlyoutApp(tk.Tk):
             if _uses_zeta:
                 self._main_zeta_lbl.config(
                     text="Tracking gain ζ:" if _is_dyn else "Damping ratio ζ:")
-                self._main_zeta_hint.config(
-                    text=("  feedback gain on altitude-rate error" if _is_dyn
-                          else "  0 = undamped skip; ~0.7 = a few skips"))
                 # Estimator applies only to phugoid damping (damped case).
                 self._main_zeta_est_btn.pack_forget()
                 if not _is_dyn:
-                    self._main_zeta_est_btn.pack(
-                        side=tk.LEFT, padx=(4, 0), before=self._main_zeta_hint)
+                    self._main_zeta_est_btn.pack(side=tk.LEFT, padx=(4, 0))
                 _zr.grid()
             else:
                 _zr.grid_remove()
