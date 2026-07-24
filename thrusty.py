@@ -5539,50 +5539,55 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(_lo, text="× object carried through boost").pack(
             side=tk.LEFT, padx=(4, 0))
 
-        # ── Launch site ────────────────────────────────────────────────
-        lf = ttk.LabelFrame(parent, text="Launch Site")
-        lf.pack(fill=tk.X, padx=6, pady=3)
+        # ── Launch site — first mockup rail card (design/thrusty-mockup.html):
+        # white card + hairline, UPPERCASE muted section label, underlined
+        # mono fields with units outside, link-style buttons.  Site dropdown
+        # stays a native Combobox (typeahead/scroll behavior kept).
+        lf_outer, lf = theme.card(parent, "Launch Site")
+        lf_outer.pack(fill=tk.X, padx=6, pady=4)
 
         _site_values, self._site_map = _load_launch_sites()
         self._site_var = tk.StringVar(value="")
         self._site_cb = ttk.Combobox(lf, textvariable=self._site_var,
                                      values=_site_values, state="readonly", width=26)
-        self._site_cb.pack(padx=6, pady=(4, 2))
+        self._site_cb.pack(fill=tk.X, pady=(0, 2))
         self._site_cb.bind("<<ComboboxSelected>>", self._on_site_selected)
         _bind_typeahead(self._site_cb)
 
-        sb = ttk.Frame(lf)
-        sb.pack(padx=6, pady=(0, 4))
-        ttk.Button(sb, text="New",    width=7,
-                   command=self._new_site).pack(side=tk.LEFT, padx=2)
-        ttk.Button(sb, text="Edit…",  width=7,
-                   command=self._edit_site).pack(side=tk.LEFT, padx=2)
-        self._site_del_btn = ttk.Button(sb, text="Delete", width=7,
-                                        command=self._delete_site,
-                                        state=tk.DISABLED)
-        self._site_del_btn.pack(side=tk.LEFT, padx=2)
+        sb = tk.Frame(lf, bg=theme.BG)
+        sb.pack(fill=tk.X, pady=(2, 6))
+        theme.LinkButton(sb, "New", self._new_site).pack(
+            side=tk.LEFT, expand=True)
+        theme.LinkButton(sb, "Edit…", self._edit_site).pack(
+            side=tk.LEFT, expand=True)
+        self._site_del_btn = theme.LinkButton(sb, "Delete", self._delete_site)
+        self._site_del_btn.config(state=tk.DISABLED)
+        self._site_del_btn.pack(side=tk.LEFT, expand=True)
 
-        lf_grid = ttk.Frame(lf)
-        lf_grid.pack(fill=tk.X)
-        self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
-        self._launch_lon = _dd_row(lf_grid, "Longitude:", row=1, default="0.0")
-        # Buttons live in a shared column (2) so Find… and Estimate… align.
-        ttk.Button(lf_grid, text="Find…", width=10,
-                   command=lambda: self._pick_location(
-                       self._launch_lat, self._launch_lon)
-                   ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=2)
-
-        ttk.Label(lf_grid, text="Azimuth:").grid(row=2, column=0,
-                                                  sticky=tk.W, padx=(8, 2), pady=2)
-        az_frame = ttk.Frame(lf_grid)
-        az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
+        self._launch_lat = tk.StringVar(value="0.0")
+        self._launch_lon = tk.StringVar(value="0.0")
         self._azimuth_var = tk.StringVar(value="0.0")
-        # Entry width matches the lat/lon rows (_dd_row uses 10).
-        ttk.Entry(az_frame, textvariable=self._azimuth_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=(2, 0))
-        ttk.Button(lf_grid, text="Estimate…", width=10,
-                   command=self._estimate_azimuth
-                   ).grid(row=2, column=2, sticky=tk.W, padx=4, pady=2)
+
+        def _site_row(label, var, unit, link=None, link_cmd=None):
+            r = tk.Frame(lf, bg=theme.BG)
+            r.pack(fill=tk.X, pady=3)
+            tk.Label(r, text=label, width=9, anchor=tk.W, bg=theme.BG,
+                     fg=theme.INK, font=theme.ui_sans(parent, 12)
+                     ).pack(side=tk.LEFT, padx=(0, 2))
+            wrap, _ = theme.underline_entry(r, var, width=10)
+            wrap.pack(side=tk.LEFT)
+            tk.Label(r, text=unit, bg=theme.BG, fg=theme.SUB,
+                     font=theme.ui_sans(parent, 11)).pack(side=tk.LEFT,
+                                                          padx=(5, 0))
+            if link:
+                theme.LinkButton(r, link, link_cmd).pack(side=tk.RIGHT,
+                                                         padx=(0, 6))
+        _site_row("Latitude:", self._launch_lat, "°")
+        _site_row("Longitude:", self._launch_lon, "°", "Find…",
+                  lambda: self._pick_location(self._launch_lat,
+                                              self._launch_lon))
+        _site_row("Azimuth:", self._azimuth_var, "°  (from N)", "Estimate…",
+                  self._estimate_azimuth)
 
         # Flight Plan section takes its place now (after Launch Site), then the
         # ascent strip is built inside it as a plain frame — one consolidated
