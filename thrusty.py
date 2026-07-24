@@ -10145,12 +10145,12 @@ class BoosterFlyoutApp(tk.Tk):
                 i += 1
 
         self._ax_trk.plot(lon_c, lat_c, color='black', linewidth=1.2, zorder=2)
-        self._ax_trk.plot(0.0, lat_arr[0], 'go', markersize=7,
+        self._ax_trk.plot(0.0, lat_arr[0], marker='o', color=theme.GREEN, linestyle='', markersize=7,
                           label="Launch", zorder=5)
 
         if not orbital:
             impact_lon_c = ((lon_arr[-1] - center_lon + 180.0) % 360.0) - 180.0
-            self._ax_trk.plot(impact_lon_c, lat_arr[-1], 'r*', markersize=9,
+            self._ax_trk.plot(impact_lon_c, lat_arr[-1], marker='*', color=theme.ACCENT2, linestyle='', markersize=9,
                               label="Impact", zorder=5)
 
         # Orbital event markers (insertion ◆, apogee ▲, perigee ▼)
@@ -10178,7 +10178,7 @@ class BoosterFlyoutApp(tk.Tk):
             if d_lat is None or d_lon is None:
                 continue
             d_lon_c = ((d_lon - center_lon + 180.0) % 360.0) - 180.0
-            self._ax_trk.plot(d_lon_c, d_lat, 'rx', markersize=8,
+            self._ax_trk.plot(d_lon_c, d_lat, marker='x', color=theme.ACCENT2, linestyle='', markersize=8,
                               markeredgewidth=1.8,
                               label="Debris" if not _debris_plotted else "_nolegend_",
                               zorder=5)

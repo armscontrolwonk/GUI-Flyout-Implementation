@@ -9,8 +9,11 @@ that history).  Recipe measured from the mockup's own SVGs and styles:
     #f3f3f3 interior grid — NOT the hide-top/right treatment the spec text
     described; the mockup as approved uses the framed look;
   * primary series: #1a1a1a solid 2px, no fill under curves;
-  * secondary (twin-axis) series: #cf5a2e dashed (5,4) 1.8px; its tick
-    labels + axis title in the same color (the frame stays light);
+  * secondary (twin-axis) series: dashed (5,4) 1.8px in ACCENT2; its tick
+    labels + axis title in the same color (the frame stays light).  ACCENT2
+    was the mockup's red-orange #cf5a2e; unified 2026-07-24 (user decision)
+    to the mockup's own muted brick red #9a3535 so the right axes, the map's
+    impact/debris markers, and warning text share ONE warm accent;
   * tick numbers in a monospace face; left-axis label ink, x-label muted;
   * legend: white @88%, 1px #ececec hairline.
 
@@ -26,12 +29,12 @@ from __future__ import annotations
 INK     = "#1a1a1a"
 SUB     = "#9a9a9a"
 ACCENT  = "#334155"
-ACCENT2 = "#cf5a2e"   # secondary (twin) axis + its dashed series — only use
+ACCENT2 = "#9a3535"   # THE warm accent: secondary axes/series, map markers
 LINE    = "#ececec"   # hairlines (legend border)
 FRAME   = "#d8d8d8"   # plot-area frame (--line2)
 GRID    = "#f3f3f3"   # interior gridlines
 BG      = "#ffffff"
-RED     = "#9a3535"
+RED     = ACCENT2     # unified 2026-07-24: one brick/cardinal accent
 GREEN   = "#3f6b4f"
 
 DASH = (0, (5, 4))    # the mockup's secondary-series dash pattern
