@@ -5131,6 +5131,18 @@ class BoosterFlyoutApp(tk.Tk):
                          'tabbingMode', self._w, 'disallowed')
         except tk.TclError:
             pass   # non-macOS platforms ignore this silently
+        # Bespoke app icon (assets/thrusty.png, transparent PNG).  On macOS
+        # aqua Tk this sets the running app's DOCK icon (replacing the stock
+        # Python rocket); on Windows/Linux it sets the window/taskbar icon.
+        # Silently keeps the stock icon when the asset is absent.
+        try:
+            _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      "assets", "thrusty.png")
+            if os.path.exists(_icon_path):
+                self._app_icon = tk.PhotoImage(file=_icon_path)  # keep a ref
+                self.iconphoto(True, self._app_icon)
+        except tk.TclError:
+            pass
         self.minsize(900, 700)
         # Size to 92 % of the available screen, capped at 1600 × 1050.
         self.update_idletasks()
