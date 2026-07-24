@@ -26,6 +26,12 @@
   {"name": "Tanegashima (Y-1)",          "country": "Japan",       "lat":  30.4005, "lon":  130.9756},
   {"name": "Uchinoura SC",               "country": "Japan",       "lat":  31.2519, "lon":  131.0811},
 
+  {"name": "Kwajalein (RTS HQ)",         "country": "Marshall Islands", "lat":  8.7167, "lon": 167.7333},
+  {"name": "Meck Island (RTS)",          "country": "Marshall Islands", "lat":  9.0053, "lon": 167.7307},
+  {"name": "Omelek Island",              "country": "Marshall Islands", "lat":  9.0477, "lon": 167.7431},
+  {"name": "Illeginni Islet (RTS)",      "country": "Marshall Islands", "lat":  9.0781, "lon": 167.4708},
+  {"name": "Roi-Namur (ALTAIR)",         "country": "Marshall Islands", "lat":  9.3967, "lon": 167.4700},
+
   {"name": "Mahia (LC-1)",               "country": "New Zealand", "lat": -39.2600, "lon":  177.8600},
 
   {"name": "Andøya",                     "country": "Norway",      "lat":  69.2900, "lon":   16.0200},
@@ -45,7 +51,11 @@
   {"name": "Cape Canaveral (SLC-40)",    "country": "USA",         "lat":  28.5619, "lon":  -80.5772},
   {"name": "Cape Canaveral (SLC-41)",    "country": "USA",         "lat":  28.5835, "lon":  -80.5830},
   {"name": "Kauai Test Facility (PMRF)", "country": "USA",         "lat":  22.0228, "lon": -159.7850},
+  {"name": "Kodiak (PSCA LP-1)",         "country": "USA",         "lat":  57.4353, "lon": -152.3393},
+  {"name": "Poker Flat Research Range",  "country": "USA",         "lat":  65.1192, "lon": -147.4320},
+  {"name": "Starbase (Boca Chica)",      "country": "USA",         "lat":  25.9968, "lon":  -97.1541},
   {"name": "Vandenberg (SLC-4E)",        "country": "USA",         "lat":  34.6320, "lon": -120.6130},
+  {"name": "Wake Island",                "country": "USA",         "lat":  19.2819, "lon":  166.6503},
   {"name": "Wallops Island",             "country": "USA",         "lat":  37.9402, "lon":  -75.4664},
   {"name": "White Sands",                "country": "USA",         "lat":  32.3799, "lon": -106.4823}
 ]

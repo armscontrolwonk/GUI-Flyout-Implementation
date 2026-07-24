@@ -129,6 +129,7 @@ variant per object is remembered in
 | `slv_performance.py` | ~287 | Algebraic payload-to-orbit estimation (Schilling) |
 | `mass_estimator.py` | ~1 260 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
 | `booster_xlsx.py` / `ro_xlsx.py` | ~740 / ~320 | Spreadsheet (XLSX) import/export for boosters and reentry objects |
+| `locations_db.py` | ~560 | Offline location catalogs (GCAT / NGA GEOnet / USGS GNIS) — parsers, search, and the download CLI |
 
 `trajectory.py` glide modes model reentry as a **phugoid-damping spectrum**:
 skip-glide (undamped, ζ=0) → damped-phugoid glide (ζ≈0.7) → non-oscillatory glide /
@@ -162,6 +163,37 @@ read. How each object is *flown* is stored separately in
 `flight_plans/*.flightplan.json`), written through from the sidebar on every run.
 Flight-plan variants live in `~/Documents/Thrusty/flight_plans/`, and the active
 variant per booster in `~/.gui_missile_flyout/active_flight_plans.json`.
+
+### Location catalogs
+
+The Launch Site picker is seeded from the hand-curated `launch_sites.json`.
+Larger catalogs are *generated* into `data/locations/` with `locations_db.py`
+and merge in automatically (read-only) on the next start:
+
+```
+python3 locations_db.py gcat                      # every launch/test site in
+                                                  # J. McDowell's GCAT (CC-BY 4.0)
+python3 locations_db.py nga RM                    # NGA GEOnet country file —
+                                                  # foreign place names (RM =
+                                                  # Marshall Islands; try the
+                                                  # GENC code MH if a FIPS
+                                                  # code 404s)
+python3 locations_db.py gnis --states HI AK UM    # USGS GNIS domestic names
+                                                  # (UM = Wake/Johnston/Midway)
+```
+
+Catalogs with `"format": "thrusty-sites-v1"` (GCAT) feed the Launch Site
+picker; `"thrusty-places-v1"` catalogs (NGA, GNIS) are searched offline by
+the **Find…** location dialog, ahead of the optional `geonamescache` city
+gazetteer. A GNIS national extract (Military / Island / Range feature
+classes, ~23 k names — includes PMRF, Vandenberg, Wake, Johnston, Midway) is
+committed in `data/locations/places_gnis_national.json`, so Find… works out
+of the box. All three sources are US-government public domain except GCAT
+(CC-BY 4.0 — cite GCAT when publishing results derived from it).
+
+`geonames.nga.mil` and `planet4589.org` occasionally move or rate-limit
+their download paths; every subcommand accepts `--from-tsv` / `--from-zip`
+to build catalogs from manually downloaded files instead.
 
 ---
 

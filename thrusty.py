@@ -46,6 +46,7 @@ from slv_performance import schilling_performance
 import mass_estimator as mest
 import heating
 import thresholds
+import locations_db
 
 # ---------------------------------------------------------------------------
 # Country border map data (Natural Earth 110m, bundled GeoJSON)
@@ -684,7 +685,7 @@ def _save_user_sites(sites: list) -> None:
 
 
 def _load_launch_sites():
-    """Return (combobox_values, name→site_dict) from bundled + user sites."""
+    """Return (combobox_values, name→site_dict) from bundled + catalog + user sites."""
     global _BUNDLED_SITE_NAMES
     path = Path(__file__).parent / "launch_sites.json"
     bundled = []
@@ -694,6 +695,15 @@ def _load_launch_sites():
         except Exception as exc:
             print(f"Warning: could not load launch_sites.json: {exc}")
     _BUNDLED_SITE_NAMES = {s["name"] for s in bundled}
+    # Generated catalogs (e.g. GCAT via locations_db.py) merge in read-only,
+    # after the curated list — a curated entry keeps its name on collision.
+    try:
+        for s in locations_db.load_extra_sites():
+            if s["name"] not in _BUNDLED_SITE_NAMES:
+                bundled.append(s)
+                _BUNDLED_SITE_NAMES.add(s["name"])
+    except Exception as exc:
+        print(f"Warning: could not load location catalogs: {exc}")
     all_sites = bundled + _load_user_sites()
     by_country = {}
     for s in all_sites:
@@ -8543,26 +8553,41 @@ class BoosterFlyoutApp(tk.Tk):
             import geonamescache as _gnc
             _gc_cities = list(_gnc.GeonamesCache().get_cities().values())
         except ImportError:
+            pass
+
+        # Generated catalogs under data/locations/ (NGA GEOnet, USGS GNIS —
+        # built with locations_db.py) are searched ahead of geonamescache:
+        # they carry the atolls, ranges and installations that a city
+        # gazetteer never will.
+        _have_places = bool(locations_db.load_places())
+
+        if not _gc_cities and not _have_places:
             status_var.set(
-                "Tip: pip install geonamescache  for instant offline city search")
+                "Tip: pip install geonamescache, or run locations_db.py, "
+                "for offline search")
 
         def _do_offline(query):
-            if not _gc_cities:
-                return []
             q = query.strip().lower()
             if not q:
                 return []
             hits = []
-            for c in _gc_cities:
-                if q in c['name'].lower():
-                    hits.append((
-                        c['name'],
-                        float(c['latitude']),
-                        float(c['longitude']),
-                        c.get('countrycode', ''),
-                        int(c.get('population') or 0),
-                    ))
-            hits.sort(key=lambda x: -x[4])
+            if _have_places:
+                hits = [(name, lat, lon, cc, 0)
+                        for name, lat, lon, cc, _cls
+                        in locations_db.search_places(q, limit=50)]
+            if _gc_cities:
+                city_hits = []
+                for c in _gc_cities:
+                    if q in c['name'].lower():
+                        city_hits.append((
+                            c['name'],
+                            float(c['latitude']),
+                            float(c['longitude']),
+                            c.get('countrycode', ''),
+                            int(c.get('population') or 0),
+                        ))
+                city_hits.sort(key=lambda x: -x[4])
+                hits.extend(city_hits)
             return hits[:50]
 
         def _fmt_row(name, lat, lon, cc):
@@ -8594,7 +8619,7 @@ class BoosterFlyoutApp(tk.Tk):
                     f"{len(results)} result(s) — select one and click Apply")
                 online_btn.config(state=tk.DISABLED)
             else:
-                if q.strip() and _gc_cities:
+                if q.strip() and (_gc_cities or _have_places):
                     status_var.set("No offline match — try Search online…")
                 online_btn.config(
                     state=tk.NORMAL if q.strip() else tk.DISABLED)
