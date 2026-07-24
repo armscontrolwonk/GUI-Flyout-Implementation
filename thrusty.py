@@ -5544,7 +5544,8 @@ class BoosterFlyoutApp(tk.Tk):
         lf_grid.pack(fill=tk.X)
         self._launch_lat = _dd_row(lf_grid, "Latitude:",  row=0, default="0.0")
         self._launch_lon = _dd_row(lf_grid, "Longitude:", row=1, default="0.0")
-        ttk.Button(lf_grid, text="Find…", width=7,
+        # Buttons live in a shared column (2) so Find… and Estimate… align.
+        ttk.Button(lf_grid, text="Find…", width=10,
                    command=lambda: self._pick_location(
                        self._launch_lat, self._launch_lon)
                    ).grid(row=1, column=2, sticky=tk.W, padx=4, pady=2)
@@ -5554,10 +5555,12 @@ class BoosterFlyoutApp(tk.Tk):
         az_frame = ttk.Frame(lf_grid)
         az_frame.grid(row=2, column=1, sticky=tk.W, padx=(0, 8), pady=2)
         self._azimuth_var = tk.StringVar(value="0.0")
-        ttk.Entry(az_frame, textvariable=self._azimuth_var, width=8).pack(side=tk.LEFT)
-        ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=2)
-        ttk.Button(az_frame, text="Estimate…", width=10,
-                   command=self._estimate_azimuth).pack(side=tk.LEFT, padx=4)
+        # Entry width matches the lat/lon rows (_dd_row uses 10).
+        ttk.Entry(az_frame, textvariable=self._azimuth_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(az_frame, text="°  (from N)").pack(side=tk.LEFT, padx=(2, 0))
+        ttk.Button(lf_grid, text="Estimate…", width=10,
+                   command=self._estimate_azimuth
+                   ).grid(row=2, column=2, sticky=tk.W, padx=4, pady=2)
 
         # Flight Plan section takes its place now (after Launch Site), then the
         # ascent strip is built inside it as a plain frame — one consolidated
@@ -5778,9 +5781,14 @@ class BoosterFlyoutApp(tk.Tk):
             value="Reentry object not configured for maneuvering"
             " — set L/D in Edit Reentry Object…")
         self._glider_status_lbl = ttk.Label(rf, textvariable=self._glider_status_var,
-                                             foreground="#555555")
+                                             foreground="#555555",
+                                             wraplength=self._left_wrap,
+                                             justify=tk.LEFT)
         self._glider_status_lbl.grid(row=3, column=0, columnspan=2,
                                       sticky=tk.W, padx=8, pady=(2, 2))
+        # register for dynamic re-wrap so the summary never clips at any
+        # pane width (it was truncating at "— edit…").
+        self._left_hints.append(self._glider_status_lbl)
 
         # Row 1: reentry-mode detail frame.  Always visible; combobox at the
         # top selects the mode, rest of rows show/hide per selection.
@@ -6497,7 +6505,7 @@ class BoosterFlyoutApp(tk.Tk):
             return default
 
         self._guidance_var.set(p.guidance)
-        self._loft_angle_var.set(f"{p.burnout_angle_deg:.4f}")
+        self._loft_angle_var.set(f"{p.burnout_angle_deg:.4g}")   # 38.1, not 38.1000
         self._launch_el_var.set(f"{p.launch_elevation_deg:.1f}")
         # Turn start defaults to 0 s (from liftoff); a saved plan value wins.
         gt_start = _gk('gt_turn_start_s', 0.0)
@@ -6651,6 +6659,11 @@ class BoosterFlyoutApp(tk.Tk):
             self._adv_pitch_frame.grid_forget()
             for w in _basic:
                 w.grid()
+            # Re-apply the quick-strip layout: the blanket restore above
+            # resurrects Turn Start at its build row (below Turn Stop, which
+            # the quick strip moved up) — the source of the inverted
+            # Stop-above-Start ordering.  Let the mode logic re-hide/place.
+            self._update_guidance_labels(self._guidance_var.get())
 
     def _on_adv_yaw_toggled(self):
         """Yaw / dogleg now lives in the Flight Plan dialog; keep its sidebar
