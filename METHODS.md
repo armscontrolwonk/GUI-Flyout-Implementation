@@ -3703,7 +3703,20 @@ This changes **which blocks print**, never a survival tier: all five blocks
 were and remain presentation or context, with the single documented exception
 of the windward overlay behind `heating.WINDWARD_DRIVES_VERDICT` (§13.8,
 default off).  `test_arc_descriptors.py` pins each trigger independently, the
-SWERVE regression, and the tier-invariance.
+SWERVE regression, and the tier-invariance; `test_gui_survivability.py` pins
+the same triggers as *rendered in the tab*, plus the tier tag, the survival
+map's pixel tab stops and colorization spans, and the ballistic-only
+sweep-context gate (`thrusty.py`) — the sole consumer of the report's `form`
+outside `survivability_report.py`.
+
+**Running the GUI test.** It needs a real Tk, and skips cleanly without one.
+On a desktop install `pytest test_gui_survivability.py` just works.  In a
+container whose default interpreter was built without Tk, point pytest at one
+that has it and give it a virtual display:
+
+```
+xvfb-run -a /usr/bin/python3.12 -m pytest test_gui_survivability.py -q
+```
 
 Note for readers of the ledger: `BENCHMARKING.md` still files its source
 campaigns under the historical "Form A/B/C" headings.  Those are the names the
