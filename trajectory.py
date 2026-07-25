@@ -62,6 +62,7 @@ Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import minimize_scalar
+from collections import namedtuple as _namedtuple
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -565,30 +566,82 @@ def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
 # Slender-body drag polar (Munk 1924, Ashley & Landahl §6-7, §9-8)
 # ---------------------------------------------------------------------------
 
-def _aero_polar(ro, ld_override: float = None) -> tuple:
-    """Return (C_D0, k, A_ref) for the slender-body drag polar.
+# The polar as a named record — richer than the old (C_D0, k, A_ref) tuple so
+# the wing-decoupled ceiling (C_L_max) and pull-efficiency (e_pull) travel with
+# it.  All call sites take the record and read attributes.
+_Polar = _namedtuple('_Polar', 'C_D0 k A_ref C_L_star C_L_max e_pull')
 
-    Linear slender-body theory gives C_L = 2α (Munk 1924; Ashley & Landahl
-    Eq. 6-108) referenced to the base cross-section A_ref = π·d²/4.  The
-    drag-due-to-lift is C_Di = k·C_L², so the polar is
+# Bare-body maximum usable C_L: Munk C_L = 2α evaluated at |α| ≲ 25° — the
+# un-physical hardcoded ceiling the wing decoupling replaces when wings exist.
+_C_L_MAX_BODY = 2.0 * np.radians(25.0)          # ≈ 0.873
 
-        C_D = C_D0 + k·C_L²
+# Wing-decoupling screening constants (METHODS §12.0.2).  Labeled inferences
+# with ~±30% bands, never fit to a flight.  The wing acts on ONE physical
+# quantity — the width of the drag bucket (induced-drag efficiency in a hard
+# pull), NOT the C_L ceiling: |α| ≲ 25° is a max-AoA limit for a body OR a
+# winged vehicle alike, and raising it just lets the pull rail at ruinous
+# induced drag.  A high-AR wing carries lift more efficiently off-design, so
+# it flattens the L/D curve away from the cruise point.
+WING_PULL_GAIN  = 1.0    # scale of the bucket-broadening per unit wing-area
+                         # ratio (S_w/A_ref) at high AR.
+WING_PULL_AR0   = 4.0    # aspect-ratio half-saturation: AR/(AR+4) → 0.5 at
+                         # AR=4, → 1 as AR → ∞ (tip losses shrink the benefit
+                         # for a stubby wing).
+WING_DEFAULT_AR = 2.0    # FAIL SAFE: wing area given but no span/AR → assume a
+                         # stubby, low-efficiency wing.  Credits a modest,
+                         # conservative benefit from area alone; a declared AR
+                         # overrides.  Never overclaims efficiency span can't
+                         # support.
+_WING_E_PULL_CAP = 3.0   # bound the induced-drag softening.
 
-    We back-solve C_D0 and k from the user's β (zero-lift ballistic
-    coefficient) and (L/D)_max:
+
+def _polar_cd(C_L: float, pol: '_Polar') -> float:
+    """Drag coefficient at lift C_L on the (possibly wing-decoupled) polar.
+
+    Cruise side (C_L ≤ C_L*): the standard C_D = C_D0 + k·C_L² — untouched, so
+    a winged vehicle's cruise L/D is EXACTLY its glider_LD (no double-count).
+    Pull side (C_L > C_L*): the induced-drag rise above the bucket is softened
+    by e_pull (≥ 1, from aspect ratio) — a higher-AR wing has a flatter L/D
+    curve.  e_pull = 1 (no wings, or wings without a declared AR) reproduces the
+    single-k polar exactly, so this is byte-identical off the wing path.
+    """
+    cl = min(abs(float(C_L)), pol.C_L_max)
+    if cl <= pol.C_L_star or pol.e_pull <= 1.0:
+        return pol.C_D0 + pol.k * cl * cl
+    cd_star = pol.C_D0 + pol.k * pol.C_L_star * pol.C_L_star
+    return cd_star + (pol.k / pol.e_pull) * (cl * cl - pol.C_L_star * pol.C_L_star)
+
+
+def _aero_polar(ro, ld_override: float = None) -> '_Polar':
+    """The drag polar as a `_Polar` record (Munk 1924; Ashley & Landahl §6-7).
+
+    Linear slender-body theory gives C_L = 2α referenced to A_ref = π·d²/4;
+    the drag-due-to-lift is C_Di = k·C_L², so C_D = C_D0 + k·C_L².  C_D0 and k
+    are back-solved from the user's β and (L/D)_max:
 
         A_ref  = π·d²/4
         C_D0   = m / (β · A_ref)            (β at zero lift)
-        k      = 1 / (4·C_D0·(L/D)_max²)    (back-solved so that the
-                                             polar yields (L/D)_max
-                                             at the trim AoA α*)
+        k      = 1 / (4·C_D0·(L/D)_max²)    (polar yields (L/D)_max at α*)
+        C_L*   = √(C_D0/k)                  (the max-L/D trim lift)
 
-    At α*: C_L* = √(C_D0/k), C_D* = 2·C_D0, (L/D)* = (L/D)_max.
-    The skip_glide EOM trims at α* so lift ∝ q (phugoid preserved).
-    The equilibrium_glide EOM trims to satisfy L·cos σ = m·g⊥.
+    WING DECOUPLING (METHODS §12.0.2).  `wing_area_m2 > 0` broadens the drag
+    bucket — the ONE thing the 2-input (β, L/D) model can't express.  The
+    cruise bucket (C_L ≤ C_L*) is UNCHANGED, so glider_LD keeps its meaning and
+    every non-winged vehicle is byte-identical; only the induced-drag rise in a
+    HARD PULL (C_L > C_L*) is softened, via _polar_cd:
 
-    Returns (C_D0, k, A_ref).  Falls back to generic-HGV defaults if the
-    inputs are missing or non-physical.
+        λ        = wing_area / A_ref                        (planform ratio)
+        AR       = wing_aspect_ratio, or WING_DEFAULT_AR if unset (fail safe)
+        e_pull   = 1 + WING_PULL_GAIN · λ · AR/(AR + AR0)
+
+    A high-AR wing carries lift more efficiently off the cruise point, so it
+    flattens the L/D curve there — exactly the pull tax the SWERVE campaign
+    exposed (the pull ran at L/D ≈ 0.94, half the nominal).  The C_L ceiling is
+    NOT raised: |α| ≲ 25° is a max-AoA limit for a body or a winged vehicle
+    alike, and raising it merely lets the pull rail at ruinous induced drag
+    (verified — it deepens the trough).  Constants are screening inferences
+    with ~±30% bands, never fit to a flight.  Returns a `_Polar`; falls back to
+    generic-HGV defaults if β/mass are missing.
     """
     d = float(getattr(ro, 'diameter_m', 0.0) or 0.0)
     if d <= 0.0:
@@ -596,22 +649,31 @@ def _aero_polar(ro, ld_override: float = None) -> tuple:
     A_ref = 0.25 * np.pi * d * d
     m   = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
     bet = float(getattr(ro, 'beta_kg_m2', 0.0) or 0.0)
-    # ld_override lets the caller supply a Mach-interpolated (L/D)_max (the
-    # derived no-sep body path) instead of the object's constant capability.
     LD  = float(ld_override if ld_override is not None
                 else (getattr(ro, 'glider_LD', 0.0) or 0.0))
     if m > 0.0 and bet > 0.0:
         C_D0 = m / (bet * A_ref)               # β at zero lift
     else:
         C_D0 = 0.08                             # generic HGV C_D0
-    if LD > 0.0:
-        k = 1.0 / (4.0 * C_D0 * LD * LD)
-    else:
-        k = 0.5                                 # slender-body theoretical
-    # Sanity floors — keep the polar well-conditioned for pathological inputs.
+    k = 1.0 / (4.0 * C_D0 * LD * LD) if LD > 0.0 else 0.5
     k = max(min(k, 5.0), 0.05)
     C_D0 = max(min(C_D0, 1.0), 0.005)
-    return C_D0, k, A_ref
+    C_L_star = float(np.sqrt(C_D0 / k))
+
+    # ---- wing decoupling (default off: byte-identical to the old polar) -----
+    # Wings broaden the pull-side bucket only (e_pull); the ceiling stays the
+    # universal max-AoA limit.
+    S_w = float(getattr(ro, 'wing_area_m2', 0.0) or 0.0)
+    e_pull = 1.0
+    if S_w > 0.0 and A_ref > 0.0:
+        lam = S_w / A_ref
+        AR = float(getattr(ro, 'wing_aspect_ratio', 0.0) or 0.0) or WING_DEFAULT_AR
+        e_pull = 1.0 + WING_PULL_GAIN * lam * AR / (AR + WING_PULL_AR0)
+        e_pull = min(e_pull, _WING_E_PULL_CAP)
+    # Ceiling: universal max-AoA limit, floored above the cruise trim so a
+    # pull always has margin.
+    C_L_max = max(_C_L_MAX_BODY, 1.05 * C_L_star)
+    return _Polar(C_D0, k, A_ref, C_L_star, C_L_max, e_pull)
 
 
 # ---------------------------------------------------------------------------
@@ -869,12 +931,11 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 if q > 1.0:
                                     if getattr(_ero, 'glider_aero_model',
                                                'polar') == 'polar':
-                                        _CD0p, _kpp, _Arefp = _aero_polar(_ero, _ld_eff)
-                                        _C_L = min(_L_struct / (q * _Arefp),
-                                                   2.0 * np.radians(25.0))
-                                        lift_mag = q * _Arefp * _C_L
-                                        drag_mag = q * _Arefp * (_CD0p
-                                                                 + _kpp * _C_L * _C_L)
+                                        _polp = _aero_polar(_ero, _ld_eff)
+                                        _C_L = min(_L_struct / (q * _polp.A_ref),
+                                                   _polp.C_L_max)
+                                        lift_mag = q * _polp.A_ref * _C_L
+                                        drag_mag = q * _polp.A_ref * _polar_cd(_C_L, _polp)
                                     else:
                                         _drag_b = (q / float(_ero.beta_kg_m2)) * ro_mass
                                         lift_mag = min(_L_struct, _drag_b * _ld_eff)
@@ -907,9 +968,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             _g_eff = max(g_mag - speed*speed/r_mag, 0.0)
                             if q > 1.0:
                                 if _polar:
-                                    _CD0,_kp,_Aref=_aero_polar(_ero, _ld_eff)
-                                    _CLstar=min(np.sqrt(_CD0/_kp), 2.0*np.radians(25.0))
-                                    _L_nom=q*_Aref*_CLstar
+                                    _pol=_aero_polar(_ero, _ld_eff)
+                                    _CLstar=min(_pol.C_L_star, _pol.C_L_max)
+                                    _L_nom=q*_pol.A_ref*_CLstar
                                 else:
                                     _drag_beta=(q/float(_ero.beta_kg_m2))*ro_mass
                                     _L_nom=_drag_beta*_ld_eff
@@ -925,9 +986,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 else:
                                     _L_target=_L_nom
                                 if _polar:
-                                    _C_L=min(max(_L_target/(q*_Aref),0.0),2.0*np.radians(25.0))
-                                    drag_mag=q*_Aref*(_CD0+_kp*_C_L*_C_L)
-                                    lift_mag=q*_Aref*_C_L
+                                    _C_L=min(max(_L_target/(q*_pol.A_ref),0.0),_pol.C_L_max)
+                                    drag_mag=q*_pol.A_ref*_polar_cd(_C_L,_pol)
+                                    lift_mag=q*_pol.A_ref*_C_L
                                 else:
                                     # constant_LD: cap at the β-available lift
                                     # (= the α* nominal here), so the lumped model
@@ -976,12 +1037,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 _L_target = (ro_mass * _g_eff / _cos_b
                                              - _k_h * (_hdot - speed * _gstar))
                                 if _polar:
-                                    _CD0, _kp, _Aref = _aero_polar(_ero, _ld_eff)
+                                    _pol = _aero_polar(_ero, _ld_eff)
                                     # aerodynamic lift ceiling: C_L <= C_L,max
-                                    _C_L = min(max(_L_target / (q * _Aref), 0.0),
-                                               2.0 * np.radians(25.0))
-                                    drag_mag = q * _Aref * (_CD0 + _kp * _C_L * _C_L)
-                                    lift_mag = q * _Aref * _C_L
+                                    _C_L = min(max(_L_target / (q * _pol.A_ref), 0.0),
+                                               _pol.C_L_max)
+                                    drag_mag = q * _pol.A_ref * _polar_cd(_C_L, _pol)
+                                    lift_mag = q * _pol.A_ref * _C_L
                                 else:
                                     # lumped model: drag tracks lift at the fixed
                                     # L/D.  Cap at the β-based available lift
@@ -998,8 +1059,9 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             else:
                                 lift_mag = 0.0
                         elif getattr(_ero, 'glider_aero_model', 'polar') == 'polar':
-                            _CD0, _kp, _Aref = _aero_polar(_ero, _ld_eff)
-                            _C_L_lim = 2.0 * np.radians(25.0)  # slender-body: |α| ≲ 25°
+                            _pol = _aero_polar(_ero, _ld_eff)
+                            _Aref = _pol.A_ref
+                            _C_L_lim = _pol.C_L_max     # geometry-anchored ceiling
                             _L_max = _ero.glider_pullup_g_max * g_mag * ro_mass
                             if _ero.glider_guidance in (
                                     'equilibrium_glide', 'equilibrium_glide_acton'):
@@ -1026,7 +1088,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                               _L_max)
                                 if q > 1.0:
                                     _C_L = min(_L_total / (q * _Aref), _C_L_lim)
-                                    _C_D = _CD0 + _kp * _C_L * _C_L
+                                    _C_D = _polar_cd(_C_L, _pol)
                                     drag_mag = q * _Aref * _C_D
                                     lift_mag = q * _Aref * _C_L
                                 else:
@@ -1036,8 +1098,8 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # so lift ∝ q and the natural phugoid oscillation
                                 # is preserved.  C_L* = √(C_D0/k); C_D* = 2·C_D0.
                                 if q > 1.0:
-                                    _C_L = min(np.sqrt(_CD0 / _kp), _C_L_lim)
-                                    _C_D = _CD0 + _kp * _C_L * _C_L
+                                    _C_L = min(_pol.C_L_star, _C_L_lim)
+                                    _C_D = _polar_cd(_C_L, _pol)
                                     drag_mag = q * _Aref * _C_D
                                     lift_mag = min(q * _Aref * _C_L, _L_max)
                                 else:

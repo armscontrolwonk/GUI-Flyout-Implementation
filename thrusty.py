@@ -2396,10 +2396,20 @@ class ROEditorDialog(tk.Toplevel):
 
         _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
         self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
+        # Wing geometry — the physical anchor for the decoupled drag polar
+        # (a winged vehicle pulls more efficiently than a bare cone; 0 = no
+        # wings = slender-body polar).  Area is the primary knob; aspect ratio
+        # refines the pull efficiency and is optional (blank = stubby default).
+        _wa = f"{ro.wing_area_m2:g}" if (ro and ro.wing_area_m2 > 0) else "0"
+        _war = f"{ro.wing_aspect_ratio:g}" if (ro and ro.wing_aspect_ratio > 0) else "0"
+        self._wing_area_var = _gfe(1, "Wing area:", _wa, unit="m²")
+        self._wing_ar_var = _gfe(2, "  aspect ratio:", _war)
         ttk.Label(self._glider_frm,
-                  text="Pull-up g-limit and re-entry βₛ are in the Reentry Plan editor.",
-                  foreground="#888888").grid(row=1, column=0, columnspan=2,
-                                             sticky=tk.W, pady=(2, 0))
+                  text="Wings anchor the drag polar (0 = slender body; AR blank "
+                       "= stubby default).\nPull-up g-limit and re-entry βₛ are "
+                       "in the Reentry Plan editor.",
+                  foreground="#888888", justify=tk.LEFT).grid(
+                      row=3, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._update_glider_state()
 
@@ -2543,6 +2553,20 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=mach_var, width=10).grid(
             row=4, column=1, sticky=tk.W)
 
+        # Wing area — pre-filled from the object editor's wing field.  A winged
+        # vehicle is draggier than the bare cone, so its estimated β is lower;
+        # this is the advisory half of the wing decoupling (Level 2).
+        _lbl(5, "Wing area (m²):")
+        try:
+            _wa_dflt = self._wing_area_var.get()
+        except AttributeError:
+            _wa_dflt = "0"
+        wing_var = tk.StringVar(value=_wa_dflt or "0")
+        _wf = ttk.Frame(frm); _wf.grid(row=5, column=1, sticky=tk.W)
+        ttk.Entry(_wf, textvariable=wing_var, width=10).pack(side=tk.LEFT)
+        ttk.Label(_wf, text="  (0 = bare cone)",
+                  foreground="gray50").pack(side=tk.LEFT)
+
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
         res = ttk.Frame(dlg, padding=(12, 8))
@@ -2559,19 +2583,20 @@ class ROEditorDialog(tk.Toplevel):
         cdw_lbl  = _res_row(0, "Cd pressure (Newtonian):")
         cdf_lbl  = _res_row(1, f"Cd friction (Cf {_CONE_CF:g} · S_wet/A):")
         cdb_lbl  = _res_row(2, "Cd base (2/γM²):")
-        cd_lbl   = _res_row(3, "Cd total:")
-        area_lbl = _res_row(4, "Reference area (m²):")
+        cdwing_lbl = _res_row(3, "Cd wing (Cf · 2·S_w/A):")
+        cd_lbl   = _res_row(4, "Cd total:")
+        area_lbl = _res_row(5, "Reference area (m²):")
         beta_lbl = ttk.Label(res, text="—", font=("", 11, "bold"), foreground="navy")
         ttk.Label(res, text="β = m / (Cd · A):").grid(
-            row=5, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        beta_lbl.grid(row=5, column=1, sticky=tk.W)
+            row=6, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        beta_lbl.grid(row=6, column=1, sticky=tk.W)
         ttk.Label(res,
                   text="Newtonian pressure (Ref (4) Ch. 5) + turbulent skin\n"
-                       "friction + hypersonic base drag.  Cf is a screening\n"
-                       "constant (0.0008–0.0015 band); bare cone — wings or\n"
-                       "fins add drag this estimate does not carry.",
+                       "friction + hypersonic base drag + wing friction.  Cf is\n"
+                       "a screening constant (0.0008–0.0015 band); wing wave\n"
+                       "drag (thickness/sweep) is not carried.",
                   foreground="gray50", justify=tk.LEFT).grid(
-            row=6, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+            row=7, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 
         _result = [None]
 
@@ -2580,19 +2605,22 @@ class ROEditorDialog(tk.Toplevel):
                 m = float(mass_var.get()); d = float(dia_var.get())
                 th = float(theta_var.get()); ep = float(eps_var.get())
                 mk = float(mach_var.get())
+                wa = max(0.0, float(wing_var.get() or 0.0))
                 if d <= 0 or m <= 0 or th <= 0 or mk <= 0:
                     raise ValueError
             except ValueError:
-                for _l in (cdw_lbl, cdf_lbl, cdb_lbl, cd_lbl, area_lbl):
+                for _l in (cdw_lbl, cdf_lbl, cdb_lbl, cdwing_lbl, cd_lbl, area_lbl):
                     _l.config(text="—")
                 beta_lbl.config(text="invalid input"); _result[0] = None
                 return
-            c    = _cd_cone_hypersonic(th, ep, mach=mk)
             area = math.pi * (d / 2.0) ** 2
+            c    = _cd_cone_hypersonic(th, ep, mach=mk,
+                                      wing_area_ratio=(wa / area if area > 0 else 0.0))
             beta = m / (c['total'] * area) if c['total'] > 0 else float('inf')
             cdw_lbl.config(text=f"{c['pressure']:.4f}")
             cdf_lbl.config(text=f"{c['friction']:.4f}")
             cdb_lbl.config(text=f"{c['base']:.4f}")
+            cdwing_lbl.config(text=f"{c.get('wing', 0.0):.4f}")
             cd_lbl.config(text=f"{c['total']:.4f}")
             area_lbl.config(text=f"{area:.4f} m²")
             beta_lbl.config(text=f"{beta:,.0f} kg/m²")
@@ -2646,12 +2674,21 @@ class ROEditorDialog(tk.Toplevel):
             return None
 
         glider_on = bool(self._glider_var.get())
+        wing_area = wing_ar = 0.0
         if glider_on:
             try:
                 LD = float(self._LD_var.get())
             except ValueError:
                 messagebox.showerror(
                     "Invalid input", "L/D must be a number.", parent=self)
+                return None
+            try:
+                wing_area = max(0.0, float(self._wing_area_var.get() or 0.0))
+                wing_ar   = max(0.0, float(self._wing_ar_var.get() or 0.0))
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid input", "Wing area / aspect ratio must be numbers.",
+                    parent=self)
                 return None
         else:
             LD = 0.0
@@ -2687,6 +2724,8 @@ class ROEditorDialog(tk.Toplevel):
             nose_radius_m=nose_rn,
             glider_enabled=glider_on,
             glider_LD=LD,
+            wing_area_m2=wing_area,
+            wing_aspect_ratio=wing_ar,
             emissivity=emiss,
             nose_tps_material=nose_key,
             body_tps_material=body_key,

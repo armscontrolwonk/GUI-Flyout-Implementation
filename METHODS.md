@@ -2388,6 +2388,61 @@ The analytic family ignores the field (it flies its own closed-form pull-up
 arc).  `test_pullup.py` pins the phase behaviour, the ζ-decoupling, and the
 zero-trigger identity.
 
+#### 12.0.2 Wing-decoupled drag polar (`wing_area_m2`, `wing_aspect_ratio`)
+
+The polar `C_D = C_D0 + k·C_L²` back-solves both coefficients from (β, L/D):
+`C_D0 = m/(β·A_ref)`, `k = 1/(4·C_D0·(L/D)²)`.  That fully determines the
+curve — which means it pins the vehicle to the slender-**body** lift behaviour,
+with a hardcoded pull ceiling `C_L ≤ 2·25° = 0.873`.  The SWERVE campaign
+exposed the consequence: a hard commanded pull rails at that ceiling and runs
+at **L/D ≈ 0.94, half the nominal** — the "pull tax" that catches the vehicle
+on the shelf but bleeds Mach doing it.
+
+The fix anchors the missing degree of freedom to **geometry the user can
+measure**, not a performance number they'd guess.  Two hardware fields on the
+reentry object (both default 0 = slender body, byte-identical):
+
+- **`wing_area_m2`** (S_w) — total wing planform area.
+- **`wing_aspect_ratio`** (optional) — b²/S_w.
+
+A winged vehicle carries lift more efficiently *off* the cruise point, so it
+flattens the L/D curve there.  The decoupling models exactly that — it
+broadens the drag bucket on the **pull side only** (`_polar_cd`, C_L > C_L\*),
+leaving the cruise bucket (and therefore glider_LD) untouched, so nothing is
+double-credited:
+
+```
+λ       = wing_area / A_ref                        (planform ratio)
+AR      = wing_aspect_ratio, or WING_DEFAULT_AR=2 if unset   (fail safe)
+e_pull  = 1 + WING_PULL_GAIN·λ·AR/(AR + WING_PULL_AR0)   (WING_PULL_GAIN=1, AR0=4)
+
+C_D(C_L ≤ C_L*)  = C_D0 + k·C_L²                   (cruise — unchanged)
+C_D(C_L > C_L*)  = C_D* + (k/e_pull)·(C_L² − C_L*²)   (pull — softened)
+```
+
+Two deliberate design choices, both discovered empirically and pinned by
+`test_wing_polar.py`:
+
+- **The C_L ceiling is NOT raised by wings.**  `|α| ≲ 25°` is a max-AoA limit
+  for a body or a winged vehicle alike.  Raising it merely lets the pull rail
+  at ruinous induced drag — *verified to deepen the trough and crash the
+  vehicle*.  Only the bucket width (`e_pull`) changes.
+- **Area-only fails safe.**  Wing area with no declared AR assumes a stubby,
+  low-efficiency wing (`WING_DEFAULT_AR = 2`): a modest, conservative benefit
+  from area alone, never the optimistic high-AR value.  Missing span costs
+  accuracy, not correctness.
+
+`WING_PULL_GAIN`, `WING_PULL_AR0` and `WING_DEFAULT_AR` are screening
+inferences with ~±30% bands — never fit to a flight.
+
+**Advisory drag side (Level 2).**  The same wing area also makes the "Estimate
+Object β" dialog honest: a winged vehicle is draggier than the bare cone
+(`cd_cone_hypersonic` adds `Cf·2·S_w/A_base` for the two wetted faces), so the
+*suggested* β drops.  This is advisory only — the run-time drag equation stays
+`q·m/β` with the single committed β, so there is no double-count between the
+estimator's suggestion and the run.  Wing wave drag (thickness/sweep) is not
+carried and is labeled conservative-low.
+
 ### 12.1 The pierce-altitude latch and glide-mode state machine
 
 Glide-mode aero forces are *not* active throughout the flight; they

@@ -324,6 +324,20 @@ class ROParams:
     #                              See DAMPED_GLIDE.md.
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
+    # Wing geometry — the physical anchor for the DECOUPLED drag polar
+    # (trajectory._aero_polar).  Both HARDWARE (shape), default 0 = no wings =
+    # the slender-body polar unchanged.  A user can measure these off a
+    # planform (span × chord) when detailed aero data is absent; they replace
+    # the un-physical hardcoded pull-C_L ceiling with a geometry-anchored one.
+    #   wing_area_m2       — total wing planform area (m²).  Raises the pull
+    #                        C_L,max ceiling; 0 keeps the bare-body 0.873.
+    #   wing_aspect_ratio  — b²/S_w.  OPTIONAL: softens the induced-drag rise
+    #                        in a hard pull (broader bucket for a high-AR wing),
+    #                        cruise L/D untouched.  0 = unset → fail safe: keep
+    #                        today's induced drag, credit only the ceiling from
+    #                        area.  Never invents efficiency it can't support.
+    wing_area_m2:           float = 0.0
+    wing_aspect_ratio:      float = 0.0
     # Default reentry mode for a freshly-built maneuvering object is a CORE
     # glide law (the smooth numerical equilibrium glide), not the legacy
     # analytic Tracy `equilibrium_glide`.  Legacy .json files that omit the key
@@ -583,6 +597,8 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'nose_radius_m':         ro.nose_radius_m,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
+        'wing_area_m2':          ro.wing_area_m2,
+        'wing_aspect_ratio':     ro.wing_aspect_ratio,
         'glider_guidance':       ro.glider_guidance,
         'glider_pullup_g_max':   ro.glider_pullup_g_max,
         'glider_terminal_dive':  ro.glider_terminal_dive,
@@ -635,6 +651,8 @@ def ro_from_dict(d: dict) -> ROParams:
         nose_radius_m=float(d.get('nose_radius_m', 0.0)),   # 0 = auto (shape)
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
+        wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
+        wing_aspect_ratio=float(d.get('wing_aspect_ratio', 0.0) or 0.0),
         glider_guidance=_g,
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
@@ -2083,11 +2101,20 @@ _GAMMA_AIR = 1.4
 
 
 def cd_cone_hypersonic(theta_deg: float, eps: float, mach: float = 10.0,
-                       cf: float = CONE_CF_TURBULENT) -> dict:
+                       cf: float = CONE_CF_TURBULENT,
+                       wing_area_ratio: float = 0.0) -> dict:
     """Total zero-AoA hypersonic axial Cd build-up for a blunted cone.
 
-    Returns {'pressure', 'friction', 'base', 'total', 'swet_ratio'} — all Cd
-    components referenced to the base area, so β = m / (total · π·d²/4).
+    Returns {'pressure', 'friction', 'base', 'wing', 'total', 'swet_ratio'} —
+    all Cd components referenced to the base area, so β = m / (total · π·d²/4).
+
+    `wing_area_ratio` = S_w/A_base (default 0).  When > 0 the estimate accounts
+    for the wing's zero-lift drag — the ADVISORY half of the wing decoupling
+    (Level 2): a winged vehicle's β is LOWER (draggier) than the bare cone, so
+    the suggested value drops.  Screening: wing zero-lift drag is friction-
+    dominated for thin surfaces, Cd_wing ≈ Cf · 2·(S_w/A_base) (both faces
+    wetted); wing wave drag needs thickness/sweep the geometry alone can't give
+    and is omitted (labeled, conservative-low on the wing term).
 
       pressure : Newtonian 2·sin²θ + published bluntness excess
                  (cd_blunted_cone_newtonian, Ref (4) Ch. 5 chart)
@@ -2117,8 +2144,10 @@ def cd_cone_hypersonic(theta_deg: float, eps: float, mach: float = 10.0,
     swet = (1.0 - (eps * math.cos(th)) ** 2) / math.sin(th)
     friction = float(cf) * swet
     base = 2.0 / (_GAMMA_AIR * m * m)
+    wing = float(cf) * 2.0 * max(0.0, float(wing_area_ratio))   # both faces
     return dict(pressure=float(pressure), friction=float(friction),
-                base=float(base), total=float(pressure + friction + base),
+                base=float(base), wing=wing,
+                total=float(pressure + friction + base + wing),
                 swet_ratio=float(swet))
 
 
