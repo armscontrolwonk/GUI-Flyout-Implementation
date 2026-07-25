@@ -91,6 +91,22 @@ def test_blunt_cones_are_pressure_dominated_and_barely_move():
         assert (c["total"] / c["pressure"] - 1.0) < tol, (th, ep)
 
 
+def test_wing_area_adds_friction_and_lowers_beta():
+    """Level-2 advisory half: a winged vehicle is draggier than the bare cone,
+    so its estimated β drops.  The wing term is Cf·2·(S_w/A_base) (both faces),
+    zero without wings — so a non-winged estimate is byte-identical."""
+    bare = cd_cone_hypersonic(5.25, 0.07, mach=10.0)
+    assert bare["wing"] == 0.0
+    assert bare["total"] == pytest.approx(bare["pressure"] + bare["friction"]
+                                          + bare["base"])
+    winged = cd_cone_hypersonic(5.25, 0.07, mach=10.0, wing_area_ratio=1.5)
+    assert winged["wing"] == pytest.approx(CONE_CF_TURBULENT * 2.0 * 1.5)
+    assert winged["total"] > bare["total"]        # draggier → lower β
+    # cone terms unchanged by the wing
+    for key in ("pressure", "friction", "base"):
+        assert winged[key] == pytest.approx(bare[key])
+
+
 def test_monotonicity():
     """Total Cd falls with Mach (base term) and rises with half-angle."""
     m_prev = None

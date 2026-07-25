@@ -275,9 +275,14 @@ tabbed notebook**.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone
-  geometry (half-angle, nose bluntness ratio, eval Mach): Newtonian pressure
-  (Ref (4) Ch. 5 chart) + turbulent skin friction + hypersonic base drag,
-  each component shown (METHODS §8.8).
+  geometry (half-angle, nose bluntness ratio, eval Mach, optional wing area):
+  Newtonian pressure (Ref (4) Ch. 5 chart) + turbulent skin friction +
+  hypersonic base drag + wing friction, each component shown (METHODS §8.8).
+- **Wing-decoupled drag polar** — a reentry object with a declared wing area
+  (and optional aspect ratio) pulls more efficiently than a bare slender body:
+  the drag bucket is broadened on the pull side only, so a commanded pull-up
+  retains more energy while cruise L/D is untouched (METHODS §12.0.2). Wing
+  area = 0 keeps the slender-body polar exactly.
 - **Thrust Estimator** — back-calculates engine thrust from observed acceleration
   during boost: `T = m · √(a_h² + (a_v + g)²)`.
 - **Dry Mass Estimator** (Analysis menu) — estimates a stage's dry/inert mass
