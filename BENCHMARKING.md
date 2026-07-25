@@ -1315,10 +1315,28 @@ Program to conduct the Pegasus/SWERVE flight tests").  What it does give:
 - SWERVE described as "mature, well characterized… has been flown previously
   at lower Mach numbers."
 
-**Fig. 2 is a schematic corridor summary, not flight data**, and its SWERVE III
-curve should NOT be digitized into a flight anchor.  For SWERVE flight numbers
-the existing primaries remain better: Iliff & Shafer 1993 (AIAA 93-0311,
-flight-vs-prediction) and Williamson 1992 (AIAA 92-3989).
+**Fig. 2 — corrected 2026-07-25.**  An earlier draft of this entry called Fig. 2
+"a schematic corridor summary, not flight data" and said its SWERVE III curve
+should not be digitized.  **That was wrong on both counts and is retracted.**
+The figure is captioned *Hypersonic Flight Test Summary* and plots flown
+envelopes — X-15, Shuttle reentry, Pegasus — alongside SWERVE III, the 1985
+Sandia flight (SWERVE flew four times).  The error came from letting the
+paper's *proposal* framing (the unfunded Pegasus/SWERVE follow-on, above)
+contaminate the reading of a figure that summarises what had already flown.
+
+**How to read the curve:** top-to-bottom, as the vehicle reenters.  SWERVE III
+descends at near-constant Mach ≈ 11.6–12.0 from ~348 kft, pulls up at roughly
+100 kft (~30 km), then settles into a decelerating glide that runs left across
+the chart to low Mach near the ground.  The vertical leg is cleanly traceable
+(84 points at 400 dpi, Mach 11.58–12.01, 348→175 kft); **below ~175 kft the
+curve runs into the solid "Hypersonic Airbreathing" shading and cannot be
+separated programmatically** — that segment needs a human eye on the figure.
+
+*Open:* a digitized SWERVE III trajectory is worth having as a glide-corridor
+anchor, but it is not wired yet — the pending piece is the axis calibration for
+the extraction (see the session log).  Iliff & Shafer 1993 (AIAA 93-0311) and
+Williamson 1992 (AIAA 92-3989) remain the primaries for SWERVE
+flight-vs-prediction; this figure adds the *corridor shape*, which they do not.
 
 *Not retrieved this pass:* `arnold2010.pdf` and `1-s2.0-S0141391022002415`
 exceed the 10 MB Drive-download limit; `ADA396928.pdf` hit an expired session.
