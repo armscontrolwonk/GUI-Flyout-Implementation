@@ -1996,6 +1996,114 @@ def _hoerner_cp_impact(mach: float) -> float:
     return 1.84 - 0.76 / (mach * mach)
 
 
+# ---------------------------------------------------------------------------
+# Blunted-cone hypersonic Cd — the "Estimate Object β" physics
+# ---------------------------------------------------------------------------
+# Newtonian blunted-cone PRESSURE Cd table — Ref (4) Ch. 5, hypersonic /
+# zero AoA.  Rows: half-angle 10°, 20°, 30°, 40°.
+# Cols: nose-radius ratio ε = r_N/r_b  0.0, 0.2, 0.4, 0.6, 0.8, 1.0.
+_BCON_THETA = [10.0, 20.0, 30.0, 40.0]
+_BCON_EPS   = [0.0,  0.2,  0.4,  0.6,  0.8,  1.0]
+_BCON_TABLE = [
+    [0.0603, 0.063, 0.068, 0.080, 0.200, 1.00],
+    [0.2340, 0.238, 0.250, 0.310, 0.540, 1.00],
+    [0.5000, 0.507, 0.530, 0.600, 0.750, 1.00],
+    [0.8264, 0.835, 0.860, 0.900, 0.965, 1.00],
+]
+
+
+def cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
+    """Newtonian PRESSURE Cd (base-area ref) of a blunted cone, zero AoA.
+
+    theta_deg : cone half-angle (degrees)
+    eps       : nose-radius ratio r_N/r_b  (0 = sharp tip, 1 = hemisphere)
+
+    For eps = 0 the exact Newtonian formula 2·sin²θ is returned.  For other
+    values bilinear interpolation is used on the Ref (4) Ch. 5 chart table;
+    the bluntness excess is scaled onto the exact sharp-cone value so angles
+    outside the 10°–40° table range are handled smoothly.
+
+    This is the inviscid pressure term ONLY.  On a slender cone (θ ≲ 10°)
+    pressure drag is small and the axial drag is dominated by skin friction —
+    use cd_cone_hypersonic() for a total-Cd estimate.
+    """
+    import math
+    th        = math.radians(max(1.0, min(float(theta_deg), 89.0)))
+    cd_sharp  = 2.0 * math.sin(th) ** 2
+    eps       = max(0.0, min(float(eps), 1.0))
+    if eps == 0.0:
+        return cd_sharp
+
+    theta_c = max(_BCON_THETA[0], min(float(theta_deg), _BCON_THETA[-1]))
+    i_th = next((i for i in range(len(_BCON_THETA) - 1)
+                 if _BCON_THETA[i + 1] >= theta_c), len(_BCON_THETA) - 2)
+    i_ep = next((i for i in range(len(_BCON_EPS) - 1)
+                 if _BCON_EPS[i + 1] >= eps), len(_BCON_EPS) - 2)
+
+    t_th = (theta_c - _BCON_THETA[i_th]) / (_BCON_THETA[i_th + 1] - _BCON_THETA[i_th])
+    t_ep = (eps     - _BCON_EPS[i_ep])   / (_BCON_EPS[i_ep + 1]   - _BCON_EPS[i_ep])
+
+    c = _BCON_TABLE
+    cd_tbl = (c[i_th    ][i_ep    ] * (1 - t_th) * (1 - t_ep) +
+              c[i_th + 1][i_ep    ] * t_th        * (1 - t_ep) +
+              c[i_th    ][i_ep + 1] * (1 - t_th)  * t_ep       +
+              c[i_th + 1][i_ep + 1] * t_th         * t_ep)
+
+    # Bluntness excess at the (clamped) table half-angle
+    cd_sharp_tbl = c[i_th][0] * (1 - t_th) + c[i_th + 1][0] * t_th
+    bluntness    = cd_tbl - cd_sharp_tbl
+    return cd_sharp + bluntness
+
+
+# Screening constants for the viscous/base completion of the cone Cd.
+# Cf: turbulent hypersonic flat-plate/cone class value.  Flight-Reynolds
+# slender cones run Cf ≈ 0.0008–0.0015 (compressibility-reduced turbulent);
+# 0.0012 is the mid-band SCREENING value — an inference, not a cited
+# measurement, and the honest uncertainty on it is ~±30%.
+CONE_CF_TURBULENT = 0.0012
+_GAMMA_AIR = 1.4
+
+
+def cd_cone_hypersonic(theta_deg: float, eps: float, mach: float = 10.0,
+                       cf: float = CONE_CF_TURBULENT) -> dict:
+    """Total zero-AoA hypersonic axial Cd build-up for a blunted cone.
+
+    Returns {'pressure', 'friction', 'base', 'total', 'swet_ratio'} — all Cd
+    components referenced to the base area, so β = m / (total · π·d²/4).
+
+      pressure : Newtonian 2·sin²θ + published bluntness excess
+                 (cd_blunted_cone_newtonian, Ref (4) Ch. 5 chart)
+      friction : Cf · S_wet/A_base.  Exact frustum geometry: the conical
+                 surface runs from the sphere-cone tangency radius
+                 r_t = ε·r_b·cosθ to r_b, so
+                 S_wet/A_base = (1 − ε²cos²θ) / sinθ.  The spherical-cap
+                 wetted area is omitted (its drag sits in the pressure
+                 table).  Cf is a labeled screening constant (see
+                 CONE_CF_TURBULENT).
+      base     : 2/(γ·M²) — the p_base → 0 hypersonic limit (exact limit
+                 formula; the wake cannot push on the base harder than
+                 removing ambient pressure entirely).
+
+    WHY THIS EXISTS: the pure-Newtonian estimator under-counts a slender
+    cone's drag by ~4× (at θ = 5.25°, pressure Cd ≈ 0.017 while friction
+    alone is ≈ 0.013 and base ≈ 0.014 at M 10), which inflated estimated β
+    to ~10⁵ kg/m² — the "anomalous ballistic coefficient" fault.  For blunt
+    RVs (θ ≥ 20°) pressure dominates and the added terms are a 2–4%
+    perturbation, so ballistic estimates are essentially unchanged.
+    """
+    import math
+    th  = math.radians(max(1.0, min(float(theta_deg), 89.0)))
+    eps = max(0.0, min(float(eps), 1.0))
+    m   = max(float(mach), 3.0)              # hypersonic form; floor as Hoerner
+    pressure = cd_blunted_cone_newtonian(theta_deg, eps)
+    swet = (1.0 - (eps * math.cos(th)) ** 2) / math.sin(th)
+    friction = float(cf) * swet
+    base = 2.0 / (_GAMMA_AIR * m * m)
+    return dict(pressure=float(pressure), friction=float(friction),
+                base=float(base), total=float(pressure + friction + base),
+                swet_ratio=float(swet))
+
+
 def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
                            cd: float = 1.0, mach: float = None) -> float:
     """

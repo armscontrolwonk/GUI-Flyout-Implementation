@@ -120,60 +120,11 @@ def _draw_borders(ax, center_lon):
 # Sentinel string inserted into the booster combobox between non-Forden and
 # Forden entries.  It is never a valid booster name.
 
-# ---------------------------------------------------------------------------
-# Newtonian blunted-cone Cd table — Ref (4) Ch. 5, hypersonic / zero AoA.
-# Rows: half-angle 10°, 20°, 30°, 40°.
-# Cols: nose-radius ratio ε = r_N/r_b  0.0, 0.2, 0.4, 0.6, 0.8, 1.0.
-# ---------------------------------------------------------------------------
-_BCON_THETA = [10.0, 20.0, 30.0, 40.0]
-_BCON_EPS   = [0.0,  0.2,  0.4,  0.6,  0.8,  1.0]
-_BCON_TABLE = [
-    [0.0603, 0.063, 0.068, 0.080, 0.200, 1.00],
-    [0.2340, 0.238, 0.250, 0.310, 0.540, 1.00],
-    [0.5000, 0.507, 0.530, 0.600, 0.750, 1.00],
-    [0.8264, 0.835, 0.860, 0.900, 0.965, 1.00],
-]
-
-
-def _cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
-    """
-    Cd (based on base area) for a spherically-blunted cone at zero angle of
-    attack in hypersonic (Newtonian) flow.
-
-    theta_deg : cone half-angle (degrees)
-    eps       : nose-radius ratio r_N/r_b  (0 = sharp tip, 1 = hemisphere)
-
-    For eps = 0 the exact Newtonian formula 2·sin²θ is returned.
-    For other values bilinear interpolation is used on the chart table;
-    the bluntness excess is scaled by the actual Cd_sharp so that angles
-    outside the 10°–40° table range are handled smoothly.
-    """
-    import math
-    th        = math.radians(max(1.0, min(float(theta_deg), 89.0)))
-    cd_sharp  = 2.0 * math.sin(th) ** 2
-    eps       = max(0.0, min(float(eps), 1.0))
-    if eps == 0.0:
-        return cd_sharp
-
-    theta_c = max(_BCON_THETA[0], min(float(theta_deg), _BCON_THETA[-1]))
-    i_th = next((i for i in range(len(_BCON_THETA) - 1)
-                 if _BCON_THETA[i + 1] >= theta_c), len(_BCON_THETA) - 2)
-    i_ep = next((i for i in range(len(_BCON_EPS) - 1)
-                 if _BCON_EPS[i + 1] >= eps), len(_BCON_EPS) - 2)
-
-    t_th = (theta_c - _BCON_THETA[i_th]) / (_BCON_THETA[i_th + 1] - _BCON_THETA[i_th])
-    t_ep = (eps     - _BCON_EPS[i_ep])   / (_BCON_EPS[i_ep + 1]   - _BCON_EPS[i_ep])
-
-    c = _BCON_TABLE
-    cd_tbl = (c[i_th    ][i_ep    ] * (1 - t_th) * (1 - t_ep) +
-              c[i_th + 1][i_ep    ] * t_th        * (1 - t_ep) +
-              c[i_th    ][i_ep + 1] * (1 - t_th)  * t_ep       +
-              c[i_th + 1][i_ep + 1] * t_th         * t_ep)
-
-    # Bluntness excess at the (clamped) table half-angle
-    cd_sharp_tbl = c[i_th][0] * (1 - t_th) + c[i_th + 1][0] * t_th
-    bluntness    = cd_tbl - cd_sharp_tbl
-    return cd_sharp + bluntness
+# Blunted-cone hypersonic Cd — physics lives in booster_models (headless-
+# testable); the "Estimate Object β" dialog is presentation over it.
+from booster_models import (cd_blunted_cone_newtonian as _cd_blunted_cone_newtonian,
+                            cd_cone_hypersonic as _cd_cone_hypersonic,
+                            CONE_CF_TURBULENT as _CONE_CF)
 
 
 # Names that ship with the program and cannot be deleted
@@ -2587,6 +2538,11 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Label(eps_row, text="  (0 = sharp tip,  1 = hemisphere)",
                   foreground="gray50").pack(side=tk.LEFT)
 
+        _lbl(4, "Eval Mach:")
+        mach_var = tk.StringVar(value="10")
+        ttk.Entry(frm, textvariable=mach_var, width=10).grid(
+            row=4, column=1, sticky=tk.W)
+
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
         res = ttk.Frame(dlg, padding=(12, 8))
@@ -2600,16 +2556,22 @@ class ROEditorDialog(tk.Toplevel):
             lbl.grid(row=row, column=1, sticky=tk.W)
             return lbl
 
-        cd_lbl   = _res_row(0, "Cd (Newtonian):")
-        area_lbl = _res_row(1, "Reference area (m²):")
+        cdw_lbl  = _res_row(0, "Cd pressure (Newtonian):")
+        cdf_lbl  = _res_row(1, f"Cd friction (Cf {_CONE_CF:g} · S_wet/A):")
+        cdb_lbl  = _res_row(2, "Cd base (2/γM²):")
+        cd_lbl   = _res_row(3, "Cd total:")
+        area_lbl = _res_row(4, "Reference area (m²):")
         beta_lbl = ttk.Label(res, text="—", font=("", 11, "bold"), foreground="navy")
         ttk.Label(res, text="β = m / (Cd · A):").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        beta_lbl.grid(row=2, column=1, sticky=tk.W)
+            row=5, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        beta_lbl.grid(row=5, column=1, sticky=tk.W)
         ttk.Label(res,
-                  text="Hypersonic Newtonian flow (Mach > 8).  Ref (4) Ch. 5.",
-                  foreground="gray50").grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+                  text="Newtonian pressure (Ref (4) Ch. 5) + turbulent skin\n"
+                       "friction + hypersonic base drag.  Cf is a screening\n"
+                       "constant (0.0008–0.0015 band); bare cone — wings or\n"
+                       "fins add drag this estimate does not carry.",
+                  foreground="gray50", justify=tk.LEFT).grid(
+            row=6, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 
         _result = [None]
 
@@ -2617,21 +2579,26 @@ class ROEditorDialog(tk.Toplevel):
             try:
                 m = float(mass_var.get()); d = float(dia_var.get())
                 th = float(theta_var.get()); ep = float(eps_var.get())
-                if d <= 0 or m <= 0 or th <= 0:
+                mk = float(mach_var.get())
+                if d <= 0 or m <= 0 or th <= 0 or mk <= 0:
                     raise ValueError
             except ValueError:
-                cd_lbl.config(text="—"); area_lbl.config(text="—")
+                for _l in (cdw_lbl, cdf_lbl, cdb_lbl, cd_lbl, area_lbl):
+                    _l.config(text="—")
                 beta_lbl.config(text="invalid input"); _result[0] = None
                 return
-            cd   = _cd_blunted_cone_newtonian(th, ep)
+            c    = _cd_cone_hypersonic(th, ep, mach=mk)
             area = math.pi * (d / 2.0) ** 2
-            beta = m / (cd * area) if cd > 0 else float('inf')
-            cd_lbl.config(text=f"{cd:.4f}")
+            beta = m / (c['total'] * area) if c['total'] > 0 else float('inf')
+            cdw_lbl.config(text=f"{c['pressure']:.4f}")
+            cdf_lbl.config(text=f"{c['friction']:.4f}")
+            cdb_lbl.config(text=f"{c['base']:.4f}")
+            cd_lbl.config(text=f"{c['total']:.4f}")
             area_lbl.config(text=f"{area:.4f} m²")
             beta_lbl.config(text=f"{beta:,.0f} kg/m²")
             _result[0] = beta
 
-        for _v in (mass_var, dia_var, theta_var, eps_var):
+        for _v in (mass_var, dia_var, theta_var, eps_var, mach_var):
             _v.trace_add("write", _compute)
         _compute()
 

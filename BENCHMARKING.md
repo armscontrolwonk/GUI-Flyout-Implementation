@@ -1396,6 +1396,27 @@ flight-vs-prediction; this figure adds the *corridor shape*, which they do not.
 exceed the 10 MB Drive-download limit; `ADA396928.pdf` hit an expired session.
 All three remain unread and uncited.
 
+## RESOLVED (2026-07-25): the "anomalous ballistic coefficient" (user memo §4.2)
+
+The user's SWERVE-matching memo reported the simulator computing
+β > 90,000 kg/m² for a slender maneuvering RV and localized the fault to the
+m/(Cd·A) denominator, guessing a reference-area unit slip.  **Diagnosis: the
+coefficient, not the area.**  The Estimate Object β dialog computed Cd from
+Newtonian pressure drag alone (2·sin²θ ≈ 0.017 at θ = 5.25°), omitting skin
+friction (~0.013) and base drag (~0.014 at M 10) — the terms that DOMINATE a
+slender cone's axial drag.  The memo's own factoring method confirms it: the
+forced-good/computed ratio 24,733/95,299 ≈ 0.26 equals the Cd ratio
+0.0177/0.068, not an area ratio (the 0.178 m² base area was correct).
+
+Fixed at the source per the memo's recommendation:
+`booster_models.cd_cone_hypersonic` (pressure + friction + base, components
+displayed in the dialog; METHODS §8.8).  Blunt-RV estimates move ≤ 4%.
+`test_beta_estimator.py` guards the fix with physics identities only — the
+estimator is deliberately NOT tuned to reproduce any vehicle's reconstructed
+β, including SWERVE's stored 24,733 (a bare-cone estimator reads
+~37,000–41,000 for that geometry; the gap is the wings/elevons wetted area
+the estimator does not model, disclosed in the dialog caption).
+
 ## Scalar benchmarks already in the code (`heating._BENCHMARKS`)
 Check/extend — these drive the "N.N× Apollo" ratio line:
 ICBM RV 318 MW/m²; Stardust 9.4 MW / 276 MJ; Apollo 7.9 MW / 468 MJ;
