@@ -2966,6 +2966,8 @@ class ReentryPlanDialog(tk.Toplevel):
         # value.  Vars init from the plan.
         self._dive_alt_var = tk.StringVar(
             value=f"{float(_f('glider_terminal_alt_km', 0.0)):g}")
+        self._pullup_alt_var = tk.StringVar(
+            value=f"{float(_f('glider_pullup_start_alt_km', 0.0)):g}")
         self._aero_var = tk.StringVar(
             value=("Drag polar (realistic)"
                    if str(_f('glider_aero_model', 'polar')) == 'polar'
@@ -2989,6 +2991,15 @@ class ReentryPlanDialog(tk.Toplevel):
             value=f"{float(_f('glider_dive_target_radius_km', 20.0)) or 20.0:g}")
 
         if self._family == 'numerical':
+            # Commanded pull-up — fall at zero lift to this altitude, then
+            # pull at full authority (≤ g-cap) and hand off to the glide law.
+            ttk.Label(frm, text="Pull-up start:").grid(
+                row=r, column=0, sticky=tk.W, pady=3)
+            _pf = ttk.Frame(frm); _pf.grid(row=r, column=1, sticky=tk.W, pady=3)
+            ttk.Entry(_pf, textvariable=self._pullup_alt_var, width=8).pack(side=tk.LEFT)
+            ttk.Label(_pf, text="  km  (0 = capture by glide law)",
+                      foreground="#888888").pack(side=tk.LEFT); r += 1
+
             # Terminal dive — glide until this altitude, then pitch into a
             # steep terminal dive (0 = glide all the way to impact).  A
             # numerical-EOM capability; the closed-form laws fly their arc.
@@ -3097,6 +3108,7 @@ class ReentryPlanDialog(tk.Toplevel):
             # ζ is owned by the sidebar strip — deliberately omitted so the
             # merge over the (strip-snapshotted) plan preserves it.
             'glider_terminal_alt_km':   max(0.0, _num(self._dive_alt_var, 0.0)),
+            'glider_pullup_start_alt_km': max(0.0, _num(self._pullup_alt_var, 0.0)),
             'glider_aero_model': ('polar'
                                   if 'polar' in self._aero_var.get().lower()
                                   else 'constant_LD'),

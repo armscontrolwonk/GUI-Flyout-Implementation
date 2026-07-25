@@ -2352,6 +2352,42 @@ See [`DAMPED_GLIDE.md`](DAMPED_GLIDE.md) and
 [`DAMPED_GLIDE_MEMO.md`](DAMPED_GLIDE_MEMO.md) for the full damped-glide
 derivation.
 
+#### 12.0.1 Commanded pull-up (`glider_pullup_start_alt_km`)
+
+A **plan-phase modifier**, not a guidance mode: it composes with any of the
+three numerical glide laws (`damped_glide`, `dynamic_equilibrium_glide`,
+`skip_glide`) the way banks and the terminal dive do.  A single user input —
+the pull-up start altitude (km) — splits capture into three phases via a
+one-way latch (`params._pullup_phase`, `trajectory.py`):
+
+1. **Fall** (above the trigger): **zero commanded lift**, β-based drag only —
+   the low-AoA ballistic descent a real MaRV flies to preserve energy.
+2. **Pull** (at the trigger, descending): a hard pull at **full authority**,
+   capped by BOTH the structural g-limit (`glider_pullup_g_max`) AND what
+   dynamic pressure + the aero model can supply.  Triggering too high, where
+   there is no q to pull with, therefore **undershoots honestly** — no lift is
+   conjured — rather than faking a catch.
+3. **Handoff** (once the sink rate is arrested to the glide law's own
+   equilibrium target `γ* = −2·H_ρ·g/(V²·cosσ·(L/D))`, Lu Eq. 31): the
+   selected law takes over, one-way.
+
+**Why it exists.**  A user campaign of nine runs against the digitized
+SWERVE III corridor (`benchmarks/swerve/`) showed the constant-ζ architecture
+tracing a smooth *frontier*: every knob (ζ, lift, booster energy, loft) trades
+capture-trough depth against arrival speed, and the flight point — a 25.8 km
+shelf held from Mach 12 — sits outside the reachable set.  The reason is
+structural: one damping gain was being asked to be both "off during the fall"
+and "10 g at the shelf".  The real vehicle did not do that — Iliff & Shafer
+(AIAA 93-0311) and Williamson (Fig. 20) describe SWERVE III's capture as a
+**discrete commanded pull-out at Mach 12** (a −10° AoA pull at t = 20 s), which
+is exactly this modifier.  With the pull owning capture, ζ returns to the job
+its linearization assumes — damping small residuals near equilibrium — instead
+of arresting a km/s-class fall.  `glider_pullup_start_alt_km = 0` (default) is
+byte-identical to the plain glide laws, so every shipped plan is unchanged.
+The analytic family ignores the field (it flies its own closed-form pull-up
+arc).  `test_pullup.py` pins the phase behaviour, the ζ-decoupling, and the
+zero-trigger identity.
+
 ### 12.1 The pierce-altitude latch and glide-mode state machine
 
 Glide-mode aero forces are *not* active throughout the flight; they

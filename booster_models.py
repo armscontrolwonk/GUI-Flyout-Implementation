@@ -413,6 +413,22 @@ class ROParams:
     # Only used by the "damped_glide" mode.
     glider_damping_zeta:    float = 0.7
 
+    # Commanded pull-up initiation altitude (km) — a PLAN-PHASE MODIFIER for
+    # the numerical glide family (damped_glide / dynamic_equilibrium_glide /
+    # skip_glide), not a guidance mode.  Above this altitude the vehicle falls
+    # with ZERO commanded lift (β-based drag only — the low-AoA ballistic
+    # descent real MaRVs fly); at it, a hard pull is commanded at full
+    # authority (capped by glider_pullup_g_max AND by what q and the aero
+    # model supply — triggering too high undershoots honestly); once the sink
+    # rate is arrested to the glide law's own equilibrium target the selected
+    # law takes over, one-way.  0 = no commanded pull: capture happens however
+    # the glide law does it (byte-identical to pre-modifier behaviour).
+    # Flight precedent: SWERVE III commanded its pull-out at Mach 12 /
+    # high altitude as a discrete event (Iliff & Shafer AIAA 93-0311; the
+    # -10 deg AoA pull at t=20 s in Williamson Fig. 20).  Ignored by the
+    # analytic family, which flies its own closed-form pull-up arc.
+    glider_pullup_start_alt_km: float = 0.0
+
     # Control-surface descriptor used only by the damping-ratio estimator
     # (docs/damping_estimate_spec.md): how much lifting/control-surface area the
     # vehicle carries, which bounds the achievable ζ.  "unknown" → the estimator
@@ -579,6 +595,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'glider_beta_entry_kg_m2': ro.glider_beta_entry_kg_m2,
         'glider_skip_count':     ro.glider_skip_count,
         'glider_damping_zeta':   ro.glider_damping_zeta,
+        'glider_pullup_start_alt_km': ro.glider_pullup_start_alt_km,
         'glider_control_surfaces':   ro.glider_control_surfaces,
         'glider_flap_area_ratio':    ro.glider_flap_area_ratio,
         'glider_flap_deflection_deg':ro.glider_flap_deflection_deg,
@@ -630,6 +647,7 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_beta_entry_kg_m2=float(d.get('glider_beta_entry_kg_m2', 0.0)),
         glider_skip_count=int(d.get('glider_skip_count', 1)),
         glider_damping_zeta=float(d.get('glider_damping_zeta', 0.7)),
+        glider_pullup_start_alt_km=float(d.get('glider_pullup_start_alt_km', 0.0) or 0.0),
         glider_control_surfaces=str(d.get('glider_control_surfaces', 'unknown')),
         glider_flap_area_ratio=float(d.get('glider_flap_area_ratio', 0.0)),
         glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
@@ -2867,6 +2885,7 @@ _REENTRY_PLAN_KEYS = (
     'glider_dive_target_lat_deg', 'glider_dive_target_lon_deg',
     'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
     'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
+    'glider_pullup_start_alt_km',
     'glider_aero_model', 'reentry_attitude', 'separation_mode',
 )
 
