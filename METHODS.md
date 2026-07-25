@@ -2443,6 +2443,43 @@ Object β" dialog honest: a winged vehicle is draggier than the bare cone
 estimator's suggestion and the run.  Wing wave drag (thickness/sweep) is not
 carried and is labeled conservative-low.
 
+#### 12.0.3 The β convention: zero-lift, with the analytic β_L derived
+
+`beta_kg_m2` has one meaning across the whole model: the **zero-lift**
+ballistic coefficient, the polar's convention `C_D0 = m/(β·A_ref)`.  The
+analytic modes (Tracy `equilibrium_glide`, Acton `equilibrium_glide_acton`)
+need a *different* quantity — Acton's `β_L`, the ballistic coefficient **in
+glide trim**, `m/(C_D,glide·A)`.  At the max-L/D trim `C_D = 2·C_D0`, so
+
+```
+β_L = β_zerolift / 2          (labeled INFERENCE — Acton gives no β_L formula,
+                               only a fitted value in his Table 3)
+```
+
+The analytic path (`trajectory.py`) derives β_L this way from the stored
+zero-lift β, so the same number serves both families without the ~2× semantic
+mismatch that would otherwise sit between them.  Acton's entry-phase `β_S`
+(`glider_beta_entry_kg_m2`) is a separate, directly-stored fit (his high-AoA
+flat-plate value), not subject to the halving.
+
+**Why this matters — HTV-2 (re-based 2026-07-25).**  HTV-2 shipped with
+`β = 13,000`, which is Acton 2015 Table 3's fitted *glide* β_L, not a zero-lift
+value.  Read by the polar as zero-lift it gave an implausible `C_D0 = 0.27` and
+an operating `C_L* = 1.4` (past stall).  Re-based to the zero-lift `β = 26,000`,
+the polar reads `C_D0 = 0.14` / `C_L* = 0.71`, and the analytic path derives
+`β_L = 26,000/2 = 13,000` — reproducing Acton's Table 3 exactly, so HTV-2 stays
+**validatable against Acton** while its polar operating point becomes physical.
+The trajectory moved < 1 % (equilibrium-glide range is L/D-dominated): this is
+a correctness/consistency fix, not a behaviour change.
+
+**Scope.**  Only HTV-2's stored β changed.  The derivation is shared code but
+behaviour-neutral for the rest of the shipped fleet: the only plans on an
+analytic mode (Generic_RV, Mk21) are ballistic (`glider_LD = 0`, so the
+analytic pull-up never runs and β_L is unused), and every shipped glider
+defaults to a numerical mode that reads β as zero-lift directly.
+`test_acton_beta.py` pins the Acton reproduction, the plausible polar point,
+the untouched fleet, and that the analytic run actually uses the halved β.
+
 ### 12.1 The pierce-altitude latch and glide-mode state machine
 
 Glide-mode aero forces are *not* active throughout the flight; they
