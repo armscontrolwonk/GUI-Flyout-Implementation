@@ -1,34 +1,37 @@
-# SWERVE III (Sandia, 1985) reentry corridor — altitude vs Mach
+# SWERVE III (Sandia, 1985) reentry corridor - altitude vs Mach
 #
 # Source : Blankson & Pyle, "NASA's Hypersonic Flight Research Program",
 #          AIAA 93-0308, Fig. 2 "Hypersonic Flight Test Summary".
-#          PDF archived at data/blankson-pyle-1993-nasa-hypersonic-flight-
-#          research-program-aiaa-93-0308.pdf
+#          PDF: data/blankson-pyle-1993-nasa-hypersonic-flight-research-
+#          program-aiaa-93-0308.pdf
 # Method : user digitization against the printed Mach (0-30) and altitude
-#          (0-400 kft) axes, in flight order (reentry = first row).
-# Status : DIGITIZED FROM A FIGURE — a corridor shape, not telemetry.  Treat
-#          as a shape/envelope anchor, never as a point measurement.
+#          (0-400 kft) axes.  Rows are in FLIGHT ORDER: row 1 is entry.
+# Status : DIGITIZED FROM A FIGURE - a corridor shape, not telemetry.  Use as
+#          a shape/envelope anchor; never as a point measurement.
 # Cross-check: an independent 400-dpi programmatic trace of the vertical leg
-#          (the only part separable from the shading) agrees to within
-#          0.2 Mach and 4 kft at the top and 0.01 Mach / 1 kft at 175 kft.
+#          (the only segment separable from the figure's shading) agrees to
+#          within 0.08 Mach at 348 kft and 0.02 Mach at 180 kft.
 #
 mach,alt_kft
-11.756812894649386,343.8836268970866
-11.91072615486873,281.29015730586025
-12.017489199069455,175.83845685166722
-12.116151545363909,159.64606181455633
-12.353148886673313,144.82039991137702
-12.796817879694252,129.23382629888118
-13.10235958790296,112.9832724050072
-13.063310069790624,97.53240279162515
-12.61195579926886,87.11712085964325
-12.23184612828182,84.41273402016174
-10.508266866068464,86.3028968649607
-8.404577932868062,85.48867287027804
-7.508100697906282,85.74069458291791
-5.990154536390826,83.35618145563313
-4.816384180790961,78.76647834274951
-3.536058491193086,63.664561869945715
-2.561897640412096,34.420350060928286
-2.1772183449651044,16.25540046527084
-1.8284729145895646,3.0000276946936424
+np.float64(11.66267134626846),np.float64(348.70207271041653)
+np.float64(11.691874710284086),np.float64(325.3162042248857)
+np.float64(11.882855440037087),np.float64(266.82449285919256)
+np.float64(12.009734454671879),np.float64(225.5380438381564)
+np.float64(12.034567247202176),np.float64(179.46162505794314)
+np.float64(12.232832262764056),np.float64(158.78749751672075)
+np.float64(12.699953645453945),np.float64(133.92600931505638)
+np.float64(12.966426064499043),np.float64(117.36198485751493)
+np.float64(12.996159194755318),np.float64(96.72648610467297)
+np.float64(12.52241573405735),np.float64(87.20835264772757)
+np.float64(12.218528574266607),np.float64(84.5275147341236)
+np.float64(11.948877557777632),np.float64(84.58932079553233)
+np.float64(11.241043639494077),np.float64(84.75156170673023)
+np.float64(9.859214621548244),np.float64(85.75591020462218)
+np.float64(8.241440964174558),np.float64(86.81433900624683)
+np.float64(6.522150850937025),np.float64(85.83316778138317)
+np.float64(5.308191510495994),np.float64(83.36092532503358)
+np.float64(3.8908019336467783),np.float64(74.74670551619096)
+np.float64(3.1458181577378985),np.float64(57.03926892258784)
+np.float64(2.568968942454142),np.float64(37.23042624108774)
+np.float64(2.1269452354148726),np.float64(17.39068052888331)
+np.float64(1.9892060128468314),np.float64(2.294550029799325)
