@@ -1257,6 +1257,73 @@ pixel-traced Reentry-F pulse to a published curve — user is hunting a copy);
 **user spot-check of the Figure-1 digitization** (peak/tail reads); both land
 as data edits when they arrive.
 
+## Air launch — source pack (2026-07-25, read from primary)
+
+Thrusty launches every booster from the ground.  An **air-launch** mode (drop
+from a carrier aircraft at altitude and Mach, then ignite) is a capability gap,
+and this is the anchor pack for it.  Both PDFs archived to `data/`.
+
+#### Joyce, Pomroy & Grindle 2005, "The Hyper-X Launch Vehicle: Challenges and
+Design Considerations for Hypersonic Flight Testing", AIAA 2005-3333
+
+The X-43A (Hyper-X) program's Pegasus-derived launch vehicle, dropped from
+NASA's B-52B-008 on the X-15 pylon.  **Firsthand numbers** (all quoted, not
+digitized):
+
+| Datum | Value | Note |
+|---|---|---|
+| Carrier limit | **41,400 lbm** | B-52B-008 with X-15 pylon + Pegasus adapter — the drop-weight ceiling that sized the whole vehicle |
+| Nominal drop | **40,000 ft, Mach 0.8** | both stated as the *maximum* B-52 capability; the altitude was pushed to max specifically to cut transonic Qbar |
+| Flight 1 (as flown, failed) | **~25,000 ft, Mach 0.5**, pull-up to α_max **13.1°** | the low-altitude drop drove "much higher transonic Qbar" (their Fig. 3) |
+| Mach 7 separation | **95,000 ft, Mach 7.075** | end state of the boost |
+| Mach 5 case | drop **< 10,000 ft** required | "unrealistically low" — the paper's own words on where the trade breaks |
+| Alternative carrier | L-1011 (Orbital's Pegasus carrier) | studied for greater lift than the B-52 |
+
+Two equations Thrusty can use directly.  Their **Eq. (1)**,
+`Qbar = ½ρ(M·a)² → ρa² = 2·Qbar/M² = f(alt)`, is the statement that a dynamic-
+pressure limit *pins* separation to a narrow altitude band.  Their **Eq. (2)**
+is the air-launch energy ledger:
+
+```
+ΔVnet = Vsep − Vdrop = ΔVideal − ΔVatm − ΔVdrag − ΔVgrav
+```
+
+with `ΔVideal = ∫(thrust/mass)dt`, `ΔVatm = ∫(Patm·Aexit/mass)dt`,
+`ΔVdrag = ∫(drag/mass)dt`, `ΔVgrav = ∫(g·sinγ/mass)dt`.  The paper's own
+finding — worth carrying as the *reason* air launch helps — is that ΔVatm and
+ΔVgrav are **small** next to ΔVideal and ΔVdrag, so the drop condition buys
+performance mainly by moving where the drag integral is accumulated, not by
+the altitude head itself.
+
+#### Blankson & Pyle 1993, "NASA's Hypersonic Flight Research Program",
+AIAA 93-0308
+
+Source of the "Fig 2 Hypersonic Flight Test Summary" Mach–altitude corridor
+chart.  **Read carefully before citing:** this is a *program proposal*, and
+the Pegasus/SWERVE flights it proposes were **never funded** — the paper says
+so plainly ("Currently, funds are not available in the NASA Generic Hypersonic
+Program to conduct the Pegasus/SWERVE flight tests").  What it does give:
+
+- SWERVE "is configured (**the shape is classified**) for horizontal gliding
+  flight from high hypersonic speeds down to Mach numbers of 2" — an
+  independent confirmation of the wide-Mach glide envelope, and an explicit
+  statement of why open-source SWERVE geometry stays scarce;
+- "the vehicle is controllable; thereby enabling conventional airplane type
+  maneuvers" — corroborates the maneuvering-glider reading (METHODS §13.14);
+- Pegasus "has more than sufficient performance to accelerate a SWERVE to over
+  Mach numbers of 20" — a *proposed* capability, not a flown one;
+- SWERVE described as "mature, well characterized… has been flown previously
+  at lower Mach numbers."
+
+**Fig. 2 is a schematic corridor summary, not flight data**, and its SWERVE III
+curve should NOT be digitized into a flight anchor.  For SWERVE flight numbers
+the existing primaries remain better: Iliff & Shafer 1993 (AIAA 93-0311,
+flight-vs-prediction) and Williamson 1992 (AIAA 92-3989).
+
+*Not retrieved this pass:* `arnold2010.pdf` and `1-s2.0-S0141391022002415`
+exceed the 10 MB Drive-download limit; `ADA396928.pdf` hit an expired session.
+All three remain unread and uncited.
+
 ## Scalar benchmarks already in the code (`heating._BENCHMARKS`)
 Check/extend — these drive the "N.N× Apollo" ratio line:
 ICBM RV 318 MW/m²; Stardust 9.4 MW / 276 MJ; Apollo 7.9 MW / 468 MJ;
