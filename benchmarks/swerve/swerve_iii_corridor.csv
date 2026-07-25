@@ -1,0 +1,34 @@
+# SWERVE III (Sandia, 1985) reentry corridor — altitude vs Mach
+#
+# Source : Blankson & Pyle, "NASA's Hypersonic Flight Research Program",
+#          AIAA 93-0308, Fig. 2 "Hypersonic Flight Test Summary".
+#          PDF archived at data/blankson-pyle-1993-nasa-hypersonic-flight-
+#          research-program-aiaa-93-0308.pdf
+# Method : user digitization against the printed Mach (0-30) and altitude
+#          (0-400 kft) axes, in flight order (reentry = first row).
+# Status : DIGITIZED FROM A FIGURE — a corridor shape, not telemetry.  Treat
+#          as a shape/envelope anchor, never as a point measurement.
+# Cross-check: an independent 400-dpi programmatic trace of the vertical leg
+#          (the only part separable from the shading) agrees to within
+#          0.2 Mach and 4 kft at the top and 0.01 Mach / 1 kft at 175 kft.
+#
+mach,alt_kft
+11.756812894649386,343.8836268970866
+11.91072615486873,281.29015730586025
+12.017489199069455,175.83845685166722
+12.116151545363909,159.64606181455633
+12.353148886673313,144.82039991137702
+12.796817879694252,129.23382629888118
+13.10235958790296,112.9832724050072
+13.063310069790624,97.53240279162515
+12.61195579926886,87.11712085964325
+12.23184612828182,84.41273402016174
+10.508266866068464,86.3028968649607
+8.404577932868062,85.48867287027804
+7.508100697906282,85.74069458291791
+5.990154536390826,83.35618145563313
+4.816384180790961,78.76647834274951
+3.536058491193086,63.664561869945715
+2.561897640412096,34.420350060928286
+2.1772183449651044,16.25540046527084
+1.8284729145895646,3.0000276946936424

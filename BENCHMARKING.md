@@ -1332,9 +1332,38 @@ the chart to low Mach near the ground.  The vertical leg is cleanly traceable
 curve runs into the solid "Hypersonic Airbreathing" shading and cannot be
 separated programmatically** — that segment needs a human eye on the figure.
 
-*Open:* a digitized SWERVE III trajectory is worth having as a glide-corridor
-anchor, but it is not wired yet — the pending piece is the axis calibration for
-the extraction (see the session log).  Iliff & Shafer 1993 (AIAA 93-0311) and
+**DIGITIZED 2026-07-25** → `benchmarks/swerve/swerve_iii_corridor.csv`
+(19 points, user digitization against the printed axes, flight order).  Two
+independent extractions agree: the programmatic 400-dpi trace of the vertical
+leg matches the user's within **0.02–0.18 Mach** from 180 to 340 kft.
+
+The corridor, with velocities from the standard atmosphere:
+
+| Phase | Altitude | Mach | V |
+|---|---|---|---|
+| entry | 344 kft / 104.8 km | 11.76 | 3.47 km/s |
+| peak Mach | 113 kft / 34.4 km | **13.10** | 4.03 km/s |
+| pull-up low point | **84.4 kft / 25.7 km** | 12.23 | 3.66 km/s |
+| glide plateau | **~26 km, near-constant** | 12.2 → 4.8 | 3.66 → 1.43 km/s |
+| exit | 3 kft / 0.9 km | 1.83 | 0.62 km/s |
+
+The load-bearing shape: SWERVE III **held ~26 km through a Mach 12 → 5
+deceleration** — a long equilibrium glide at essentially constant altitude.
+That is a shape anchor Thrusty's glider model can be checked against, and it is
+the thing Iliff & Shafer and Williamson do *not* give.
+
+**Flag raised by this anchor.**  Thrusty's *shipped* SWERVE-on-STARS-1 scenario
+lofts to a 2,074 km apogee and reenters at **Mach 19–21**, against SWERVE III's
+Mach 11.8 entry — at 300 kft, Thrusty M21.3 vs the flight's M11.9.  This is
+**not by itself a model error**: the shipped scenario is a different mission
+(no one configured it to replicate the 1985 test).  But it compounds the
+already-open STARS-1 energy flag (Thrusty 5.88 km/s vs Williamson's 5.18–5.64
+km/s envelope), and the two should be resolved together.
+
+*Next step, not yet taken:* a SWERVE III replication case — enter a glider at
+104.8 km / 3.47 km/s with SWERVE's L/D and β, and test whether Thrusty produces
+the ~26 km plateau across Mach 12 → 5.  That isolates the glide model from the
+booster question.  Iliff & Shafer 1993 (AIAA 93-0311) and
 Williamson 1992 (AIAA 92-3989) remain the primaries for SWERVE
 flight-vs-prediction; this figure adds the *corridor shape*, which they do not.
 
