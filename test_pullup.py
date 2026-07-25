@@ -148,3 +148,30 @@ def test_analytic_family_ignores_the_field():
             launch_elevation_deg=70.0, max_time_s=3600.0, dt_output=2.0)
     a, b = fly_acton(0.0), fly_acton(40.0)
     assert abs(a['range_km'] - b['range_km']) < 1e-6
+
+
+# ── the run-path conduit (the bug that shipped: field had NO EFFECT) ─────────
+def test_run_path_carries_the_pullup_field():
+    """Regression for a real defect: the field round-tripped through the plan
+    FILE (so apply_reentry_plan tests passed) but the GUI run path rebuilds
+    what it flies from the sidebar conduit dict (_reentry_plan_kwargs, used by
+    _dc.replace at run time), which OMITTED the field — so commanding a pull-up
+    in the GUI did nothing.  Every plan field the run flies must appear in that
+    dict; pin it here so the class of bug can't recur silently for this one."""
+    tk = pytest.importorskip("tkinter")
+    import matplotlib
+    matplotlib.use("Agg")
+    import thrusty
+    try:
+        app = thrusty.BoosterFlyoutApp()
+    except tk.TclError as e:
+        pytest.skip(f"no display: {e}")
+    try:
+        app.withdraw()
+        app._main_guidance_var.set("Damped phugoid glide")
+        app._main_pullup_alt_var.set("40")
+        assert app._reentry_plan_kwargs().get("glider_pullup_start_alt_km") == 40.0
+        app._main_pullup_alt_var.set("0")
+        assert app._reentry_plan_kwargs().get("glider_pullup_start_alt_km") == 0.0
+    finally:
+        app.destroy()
