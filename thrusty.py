@@ -6064,11 +6064,11 @@ class BoosterFlyoutApp(tk.Tk):
             "Fly a trajectory (Launch / Max Range).  This panel then reports\n"
             "the reentry object's heating survivability, keyed to its reentry\n"
             "mode: a ballistic RV is judged on the nose-recession accuracy\n"
-            "ladder (Form A), a glider on survival-time vs glide-time and the\n"
-            "NRC-2008 TPS duration ladder (Form B), and a maneuvering vehicle\n"
-            "adds the terminal-dive transient (Form C).  The plot shows the\n"
-            "flux pulse q̇(t) and the running load Q(t) — the pulse shape is\n"
-            "the mode's signature.")
+            "ladder, a glider on survival-time vs glide-time and the NRC-2008\n"
+            "TPS duration ladder.  Banking, a terminal dive and a commanded\n"
+            "lift cap each add their own block when the plan carries them.\n"
+            "The plot shows the flux pulse q̇(t) and the running load Q(t) —\n"
+            "the pulse shape is the mode's signature.")
 
     def _surv_set_text(self, tier, headline, body, map_spans=None):
         self._surv_text.configure(state=tk.NORMAL)
@@ -6101,10 +6101,10 @@ class BoosterFlyoutApp(tk.Tk):
         import survivability_report as _sr
         rep = _sr.build_report(r or {})
         body = rep['body']
-        # Form A loft/depress context — fed ONLY from the most recent sweep
-        # (design decision 2), when it swept this booster with heating data.
+        # Ballistic-RV loft/depress context — fed ONLY from the most recent
+        # sweep (design decision 2), when it swept this booster with heating data.
         _sw = getattr(self, '_last_heating_sweep', None)
-        if (rep.get('form') == 'A' and _sw
+        if (rep.get('form') == 'ballistic' and _sw
                 and _sw.get('booster') == self._booster_var.get()
                 and len(_sw.get('rows') or []) >= 2):
             rows = [row for row in _sw['rows']

@@ -574,7 +574,7 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
 # (~0.1) is consistent.  One number, flagged — not a heating distribution.
 BODY_FLUX_FRACTION = 0.13
 
-# --- Windward-flank heating band (Form C AoA probe) --------------------------
+# --- Windward-flank heating band (glide AoA probe) ---------------------------
 # The α=0 acreage flux above times a windward amplification A(α)=sin(δ+α)/sin(δ):
 # the modified-Newtonian surface-pressure ratio Cp ∝ sin²θ fed through the
 # reference-enthalpy laminar scaling q̇ ∝ √ρ_e ∝ √p_e (Eckert/Hung C_h ∝ Re*^−½,
@@ -661,7 +661,7 @@ def transition_factor(rho, V, alt, nose_radius_m, *,
     return factor, Re_Rn, state
 
 
-# --- Stagnation-point RADIATIVE gas heating (METHODS §13.12) --------------
+# --- Stagnation-point RADIATIVE gas heating (METHODS §13.13) --------------
 # Tauber & Sutton 1991, "Stagnation-Point Radiative Heating Relations for
 # Earth and Mars Entries", J. Spacecraft & Rockets 28(1):40-42 (read from
 # primary; PDF in data/).  Earth/air equilibrium correlation, Eqs. (1)-(2):

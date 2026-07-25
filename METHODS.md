@@ -3345,13 +3345,15 @@ bound-checked against the recovered Stardust and Hayabusa capsules.  No nominal
 changed value (verdict-stable); the epistemic status did.  H_eff was **not** tuned
 to the capsule measurements — by design (see above).
 
-### 13.7 Maneuver-load anchors (Form C demonstrated envelope)
+### 13.7 Maneuver-load anchors (demonstrated envelope)
 
-For maneuvering RVs (Form C) the report adds a **demonstrated maneuver-load
-context block** alongside the terminal-dive transient screen.  The anchor
+For any glider flying with a commanded lift cap the report adds a
+**demonstrated maneuver-load context block** (see §13.14 for why this is
+keyed on the lift cap and not on a vehicle "Form").  The anchor
 dataset lives as `survivability_report.MANEUVER_ANCHORS` (same data-edit
 philosophy as `UHTC_ANCHORS` — one cited record per demonstrated or
-published-representative load; `BENCHMARKING.md` §Form C is the citation of
+published-representative load; the `BENCHMARKING.md` maneuver-anchor campaign
+— filed there under its historical "Form C" heading — is the citation of
 record): Regan 1984's worked 4-g accuracy-maneuver case, Pershing II's ~25-g
 operational pullout (Yengst 2010; maneuver corroborated by Lund 1984),
 BGRV's 25-g component qualification (Yengst), AMaRV's flight-measured ~100 g
@@ -3364,7 +3366,7 @@ every load in the open flight record.  **Context, never a verdict**: the
 anchors are structural/guidance survived-the-maneuver demonstrations, not
 thermal limits, so the block never changes the survivability status.
 
-### 13.8 Windward-flank heating (Form C AoA probe)
+### 13.8 Windward-flank heating (glide AoA probe)
 
 A lifting reentry vehicle flies its glide at angle of attack, so the
 **windward generator** — not the nose — carries the off-nose acreage heat.
@@ -3586,7 +3588,7 @@ Presentation choices, each deliberate:
 `test_survival_map.py` pins the placement, the per-material cell logic, and
 that every colorization span lands exactly on its cell text.
 
-### 13.12 Radiative gas heating (`heating.radiative_flux`)
+### 13.13 Radiative gas heating (`heating.radiative_flux`)
 
 Above roughly 9 km/s the shock layer itself becomes an important radiator, and
 a convective-only screen understates the environment.  Thrusty computes the
@@ -3648,6 +3650,65 @@ against the ≈ 60 MJ/m² *total* load record Thrusty carries for carbon phenoli
 (Cabrera & West 2026, who describe the pulse as radiation-heavy).  Two
 independent reconstructions of the same flight agreeing at that level firms up
 what had been the weakest of the three ablator records.
+
+### 13.14 Arc descriptors: retiring Form C (`survivability_report.descriptors`)
+
+The report originally sorted every vehicle into one of three **Forms**, keyed
+automatically from the reentry plan.  Two of those were real; the third was a
+category error, and it is now retired.
+
+**What was real.**  Ballistic RVs and gliders are judged by genuinely
+different models — the ablator load-vs-record / accuracy ladder (§13.6) versus
+the stopwatch of survival-time against glide-time (§13.5, NRC duration
+ladder).  That single fork survives as `classify()`, which now returns
+`'ballistic'` or `'glide'` and nothing else.
+
+**What was not.**  "Form C — Maneuvering (MaRV)" was triggered by
+`glider_terminal_alt_km > 0 or glider_dive_target_radius_km > 0` — that is, by
+a commanded **terminal dive**.  Diving is not maneuvering, and the mismatch
+ran in both directions:
+
+* **False negatives.**  SWERVE — a lifting body that flew at −10° AoA and was
+  rated to 10 g, i.e. the one vehicle in the shipped library whose flight
+  record *is* an AoA-maneuver demonstration — commands no terminal dive, so it
+  classified as a plain glider and was denied both the windward-flank heating
+  block (§13.8) and the maneuver-load anchors (§13.7): the two blocks most
+  specifically about what it did.  In fact **no shipped vehicle ever reached
+  Form C**: the C-HGB, AHW and Hwasong-11 plans set `glider_terminal_dive =
+  True` with `glider_terminal_alt_km = 0.0`, which the integrator reads as
+  *glide to impact*, not as a dive.  Both blocks were effectively dead code
+  for the whole shipped library.
+* **False positives.**  A plan carrying a dive altitude and an *empty* bank
+  schedule was announced in the headline as "Form C (maneuvering (MaRV))" — an
+  assertion about vehicle behaviour that the plan did not carry.
+
+**The fix is structural, not cosmetic.**  Each block now hangs on its own
+trigger, and each headline descriptor is earned by its own fact:
+
+| Report element | Trigger (the fact it actually depends on) |
+|---|---|
+| ballistic vs glide judgement model | `profile['glider']` |
+| windward-flank heating block | windward numbers present in the FOM |
+| terminal-dive transient block | `terminal_alt_km > 0` or `dive_target_radius_km > 0` |
+| maneuver-load anchor block | `pullup_g_max > 0` |
+| `banking` descriptor | a non-empty `glider_bank_schedule` |
+
+`descriptors()` returns the headline phrase from those same facts —
+`ballistic RV`, or `glide` joined with whichever of `banking`, `terminal
+dive`, `dive-at-target` the plan carries.  A vehicle that banks but never
+dives now reads *glide · banking*; one that dives without banking is no longer
+called maneuvering.  The Form letter is gone from the headline entirely.
+
+This changes **which blocks print**, never a survival tier: all five blocks
+were and remain presentation or context, with the single documented exception
+of the windward overlay behind `heating.WINDWARD_DRIVES_VERDICT` (§13.8,
+default off).  `test_arc_descriptors.py` pins each trigger independently, the
+SWERVE regression, and the tier-invariance.
+
+Note for readers of the ledger: `BENCHMARKING.md` still files its source
+campaigns under the historical "Form A/B/C" headings.  Those are the names the
+citation campaigns were run under and are left intact as a provenance record —
+Form A ↦ ballistic, Form B ↦ glide, Form C ↦ the maneuver/AoA source pack.
 
 ---
 

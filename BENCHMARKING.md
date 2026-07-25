@@ -6,6 +6,21 @@ each row becomes a validation case run at the vehicle's entry conditions.
 
 ## The three forms and their data needs
 
+> **Nomenclature note (2026-07-25).**  The report no longer has three Forms —
+> Form C was retired as a category error (it was triggered by a commanded
+> terminal *dive* but labelled *maneuvering*; METHODS §13.14 records the
+> reasoning and the SWERVE false negative that exposed it).  The code now
+> forks once, `'ballistic' | 'glide'`, and gates each former Form-C block on
+> its own trigger.
+>
+> **The Form headings below are kept as-is on purpose.**  They are the names
+> the source campaigns were run and cited under, and this file is the citation
+> of record — renaming campaign headings after the fact would break every
+> inbound reference for no gain.  Read the mapping as:
+> **Form A ↦ ballistic** · **Form B ↦ glide** · **Form C ↦ the maneuver /
+> windward-AoA source pack** (whose data all still feeds live blocks — see
+> §13.7 maneuver anchors and §13.8 windward flank).
+
 ### Form A — Ballistic RV (the recession/accuracy chain)
 **Computed:** Sutton–Graves q̇(t) → peak flux, pulse width, load Q, T_eq;
 recession δ = Q/(ρ·H_eff); δ/R_n accuracy band; lumped heat-sink.
@@ -298,11 +313,16 @@ flight record — already anchored).
 
 > **ENCODED (2026-07-20):** the maneuver-load anchors below now live in code as
 > `survivability_report.MANEUVER_ANCHORS` (same data-edit philosophy as
-> `UHTC_ANCHORS`; METHODS §13.7), and the Form C report prints a
+> `UHTC_ANCHORS`; METHODS §13.7), and the report prints a
 > demonstrated-envelope context block comparing the plan's commanded
 > `glider_pullup_g_max` to the ladder (≤25 g operational class / ≤100 g AMaRV
 > flight-demonstrated ceiling / beyond = extrapolation).  Context only — never
 > a survivability verdict.  This file remains the citation of record.
+>
+> **WIDENED (2026-07-25):** with Form C retired, this block is gated on the
+> commanded lift cap itself rather than on a terminal dive, so it now reaches
+> every glider that pulls g — including SWERVE and the C-HGB, which under the
+> old Form-C trigger never printed it at all (METHODS §13.14).
 
 #### Form C anchor shopping list (the next campaign)
 
@@ -801,8 +821,10 @@ Wright hot-wall cross-check (+6.5%) logged in HEATING_MODEL_CROSSCHECK §6.
 
 #### Windward/AoA heating probe — BUILT (2026-07-20)
 
-**Status: implemented** (`heating.windward_flank_flux`, wired into the Form C
-report).  The screening model, from the source pack below:
+**Status: implemented** (`heating.windward_flank_flux`; printed for every
+glider whose windward numbers were computed — since 2026-07-25 this is gated
+on the data existing, not on the retired Form C, so SWERVE and the C-HGB now
+get it; METHODS §13.14).  The screening model, from the source pack below:
 
 ```
 q̇_flank0 = BODY_FLUX_FRACTION · q̇_stag(ρ,V,R_body)     # α=0 acreage flux (cited, 0.13)
@@ -1617,7 +1639,7 @@ placeholder — never given a fake citation.**  Status of every threshold:
 | C/C severe-regime Q\* cap | ~10–20 MJ/kg at 80–168 atm (band validity floor) | Nestler 1979 (NTRS 19790010869, read from primary, repo `data/`): measured 3-D C/C steady-state recession 0.508–0.787 cm/s at 80–168 atm / T_w 4,000–4,167 K / H_CL 6.9–11.6 MJ/kg, roughness-augmented heating 1.4–1.5×, gouging onset ~60–77 atm along 45° weave rays; Q\* derived via the paper's own energy balance with a flagged nominal ρ ≈ 1.9 g/cc and Fig.-5 H_w.  Corroborated by Perini 1971: JANAF sublimation theory under-estimates measured loss up to 70% at the p = 4 atm / 4000 K extreme (erosion / higher-order species) | ⚠ measured rates cited; Q\* labeled derived |
 | C/C diffusion-limit Q\* (theory anchor) | Q\* ≈ h_t/0.1725 ≈ 5.8 × total enthalpy (cold-wall, moderate regime) | Scala's CO-diffusion-limit correlation with blowing offset (ṁ = 0.1725·ρₑuₑC_H₀), via Perini, *Review of Graphite Ablation Theory and Experimental Data*, JHU/APL ANSP-M-1, Dec 1971 (OSTI 4286220), Eq. 28 — read from primary, repo `data/`; diffusion-limit data scatter +10/−50% about theory.  Independent check on the Reentry-F flight-derived central: 18.6/0.1725 ≈ 108 vs 114 MJ/kg (~6%) | ✔ cited |
 | Stardust radiative fraction | 9% of peak rate / 4% of load (stagnation); CEV-scale ~40% of peak flux | Kontinos & Stackpoole AIAA 2008-1197 (auxiliary computations; §II for CEV comparison).  **NOW THE VERIFICATION ANCHOR** for the computed radiative model: Tauber-Sutton returns ~23% of total at Stardust's conditions, a 2.6× over-prediction (R_n 0.20 m is below the correlation's 0.3 m floor — flagged extrapolated).  `test_radiative.py` pins the DIRECTION so a retune cannot silently flip it to under-prediction | ✔ cited + computed |
-| radiative gas heating (Earth) | q̇_r = 4.736e4·R_n^a·ρ^1.22·f_E(V) W/cm², a = 1.072e6·V^−1.88·ρ^−0.325 (capped), f_E from Table 1 (9–16 km/s) | **Tauber & Sutton 1991**, *JSR* 28(1):40–42 — read from primary, PDF in `data/`.  Wired as `heating.radiative_flux`, ADDED to the convective flux (METHODS §13.12).  Stated envelope V 10–16 km/s, ρ 6.66e-5–6.31e-4 kg/m³, R_n 0.3–3 m; paper's own accuracy ±20% at 54 km, ±8% at 66 km.  Equilibrium + cold wall → conservative-high where extrapolated.  **Exactly zero below 9 km/s, so no shipped verdict moves** (RVs ~7, HGVs ~5–6 km/s) | ✔ cited |
+| radiative gas heating (Earth) | q̇_r = 4.736e4·R_n^a·ρ^1.22·f_E(V) W/cm², a = 1.072e6·V^−1.88·ρ^−0.325 (capped), f_E from Table 1 (9–16 km/s) | **Tauber & Sutton 1991**, *JSR* 28(1):40–42 — read from primary, PDF in `data/`.  Wired as `heating.radiative_flux`, ADDED to the convective flux (METHODS §13.13).  Stated envelope V 10–16 km/s, ρ 6.66e-5–6.31e-4 kg/m³, R_n 0.3–3 m; paper's own accuracy ±20% at 54 km, ±8% at 66 km.  Equilibrium + cold wall → conservative-high where extrapolated.  **Exactly zero below 9 km/s, so no shipped verdict moves** (RVs ~7, HGVs ~5–6 km/s) | ✔ cited |
 
 Rows marked ⚠ are the complete list of thresholds NOT backed by literature;
 each is labeled with its true epistemic status in code and report text.  If a
@@ -1763,7 +1785,7 @@ What the paper *does* contribute, all of it logged rather than wired:
 **CLOSED (2026-07-24) — radiative gas heating above ~9 km/s.**  Was the
 standing *"convective-only model; radiative gas heating NOT assessed"* caveat
 and a P3 ledger item.  Closed with **Tauber & Sutton 1991** (Earth/air) wired
-as `heating.radiative_flux` and added to the convective flux (METHODS §13.12);
+as `heating.radiative_flux` and added to the convective flux (METHODS §13.13);
 both papers read from primary and archived in `data/`.  Four things worth
 recording:
 
