@@ -1946,7 +1946,15 @@ def integrate_trajectory(params: BoosterParams,
         if _pierce_fired:
             t_pierce     = float(sol_pre.t_events[1][0])
             state_pierce = sol_pre.y_events[1][0]
-            beta_L = float(_ero_full.beta_kg_m2)
+            # Acton's/Tracy's β_L is the ballistic coefficient IN GLIDE TRIM,
+            # β_L = m/(C_D,glide·A).  `beta_kg_m2` is stored zero-lift (the
+            # polar's convention, C_D0 = m/(β·A)), and at the max-L/D trim
+            # C_D = 2·C_D0, so β_L = β_zerolift / 2 (labeled INFERENCE — Acton
+            # gives no β_L formula, only a fit).  This keeps ONE meaning for
+            # `beta_kg_m2` across the numerical polar and the analytic modes;
+            # e.g. HTV-2's zero-lift β = 26,000 → β_L = 13,000, reproducing
+            # Acton 2015 Table 3.  METHODS §12.0.3.
+            beta_L = float(_ero_full.beta_kg_m2) / 2.0
             LD     = float(_ero_full.glider_LD)
             H    = ACTON_SCALE_HEIGHT_M
             rho0 = ACTON_SEA_LEVEL_RHO
