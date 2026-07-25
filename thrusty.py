@@ -5820,6 +5820,10 @@ class BoosterFlyoutApp(tk.Tk):
         # reads them, dialog edits them through the plan file).
         self._main_zeta_var = tk.StringVar(value="0.7")
         self._main_dive_alt_var = tk.StringVar(value="0")
+        # Commanded pull-up start altitude — set-once tuning in the plan editor;
+        # this var is the in-memory conduit (populate ← plan, run → reads it,
+        # dialog edits it via the plan file), exactly like _main_dive_alt_var.
+        self._main_pullup_alt_var = tk.StringVar(value="0")
         self._main_aero_var = tk.StringVar(value="Drag polar (realistic)")
 
         # ζ row — shown only for the ζ-using glide laws (damped / dynamic).
@@ -7528,10 +7532,15 @@ class BoosterFlyoutApp(tk.Tk):
             except (ValueError, AttributeError): pass
             try:    dt_rad = float(self._main_dt_radius_var.get())
             except (ValueError, AttributeError): pass
+        try:
+            pull_alt = max(0.0, float(self._main_pullup_alt_var.get()))
+        except (ValueError, AttributeError):
+            pull_alt = 0.0
         return dict(
             glider_enabled=True, glider_guidance=key, glider_skip_count=skip,
             glider_damping_zeta=zeta, glider_terminal_dive=True,
             glider_terminal_alt_km=dalt, glider_bank_schedule=bank,
+            glider_pullup_start_alt_km=pull_alt,
             glider_aero_model=aero, glider_dive_target_lat_deg=dt_lat,
             glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad,
             separation_mode=_sep)
@@ -7563,6 +7572,8 @@ class BoosterFlyoutApp(tk.Tk):
             if _guid == "equilibrium_glide"
             else "Ballistic (drag · gravity · rotation)")
         self._main_dive_alt_var.set(f"{ro.glider_terminal_alt_km:.0f}")
+        self._main_pullup_alt_var.set(
+            f"{getattr(ro, 'glider_pullup_start_alt_km', 0.0):g}")
         _sched = ro.glider_bank_schedule or []
         self._main_bank_sched_var.set(bool(_sched))
         for _i, _bvars in enumerate(self._main_bank_vars):
@@ -10312,6 +10323,7 @@ class BoosterFlyoutApp(tk.Tk):
             'glider_guid': getattr(self, '_main_guidance_var', tk.StringVar(value='')).get(),
             'glider_skip_count': getattr(self, '_main_skip_count_var', tk.StringVar(value='1')).get(),
             'glider_dive_alt': getattr(self, '_main_dive_alt_var', tk.StringVar(value='0')).get(),
+            'glider_pullup_alt': getattr(self, '_main_pullup_alt_var', tk.StringVar(value='0')).get(),
             'glider_bank_on':  getattr(self, '_main_bank_sched_var', tk.BooleanVar()).get(),
             'glider_banks': [
                 {'start': v['start'].get(), 'end': v['end'].get(), 'bank': v['bank'].get()}
@@ -10415,6 +10427,8 @@ class BoosterFlyoutApp(tk.Tk):
             if hasattr(self, '_main_skip_count_var'):
                 self._main_skip_count_var.set(str(meta.get('glider_skip_count', '1')))
             self._main_dive_alt_var.set(meta.get('glider_dive_alt', '0'))
+            if hasattr(self, '_main_pullup_alt_var'):
+                self._main_pullup_alt_var.set(meta.get('glider_pullup_alt', '0'))
             self._main_bank_sched_var.set(bool(meta.get('glider_bank_on', False)))
             saved_banks = meta.get('glider_banks', [])
             for _i, _bvars in enumerate(self._main_bank_vars):
