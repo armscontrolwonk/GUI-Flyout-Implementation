@@ -2932,6 +2932,10 @@ def integrate_trajectory(params: BoosterParams,
                     'terminal_alt_km': (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0)
                                         if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0),
                     'dive_target_radius_km': float(getattr(_ero_ms, 'glider_dive_target_radius_km', 0.0) or 0.0),
+                    # Lateral maneuver: a non-empty bank schedule.  Feeds the
+                    # report's honest arc descriptors (a vehicle that BANKS is
+                    # what "maneuvering" means; diving is a separate fact).
+                    'banking':     bool(getattr(_ero_ms, 'glider_bank_schedule', None)),
                 },
             }
             if len(_q_dot) and np.max(_q_dot) > 0:
@@ -2984,7 +2988,7 @@ def integrate_trajectory(params: BoosterParams,
                         material=str(getattr(_ero_ms, 'tps_material', '') or ''),
                         mass_kg=float(getattr(_ero_ms, 'mass_kg', 0.0) or 0.0),
                         frontal_area_m2=(np.pi * (_diam / 2.0) ** 2 if _diam > 0 else 0.0))
-                # Windward-flank heating band (Form C AoA probe, heating.py):
+                # Windward-flank heating band (glide AoA probe, heating.py):
                 # the α=0 acreage flux scaled by the modified-Newtonian windward
                 # amplification A(α)=sin(δ+α)/sin(δ), over the glide sub-arc
                 # (the low-AoA terminal dive is masked out).  A lifting vehicle

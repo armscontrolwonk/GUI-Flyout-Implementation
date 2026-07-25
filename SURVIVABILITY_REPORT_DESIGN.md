@@ -46,13 +46,24 @@ maneuvering quasi-ballistic on the transient pull-up spike.
 
 ## 2. Class keying (automatic, from data the run already has)
 
+> **SUPERSEDED 2026-07-25 — Form C retired.  See METHODS §13.14.**  Forms A
+> and B were real: they are the two genuinely different judgement models, and
+> they survive as `classify() → 'ballistic' | 'glide'`.  Form C was not.  It
+> was triggered by a commanded *terminal dive* but labelled *maneuvering*, so
+> it withheld the windward-flank and maneuver-anchor blocks from SWERVE (a
+> 10-g AoA-maneuver demonstrator that commands no dive) while announcing
+> "maneuvering (MaRV)" for any plan with a dive altitude and an empty bank
+> schedule.  No shipped vehicle ever reached it.  Each of its three blocks now
+> hangs on its own trigger, and the headline is built from
+> `descriptors()` — earned facts (`glide · banking · terminal dive`), not a
+> Form letter.  The sections below are kept as the original design record; read
+> "Form A" as *ballistic* and "Form B" as *glide*.
+
 | Class | Key | Report form |
 |---|---|---|
 | **Ballistic RV** | glider disabled (mode `ballistic`) | A |
 | **Glider / HGV** | numerical or analytic glide, no terminal pull-up emphasis | B |
-| **Maneuvering quasi-ballistic (MaRV)** | glide with terminal dive / dive-at-target / pull-up-dominated profile (Hwasong-11 class) | C |
-
-(C is form B plus the transient-pulse block; it ships after A and B.)
+| **Maneuvering quasi-ballistic (MaRV)** | glide with terminal dive / dive-at-target / pull-up-dominated profile (Hwasong-11 class) | ~~C~~ *(retired)* |
 
 ## 3. Form A — Ballistic RV: the accuracy ladder
 
@@ -150,7 +161,15 @@ oxidation-dwell, NRC-tier placement.
   Murbach/SWERVE materials.
 ```
 
-## 5. Form C — Maneuvering quasi-ballistic (MaRV): the envelope
+## 5. ~~Form C — Maneuvering quasi-ballistic (MaRV): the envelope~~ *(retired)*
+
+**The three blocks specified here all shipped and are all still computed —
+what was retired is the Form that bundled them.**  The transient-pulse block
+now fires on a commanded dive (`terminal_alt_km > 0` or
+`dive_target_radius_km > 0`), the windward-flank probe on the windward numbers
+existing, and the maneuver-load anchors on a commanded lift cap
+(`pullup_g_max > 0`) — three independent facts that this section wrongly
+treated as one vehicle class.  METHODS §13.14 records why.  Original text:
 
 Form B plus a **transient-pulse block** for the terminal dive / pull-up
 (Hwasong-11 class, crosscheck §0 row 3): the binding event is a low-altitude

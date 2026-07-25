@@ -3,14 +3,20 @@
 Assembles a mode-keyed report (SURVIVABILITY_REPORT_DESIGN.md) from a
 trajectory result: inputs echoed → budget table → per-criterion margins →
 a JUDGEMENT WITH CONSEQUENCES (accuracy band / time-to-failure / maneuver
-envelope) → method + flight-anchor references.  Three forms, keyed
+envelope) → method + flight-anchor references.  TWO judgement models, keyed
 automatically from the reentry plan already baked into the result:
 
-  Form A — Ballistic RV       : the δ/R_n accuracy ladder (accuracy fails
-                                before survival; PANT / Lin 1982 / Reentry-F)
-  Form B — Glider / HGV       : the stopwatch (survival-time vs glide-time,
-                                NRC-2008 duration ladder; thermal-range cap)
-  Form C — Maneuvering (MaRV) : Form B + the terminal-dive transient block
+  ballistic RV : the δ/R_n accuracy ladder (accuracy fails before survival;
+                 PANT / Lin 1982 / Reentry-F)
+  glide / HGV  : the stopwatch (survival-time vs glide-time, NRC-2008
+                 duration ladder; thermal-range cap)
+
+Everything ELSE that varies between vehicles — the windward-flank block, the
+terminal-dive transient, the maneuver-load anchors — is gated on its own
+trigger (windward data present; a commanded dive; a commanded lift cap), not
+on a vehicle "Form".  A third "maneuvering" Form used to bundle those three
+blocks behind a terminal-dive flag, which mislabelled every banking glider
+that did not dive and every diving vehicle that did not bank.
 
 Everything here is PRESENTATION over numbers heating.py already computed
 (result['heating_fom']) plus the stashed reentry arc (result['heating_arc']).
@@ -267,10 +273,11 @@ def _uhtc_coverage(t, q, eps, nose_radius_m, mat):
 
 
 # ---------------------------------------------------------------------------
-# Form C maneuver-load anchor dataset — one record per demonstrated (or
+# Maneuver-load anchor dataset — one record per demonstrated (or
 # published-representative) MaRV maneuver load.  Same philosophy as
 # UHTC_ANCHORS: a new flight datum is a DATA EDIT, not a code change; sources
-# are exact and BENCHMARKING.md §Form C is the citation of record.  These are
+# are exact and BENCHMARKING.md §Maneuver anchors is the citation of record.
+# These are
 # structural/guidance survived-the-maneuver demonstrations, NOT thermal
 # limits — the context block below is a demonstrated-envelope comparison,
 # never a pass/fail verdict.
@@ -320,7 +327,7 @@ _MARV_G_DEMONSTRATED = 100.0  # AMaRV-flight-100g (flight-measured ceiling)
 
 
 def _maneuver_context(g_cmd):
-    """Demonstrated maneuver-load envelope context for Form C (text block).
+    """Demonstrated maneuver-load envelope context (text block).
 
     Compares the plan's commanded lift cap (glider_pullup_g_max, in g) to the
     flight-demonstrated ladder.  Context only — the anchors are structural/
@@ -355,15 +362,44 @@ def _maneuver_context(g_cmd):
 
 
 def classify(result) -> str:
-    """'A' (ballistic RV) | 'B' (glider) | 'C' (MaRV: glide + terminal dive)."""
-    arc = result.get('heating_arc') or {}
-    prof = arc.get('profile') or {}
+    """'ballistic' | 'glide' — the ONE structural fork in the report.
+
+    It keys the two genuinely different judgement models: the ballistic
+    load-vs-record / accuracy ladder, versus the glider stopwatch (survival
+    time vs glide time).  Everything else that used to hang off a third
+    "maneuvering" Form now hangs off its own trigger — see descriptors().
+    """
+    prof = (result.get('heating_arc') or {}).get('profile') or {}
+    return 'glide' if prof.get('glider') else 'ballistic'
+
+
+def descriptors(result) -> list:
+    """Arc descriptors, each derived from its OWN trigger.
+
+    The retired Form C ("maneuvering") was keyed on a commanded terminal dive,
+    which is not what maneuvering means: SWERVE pulled -10° AoA at 10 g and
+    read as a plain glider, while a vehicle with a dive altitude and an empty
+    bank schedule was labelled maneuvering.  Each fact now speaks for itself —
+    banking comes from a non-empty bank schedule, diving from the two dive
+    knobs — so the headline never asserts a behaviour the plan does not carry.
+    """
+    prof = (result.get('heating_arc') or {}).get('profile') or {}
     if not prof.get('glider'):
-        return 'A'
-    if (prof.get('terminal_alt_km', 0.0) > 0.0
-            or prof.get('dive_target_radius_km', 0.0) > 0.0):
-        return 'C'
-    return 'B'
+        return ["ballistic RV"]
+    out = ["glide"]
+    if prof.get('banking'):
+        out.append("banking")
+    if float(prof.get('terminal_alt_km') or 0.0) > 0.0:
+        out.append("terminal dive")
+    elif float(prof.get('dive_target_radius_km') or 0.0) > 0.0:
+        out.append("dive-at-target")
+    return out
+
+
+def _dives(prof) -> bool:
+    """True when the plan commands a terminal dive (either knob)."""
+    return bool(float(prof.get('terminal_alt_km') or 0.0) > 0.0
+                or float(prof.get('dive_target_radius_km') or 0.0) > 0.0)
 
 
 def _fwhm_s(t, q):
@@ -676,7 +712,7 @@ def build_report(result) -> dict:
     # the boolean dwell fail for the nose; its dwell-floor "compromise" is an
     # extrapolation flag, not a failure, so it must not drive t_fail.
     _nose_mat = heating.TPS_MATERIALS.get(str(prof.get('nose_material') or ""))
-    uhtc_nose = bool(form in ('B', 'C') and _nose_mat
+    uhtc_nose = bool(form == 'glide' and _nose_mat
                      and not _nose_mat.get('is_ablator')
                      and _nose_mat.get('oxidation_dwell_s'))
     coverage = None
@@ -697,7 +733,7 @@ def build_report(result) -> dict:
             _fail_loc, _fail_mode = name_, c.get('mode')
 
     # ---- header ------------------------------------------------------------
-    mode_str = ('ballistic' if form == 'A' else prof.get('guidance', ''))
+    mode_str = ('ballistic' if form == 'ballistic' else prof.get('guidance', ''))
     fam_str = f"   [{fam} family]" if fam else ""
     hdr = [
         f"Reentry object:  {prof.get('name') or '(unnamed)'}   "
@@ -746,7 +782,7 @@ def build_report(result) -> dict:
     regime = (_ablator_regime(rc, f"{_nose_lbl} nose")
               if nose.get('is_ablator') else None)
 
-    if form == 'A':
+    if form == 'ballistic':
         if regime is not None:
             status = regime['status']
             j.append("  " + regime['load_sentence'])
@@ -769,7 +805,7 @@ def build_report(result) -> dict:
         j.append("  (Loft/depress trade: run a burnout-angle sweep to see "
                  "flux vs load across shaping.)")
 
-    else:   # Forms B and C — the stopwatch
+    else:   # glide — the stopwatch
         glide_range_km = None
         if t_fail is not None and t.size:
             rng = np.asarray(arc['range'], float)
@@ -798,7 +834,7 @@ def build_report(result) -> dict:
                     and not body_loc.get('compromise'):
                 j.append(f"  Body holds the full {dur:,.0f}-s glide.")
         elif regime is not None:
-            # Ablative-nosed glider: same load-vs-record regime as Form A.
+            # Ablative-nosed glider: same load-vs-record regime as a ballistic RV.
             status = regime['status']
             j.append("  " + regime['load_sentence'])
             if regime['accuracy_sentence']:
@@ -834,53 +870,57 @@ def build_report(result) -> dict:
                      "as-flown numerical modes typically read 2–4× higher "
                      "peak flux (phugoid troughs).")
 
-        if form == 'C':
-            # Windward-flank heating (screening AoA probe): a lifting vehicle
-            # flies its glide at AoA, so the windward generator — not the nose —
-            # carries the off-nose acreage heat.  The α=0 acreage flux scaled by
-            # the modified-Newtonian amplification A(α)=sin(δ+α)/sin(δ), over the
-            # glide sub-arc (heating.windward_flank_flux).
-            _w = (fom or {}).get('windward')
-            if _w and _w.get('T_eq_windward_K'):
-                _T = _w['T_eq_windward_K']; _qw = _w['q_windward_MW_m2']
-                _amp = _w['amplification']; _ab = _w['alpha_band_deg']
-                j.append("─── Windward-flank heating (screening) ─────────────────────")
-                _opstr = (f", {_T['op']:.0f} K at trim α={_w['alpha_op_deg']:.0f}°"
-                          if _w.get('alpha_op_deg') is not None and _T.get('op') else "")
-                j.append(f"  Windward T_eq {_T['lo']:.0f}–{_T['hi']:.0f} K across "
-                         f"α {_ab[0]:.0f}–{_ab[1]:.0f}°{_opstr}  "
-                         f"(δ={_w['delta_deg']:.0f}° flank; "
-                         f"{_qw['lo']:.1f}–{_qw['hi']:.1f} MW/m², "
-                         f"{_amp['lo']:.1f}–{_amp['hi']:.1f}× the α=0 acreage flux).")
-                _wc = (_w.get('criteria') or {}).get('windward_surface')
-                if _wc:
-                    j.append(f"  vs body {_w['body_material']}: soak "
-                             f"{_wc['limit_continuous_K']:.0f} K / peak "
-                             f"{_wc['limit_peak_K']:.0f} K — {_w['verdict']}.")
-                    if heating.WINDWARD_DRIVES_VERDICT:
-                        if _wc['T_lo_K'] > _wc['limit_continuous_K'] and status == 'survive':
-                            status = 'degraded'
-                        elif _wc['T_hi_K'] > _wc['limit_peak_K'] and status == 'survive':
-                            status = 'analysis'
-                elif _w.get('verdict'):
-                    j.append(f"  {_w['verdict']}.")
-                # Boundary-layer transition (computed gate, §13.11).
-                _tst = _w.get('transition_state')
-                if _tst and _tst != 'laminar':
-                    j.append(f"  Acreage boundary layer {_tst} at low altitude "
-                             f"(Re_Rn to {_w.get('Re_Rn_peak', 0):.1e}) — flank "
-                             f"flux ×{_w.get('transition_factor_peak', 1):.1f} "
-                             f"applied (Kuntz 1999 gate; turbulent 3–5× band).")
-                else:
-                    j.append(f"  Acreage boundary layer laminar over the glide "
-                             f"(Re_Rn {_w.get('Re_Rn_peak', 0):.1e} below onset).")
-                j.append(f"  {_w.get('thompson_band', '')}; control-fin gap "
-                         f"interference 10–80× at reattachment (Alviani 2022) — "
-                         f"flagged, not computed at screening tier.")
+        # Windward-flank heating (screening AoA probe): a lifting vehicle
+        # flies its glide at AoA, so the windward generator — not the nose —
+        # carries the off-nose acreage heat.  The α=0 acreage flux scaled by
+        # the modified-Newtonian amplification A(α)=sin(δ+α)/sin(δ), over the
+        # glide sub-arc (heating.windward_flank_flux).  Gated on the windward
+        # numbers EXISTING, not on a vehicle Form: every glider flies its
+        # acreage at AoA whether or not it also dives at the end.
+        _w = (fom or {}).get('windward')
+        if _w and _w.get('T_eq_windward_K'):
+            _T = _w['T_eq_windward_K']; _qw = _w['q_windward_MW_m2']
+            _amp = _w['amplification']; _ab = _w['alpha_band_deg']
+            j.append("─── Windward-flank heating (screening) ─────────────────────")
+            _opstr = (f", {_T['op']:.0f} K at trim α={_w['alpha_op_deg']:.0f}°"
+                      if _w.get('alpha_op_deg') is not None and _T.get('op') else "")
+            j.append(f"  Windward T_eq {_T['lo']:.0f}–{_T['hi']:.0f} K across "
+                     f"α {_ab[0]:.0f}–{_ab[1]:.0f}°{_opstr}  "
+                     f"(δ={_w['delta_deg']:.0f}° flank; "
+                     f"{_qw['lo']:.1f}–{_qw['hi']:.1f} MW/m², "
+                     f"{_amp['lo']:.1f}–{_amp['hi']:.1f}× the α=0 acreage flux).")
+            _wc = (_w.get('criteria') or {}).get('windward_surface')
+            if _wc:
+                j.append(f"  vs body {_w['body_material']}: soak "
+                         f"{_wc['limit_continuous_K']:.0f} K / peak "
+                         f"{_wc['limit_peak_K']:.0f} K — {_w['verdict']}.")
+                if heating.WINDWARD_DRIVES_VERDICT:
+                    if _wc['T_lo_K'] > _wc['limit_continuous_K'] and status == 'survive':
+                        status = 'degraded'
+                    elif _wc['T_hi_K'] > _wc['limit_peak_K'] and status == 'survive':
+                        status = 'analysis'
+            elif _w.get('verdict'):
+                j.append(f"  {_w['verdict']}.")
+            # Boundary-layer transition (computed gate, §13.11).
+            _tst = _w.get('transition_state')
+            if _tst and _tst != 'laminar':
+                j.append(f"  Acreage boundary layer {_tst} at low altitude "
+                         f"(Re_Rn to {_w.get('Re_Rn_peak', 0):.1e}) — flank "
+                         f"flux ×{_w.get('transition_factor_peak', 1):.1f} "
+                         f"applied (Kuntz 1999 gate; turbulent 3–5× band).")
+            else:
+                j.append(f"  Acreage boundary layer laminar over the glide "
+                         f"(Re_Rn {_w.get('Re_Rn_peak', 0):.1e} below onset).")
+            j.append(f"  {_w.get('thompson_band', '')}; control-fin gap "
+                     f"interference 10–80× at reattachment (Alviani 2022) — "
+                     f"flagged, not computed at screening tier.")
 
-            # Terminal-dive transient block (screening): the low-AoA arc below
-            # the commanded dive altitude (or 15 km for dive-at-target) — the
-            # nose-stagnation complement to the windward glide flank above.
+        # Terminal-dive transient block (screening): the low-AoA arc below the
+        # commanded dive altitude (or 15 km for dive-at-target) — the
+        # nose-stagnation complement to the windward glide flank above.  Gated
+        # on the plan actually COMMANDING a dive, which is what this block
+        # describes; it says nothing about whether the vehicle maneuvers.
+        if _dives(prof):
             _h_dive = (prof.get('terminal_alt_km', 0.0) or 15.0) * 1000.0
             alt = np.asarray(arc['alt'], float)
             m = alt <= _h_dive
@@ -892,7 +932,13 @@ def build_report(result) -> dict:
                          f"{t_d[-1]-t_d[0]:.0f} s — heat-sink regime "
                          f"(nose-stagnation; the windward flank/fin LE is the "
                          f"block above).")
-            j += _maneuver_context(prof.get('pullup_g_max', 0.0))
+
+        # Maneuver-load anchors: gated on a commanded lift cap (the helper
+        # self-suppresses at g ≤ 0), so a glider that pulls g gets its
+        # demonstrated-envelope context whether or not it dives at the end —
+        # the case the old Form C trigger got backwards (SWERVE pulled -10°
+        # AoA at 10 g and never saw this block).
+        j += _maneuver_context(prof.get('pullup_g_max', 0.0))
 
     # ---- Interior (bondline) screen — all forms -----------------------------
     # The "does the inside survive" axis: 1-D conduction through the body TPS
@@ -924,7 +970,7 @@ def build_report(result) -> dict:
 
     # ---- NRC ladder (gliders) + method line ---------------------------------
     tail = []
-    if form in ('B', 'C') and dur > 60.0:
+    if form == 'glide' and dur > 60.0:
         tail += ["", tps_ladder.format_ladder(dur)]
     tail += [
         "",
@@ -958,8 +1004,10 @@ def build_report(result) -> dict:
     if status == 'degraded':
         # Survival is demonstrated; a screening overlay flagged a consequence.
         tier_label += "  (degraded — see report)"
-    _form_name = {'A': "ballistic RV", 'B': "glider", 'C': "maneuvering (MaRV)"}[form]
-    headline = f"{tier_label}   —   Form {form} ({_form_name})"
+    # The headline names what the plan ACTUALLY does — each descriptor earned
+    # by its own trigger (descriptors()), never a Form letter standing in for
+    # behaviour the plan may not carry.
+    headline = f"{tier_label}   —   {' · '.join(descriptors(result))}"
     if _mods:
         headline += "  *"
 
@@ -969,11 +1017,11 @@ def build_report(result) -> dict:
     # change it.  The full engineering analysis — citations intact — follows
     # below the divider, unchanged.
     _name = prof.get('name') or '(unnamed)'
-    _mode_phrase = ('ballistic reentry' if form == 'A'
+    _mode_phrase = ('ballistic reentry' if form == 'ballistic'
                     else f"{prof.get('guidance', 'glide')} glide")
     lead = [f"{_name} — {_mode_phrase}, {dur:,.0f}-s reentry arc."]
     because, fix = [], None
-    if form == 'A':
+    if form == 'ballistic':
         if regime is not None:
             because.append(regime['load_sentence'])
             if regime['accuracy_sentence'] and regime['lead_accuracy']:
@@ -1012,7 +1060,7 @@ def build_report(result) -> dict:
                 f"range.")
             fix = "a shorter or steeper profile, or more capable TPS"
         elif regime is not None:
-            # Ablative-nosed glider: load-vs-record regime (same as Form A).
+            # Ablative-nosed glider: load-vs-record regime (as for a ballistic RV).
             because.append(regime['load_sentence'])
             if regime['accuracy_sentence'] and regime['lead_accuracy']:
                 because.append(regime['accuracy_sentence'])
@@ -1075,7 +1123,7 @@ def build_report(result) -> dict:
     # NRC lineage context, written to keep the two ladders distinct: the NRC
     # rungs are a DESIGN LINEAGE (what TPS class each mission duration
     # historically required), not a demonstration of the flown material.
-    if form in ('B', 'C') and dur > 60.0:
+    if form == 'glide' and dur > 60.0:
         _ctx = (f"For context: gliders of this class historically used "
                 f"ablative carbon-phenolic to ~800 s (NRC 2008, AMaRV "
                 f"lineage); past ~{tps_ladder.CROSSOVER_S:,.0f} s the record "
@@ -1109,8 +1157,8 @@ def build_report(result) -> dict:
     plot = dict(
         t=t - t0, q_MW=q_MW, Q_MJ=Q_MJ,
         t_fail=(t_fail - t0) if t_fail is not None else None,
-        glide_s=dur if form in ('B', 'C') else None,
-        tiers=(tps_ladder.NAS_LINEAGE if form in ('B', 'C') else None),
+        glide_s=dur if form == 'glide' else None,
+        tiers=(tps_ladder.NAS_LINEAGE if form == 'glide' else None),
         tier=tier, tier_color=tier_color,
         # bands recolored from per-timestep coverage class → survival tier
         bands=([(b0 - t0, b1 - t0, _BAND_CLASS_TIER.get(c, c))
