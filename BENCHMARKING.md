@@ -1353,13 +1353,37 @@ Mach 12 → 5 deceleration** — a long, remarkably flat equilibrium glide at
 ~26 km.  That is a shape anchor Thrusty's glider model can be checked against,
 and it is precisely what Iliff & Shafer and Williamson do *not* supply.
 
-**Flag raised by this anchor.**  Thrusty's *shipped* SWERVE-on-STARS-1 scenario
-lofts to a 2,074 km apogee and reenters at **Mach 19–21**, against SWERVE III's
-Mach 11.7 entry — at 300 kft, Thrusty M21.3 vs the flight's M11.8.  This is
-**not by itself a model error**: the shipped scenario is a different mission,
-since nothing ever configured it to replicate the 1985 test.  But it compounds
-the already-open STARS-1 energy flag (Thrusty 5.88 km/s vs Williamson's
-5.18–5.64 km/s envelope), and the two should be resolved together.
+**Corroborated independently by Iliff & Shafer** (AIAA 93-0311, already in
+`data/`), which describes the *third* SWERVE flight's maneuver in text: "a
+-10°-angle of attack, **Mach 12, high-altitude pull out** at 20 sec, requiring
+control deflections of 4°, followed by a return to 0°-angle of attack at 60 sec
+at **about Mach 8**."  The digitized corridor puts the pull-up low point at
+**M12.22 / 25.8 km** and has **M8.24 at 26.5 km** mid-plateau.  A figure
+digitization and a prose flight description, from two different papers, landing
+on the same two Mach numbers — that is about as good as this kind of anchor
+gets.  Iliff & Shafer add: transition onset "slightly above 100,000 ft", which
+brackets the corridor's peak-Mach point at 96.7 kft.
+
+**Launcher — correcting an error in the previous commit.**  That commit
+compared the corridor against a Thrusty run of SWERVE on **STARS-1** and raised
+a flag over the Mach 19–21 mismatch.  **The flag was spurious and is
+withdrawn: STARS-1 is the wrong booster.**  Williamson 1992 records that in
+1992 Sandia was "currently developing the capability of launching the STARS
+missiles from the Kauai Test Facility" — STARS post-dates the 1985 flight
+entirely — and its quoted performance (500–900 lb to 17,000–18,500 ft/s,
+i.e. 5.2–5.6 km/s) is far above SWERVE III's 3.49 km/s entry.  STRYPI is the
+Sandia-designed booster of the era, and this repo already carries the right
+pairing: `README.md` lists **Strypi VIII R** and **Strypi VIII R (Castor II)**
+as the SWERVE (glider) carriers.  The open STARS-1 energy question
+(5.88 km/s vs Williamson's 5.18–5.64 envelope) stands on its own and is
+*unrelated* to this anchor.
+
+**Flight geography** (Iliff & Shafer, for anyone setting the run up): SWERVE
+flew out of the **Kauai Test Facility**; the third flight **reentered near
+Johnston Island**.  Vehicle: spherically blunted cone, 5.25° half-angle, "a
+little over 100-in." long, nose-to-base radius ratio ~0.07, small wings and
+elevons, ablative heat shield and nose tip.  (Iliff & Shafer count **three**
+SWERVE flight tests, 1979–1985.)
 
 *Next step, not yet taken:* a SWERVE III replication case — enter a glider at
 106.3 km / 3.49 km/s with SWERVE's L/D and β, and test whether Thrusty holds
