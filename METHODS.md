@@ -1701,17 +1701,46 @@ This is a closed-form way to write drag without separately specifying
 warheads typically run `β` ~ 10⁴ – 10⁵ kg/m²; light reentry test
 articles can be ~ 10³.
 
-The GUI provides a Newtonian β calculator (Section 14 of the user guide)
-that estimates β for a cone-shaped RV from its half-angle and bluntness
-ratio using a 4×6 interpolation table of Newtonian C_D values
-(`_cd_blunted_cone_newtonian`, `thrusty.py`). For a sharp cone the
-exact Newtonian result is `C_D = 2 sin²θ`. For blunted cones (half-angle
-10°–40°, bluntness ratio `ε = r_N/r_b` from 0 to 1) the table is taken
-from a published Newtonian-hypersonic Cd chart cited in the source code
-as "Ref (4) Ch. 5". The full primary reference for "Ref (4)" is not
-defined in the repository; given the surrounding source chain (Section 8.2)
-it is plausibly Chin (1961) Ch. 5, but this should be verified before
-citing the table as Chin in publication-grade work.
+The GUI provides a β calculator (Section 14 of the user guide) that
+estimates β for a cone-shaped RV from its half-angle, bluntness ratio and
+an evaluation Mach.  The physics lives in
+`booster_models.cd_cone_hypersonic`, a three-term axial-Cd build-up
+(base-area referenced):
+
+```
+C_D = C_D,pressure + C_D,friction + C_D,base
+
+C_D,pressure : Newtonian 2·sin²θ + published bluntness excess
+               (4×6 chart table, θ 10–40°, ε = r_N/r_b 0–1;
+               cd_blunted_cone_newtonian)
+C_D,friction : Cf · S_wet/A_base,  S_wet/A_base = (1 − ε²cos²θ)/sinθ
+               (exact frustum geometry; Cf = 0.0012, a turbulent-
+               hypersonic SCREENING constant, honest band 0.0008–0.0015)
+C_D,base     : 2/(γM²) — the p_base → 0 hypersonic limit
+```
+
+**Why three terms (fault fixed 2026-07-25).**  The calculator originally
+used the Newtonian pressure term alone.  That is adequate for blunt RVs
+(θ ≥ 20°, pressure-dominated, and the added terms perturb C_D by only
+2–4%), but on a slender cone the pressure term nearly vanishes —
+2·sin²(5.25°) ≈ 0.017 — while friction (≈ 0.013) and base drag (≈ 0.014 at
+M 10) do not.  The pressure-only estimate under-counted C_D by ~4× and
+emitted β ≈ 95,000 kg/m² for a SWERVE-geometry cone, an order of magnitude
+above any physical slender-RV value.  With the viscous and base terms
+carried the same geometry reads β ≈ 37,000–41,000 kg/m² over M 10–12.
+`test_beta_estimator.py` pins the component identities, the blunt-RV
+invariance, and the slender-cone sanity band — deliberately as physics
+identities, never as a fit to any vehicle's reconstructed β.  Note the
+estimator describes a **bare cone**: wings, fins or flaps add wetted area
+and interference drag it does not carry, so a winged vehicle's true β is
+lower than the bare-cone estimate.
+
+For blunted cones the pressure table is taken from a published
+Newtonian-hypersonic Cd chart cited in the source code as "Ref (4) Ch. 5".
+The full primary reference for "Ref (4)" is not defined in the repository;
+given the surrounding source chain (Section 8.2) it is plausibly Chin
+(1961) Ch. 5, but this should be verified before citing the table as Chin
+in publication-grade work.
 
 For hypersonic glide vehicles the constant-β model is augmented by a
 lift term and (optionally) a polar-drag model — see Section 12.

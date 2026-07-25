@@ -275,8 +275,9 @@ tabbed notebook**.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone
-  geometry (half-angle, nose bluntness ratio) using a bilinear interpolation of the
-  Newtonian hypersonic Cd chart (Ref (4) Ch. 5).
+  geometry (half-angle, nose bluntness ratio, eval Mach): Newtonian pressure
+  (Ref (4) Ch. 5 chart) + turbulent skin friction + hypersonic base drag,
+  each component shown (METHODS §8.8).
 - **Thrust Estimator** — back-calculates engine thrust from observed acceleration
   during boost: `T = m · √(a_h² + (a_v + g)²)`.
 - **Dry Mass Estimator** (Analysis menu) — estimates a stage's dry/inert mass
@@ -717,13 +718,17 @@ empirical gravity/drag/steering-loss penalty derived from ascent time, and
 solves for the maximum deliverable payload.  Accuracy ~260 m/s RMS in total
 mission ΔV; ~10% payload error.
 
-### Newtonian β calculator (`_cd_blunted_cone_newtonian`, `thrusty.py:133`)
+### Cone β calculator (`booster_models.cd_cone_hypersonic`)
 
-Hypersonic Cd for a blunted cone.  For a sharp cone (ε = r_N/r_b = 0) the
-exact Newtonian result is `Cd = 2·sin²θ`.  For blunted cones, bilinear
-interpolation on a 4×6 table taken from the Ref (4) Ch. 5 chart
-(θ = 10°–40°, ε = 0–1.0) is used, with the bluntness excess scaled onto
-the exact Newtonian value for out-of-range angles.
+Hypersonic axial Cd for a blunted cone as a three-term build-up: Newtonian
+pressure (sharp cone `2·sin²θ` exactly; blunted via bilinear interpolation
+on the 4×6 Ref (4) Ch. 5 chart, θ = 10°–40°, ε = 0–1.0) **plus** turbulent
+skin friction (`Cf·S_wet/A_base`, exact frustum geometry, Cf = 0.0012
+screening constant) **plus** hypersonic base drag (`2/γM²`).  The viscous
+and base terms matter enormously for slender cones — pressure-only
+under-counted a 5.25° cone's Cd ~4× and inflated its estimated β to
+~10⁵ kg/m² (METHODS §8.8) — and are a 2–4% perturbation for blunt RVs.
+Bare-cone estimate: wings/fins add drag it does not carry.
 
 ### Reentry heating (`heating.py`)
 
