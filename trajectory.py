@@ -817,7 +817,77 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                             if _dive_now:
                                 bank_rad = np.pi
 
-                        if _ero.glider_guidance == 'damped_glide':
+                        # ---- Commanded pull-up (plan-phase modifier) --------
+                        # glider_pullup_start_alt_km > 0 splits capture into
+                        # three phases: ballistic fall (zero commanded lift,
+                        # the β drag already computed) above the trigger; a
+                        # hard pull at the trigger, at full authority capped
+                        # by BOTH the structural g-limit and what q + the aero
+                        # model supply (triggering too high undershoots
+                        # honestly — no lift is conjured); then a ONE-WAY
+                        # handoff to the selected glide law once the sink rate
+                        # is arrested to the law's own equilibrium target
+                        # γ* = −2·H_ρ·g/(V²·cosσ·(L/D)) (Lu Eq. 31).  This
+                        # frees ζ to do the job its linearization assumes —
+                        # damping small residuals near equilibrium — instead
+                        # of arresting a km/s-class fall.  Flight precedent:
+                        # SWERVE III's discrete commanded pull-out at Mach 12
+                        # (Iliff & Shafer 1993; Williamson Fig. 20, t = 20 s).
+                        # Unset (0) is byte-identical to the plain glide laws.
+                        _pu_handled = False
+                        _pu_alt_m = float(getattr(_ero, 'glider_pullup_start_alt_km',
+                                                  0.0) or 0.0) * 1000.0
+                        _pu = getattr(params, '_pullup_phase', None)
+                        if (_pu_alt_m > 0.0 and _pu is not None
+                                and _ero.glider_guidance in
+                                    ('damped_glide', 'dynamic_equilibrium_glide',
+                                     'skip_glide')):
+                            _hdot_pu = speed * float(np.dot(v_hat, r_hat))
+                            if _pu[0] == 0 and alt <= _pu_alt_m and _hdot_pu < 0.0:
+                                _pu[0] = 1
+                            if _pu[0] == 1:
+                                _dh = 200.0
+                                _rho0 = atmosphere(max(alt, 0.0))[2]
+                                _rho1 = atmosphere(max(alt, 0.0) + _dh)[2]
+                                _Hrho_pu = (_dh / np.log(_rho0 / _rho1)
+                                            if (_rho1 > 0.0 and _rho0 > _rho1)
+                                            else 7000.0)
+                                _Hrho_pu = min(max(_Hrho_pu, 4000.0), 12000.0)
+                                _cosb_pu = max(abs(float(np.cos(bank_rad))), 0.05)
+                                _gstar_pu = (-2.0 * _Hrho_pu * g_mag
+                                             / (speed * speed * _cosb_pu * _ld_eff))
+                                if _hdot_pu >= speed * _gstar_pu:
+                                    _pu[0] = 2      # captured — glide law owns it
+                            if _pu[0] == 0:
+                                # Ballistic fall: no commanded lift; the
+                                # β-based zero-lift drag stands unmodified.
+                                lift_mag = 0.0
+                                _pu_handled = True
+                            elif _pu[0] == 1:
+                                _L_struct = (_ero.glider_pullup_g_max
+                                             * g_mag * ro_mass)
+                                if q > 1.0:
+                                    if getattr(_ero, 'glider_aero_model',
+                                               'polar') == 'polar':
+                                        _CD0p, _kpp, _Arefp = _aero_polar(_ero, _ld_eff)
+                                        _C_L = min(_L_struct / (q * _Arefp),
+                                                   2.0 * np.radians(25.0))
+                                        lift_mag = q * _Arefp * _C_L
+                                        drag_mag = q * _Arefp * (_CD0p
+                                                                 + _kpp * _C_L * _C_L)
+                                    else:
+                                        _drag_b = (q / float(_ero.beta_kg_m2)) * ro_mass
+                                        lift_mag = min(_L_struct, _drag_b * _ld_eff)
+                                        drag_mag = max(_drag_b,
+                                                       lift_mag / max(_ld_eff, 1e-6))
+                                    f_drag = -drag_mag * v_hat
+                                else:
+                                    lift_mag = 0.0
+                                _pu_handled = True
+
+                        if _pu_handled:
+                            pass
+                        elif _ero.glider_guidance == 'damped_glide':
                             # Damped-phugoid glide.  NOMINAL = the max-L/D α* (skip)
                             # lift — so the natural phugoid is preserved (α* lift ∝ q
                             # over/undershoots equilibrium) — plus ζ altitude-rate
@@ -1628,6 +1698,9 @@ def integrate_trajectory(params: BoosterParams,
     if not hasattr(params, '__dict__'):
         params = copy.copy(params)
     params._gl_above_pierce = [False]   # set once alt > 100 km
+    # Commanded pull-up phase latch [0 fall | 1 pulling | 2 handed off] —
+    # one-way per mission; persists across integration passes, reset here.
+    params._pullup_phase = [0]
     # Shroud heating-jettison latch [armed, jettisoned, t_jettison], used only
     # when shroud_jettison_alt_km <= 0 (heating default).  armed once q_dot has
     # risen above the fairing flux (past max-q); jettisoned on the first drop
@@ -2932,6 +3005,7 @@ def integrate_trajectory(params: BoosterParams,
                     'terminal_alt_km': (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0)
                                         if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0),
                     'dive_target_radius_km': float(getattr(_ero_ms, 'glider_dive_target_radius_km', 0.0) or 0.0),
+                    'pullup_start_alt_km': float(getattr(_ero_ms, 'glider_pullup_start_alt_km', 0.0) or 0.0),
                     # Lateral maneuver: a non-empty bank schedule.  Feeds the
                     # report's honest arc descriptors (a vehicle that BANKS is
                     # what "maneuvering" means; diving is a separate fact).
