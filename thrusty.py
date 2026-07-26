@@ -4437,21 +4437,34 @@ class FootprintDialog(tk.Toplevel):
         all_lons = [launch_lon] + [r['lon'][-1] for _, r in valid]
         centre = [sum(all_lats) / len(all_lats), sum(all_lons) / len(all_lons)]
 
+        # Light basemap, matching the single-trajectory map (_export_folium).
         m = folium.Map(location=centre, zoom_start=4,
-                       tiles='CartoDB dark_matter')
+                       tiles='CartoDB positron')
 
-        # Rainbow spectrum
-        n = max(len(valid), 1)
-        def _hsl(i):
-            h = int(300 * i / max(n - 1, 1))   # magenta→red fan
-            return f"hsl({h},100%,60%)"
+        # Diverging palette keyed to the BANK ANGLE, not the index: bank is a
+        # diverging quantity (left turn ↔ straight ↔ right turn), so the
+        # restrained, meaningful encoding is blue↔gray↔red — cool for left
+        # (negative) banks, brick-red (the app accent) for right (positive),
+        # a mid-gray for near-straight.  Replaces the old rainbow HSL sweep,
+        # which coded index order rather than turn direction.
+        _COOL = (0x2a, 0x6f, 0xb0)     # steel blue  — max left bank
+        _MID  = (0x7a, 0x7a, 0x76)     # mid gray    — straight
+        _WARM = (0xc0, 0x39, 0x2b)     # brick red   — max right bank
+        _b_max = max((abs(float(bk)) for bk, _ in valid), default=1.0) or 1.0
+
+        def _bank_color(bk):
+            t = max(-1.0, min(1.0, float(bk) / _b_max))    # −1 … +1
+            a, b = (_MID, _WARM) if t >= 0 else (_MID, _COOL)
+            f = abs(t)
+            rgb = tuple(round(a[k] + (b[k] - a[k]) * f) for k in range(3))
+            return "#%02x%02x%02x" % rgb
 
         # Trajectories
         for i, (bk, r) in enumerate(valid):
             lats = list(r['lat'])
             lons = list(r['lon'])
             coords = list(zip(lats, lons))
-            col = _hsl(i)
+            col = _bank_color(bk)
             folium.PolyLine(
                 coords, color=col, weight=2, opacity=0.85,
                 tooltip=f"Bank {bk:+.0f}°"
@@ -4480,8 +4493,8 @@ class FootprintDialog(tk.Toplevel):
                 # impacts collinear).
                 env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
                 env.append(env[0])
-            folium.PolyLine(env, color="white", weight=1,
-                            dash_array="4 4", opacity=0.5).add_to(m)
+            folium.PolyLine(env, color="#555555", weight=1,
+                            dash_array="4 4", opacity=0.6).add_to(m)
 
         # Launch marker
         folium.Marker(
