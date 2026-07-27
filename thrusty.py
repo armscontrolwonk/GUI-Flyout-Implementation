@@ -4493,8 +4493,15 @@ class FootprintDialog(tk.Toplevel):
                 # impacts collinear).
                 env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
                 env.append(env[0])
-            folium.PolyLine(env, color="#555555", weight=1,
-                            dash_array="4 4", opacity=0.6).add_to(m)
+            # The envelope is the headline of this map (the reachable
+            # footprint), so it reads as an AREA, not a faint outline: a very
+            # light neutral fill inside a dashed boundary.  The 10 % fill is a
+            # wash the weight-2 trajectories (drawn earlier) still read
+            # through, so the left/right spread stays legible over the area.
+            folium.Polygon(env, color="#555555", weight=1.2,
+                           dash_array="4 4", opacity=0.7,
+                           fill=True, fill_color="#8a8a86",
+                           fill_opacity=0.10).add_to(m)
 
         # Launch marker
         folium.Marker(
