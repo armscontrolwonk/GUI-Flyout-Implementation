@@ -41,6 +41,23 @@ def stage_chain(p):
     return out
 
 
+def fin_polygon(sgn, R, yb, span, root, tip, sweep_deg):
+    """Side-elevation outline of one tail fin, vehicle nose-up (forward = +y).
+
+    The trailing (aft) edge sits at the stage base yb; the leading edge sweeps
+    back, so the tip is forward of the root and, for sweep_deg > 0, shifted aft
+    (down).  Anchoring the tip to the TRAILING edge is what keeps a clipped fin
+    (tip < root) reading as swept-back, not the reversed forward-swept look.
+    Returns four (x, y) points: root-trailing, root-leading, tip-leading,
+    tip-trailing.
+    """
+    off = span * math.tan(math.radians(sweep_deg))
+    return [(sgn * R, yb),
+            (sgn * R, yb + root),
+            (sgn * (R + span), yb + tip - off),
+            (sgn * (R + span), yb - off)]
+
+
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
     """A nose from y0 up to y0+length, base width diam, centred on x0.
 
@@ -154,12 +171,9 @@ def draw_booster(ax, p, title=None):
         span = float(s.fin_span_m)
         root = float(getattr(s, "fin_root_chord_m", 0.0) or 0.8 * span)
         tip = float(getattr(s, "fin_tip_chord_m", 0.0) or 0.4 * root)
-        sweep = math.radians(float(getattr(s, "fin_sweep_deg", 0.0) or 0.0))
-        off = span * math.tan(sweep)
+        sweep_deg = float(getattr(s, "fin_sweep_deg", 0.0) or 0.0)
         for sgn in (+1, -1):
-            pts = [(sgn * R, yb), (sgn * R, yb + root),
-                   (sgn * (R + span), yb + root - off),
-                   (sgn * (R + span), yb + root - off - tip)]
+            pts = fin_polygon(sgn, R, yb, span, root, tip, sweep_deg)
             ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
                                  lw=1.1, zorder=1))
         ax.text(0, yb - 0.5, f"{int(s.n_fins or 4)} fins  span {span:g} m",
