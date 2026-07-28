@@ -121,6 +121,50 @@ def test_leading_edge_is_swept_back_not_forward():
         assert tip_leading[1] < root_leading_y, (sweep, tip_leading)
 
 
+# ── aerospike / aerodisk (drawn only when ticked) ───────────────────────────
+def _strypi(LD=0.0, dD=0.0):
+    b = _load("Strypi_VIII_R")
+    b.aerospike_LD = LD
+    b.aerospike_dD = dD
+    return b
+
+
+def test_aerospike_length_is_LD_times_forebody_and_adds_height():
+    """Spike length = aerospike_LD × forebody diameter, drawn forward from the
+    nose apex — so the stack's drawn height grows by exactly that."""
+    fb = _load("Strypi_VIII_R").stage2.diameter_m        # forebody = top-stage ⌀
+    h0 = draw_booster(_ax(), _strypi(LD=0.0))["total_height_m"]
+    h1 = draw_booster(_ax(), _strypi(LD=1.5))["total_height_m"]
+    assert h1 == pytest.approx(h0 + 1.5 * fb)
+
+
+def test_no_aerospike_draws_nothing_extra():
+    """LD = 0 (unticked) must be byte-identical to a plain nose — no stalk."""
+    fb = _load("Strypi_VIII_R").stage2.diameter_m
+    h0 = draw_booster(_ax(), _strypi(LD=0.0))["total_height_m"]
+    # a vehicle with no aerospike has no vertical stalk line rising past the nose
+    ax = _ax(); draw_booster(ax, _strypi(LD=0.0))
+    tops = [max(ln.get_ydata()) for ln in ax.lines if len(ln.get_ydata()) == 2]
+    assert all(t <= h0 + 1e-9 for t in tops)
+
+
+def test_aerodisk_is_one_extra_patch_only_when_dD_positive():
+    """A pointed spike (dD = 0) adds no patch; a disk (dD > 0) adds exactly one
+    (the aerodisk), sized aerospike_dD × forebody."""
+    from matplotlib.patches import Rectangle
+    n_point = sum(isinstance(p, Rectangle)
+                  for p in _draw_patches(_strypi(LD=1.5, dD=0.0)))
+    n_disk = sum(isinstance(p, Rectangle)
+                 for p in _draw_patches(_strypi(LD=1.5, dD=0.3)))
+    assert n_disk == n_point + 1
+
+
+def _draw_patches(b):
+    ax = _ax()
+    draw_booster(ax, b)
+    return ax.patches
+
+
 def test_equal_aspect_is_enforced():
     """Proportion honesty is the whole point: the axes must be metre-true in
     both directions, not stretched to fit the panel — including after the

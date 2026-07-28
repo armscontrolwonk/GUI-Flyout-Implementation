@@ -210,6 +210,7 @@ def draw_booster(ax, p, title=None):
                 va="center", ha="right", fontsize=8, color=SHROUD_E)
         if flag:
             flags.append("fairing" + flag)
+        nose_base_d = sd
         y += sl
     else:
         nd = top_surface_d or 1.0
@@ -226,7 +227,30 @@ def draw_booster(ax, p, title=None):
                 va="center", ha="right", fontsize=8, color=LABEL_MUT)
         if flag:
             flags.append("nose" + flag)
+        nose_base_d = nd
         y += nl
+
+    # Aerospike — a forward drag-reduction probe from the nose apex.  Length and
+    # aerodisk diameter come straight from the stored ratios (× the forebody
+    # diameter): aerospike_LD = spike length / D, aerospike_dD = disk ⌀ / D
+    # (0 = pointed).  A top-level booster property, so read from the root node.
+    a_LD = float(getattr(p, "aerospike_LD", 0.0) or 0.0)
+    if a_LD > 0:
+        a_dD = float(getattr(p, "aerospike_dD", 0.0) or 0.0)
+        L_spike = a_LD * nose_base_d
+        tip_y = y + L_spike
+        ax.plot([x0, x0], [y, tip_y], color=BODY_E, lw=2.0, zorder=4)   # stalk
+        if a_dD > 0:                                        # aerodisk at the tip
+            disk_d = a_dD * nose_base_d
+            ax.add_patch(Rectangle((x0 - disk_d / 2, tip_y - 0.02 * nose_base_d),
+                                   disk_d, 0.04 * nose_base_d,
+                                   fc=BODY, ec=BODY_E, lw=1.0, zorder=4))
+            _lbl = f"aerospike {L_spike:.2g} m · disk ⌀{disk_d:.2g} m"
+        else:                                               # pointed spike
+            _lbl = f"aerospike {L_spike:.2g} m (pointed)"
+        ax.text(x0 + nose_base_d / 2 + 0.15, y + L_spike / 2, _lbl,
+                va="center", ha="left", fontsize=7.5, color=LABEL_MUT)
+        y = tip_y
 
     if finned:
         s, yb = finned
