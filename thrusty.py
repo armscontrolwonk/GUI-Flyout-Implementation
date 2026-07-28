@@ -8510,14 +8510,32 @@ class BoosterFlyoutApp(tk.Tk):
                   f"{_ero.diameter_m:.2f} m" if _ero.diameter_m > 0 else "—"); r += 1
             if _ero.length_m > 0:
                 _row2(af, r, "Object length:", f"{_ero.length_m:.2f} m"); r += 1
-            if _ero.glider_enabled:
-                _guid_lbl = (
-                    "Equilibrium glide (Tracy)"
-                        if _ero.glider_guidance == "equilibrium_glide"
-                    else "Non-oscillatory glide (Acton)"
-                        if _ero.glider_guidance == "equilibrium_glide_acton"
-                    else "Skip-glide")
-                _row2(af, r, "Glider L/D:", f"{_ero.glider_LD:.2f}",
+            # Guidance (the glide law) and whether the object glides at all are
+            # REENTRY-PLAN choices, not object hardware — the run flies the
+            # sidebar strip (_reentry_plan_kwargs), so read the same live store
+            # here rather than the object's baked-in default.  The sidebar
+            # guidance variable already holds the exact display label; fall back
+            # to the object only when there is no sidebar (headless render).
+            _GUID_LABELS = {
+                "equilibrium_glide":          "Equilibrium glide (Tracy)",
+                "equilibrium_glide_acton":    "Non-oscillatory glide (Acton)",
+                "damped_glide":               "Damped phugoid glide",
+                "skip_to_equilibrium":        "Damped phugoid glide",
+                "dynamic_equilibrium_glide":  "Dynamic equilibrium glide",
+                "skip_glide":                 "Phugoid / skip-glide",
+                "azimuth_command":            "Phugoid / skip-glide",
+            }
+            if hasattr(self, '_main_guidance_var'):
+                _guid_lbl = self._main_guidance_var.get()
+                _glide_on = "ballistic" not in _guid_lbl.lower()
+            else:
+                _guid_lbl = _GUID_LABELS.get(_ero.glider_guidance,
+                                             _ero.glider_guidance)
+                _glide_on = _ero.glider_enabled
+            if _glide_on:
+                # glider_LD is the airframe CAPABILITY; a plan's commanded L/D
+                # may fly it lower (never higher), so label it as the ceiling.
+                _row2(af, r, "Glider L/D:", f"{_ero.glider_LD:.2f}  (capability)",
                       "Guidance:", _guid_lbl); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
