@@ -125,10 +125,17 @@ def _reentry_shape(ax, x0, y0, diam, length, nose_r, color, edge):
     ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
 
 
-def _draw_reentry_object(ax, ro, view_right, yl):
+_WING_DEFAULT_AR = 2.0        # mirrors trajectory.WING_DEFAULT_AR (stubby fail-safe)
+
+
+def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     """Draw the reentry object to scale in the lower-RIGHT corner, base on the
-    y = 0 ground line, from its own stored geometry.  A length of 0 falls back
-    to a nominal cone and is flagged, like the nose."""
+    y = 0 ground line, from its own stored geometry, with its text to the right.
+
+    Wings are drawn only when a wing area is stored; their span/chord are
+    DERIVED from that area and the aspect ratio (WING_DEFAULT_AR when blank,
+    flagged) — the same convention the wing-decoupled polar uses.  A length of
+    0 falls back to a nominal cone and is flagged, like the nose."""
     D = float(getattr(ro, "diameter_m", 0.0) or 0.0)
     if D <= 0:
         return
@@ -139,8 +146,40 @@ def _draw_reentry_object(ax, ro, view_right, yl):
         flag = " (length unset)"
     rn = float(getattr(ro, "nose_radius_m", 0.0) or 0.0)
     R = D / 2.0
-    x0 = view_right - 0.3 - R                       # RV right edge ~0.3 from edge
+
+    # Wing geometry (if any) — needed before placing the body so its span is
+    # reserved.  span b = √(AR·S); mean chord c = S/b; exposed semi-span from
+    # the body edge.  AR blank → the stubby default, flagged.
+    S = float(getattr(ro, "wing_area_m2", 0.0) or 0.0)
+    wing_ss = wing_c = 0.0
+    wing_flag = ""
+    if S > 0:
+        AR = float(getattr(ro, "wing_aspect_ratio", 0.0) or 0.0)
+        if AR <= 0:
+            AR = _WING_DEFAULT_AR
+            wing_flag = " (AR def.)"
+        b = math.sqrt(AR * S)
+        wing_c = S / b
+        wing_ss = max((b - D) / 2.0, 0.25 * R)
+
+    # Reserve room for the right-hand label from its pixel size (text is fixed
+    # points, so its width in metres scales with the view).
+    pos = ax.get_position(original=True)
+    _fw_in, fh_in = ax.figure.get_size_inches()
+    H = max(yl[1] - yl[0], 1e-6)
+    m_per_in = H / max(pos.height * fh_in, 1e-6)
+    label_w = 1.5 * m_per_in           # room for the longest label line
+    x0 = view_right - 0.25 - label_w - (R + wing_ss)
+    # Never drift left into (or past) the vehicle on small views: the RO stays
+    # a clear margin right of the stack even if the label then runs tight.
+    x0 = max(x0, veh_right + 0.4 + wing_ss + R)
+
     _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
+    if S > 0:                                       # small wings on the body
+        for sgn in (+1, -1):
+            pts = fin_polygon(sgn, R, 0.0, wing_ss, wing_c, 0.4 * wing_c, 20.0)
+            ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
+                                 lw=1.0, zorder=2))
 
     name = getattr(ro, "name", "") or "RV"
     beta = float(getattr(ro, "beta_kg_m2", 0.0) or 0.0)
@@ -153,8 +192,11 @@ def _draw_reentry_object(ax, ro, view_right, yl):
         tail.append(f"L/D {ld:g}")
     if tail:
         lines.append(" · ".join(tail))
-    ax.text(x0 - R - 0.2, L / 2.0, "\n".join(lines),
-            va="center", ha="right", fontsize=7.5, color=LABEL_MUT)
+    if S > 0:
+        lines.append(f"wings S={S:g} m²{wing_flag}")
+    # text to the RIGHT of the body/wings
+    ax.text(x0 + R + wing_ss + 0.2, L / 2.0, "\n".join(lines),
+            va="center", ha="left", fontsize=7.5, color=LABEL_MUT)
 
 
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
@@ -367,7 +409,7 @@ def draw_booster(ax, p, title=None):
     # is composed onto the stack); drawn from its own geometry.
     _ro = getattr(p, "ro", None)
     if _ro is not None and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0:
-        _draw_reentry_object(ax, _ro, _view_right, yl)
+        _draw_reentry_object(ax, _ro, _view_right, yl, veh_right=xl[1])
     if title:
         ax.set_title(title, fontsize=11, weight="bold")
     ax.axis("off")

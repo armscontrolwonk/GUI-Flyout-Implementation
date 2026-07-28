@@ -194,6 +194,28 @@ def test_reentry_object_drawn_to_scale_bottom_right():
     assert found, "reentry-object cone not found at lower-right"
 
 
+def test_reentry_object_wings_drawn_only_when_area_set():
+    """Wings appear only when a wing area is stored (two small surfaces); a
+    reentry object with no wing area draws none."""
+    import dataclasses
+    p0, _ = _with_ro()                              # C-HGB: no wing area
+    ax0 = _ax(); draw_booster(ax0, p0)
+    n0 = len(ax0.patches)
+    p1, ro1 = _with_ro()
+    p1.ro = dataclasses.replace(ro1, wing_area_m2=0.2, wing_aspect_ratio=0.0)
+    ax1 = _ax(); draw_booster(ax1, p1)
+    assert len(ax1.patches) == n0 + 2              # two wing patches
+
+
+def test_reentry_object_label_sits_to_the_right():
+    """The reentry-object caption is placed to the right of its body (extends
+    rightward), not over it."""
+    p, _ = _with_ro()
+    ax = _ax(); draw_booster(ax, p)
+    ro_txt = [t for t in ax.texts if t.get_text().startswith("reentry object")]
+    assert ro_txt and ro_txt[0].get_ha() == "left"
+
+
 def test_no_reentry_object_when_none_composed():
     """With no reentry object (ro is None) the drawing simply omits it and
     never crashes."""
