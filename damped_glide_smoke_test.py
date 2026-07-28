@@ -16,6 +16,7 @@ Run:  python damped_glide_smoke_test.py        (needs numpy + scipy)
 """
 
 import copy
+import dataclasses
 import json
 
 import numpy as np
@@ -31,6 +32,13 @@ from booster_models import apply_reentry_plan as _arp, load_reentry_plan as _lrp
 _rp = _lrp("C-HGB")
 if _rp is not None:
     _CHGB = _arp(_CHGB, _rp)
+# The AUR+HGB flew a distinct "HGB" glide body (⌀0.8, L 2.0, L/D 1.8) that used
+# to be embedded in the booster JSON.  Boosters no longer embed reentry objects,
+# so reconstruct it here as a test fixture (same β and mass as C-HGB; only the
+# glide-relevant geometry / L/D differ) for the AUR capture cases below.
+_HGB = dataclasses.replace(_CHGB, name="HGB", diameter_m=0.8, length_m=2.0,
+                           nose_radius_m=0.0, glider_LD=1.8,
+                           glider_beta_entry_kg_m2=7.0)
 _CUTOFF = 170.0
 
 
@@ -57,16 +65,12 @@ def _fly_aur_shallow(mode, zeta=None, aero="polar"):
         p.stage2.stage_turn_stop_s = 90.0
         p.stage2.stage_burnout_angle_deg = 0.0
     p.launch_elevation_deg = 80.0
-    ro = copy.deepcopy(effective_ro(p))
+    # Compose the reentry object explicitly (boosters no longer embed one).
+    ro = copy.deepcopy(_HGB)
     ro.glider_guidance, ro.glider_aero_model = mode, aero
     if zeta is not None:
         ro.glider_damping_zeta = zeta
-    node = p
-    while node is not None:
-        if node.ro is not None:
-            node.ro = ro
-            break
-        node = node.stage2
+    p.ro = ro
     r = integrate_trajectory(p, 28.458, -80.5286, 103.0, guidance="pitch_program",
                              burnout_angle_deg=25.0, cutoff_time_s=117.0,
                              gt_turn_start_s=5.0, launch_elevation_deg=80.0,
