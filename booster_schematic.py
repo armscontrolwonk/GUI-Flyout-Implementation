@@ -206,7 +206,11 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
     if S > 0:                                       # small wings on the body
         for sgn in (+1, -1):
+            # fin_polygon returns x centred on 0 (built for the booster stack,
+            # always at x=0) — shift by x0, the RO's own position, or the
+            # wings land at the vehicle's base instead of on the RO.
             pts = fin_polygon(sgn, R, 0.0, wing_ss, wing_c, 0.4 * wing_c, 20.0)
+            pts = [(x0 + px, py) for (px, py) in pts]
             ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
                                  lw=1.0, zorder=2))
 

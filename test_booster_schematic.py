@@ -207,6 +207,47 @@ def test_reentry_object_wings_drawn_only_when_area_set():
     assert len(ax1.patches) == n0 + 2              # two wing patches
 
 
+def test_reentry_object_wings_sit_on_the_ro_not_the_vehicle_centreline():
+    """Regression: fin_polygon returns x centred on 0 (it was built for the
+    booster stack, always at x=0), so drawing the RO's wings with its raw
+    output — without shifting by the RO's own x0, off in the corner — put
+    the wing patches at x≈0, y≈0: the MAIN VEHICLE's base, not the RO.  The
+    wings must sit within one RO-body-width of the RO cone, nowhere near the
+    vehicle centreline the RO is offset well away from."""
+    import dataclasses
+    from matplotlib.patches import Polygon
+    p, ro = _with_ro(bname="AUR")            # finless, no strap-ons at the base
+    p.ro = dataclasses.replace(ro, wing_area_m2=0.2, wing_aspect_ratio=0.0)
+    ax = _ax()
+    draw_booster(ax, p)
+
+    ro_cone_x = None
+    for patch in ax.patches:
+        if isinstance(patch, Polygon):
+            v = patch.get_path().vertices
+            w = v[:, 0].max() - v[:, 0].min()
+            if abs(w - ro.diameter_m) < 1e-6 and v[:, 1].min() <= 1e-9 \
+                    and v[:, 0].min() > 0:
+                ro_cone_x = 0.5 * (v[:, 0].min() + v[:, 0].max())
+    assert ro_cone_x is not None and ro_cone_x > 1.0, \
+        "test fixture assumption failed: RO should be well off-centre"
+
+    # the two wing patches: small quads at y≈0 (RO base), not the RO cone itself
+    wing_patches = [p_ for p_ in ax.patches
+                   if isinstance(p_, Polygon)
+                   and p_.get_path().vertices[:, 1].min() <= 1e-9
+                   and abs(p_.get_path().vertices[:, 0].max()
+                           - p_.get_path().vertices[:, 0].min()
+                           - ro.diameter_m) > 1e-6]
+    assert len(wing_patches) == 2
+    for wp in wing_patches:
+        wx = wp.get_path().vertices[:, 0]
+        # must sit near the RO, not straddle x=0 (the vehicle centreline)
+        assert wx.min() > 0.0, \
+            f"wing patch at x={wx} crosses the vehicle centreline"
+        assert abs(0.5 * (wx.min() + wx.max()) - ro_cone_x) < 2.0 * ro.diameter_m
+
+
 def test_reentry_object_label_sits_to_the_right():
     """The reentry-object caption is placed to the right of its body (extends
     rightward), not over it."""
