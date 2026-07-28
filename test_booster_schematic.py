@@ -130,10 +130,11 @@ def test_equal_aspect_is_enforced():
     assert ax.get_aspect() == 1.0
 
 
-# ── the 2 m Thrusty scale reference ─────────────────────────────────────────
-def test_scale_figure_is_two_metres_tall():
-    """The mascot silhouette is placed exactly 2 m tall (feet on y=0), so it
-    reads as a literal human-scale ruler beside the stack."""
+# ── the Thrusty scale reference (~1.8 m figure + 5 m bar) ────────────────────
+def test_scale_figure_stands_at_the_human_height():
+    """The mascot silhouette is placed at _SCALE_FIGURE_M (~1.8 m, human
+    height), feet on y=0, so it reads as a person beside the stack — while the
+    quantitative reference is carried by the separate 5 m bar."""
     import booster_schematic as bs
     if bs._scale_image() is None:
         pytest.skip("scale asset not present in this checkout")
@@ -142,16 +143,30 @@ def test_scale_figure_is_two_metres_tall():
     imgs = ax.get_images()
     assert len(imgs) == 1
     x0, x1, y0, y1 = imgs[0].get_extent()
-    assert (y0, y1) == (0.0, bs._SCALE_FIGURE_M)          # feet at 0, head at 2 m
-    assert y1 == 2.0
+    assert (y0, y1) == (0.0, bs._SCALE_FIGURE_M)          # feet at 0, head at 1.8 m
+    assert bs._SCALE_FIGURE_M == 1.8
     # width preserves the art's aspect ratio (never stretched)
     h_px, w_px = imgs[0].get_array().shape[:2]
-    assert (x1 - x0) == pytest.approx(2.0 * w_px / h_px)
+    assert (x1 - x0) == pytest.approx(bs._SCALE_FIGURE_M * w_px / h_px)
+
+
+def test_reference_bar_is_the_five_metre_quantitative_scale():
+    """The dimension bar spans 0→5 m and is labelled '5 m' — the numeric
+    reference, distinct from the figure's felt human height."""
+    import booster_schematic as bs
+    ax = _ax()
+    draw_booster(ax, _load("Scud-B_-R-17-"))
+    assert bs._SCALE_BAR_M == 5.0
+    assert any(t.get_text() == "5 m" for t in ax.texts)
+    # a vertical line 0→5 m exists (the bar)
+    spans = [tuple(round(v, 3) for v in ln.get_ydata())
+             for ln in ax.lines if len(ln.get_ydata()) == 2]
+    assert (0.0, 5.0) in spans
 
 
 def test_scale_reference_falls_back_without_the_asset(monkeypatch):
     """A stripped checkout (no assets/) must still render — the reference
-    degrades to a plain 2 m bar, never a crash."""
+    degrades to the 5 m bar alone, never a crash."""
     import booster_schematic as bs
     monkeypatch.setattr(bs, "_scale_img_cache", None)     # simulate missing asset
     ax = _ax()
@@ -159,4 +174,4 @@ def test_scale_reference_falls_back_without_the_asset(monkeypatch):
     assert info["total_height_m"] > 0
     assert ax.get_images() == []                          # no silhouette drawn
     assert ax.get_aspect() == 1.0
-    assert any("2 m" in t.get_text() for t in ax.texts)   # bar still labelled
+    assert any(t.get_text() == "5 m" for t in ax.texts)   # bar still labelled
