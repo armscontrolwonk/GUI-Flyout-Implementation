@@ -820,6 +820,47 @@ bounds rather than silently accepting it.
 > is the module's own git history and [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md),
 > on which this section is based.
 
+### 6.7 Interstages and conical stages (Phase 1: geometry + mass)
+
+Two optional per-stage structural features, both defaulting off so every
+existing vehicle is byte-identical until it opts in.
+
+**Interstage adapter.** Any stage may carry an interstage on top of it —
+the structural section connecting it to the next stage. It is toggled by
+`has_interstage`; the only free parameters are `interstage_length_m`,
+`interstage_mass_kg`, and `interstage_jettison_s`. The frustum's
+**diameters are derived, never entered**: the bottom equals this stage's
+top diameter (its `top_diameter_m` when conical, else `diameter_m`) and
+the top equals the next stage's base diameter. This is deliberate — the
+schematic must never invent a transition the data did not specify, so the
+adapter's shape is forced to match the real neighbouring geometry.
+
+*Mass schedule.* The interstage rides with the stack from launch until
+its jettison event — `interstage_jettison_s` if set, otherwise the
+carrying stage's separation (its burnout, the instant that stage leaves).
+It is an **additive** term (`_interstage_mass_addend`, `booster_models.py`),
+so the stored stage masses are unchanged and a vehicle with no interstage
+gets `+0`. The interstage is a booster-side adapter, never part of
+`payload_kg` / the throw-weight tally.
+
+*Drag.* **Phase 1 is drag-neutral** — declaring an interstage carries its
+mass but does not change the boost reference area or `C_D`. The
+step/flare drag increment is deferred to Phase 2.
+
+**Conical (tapered) stage.** `conical = True` with `top_diameter_m > 0`
+makes the stage body a frustum from `diameter_m` (base) to `top_diameter_m`
+(top), a cylinder otherwise. As with the interstage, Phase 1 draws and
+carries the taper but leaves the aerodynamics unchanged: the boost
+reference area still uses the base diameter. Distinct from an interstage —
+a conical stage is load-bearing structure that stays; an interstage is a
+jettisonable adapter.
+
+Both are drawn to scale in the **Schematic** tab (a conical stage as a
+trapezoid; an interstage as its derived-diameter frustum, labelled with
+length, mass, and jettison), so a mis-sized adapter or taper is visible at
+a glance. Phase 2 will add the aerodynamic coupling (interstage step/flare
+drag, conical wave-drag refinement).
+
 ---
 
 ## 7. Propulsion

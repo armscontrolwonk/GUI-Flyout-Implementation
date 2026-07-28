@@ -251,7 +251,12 @@ tabbed notebook**.
   front-end hardware. Each stage has: fueled mass, dry mass, diameter, length,
   thrust (with Suggest estimator), Isp, nozzle exit area (with Estimate tool),
   burn time (computed), coast time, and a solid-motor flag with grain type
-  selection. The *Front End* panel holds only what the booster owns — the
+  selection. Each stage also has a **Conical stage** toggle (tapered body →
+  enter a top diameter) and an **Interstage on top** toggle (an adapter whose
+  length, mass, and jettison time are entered; its diameters are derived from
+  the neighbouring stages, never invented). Both carry mass in Phase 1;
+  aerodynamic coupling is Phase 2 (METHODS §6.7). The *Front End* panel holds
+  only what the booster owns — the
   bus/PBV mass (carried as dead mass for now) and the fairing. It does **not**
   reference the reentry object: which object and how many is the sidebar's
   **Loadout** choice, composed onto the stage masses at run time (bus + N ×

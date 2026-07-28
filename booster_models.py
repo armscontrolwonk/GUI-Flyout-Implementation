@@ -136,6 +136,27 @@ class BoosterParams:
     stage_yaw_stop_s:      Optional[float] = None
     stage_yaw_final_az_deg: Optional[float] = None
 
+    # Conical (tapered) stage body.  When conical is True the stage is a
+    # frustum from diameter_m (bottom) to top_diameter_m (top); a cylinder
+    # otherwise.  Phase-1 geometry only: drag still references the base
+    # (bottom) diameter, so a taper is drawn and carried but does not yet
+    # change the aero (see METHODS -- interstage/conical plan).
+    conical:                bool  = False
+    top_diameter_m:         float = 0.0    # stage top diameter (m); frustum top
+
+    # Interstage adapter sitting ON TOP of this stage, connecting it to the
+    # next.  has_interstage toggles it on; the only free parameters are length,
+    # mass, and jettison time -- the frustum's diameters are DERIVED (bottom =
+    # this stage's top diameter, top = the next stage's base diameter) so the
+    # drawing can never invent a transition the data did not specify.
+    # interstage_jettison_s: absolute time from T=0; None = jettison with this
+    # stage's separation (its burnout).  Phase-1: mass is carried while
+    # attached and dropped at jettison; drag is unchanged.
+    has_interstage:         bool  = False
+    interstage_length_m:    float = 0.0
+    interstage_mass_kg:     float = 0.0
+    interstage_jettison_s:  Optional[float] = None
+
     # Shroud jettisoned during ascent.
     # shroud_mass_kg is included in mass_initial at launch and subtracted once
     # the booster crosses shroud_jettison_alt_km.  0 = no shroud.
@@ -1814,6 +1835,12 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         'grain_type':             p.grain_type,
         'thrust_peak_N':          p.thrust_peak_N,
         'thrust_profile':         list(p.thrust_profile),
+        'conical':                p.conical,
+        'top_diameter_m':         p.top_diameter_m,
+        'has_interstage':         p.has_interstage,
+        'interstage_length_m':    p.interstage_length_m,
+        'interstage_mass_kg':     p.interstage_mass_kg,
+        'interstage_jettison_s':  p.interstage_jettison_s,
         'nose_shape':             p.nose_shape,
         'nose_length_m':          p.nose_length_m,
         'shroud_nose_shape':      p.shroud_nose_shape,
@@ -1920,6 +1947,13 @@ def booster_from_dict(d: dict) -> BoosterParams:
         grain_type=d.get('grain_type', ''),
         thrust_peak_N=float(d.get('thrust_peak_N', 0.0)),
         thrust_profile=list(d.get('thrust_profile', [])),
+        conical=bool(d.get('conical', False)),
+        top_diameter_m=float(d.get('top_diameter_m', 0.0)),
+        has_interstage=bool(d.get('has_interstage', False)),
+        interstage_length_m=float(d.get('interstage_length_m', 0.0)),
+        interstage_mass_kg=float(d.get('interstage_mass_kg', 0.0)),
+        interstage_jettison_s=(float(d['interstage_jettison_s'])
+                               if d.get('interstage_jettison_s') is not None else None),
         nose_shape=d.get('nose_shape', ''),
         nose_length_m=float(d.get('nose_length_m',
                             float(d.get('nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
@@ -2352,9 +2386,34 @@ def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> fl
     return params.mass_final
 
 
+def _interstage_mass_addend(params: BoosterParams, t: float) -> float:
+    """Mass (kg) from interstage adapters still attached at time t.
+
+    Each stage may carry an interstage on top of it (has_interstage).  The
+    adapter rides with the stack from launch until its jettison event:
+    interstage_jettison_s if set, else this stage's separation (its burnout,
+    the same instant the stage leaves).  The stored stage masses do NOT include
+    the interstage (the fields are additive, defaulting to zero), so this term
+    is the whole of the interstage's contribution and existing vehicles get +0.
+    """
+    total = 0.0
+    t_cursor = max(0.0, params.booster_core_delay_s)   # start of stage-1 burn
+    s = params
+    while s is not None:
+        sep_t = t_cursor + s.burn_time_s               # this stage separates here
+        if getattr(s, 'has_interstage', False) and getattr(s, 'interstage_mass_kg', 0.0) > 0:
+            jt = getattr(s, 'interstage_jettison_s', None)
+            jett = float(jt) if jt is not None else sep_t
+            if t <= jett:
+                total += float(s.interstage_mass_kg)
+        t_cursor = sep_t + s.coast_time_s              # next stage ignites after coast
+        s = s.stage2
+    return total
+
+
 def booster_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> float:
-    """Current mass (kg) at time t seconds after launch.  Handles N stages and
-    strap-on boosters.
+    """Current mass (kg) at time t seconds after launch.  Handles N stages,
+    strap-on boosters, and interstage adapters.
 
     alt_m is the current altitude in metres; used for shroud-jettison accounting.
     When booster_core_delay_s > 0 the stage chain hasn't started burning until
@@ -2362,7 +2421,8 @@ def booster_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> float:
     """
     t_chain = t - params.booster_core_delay_s
     return (_stage_chain_mass(params, max(0.0, t_chain), alt_m)
-            + _booster_mass_addend(params, max(0.0, t)))
+            + _booster_mass_addend(params, max(0.0, t))
+            + _interstage_mass_addend(params, max(0.0, t)))
 
 
 def _boost_front_geometry(top_params: 'BoosterParams', params: BoosterParams,

@@ -835,10 +835,57 @@ class _StageFrame(ttk.LabelFrame):
         self._fill_warn_lbl.grid(row=5, column=0, columnspan=2,
                                  sticky=tk.W, padx=(6, 2), pady=(2, 4))
 
+        # ── Conical stage (row 11) ─────────────────────────────────────────
+        # A tapered stage body: frustum from Diameter (base) to Top ⌀.
+        _con_f = ttk.Frame(self)
+        _con_f.grid(row=11, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(4, 0))
+        self._conical_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_con_f, text="Conical stage", variable=self._conical_var,
+                        command=self._on_conical).pack(side=tk.LEFT)
+        ttk.Label(_con_f, text="Top ⌀ (m):").pack(side=tk.LEFT, padx=(10, 2))
+        self._top_dia_var = tk.StringVar(value="0")
+        self._top_dia_entry = ttk.Entry(_con_f, textvariable=self._top_dia_var, width=8)
+        self._top_dia_entry.pack(side=tk.LEFT)
+
+        # ── Interstage on top (row 12) ─────────────────────────────────────
+        # Adapter sitting on this stage.  Diameters are DERIVED (this stage's
+        # top → the next stage's base); only length, mass, jettison are free.
+        _is_f = ttk.Frame(self)
+        _is_f.grid(row=12, column=0, columnspan=2, sticky=tk.W, padx=6, pady=(2, 4))
+        self._interstage_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_is_f, text="Interstage on top",
+                        variable=self._interstage_var,
+                        command=self._on_interstage).pack(side=tk.LEFT)
+        ttk.Label(_is_f, text="L (m):").pack(side=tk.LEFT, padx=(10, 2))
+        self._is_len_var = tk.StringVar(value="0")
+        self._is_len_entry = ttk.Entry(_is_f, textvariable=self._is_len_var, width=6)
+        self._is_len_entry.pack(side=tk.LEFT)
+        ttk.Label(_is_f, text="mass (kg):").pack(side=tk.LEFT, padx=(8, 2))
+        self._is_mass_var = tk.StringVar(value="0")
+        self._is_mass_entry = ttk.Entry(_is_f, textvariable=self._is_mass_var, width=8)
+        self._is_mass_entry.pack(side=tk.LEFT)
+        ttk.Label(_is_f, text="jettison (s):").pack(side=tk.LEFT, padx=(8, 2))
+        self._is_jett_var = tk.StringVar(value="")
+        self._is_jett_entry = ttk.Entry(_is_f, textvariable=self._is_jett_var, width=7)
+        self._is_jett_entry.pack(side=tk.LEFT)
+        ttk.Label(_is_f, text="(blank = stage sep.)",
+                  foreground="gray50").pack(side=tk.LEFT, padx=(4, 0))
+        self._on_conical()
+        self._on_interstage()
+
         # Recompute burn whenever any of the four driving fields change
         for _v in (self._fueled, self._dry, self._thrust_kn, self._isp):
             _v.trace_add("write", self._recompute_burn)
         self._recompute_burn()
+
+    def _on_conical(self):
+        st = "normal" if self._conical_var.get() else "disabled"
+        self._top_dia_entry.config(state=st)
+
+    def _on_interstage(self):
+        st = "normal" if self._interstage_var.get() else "disabled"
+        for e in (self._is_len_entry, self._is_mass_entry, self._is_jett_entry):
+            e.config(state=st)
 
     def _recompute_burn(self, *_):
         """Compute burn = Isp × g₀ × prop / avg_thrust.
@@ -1254,6 +1301,30 @@ class _StageFrame(ttk.LabelFrame):
             except ValueError:
                 pass
             result["thrust_profile"] = getattr(self, '_profile_data', [])
+
+        # Conical stage + interstage (per-stage structure)
+        result["conical"] = bool(self._conical_var.get())
+        try:
+            result["top_diameter_m"] = (max(0.0, float(self._top_dia_var.get()))
+                                        if result["conical"] else 0.0)
+        except ValueError:
+            raise ValueError("Conical top diameter must be a number.")
+        result["has_interstage"] = bool(self._interstage_var.get())
+        if result["has_interstage"]:
+            try:
+                result["interstage_length_m"] = max(0.0, float(self._is_len_var.get()))
+                result["interstage_mass_kg"]  = max(0.0, float(self._is_mass_var.get()))
+            except ValueError:
+                raise ValueError("Interstage length and mass must be numbers.")
+            _jt = self._is_jett_var.get().strip()
+            try:
+                result["interstage_jettison_s"] = float(_jt) if _jt else None
+            except ValueError:
+                raise ValueError("Interstage jettison time must be a number (or blank).")
+        else:
+            result["interstage_length_m"] = 0.0
+            result["interstage_mass_kg"]  = 0.0
+            result["interstage_jettison_s"] = None
         return result
 
     def populate(self, d):
@@ -1295,6 +1366,17 @@ class _StageFrame(ttk.LabelFrame):
             self._profile_path_var.set(f"<{len(self._profile_data)} pts>")
         else:
             self._profile_path_var.set("")
+
+        # Conical stage + interstage
+        self._conical_var.set(bool(d.get("conical", False)))
+        self._top_dia_var.set(str(d.get("top_diameter_m", 0.0) or 0.0))
+        self._interstage_var.set(bool(d.get("has_interstage", False)))
+        self._is_len_var.set(str(d.get("interstage_length_m", 0.0) or 0.0))
+        self._is_mass_var.set(str(d.get("interstage_mass_kg", 0.0) or 0.0))
+        _jt = d.get("interstage_jettison_s", None)
+        self._is_jett_var.set("" if _jt is None else f"{_jt:g}")
+        self._on_conical()
+        self._on_interstage()
 
         # Trigger UI state update — burn time will be recomputed from
         # Isp / prop / (peak × fill_factor or average) thrust by _recompute_burn.
@@ -1893,6 +1975,12 @@ class BoosterDialog(tk.Toplevel):
                 "grain_type":    getattr(node, 'grain_type', ''),
                 "thrust_peak_N": getattr(node, 'thrust_peak_N', 0.0),
                 "thrust_profile": list(getattr(node, 'thrust_profile', [])),
+                "conical":        getattr(node, 'conical', False),
+                "top_diameter_m": getattr(node, 'top_diameter_m', 0.0),
+                "has_interstage": getattr(node, 'has_interstage', False),
+                "interstage_length_m": getattr(node, 'interstage_length_m', 0.0),
+                "interstage_mass_kg":  getattr(node, 'interstage_mass_kg', 0.0),
+                "interstage_jettison_s": getattr(node, 'interstage_jettison_s', None),
             })
             node = nxt
             stage_idx += 1
@@ -2136,6 +2224,12 @@ class BoosterDialog(tk.Toplevel):
                 grain_type=sd.get("grain_type", ""),
                 thrust_peak_N=float(sd.get("thrust_peak_N", 0.0)),
                 thrust_profile=list(sd.get("thrust_profile", [])),
+                conical=bool(sd.get("conical", False)),
+                top_diameter_m=float(sd.get("top_diameter_m", 0.0)),
+                has_interstage=bool(sd.get("has_interstage", False)),
+                interstage_length_m=float(sd.get("interstage_length_m", 0.0)),
+                interstage_mass_kg=float(sd.get("interstage_mass_kg", 0.0)),
+                interstage_jettison_s=sd.get("interstage_jettison_s", None),
             )
 
         # Saved boosters no longer embed an RV — RV identity lives in the
