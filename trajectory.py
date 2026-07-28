@@ -79,6 +79,7 @@ from booster_models import (
     BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_ro, booster_separation_time,
+    wing_geometry,
     SHROUD_Q_FAIRING,
 )
 
@@ -662,12 +663,14 @@ def _aero_polar(ro, ld_override: float = None) -> '_Polar':
 
     # ---- wing decoupling (default off: byte-identical to the old polar) -----
     # Wings broaden the pull-side bucket only (e_pull); the ceiling stays the
-    # universal max-AoA limit.
-    S_w = float(getattr(ro, 'wing_area_m2', 0.0) or 0.0)
+    # universal max-AoA limit.  S and AR come from wing_geometry(): ALWAYS
+    # derived from the planform when one is stored (the planform is the
+    # image-measurable primary data), else the direct S/AR entries.
+    S_w, _AR_eff, _w_src = wing_geometry(ro)
     e_pull = 1.0
     if S_w > 0.0 and A_ref > 0.0:
         lam = S_w / A_ref
-        AR = float(getattr(ro, 'wing_aspect_ratio', 0.0) or 0.0) or WING_DEFAULT_AR
+        AR = _AR_eff or WING_DEFAULT_AR
         e_pull = 1.0 + WING_PULL_GAIN * lam * AR / (AR + WING_PULL_AR0)
         e_pull = min(e_pull, _WING_E_PULL_CAP)
     # Ceiling: universal max-AoA limit, floored above the cruise trim so a
