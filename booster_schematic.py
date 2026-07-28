@@ -250,7 +250,11 @@ def _draw_scale_reference(ax, xl, yl):
     stack, feet on the y = 0 ground line, with a dimensioned "2 m" bar beside
     it.  Falls back to a plain 2 m bar when the silhouette asset is absent."""
     img = _scale_image()
-    line_x = xl[0] - 0.6                       # dimension bar just left of vehicle
+    # Left-justify the whole reference group (silhouette · bar · "2 m") toward
+    # the panel's left margin, with a clear gap to the vehicle so it never
+    # crowds the stack.  The bar sits GAP metres left of the vehicle edge.
+    GAP = 2.0
+    line_x = xl[0] - GAP
     # 2 m dimension bar with end ticks
     ax.plot([line_x, line_x], [0, _SCALE_FIGURE_M], color="k", lw=1.8, zorder=4)
     for yy in (0.0, _SCALE_FIGURE_M):
