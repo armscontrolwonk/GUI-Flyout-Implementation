@@ -2282,6 +2282,42 @@ def cd_biconic_hypersonic(theta1_deg: float, theta2_deg: float,
                 swet_fore=float(swet_fore), swet_aft=float(swet_aft))
 
 
+def wing_geometry(ro):
+    """Effective wing (S, AR, source) for a reentry object — single source of
+    truth for every consumer (drag polar, β estimator, editor, schematic).
+
+    The wing PLANFORM (wing_root_chord_m, wing_span_exposed_m, wing_sweep_deg)
+    is the PRIMARY data when present: chords and spans are measurable off an
+    image, an area is not, so S and AR are ALWAYS DERIVED from the planform —
+    a stored wing_area_m2/wing_aspect_ratio can never disagree with it.  Direct
+    S/AR entry is the fallback when no planform is stored.
+
+    Derivation (reference-wing convention, carry-through included):
+        c_t   = max(0, c_r − s_e·tanΛ)          tip chord (TE straight)
+        S_exp = (c_r + c_t)·s_e                  both exposed panels
+        S     = S_exp + c_r·D                    + carry-through at the root
+        b     = 2·s_e + D                        tip-to-tip span
+        AR    = b²/S
+
+    Returns (S_m2, AR, source): source is 'planform' (derived), 'direct'
+    (stored S; AR may be 0 = caller default), or None (no wings).
+    """
+    import math
+    c_r = float(getattr(ro, 'wing_root_chord_m', 0.0) or 0.0)
+    s_e = float(getattr(ro, 'wing_span_exposed_m', 0.0) or 0.0)
+    if c_r > 0.0 and s_e > 0.0:
+        sw = math.radians(float(getattr(ro, 'wing_sweep_deg', 0.0) or 0.0))
+        D = max(0.0, float(getattr(ro, 'diameter_m', 0.0) or 0.0))
+        c_t = max(0.0, c_r - s_e * math.tan(sw))
+        S = (c_r + c_t) * s_e + c_r * D
+        b = 2.0 * s_e + D
+        return S, (b * b / S if S > 0 else 0.0), 'planform'
+    S = float(getattr(ro, 'wing_area_m2', 0.0) or 0.0)
+    if S > 0.0:
+        return S, float(getattr(ro, 'wing_aspect_ratio', 0.0) or 0.0), 'direct'
+    return 0.0, 0.0, None
+
+
 def biconic_angles(diameter_m: float, length_m: float, fore_length_m: float,
                    break_diameter_m: float, nose_radius_m: float = 0.0):
     """Derive (theta1_deg, theta2_deg, break_ratio, eps) for a biconic from its

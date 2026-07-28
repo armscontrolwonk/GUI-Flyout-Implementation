@@ -19,7 +19,9 @@ import json
 import numpy as np
 import pytest
 
-from booster_models import ro_from_dict
+import math
+
+from booster_models import ro_from_dict, wing_geometry
 from trajectory import (_aero_polar, _polar_cd, _C_L_MAX_BODY,
                         WING_DEFAULT_AR)
 
@@ -131,3 +133,74 @@ def test_wings_help_the_pull_retain_energy_end_to_end():
     m_body = fly({})
     m_wing = fly({'wing_area_m2': 0.2, 'wing_aspect_ratio': 8.0})
     assert m_wing > m_body + 0.3, (m_body, m_wing)
+
+
+# ── wing_geometry(): the single source of truth for S and AR ────────────────
+# The rule the user asked for: whenever a planform (root chord + exposed span)
+# is present, DERIVE S and AR from it — never trust a hand-typed pair.  These
+# pin the reference-wing convention (trapezoid exposed panels + rectangular
+# carry-through through the body) as an identity, not a fit.
+
+def test_planform_derives_reference_area_and_ar_unswept():
+    """Unswept: c_t = c_r, so S = 2·c_r·s_e + c_r·D and b = 2·s_e + D."""
+    ro = _swerve(diameter_m=0.8, wing_root_chord_m=2.0,
+                 wing_span_exposed_m=1.0, wing_sweep_deg=0.0,
+                 wing_area_m2=0.0, wing_aspect_ratio=0.0)
+    S, AR, src = wing_geometry(ro)
+    assert src == 'planform'
+    assert S == pytest.approx(2.0 * 2.0 * 1.0 + 2.0 * 0.8)          # 5.6
+    assert AR == pytest.approx((2.0 * 1.0 + 0.8) ** 2 / S)          # b²/S
+
+
+def test_planform_sweep_shrinks_tip_chord_and_area():
+    """LE sweep shrinks the tip chord (c_t = c_r − s_e·tanΛ), so S falls and,
+    at fixed span, AR rises."""
+    ro = _swerve(diameter_m=0.8, wing_root_chord_m=2.0,
+                 wing_span_exposed_m=1.0, wing_sweep_deg=30.0,
+                 wing_area_m2=0.0, wing_aspect_ratio=0.0)
+    S, AR, src = wing_geometry(ro)
+    c_t = 2.0 - 1.0 * math.tan(math.radians(30.0))
+    S_exp = (2.0 + c_t) * 1.0 + 2.0 * 0.8
+    b = 2.0 * 1.0 + 0.8
+    assert src == 'planform'
+    assert S == pytest.approx(S_exp)
+    assert AR == pytest.approx(b * b / S_exp)
+
+
+def test_direct_pair_used_only_when_no_planform():
+    S, AR, src = wing_geometry(_swerve(wing_area_m2=3.0, wing_aspect_ratio=2.5))
+    assert src == 'direct'
+    assert S == pytest.approx(3.0) and AR == pytest.approx(2.5)
+
+
+def test_no_wing_data_is_none():
+    S, AR, src = wing_geometry(_swerve(wing_area_m2=0.0, wing_aspect_ratio=0.0))
+    assert (S, AR, src) == (0.0, 0.0, None)
+
+
+def test_planform_beats_a_stale_direct_pair():
+    """A planform present ALONGSIDE a (drifted) direct S/AR must win — the
+    whole point of deriving is that a hand-typed number can't desync."""
+    ro = _swerve(diameter_m=0.8, wing_root_chord_m=2.0, wing_span_exposed_m=1.0,
+                 wing_sweep_deg=0.0, wing_area_m2=99.0, wing_aspect_ratio=99.0)
+    S, AR, src = wing_geometry(ro)
+    assert src == 'planform'
+    assert S == pytest.approx(5.6) and AR != pytest.approx(99.0)
+
+
+def test_polar_consumes_the_derived_planform_area():
+    """End-to-end: the drag polar's pull benefit must track the DERIVED area,
+    not the ignored direct field.  A planform giving S≈0.2 must broaden the
+    pull bucket like an explicit wing_area_m2=0.2 of the same AR would."""
+    # Pick a small planform whose derived S is order 0.2 m² so we stay on the
+    # same side as the existing direct-entry tests.
+    ro_pf = _swerve(diameter_m=0.5, wing_root_chord_m=0.2,
+                    wing_span_exposed_m=0.2, wing_sweep_deg=0.0,
+                    wing_area_m2=0.0, wing_aspect_ratio=0.0)
+    S, AR, src = wing_geometry(ro_pf)
+    assert src == 'planform' and S > 0.0
+    p_pf = _aero_polar(ro_pf)
+    p_eq = _aero_polar(_swerve(diameter_m=0.5, wing_area_m2=S,
+                               wing_aspect_ratio=AR))
+    assert p_pf.e_pull == pytest.approx(p_eq.e_pull)
+    assert p_pf.e_pull > 1.0

@@ -17,6 +17,7 @@ import numpy as np
 import sys
 import os
 import json
+import types
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -132,6 +133,7 @@ from booster_models import (cd_blunted_cone_newtonian as _cd_blunted_cone_newton
                             cd_cone_hypersonic as _cd_cone_hypersonic,
                             cd_biconic_hypersonic as _cd_biconic_hypersonic,
                             biconic_angles as _biconic_angles,
+                            wing_geometry as _wing_geometry,
                             CONE_CF_TURBULENT as _CONE_CF)
 
 
@@ -2510,40 +2512,56 @@ class ROEditorDialog(tk.Toplevel):
             var = tk.StringVar(value=default)
             inner = ttk.Frame(self._glider_frm)
             inner.grid(row=row, column=1, sticky=tk.W, pady=2)
-            ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
+            ent = ttk.Entry(inner, textvariable=var, width=10)
+            ent.pack(side=tk.LEFT)
             if unit:
                 ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
-            return var
+            return var, ent
 
         _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
-        self._LD_var = _gfe(0, "Lift/drag (L/D):", _LD)
+        self._LD_var, _ = _gfe(0, "Lift/drag (L/D):", _LD)
         # Wing geometry — the physical anchor for the decoupled drag polar
         # (a winged vehicle pulls more efficiently than a bare cone; 0 = no
-        # wings = slender-body polar).  Area is the primary knob; aspect ratio
-        # refines the pull efficiency and is optional (blank = stubby default).
+        # wings = slender-body polar).  The planform (root chord + exposed span,
+        # + optional sweep) is the PRIMARY input: whenever it is set, reference
+        # area S and aspect ratio AR are DERIVED from it (single source of truth
+        # = wing_geometry()) and shown read-only, so the drawing and the polar
+        # can never disagree with a hand-typed number.  Direct S/AR entry is the
+        # fallback for when only those figures are known (no planform).
         _wa = f"{ro.wing_area_m2:g}" if (ro and ro.wing_area_m2 > 0) else "0"
         _war = f"{ro.wing_aspect_ratio:g}" if (ro and ro.wing_aspect_ratio > 0) else "0"
-        self._wing_area_var = _gfe(1, "Wing area:", _wa, unit="m²")
-        self._wing_ar_var = _gfe(2, "  aspect ratio:", _war)
-        # Optional wing PLANFORM — depiction only (the polar needs only S/AR).
-        # With these set the Schematic draws the wings faithfully (root along
-        # the flank, TE on the base, swept LE); without them it draws a small
-        # flagged "(schematic)" tab, never invented dimensions.
+        self._wing_area_var, self._wing_area_ent = _gfe(1, "Wing area:", _wa, unit="m²")
+        self._wing_ar_var, self._wing_ar_ent = _gfe(2, "  aspect ratio:", _war)
+        # Wing PLANFORM — root chord, exposed span, LE sweep.  Drives BOTH the
+        # faithful Schematic depiction (root along the flank, TE on the base,
+        # swept LE) AND the derived S/AR above.  Leave blank to fall back to a
+        # flagged "(schematic)" tab and direct S/AR entry.
         _wrc = f"{ro.wing_root_chord_m:g}" if (ro and getattr(ro, 'wing_root_chord_m', 0) > 0) else "0"
         _wss = f"{ro.wing_span_exposed_m:g}" if (ro and getattr(ro, 'wing_span_exposed_m', 0) > 0) else "0"
         _wsw = f"{ro.wing_sweep_deg:g}" if (ro and getattr(ro, 'wing_sweep_deg', 0) > 0) else "0"
-        self._wing_root_var = _gfe(3, "  root chord (opt.):", _wrc, unit="m")
-        self._wing_span_var = _gfe(4, "  exposed span (opt.):", _wss, unit="m")
-        self._wing_sweep_var = _gfe(5, "  LE sweep (opt.):", _wsw, unit="°")
+        self._wing_root_var, _ = _gfe(3, "  root chord:", _wrc, unit="m")
+        self._wing_span_var, _ = _gfe(4, "  exposed span:", _wss, unit="m")
+        self._wing_sweep_var, _ = _gfe(5, "  LE sweep:", _wsw, unit="°")
+        # Live "derived" indicator + traces: when a planform is present, S/AR are
+        # recomputed and locked; otherwise they are editable.
+        self._wing_derived_lbl = ttk.Label(
+            self._glider_frm, text="", foreground="#2a7", justify=tk.LEFT)
+        self._wing_derived_lbl.grid(row=6, column=0, columnspan=2,
+                                    sticky=tk.W, pady=(0, 0))
+        for _v in (self._wing_root_var, self._wing_span_var,
+                   self._wing_sweep_var, self._dia_var):
+            _v.trace_add("write", lambda *_a: self._sync_wing_derived())
         ttk.Label(self._glider_frm,
                   text="Wings anchor the drag polar (0 = slender body; AR blank "
-                       "= stubby default).  Root chord / span / sweep are for "
-                       "the schematic only —\nwith them the wings draw to scale; "
-                       "without, a flagged schematic tab.  Pull-up g-limit and "
+                       "= stubby default).  Enter the planform (root chord + "
+                       "exposed span) and S / AR are derived and the wings draw "
+                       "to scale;\nwithout it, type S / AR directly and the "
+                       "schematic shows a flagged tab.  Pull-up g-limit and "
                        "re-entry βₛ are in the Reentry Plan editor.",
                   foreground="#888888", justify=tk.LEFT).grid(
-                      row=6, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+                      row=7, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
+        self._sync_wing_derived()
         self._update_glider_state()
 
         # ── Thermal protection (TPS) materials — per location (§10) ──────
@@ -2690,8 +2708,12 @@ class ROEditorDialog(tk.Toplevel):
         # vehicle is draggier than the bare cone, so its estimated β is lower;
         # this is the advisory half of the wing decoupling (Level 2).
         _lbl(5, "Wing area (m²):")
+        # Prefer the DERIVED area when a planform is present (matches the polar),
+        # falling back to whatever is in the wing-area field otherwise.
         try:
-            _wa_dflt = self._wing_area_var.get()
+            _S_wa, _AR_wa, _src_wa = self._current_wing_geometry()
+            _wa_dflt = f"{_S_wa:.4g}" if (_src_wa and _S_wa > 0) \
+                else self._wing_area_var.get()
         except AttributeError:
             _wa_dflt = "0"
         wing_var = tk.StringVar(value=_wa_dflt or "0")
@@ -2837,6 +2859,58 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     # ------------------------------------------------------------------
+    def _current_wing_geometry(self):
+        """(S, AR, source) for the wing as the editor fields currently stand.
+
+        Builds a throwaway shim from the live entry values and defers to
+        booster_models.wing_geometry() — the ONE place that decides whether a
+        planform is present and what reference S / AR it implies — so the
+        editor read-out, the schematic, and the drag polar never diverge.
+        """
+        def _f(var):
+            try:
+                return max(0.0, float(var.get() or 0.0))
+            except (ValueError, AttributeError):
+                return 0.0
+        shim = types.SimpleNamespace(
+            wing_root_chord_m=_f(self._wing_root_var),
+            wing_span_exposed_m=_f(self._wing_span_var),
+            wing_sweep_deg=_f(self._wing_sweep_var),
+            wing_area_m2=_f(self._wing_area_var),
+            wing_aspect_ratio=_f(self._wing_ar_var),
+            diameter_m=_f(self._dia_var),
+        )
+        return _wing_geometry(shim)
+
+    def _sync_wing_derived(self):
+        """When a planform is present, DERIVE S / AR from it and lock the two
+        entries read-only; otherwise leave them editable (direct-entry
+        fallback).  Keeps a green indicator line in step."""
+        try:
+            c_r = float(self._wing_root_var.get() or 0.0)
+            s_e = float(self._wing_span_var.get() or 0.0)
+        except (ValueError, AttributeError):
+            c_r = s_e = 0.0
+        has_planform = c_r > 0.0 and s_e > 0.0
+        if has_planform:
+            S, AR, _src = self._current_wing_geometry()
+            # Populate then lock, so the stored ROParams carries the derived
+            # numbers even though the user can't hand-edit them.
+            self._wing_area_ent.configure(state="normal")
+            self._wing_ar_ent.configure(state="normal")
+            self._wing_area_var.set(f"{S:.4g}")
+            self._wing_ar_var.set(f"{AR:.3g}")
+            self._wing_area_ent.configure(state="readonly")
+            self._wing_ar_ent.configure(state="readonly")
+            self._wing_derived_lbl.configure(
+                text=f"↳ derived from planform: S = {S:.3g} m² · "
+                     f"AR = {AR:.2g}  (read-only)")
+        else:
+            self._wing_area_ent.configure(state="normal")
+            self._wing_ar_ent.configure(state="normal")
+            self._wing_derived_lbl.configure(text="")
+
+    # ------------------------------------------------------------------
     def _build_ro(self):
         """Validate fields and build an ROParams.  Returns None on input error
         (after showing a messagebox).
@@ -2900,6 +2974,12 @@ class ROEditorDialog(tk.Toplevel):
                     "fields must be numbers.",
                     parent=self)
                 return None
+            # Whenever a planform is present, S / AR are DERIVED from it — never
+            # trust a hand-typed area that might have drifted (the editor locks
+            # those fields, but a JSON loaded straight in could still carry a
+            # stale pair).  wing_geometry() is the single source of truth.
+            if wing_root > 0.0 and wing_span > 0.0:
+                wing_area, wing_ar, _ = self._current_wing_geometry()
         else:
             LD = 0.0
 

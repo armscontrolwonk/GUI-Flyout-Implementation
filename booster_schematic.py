@@ -186,19 +186,21 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
             return max(0.0, R1 * (1.0 - (y - La) / Lf))
         return max(0.0, R * (1.0 - y / L))
 
-    # Wing depiction mode.  Faithful when the planform fields are set; a
-    # flagged schematic tab when only the area is; nothing otherwise.
-    S = float(getattr(ro, "wing_area_m2", 0.0) or 0.0)
+    # Wing depiction mode.  wing_geometry() is the single source of truth:
+    # 'planform' → faithful panels + DERIVED S/AR in the label; 'direct' →
+    # flagged schematic tab from the stored area; None → nothing.
+    from booster_models import wing_geometry
+    S_eff, AR_eff, w_src = wing_geometry(ro)
     w_rc = float(getattr(ro, "wing_root_chord_m", 0.0) or 0.0)
     w_ss = float(getattr(ro, "wing_span_exposed_m", 0.0) or 0.0)
     w_sw = float(getattr(ro, "wing_sweep_deg", 0.0) or 0.0)
-    planform = (w_rc > 0.0 and w_ss > 0.0)
+    planform = (w_src == 'planform')
     wing_flag = ""
-    if S > 0 and float(getattr(ro, "wing_aspect_ratio", 0.0) or 0.0) <= 0:
+    if w_src == 'direct' and AR_eff <= 0:
         wing_flag = " · AR def."                      # polar fail-safe, flagged
     if planform:
         wing_ext, glyph = w_ss, False
-    elif S > 0:
+    elif w_src == 'direct':
         wing_ext, glyph = 0.35 * R, True              # fixed-proportion tab
     else:
         wing_ext, glyph = 0.0, False
@@ -261,10 +263,9 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         th2 = math.degrees(math.atan2((D - Dbrk) / 2.0, L - Lf))
         lines.append(f"biconic {th1:.1f}°/{th2:.1f}°")
     if planform:
-        lines.append(f"wings S={S:g} m²{wing_flag}" if S > 0
-                     else f"wings {w_rc:g}×{w_ss:g} m (no area set)")
+        lines.append(f"wings S={S_eff:.3g} m² · AR {AR_eff:.2g} (derived)")
     elif glyph:
-        lines.append(f"wings S={S:g} m² (schematic{wing_flag})")
+        lines.append(f"wings S={S_eff:g} m² (schematic{wing_flag})")
     # text to the RIGHT of the body/wings
     label_x = x0 + R + wing_ext + 0.2
     ax.text(label_x, L / 2.0, "\n".join(lines),
