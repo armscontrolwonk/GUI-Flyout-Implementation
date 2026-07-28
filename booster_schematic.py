@@ -79,6 +79,33 @@ def fin_polygon(sgn, R, yb, span, root, tip, sweep_deg):
             (sgn * (R + span), yb - off)]
 
 
+def _body_patch(ax, x0, y0, d_bottom, d_top, length, color, edge):
+    """A stage/interstage body from y0 up to y0+length, centred on x0.
+
+    A cylinder when d_bottom == d_top, otherwise a frustum (trapezoid) tapering
+    from d_bottom at the base to d_top at the top.
+    """
+    Rb, Rt = d_bottom / 2.0, d_top / 2.0
+    if abs(d_bottom - d_top) < 1e-9:
+        ax.add_patch(Rectangle((x0 - Rb, y0), d_bottom, length,
+                               fc=color, ec=edge, lw=1.3, zorder=2))
+    else:
+        ax.add_patch(Polygon([(x0 - Rb, y0), (x0 + Rb, y0),
+                              (x0 + Rt, y0 + length), (x0 - Rt, y0 + length)],
+                             closed=True, fc=color, ec=edge, lw=1.3, zorder=2))
+
+
+def _stage_top_diameter(s):
+    """The diameter at the top of stage `s` — its top_diameter_m when the stage
+    is conical (and set), else its base diameter."""
+    d = float(getattr(s, "diameter_m", 0.0) or 0.6)
+    if getattr(s, "conical", False):
+        dt = float(getattr(s, "top_diameter_m", 0.0) or 0.0)
+        if dt > 0:
+            return dt
+    return d
+
+
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
     """A nose from y0 up to y0+length, base width diam, centred on x0.
 
@@ -122,9 +149,11 @@ def draw_booster(ax, p, title=None):
         d = float(getattr(s, "diameter_m", 0.0) or 0.6)
         L = float(getattr(s, "length_m", 0.0) or 1.0)
         R = d / 2.0
-        ax.add_patch(Rectangle((x0 - R, y), d, L,
-                               fc=BODY, ec=BODY_E, lw=1.3, zorder=2))
-        ax.text(x0 + R + 0.15, y + L / 2, f"S{i+1}: ⌀{d:g}×{L:g} m",
+        d_top = _stage_top_diameter(s)                 # equals d unless conical
+        _body_patch(ax, x0, y, d, d_top, L, BODY, BODY_E)
+        _lbl = (f"S{i+1}: ⌀{d:g}→{d_top:g}×{L:g} m" if d_top != d
+                else f"S{i+1}: ⌀{d:g}×{L:g} m")
+        ax.text(x0 + R + 0.15, y + L / 2, _lbl,
                 va="center", ha="left", fontsize=8, color=LABEL)
         if getattr(s, "has_fins", False) and (getattr(s, "fin_span_m", 0.0) or 0) > 0:
             finned = (s, y)
@@ -132,18 +161,34 @@ def draw_booster(ax, p, title=None):
             grid_finned = (s, y, L)
         if (getattr(s, "n_boosters", 0) or 0) > 0:
             strap = (s, y, L)
-        # Stages butt directly together.  A diameter change therefore shows as
-        # an honest step in the outline — NOT a smoothing frustum.  Inventing a
-        # transition here would manufacture hardware the data never specified
-        # and hide exactly the thing this panel exists to surface; the real
-        # adapter is an explicit interstage component (see draw_booster docs),
-        # drawn only when the vehicle actually declares one.
+        # Stages butt directly together — a diameter change shows as an honest
+        # step, never a smoothing frustum (inventing one would hide an
+        # unspecified transition, which this panel exists to surface).  A real
+        # adapter is drawn ONLY when the stage declares an interstage; its
+        # diameters are DERIVED (this stage's top -> the next stage's base) so
+        # nothing about the transition is fabricated.
         y = y + L
+        if getattr(s, "has_interstage", False) \
+                and (getattr(s, "interstage_length_m", 0.0) or 0) > 0:
+            il = float(s.interstage_length_m)
+            d_is_bot = d_top                                    # this stage's top
+            nxt = stages[i + 1] if i + 1 < len(stages) else None
+            d_is_top = float(getattr(nxt, "diameter_m", 0.0) or d_top) if nxt \
+                else d_top                                       # next base, or hold
+            _body_patch(ax, x0, y, d_is_bot, d_is_top, il, SHROUD, BODY_E)
+            _im = getattr(s, "interstage_mass_kg", 0.0) or 0.0
+            _jt = getattr(s, "interstage_jettison_s", None)
+            _jtxt = f"{_jt:g} s" if _jt is not None else "with stage"
+            ax.text(x0 - max(d_is_bot, d_is_top) / 2 - 0.15, y + il / 2,
+                    f"interstage {il:g} m, {_im:g} kg\njett {_jtxt}",
+                    va="center", ha="right", fontsize=7.5, color=SHROUD_E)
+            y += il
 
     top = stages[-1]
+    top_surface_d = _stage_top_diameter(top)       # nose/fairing sits on this
     if shroud_stage is not None:
         sd = float(getattr(shroud_stage, "shroud_diameter_m", 0.0)
-                   or getattr(top, "diameter_m", 1.0))
+                   or top_surface_d)
         sl = float(getattr(shroud_stage, "shroud_length_m", 0.0) or 2 * sd)
         shape = getattr(shroud_stage, "shroud_nose_shape", "") or ""
         nose = float(getattr(shroud_stage, "shroud_nose_length_m", 0.0) or 0.0)
@@ -165,7 +210,7 @@ def draw_booster(ax, p, title=None):
             flags.append("fairing" + flag)
         y += sl
     else:
-        nd = float(getattr(top, "diameter_m", 0.0) or 1.0)
+        nd = top_surface_d or 1.0
         shape = getattr(top, "nose_shape", "") or ""
         nl = float(getattr(top, "nose_length_m", 0.0) or 0.0)
         flag = ""
