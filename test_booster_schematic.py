@@ -195,8 +195,8 @@ def test_reentry_object_drawn_to_scale_bottom_right():
 
 
 def test_reentry_object_wings_drawn_only_when_area_set():
-    """Wings appear only when a wing area is stored (two small surfaces); a
-    reentry object with no wing area draws none."""
+    """Wings appear only when a wing area (or planform) is stored — two small
+    surfaces; a reentry object with neither draws none."""
     import dataclasses
     p0, _ = _with_ro()                              # C-HGB: no wing area
     ax0 = _ax(); draw_booster(ax0, p0)
@@ -205,6 +205,67 @@ def test_reentry_object_wings_drawn_only_when_area_set():
     p1.ro = dataclasses.replace(ro1, wing_area_m2=0.2, wing_aspect_ratio=0.0)
     ax1 = _ax(); draw_booster(ax1, p1)
     assert len(ax1.patches) == n0 + 2              # two wing patches
+
+
+def test_area_only_wings_are_flagged_schematic_not_fake_dimensions():
+    """S and AR alone cannot define a planform (no position, root chord, or
+    shape), so with only an area stored the wings draw as a FIXED-proportion
+    tab and the label declares '(schematic' — never dimensions derived by
+    invention (the old 0.25·R clamp)."""
+    import dataclasses
+    p, ro = _with_ro(bname="AUR")            # finless: only the RO's wings at y=0
+    p.ro = dataclasses.replace(ro, wing_area_m2=0.2, wing_aspect_ratio=0.0)
+    ax = _ax(); draw_booster(ax, p)
+    wing_txt = [t.get_text() for t in ax.texts if "wings" in t.get_text()]
+    assert wing_txt and "(schematic" in wing_txt[0]
+    # the tab is proportional to the BODY (0.35·R outboard), independent of S
+    p2, ro2 = _with_ro(bname="AUR")
+    p2.ro = dataclasses.replace(ro2, wing_area_m2=1.5, wing_aspect_ratio=0.0)
+    ax2 = _ax(); draw_booster(ax2, p2)
+    def _wing_extent(ax_, D):
+        from matplotlib.patches import Polygon
+        ws = [q for q in ax_.patches if isinstance(q, Polygon)
+              and q.get_path().vertices[:, 1].min() <= 1e-9
+              and abs(q.get_path().vertices[:, 0].max()
+                      - q.get_path().vertices[:, 0].min() - D) > 1e-6]
+        return max(q.get_path().vertices[:, 0].max()
+                   - q.get_path().vertices[:, 0].min() for q in ws)
+    assert _wing_extent(ax, ro.diameter_m) == pytest.approx(
+        _wing_extent(ax2, ro2.diameter_m))
+
+
+def test_planform_wings_draw_the_entered_dimensions():
+    """With root chord + exposed span entered, the wings draw faithfully:
+    the panel rises exactly the root chord and extends exactly the exposed
+    span outboard of the body flank, with the label NOT flagged schematic."""
+    import dataclasses
+    from matplotlib.patches import Polygon
+    rc, ss = 0.6, 0.15
+    p, ro = _with_ro(bname="AUR")            # finless: only the RO's wings at y=0
+    p.ro = dataclasses.replace(ro, wing_area_m2=0.2, wing_aspect_ratio=0.0,
+                               wing_root_chord_m=rc, wing_span_exposed_m=ss,
+                               wing_sweep_deg=65.0)
+    ax = _ax(); draw_booster(ax, p)
+    ws = [q for q in ax.patches if isinstance(q, Polygon)
+          and q.get_path().vertices[:, 1].min() <= 1e-9
+          and abs(q.get_path().vertices[:, 0].max()
+                  - q.get_path().vertices[:, 0].min() - ro.diameter_m) > 1e-6]
+    assert len(ws) == 2
+    for q in ws:
+        v = q.get_path().vertices
+        assert v[:, 1].max() == pytest.approx(rc)          # rises the root chord
+    # outboard extent = flank radius at base + exposed span
+    right_wing = max(ws, key=lambda q: q.get_path().vertices[:, 0].max())
+    cone = [q for q in ax.patches if isinstance(q, Polygon)
+            and abs(q.get_path().vertices[:, 0].max()
+                    - q.get_path().vertices[:, 0].min() - ro.diameter_m) < 1e-6
+            and q.get_path().vertices[:, 1].min() <= 1e-9
+            and q.get_path().vertices[:, 0].min() > 0][0]
+    cone_right = cone.get_path().vertices[:, 0].max()
+    assert right_wing.get_path().vertices[:, 0].max() == \
+        pytest.approx(cone_right + ss)
+    wing_txt = [t.get_text() for t in ax.texts if "wings" in t.get_text()]
+    assert wing_txt and "(schematic" not in wing_txt[0]
 
 
 def test_reentry_object_wings_sit_on_the_ro_not_the_vehicle_centreline():

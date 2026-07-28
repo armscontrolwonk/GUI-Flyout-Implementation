@@ -368,6 +368,15 @@ class ROParams:
     #                        area.  Never invents efficiency it can't support.
     wing_area_m2:           float = 0.0
     wing_aspect_ratio:      float = 0.0
+    # Optional wing PLANFORM (depiction only — the polar needs only S and AR).
+    # S and AR alone cannot define a planform on a conical body (no position,
+    # root chord, or shape), so the schematic draws the wings faithfully ONLY
+    # when these are entered; otherwise it falls back to a small fixed-
+    # proportion glyph labelled "(schematic)".  A planform is "specified" when
+    # both root chord and exposed span are > 0.
+    wing_root_chord_m:      float = 0.0   # root chord along the body flank (m)
+    wing_span_exposed_m:    float = 0.0   # per-side exposed span from the surface (m)
+    wing_sweep_deg:         float = 0.0   # leading-edge sweep (0 = tip at TE height)
     # Default reentry mode for a freshly-built maneuvering object is a CORE
     # glide law (the smooth numerical equilibrium glide), not the legacy
     # analytic Tracy `equilibrium_glide`.  Legacy .json files that omit the key
@@ -632,6 +641,9 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
         'wing_aspect_ratio':     ro.wing_aspect_ratio,
+        'wing_root_chord_m':     ro.wing_root_chord_m,
+        'wing_span_exposed_m':   ro.wing_span_exposed_m,
+        'wing_sweep_deg':        ro.wing_sweep_deg,
         'glider_guidance':       ro.glider_guidance,
         'glider_pullup_g_max':   ro.glider_pullup_g_max,
         'glider_terminal_dive':  ro.glider_terminal_dive,
@@ -689,6 +701,9 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
         wing_aspect_ratio=float(d.get('wing_aspect_ratio', 0.0) or 0.0),
+        wing_root_chord_m=float(d.get('wing_root_chord_m', 0.0) or 0.0),
+        wing_span_exposed_m=float(d.get('wing_span_exposed_m', 0.0) or 0.0),
+        wing_sweep_deg=float(d.get('wing_sweep_deg', 0.0) or 0.0),
         glider_guidance=_g,
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
