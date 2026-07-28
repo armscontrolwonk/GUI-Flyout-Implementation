@@ -132,18 +132,13 @@ def draw_booster(ax, p, title=None):
             grid_finned = (s, y, L)
         if (getattr(s, "n_boosters", 0) or 0) > 0:
             strap = (s, y, L)
-        y_top = y + L
-        if i < len(stages) - 1:            # frustum where the diameter changes
-            du = float(getattr(stages[i + 1], "diameter_m", 0.0) or d)
-            if abs(du - d) > 1e-3:
-                Ru = du / 2.0
-                fl = 0.4 * abs(d - du) + 0.2
-                ax.add_patch(Polygon([(x0 - R, y_top), (x0 + R, y_top),
-                                      (x0 + Ru, y_top + fl), (x0 - Ru, y_top + fl)],
-                                     closed=True, fc=BODY, ec=BODY_E,
-                                     lw=1.2, zorder=2))
-                y_top += fl
-        y = y_top
+        # Stages butt directly together.  A diameter change therefore shows as
+        # an honest step in the outline — NOT a smoothing frustum.  Inventing a
+        # transition here would manufacture hardware the data never specified
+        # and hide exactly the thing this panel exists to surface; the real
+        # adapter is an explicit interstage component (see draw_booster docs),
+        # drawn only when the vehicle actually declares one.
+        y = y + L
 
     top = stages[-1]
     if shroud_stage is not None:
