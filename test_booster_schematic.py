@@ -165,6 +165,44 @@ def _draw_patches(b):
     return ax.patches
 
 
+# ── reentry object drawn to scale in the lower-right ────────────────────────
+def _with_ro(bname="Strypi_VIII_R", roname="C-HGB"):
+    import booster_models as mm
+    from booster_models import ro_from_dict
+    p = _load(bname)
+    ro = ro_from_dict(json.load(open(f"ro_library/{roname}.ro.json")))
+    p = mm.compose_loadout(p, ro, 1)
+    p.ro = ro
+    return p, ro
+
+
+def test_reentry_object_drawn_to_scale_bottom_right():
+    """When a loadout object is composed, it is drawn as a cone of its true
+    base diameter, base on the ground line (y=0), over on the right side."""
+    from matplotlib.patches import Polygon
+    p, ro = _with_ro()
+    ax = _ax()
+    draw_booster(ax, p)
+    found = False
+    for patch in ax.patches:
+        if isinstance(patch, Polygon):
+            v = patch.get_path().vertices
+            w = v[:, 0].max() - v[:, 0].min()
+            if abs(w - ro.diameter_m) < 1e-6 and v[:, 1].min() <= 1e-9 \
+                    and v[:, 0].min() > 0:                  # right side, base at 0
+                found = True
+    assert found, "reentry-object cone not found at lower-right"
+
+
+def test_no_reentry_object_when_none_composed():
+    """With no reentry object (ro is None) the drawing simply omits it and
+    never crashes."""
+    p = _load("Strypi_VIII_R")
+    p.ro = None
+    info = draw_booster(_ax(), p)
+    assert info["total_height_m"] > 0          # renders fine, RO just omitted
+
+
 def test_equal_aspect_is_enforced():
     """Proportion honesty is the whole point: the axes must be metre-true in
     both directions, not stretched to fit the panel — including after the

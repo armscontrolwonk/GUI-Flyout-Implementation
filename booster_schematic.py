@@ -108,6 +108,55 @@ def _stage_top_diameter(s):
     return d
 
 
+def _reentry_shape(ax, x0, y0, diam, length, nose_r, color, edge):
+    """A reentry vehicle drawn nose-up: a cone of base `diam` and height
+    `length` from the base at y0, with the tip blunted to radius `nose_r`
+    (0 = sharp).  Its own true geometry — no fabrication."""
+    R = diam / 2.0
+    rn = min(max(nose_r, 0.0), 0.9 * R)
+    if rn <= 1e-6 or length <= rn:
+        pts = [(x0 - R, y0), (x0 + R, y0), (x0, y0 + length)]        # sharp cone
+    else:
+        capc = y0 + length - rn                                      # cap centre
+        n = 14
+        arc = [(x0 + rn * math.cos(math.pi * i / n),
+                capc + rn * math.sin(math.pi * i / n)) for i in range(n + 1)]
+        pts = [(x0 - R, y0), (x0 + R, y0)] + arc                     # blunted cone
+    ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
+
+
+def _draw_reentry_object(ax, ro, view_right, yl):
+    """Draw the reentry object to scale in the lower-RIGHT corner, base on the
+    y = 0 ground line, from its own stored geometry.  A length of 0 falls back
+    to a nominal cone and is flagged, like the nose."""
+    D = float(getattr(ro, "diameter_m", 0.0) or 0.0)
+    if D <= 0:
+        return
+    L = float(getattr(ro, "length_m", 0.0) or 0.0)
+    flag = ""
+    if L <= 0:
+        L = 1.6 * D
+        flag = " (length unset)"
+    rn = float(getattr(ro, "nose_radius_m", 0.0) or 0.0)
+    R = D / 2.0
+    x0 = view_right - 0.3 - R                       # RV right edge ~0.3 from edge
+    _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
+
+    name = getattr(ro, "name", "") or "RV"
+    beta = float(getattr(ro, "beta_kg_m2", 0.0) or 0.0)
+    ld = float(getattr(ro, "glider_LD", 0.0) or 0.0)
+    lines = [f"reentry object: {name}", f"⌀{D:g}×{L:g} m{flag}"]
+    tail = []
+    if beta > 0:
+        tail.append(f"β {beta:,.0f}")
+    if ld > 0:
+        tail.append(f"L/D {ld:g}")
+    if tail:
+        lines.append(" · ".join(tail))
+    ax.text(x0 - R - 0.2, L / 2.0, "\n".join(lines),
+            va="center", ha="right", fontsize=7.5, color=LABEL_MUT)
+
+
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
     """A nose from y0 up to y0+length, base width diam, centred on x0.
 
@@ -206,7 +255,8 @@ def draw_booster(ax, p, title=None):
             ax.add_patch(Rectangle((x0 - R, y), sd, cyl,
                                    fc=SHROUD, ec=SHROUD_E, lw=1.3, zorder=3))
         _nose_patch(ax, x0, y + cyl, sd, nose, SHROUD, SHROUD_E, shape or "cone")
-        ax.text(x0 - R - 0.15, y + sl * 0.5, f"fairing ⌀{sd:g}×{sl:g} m{flag}",
+        ax.text(x0 - R - 0.15, y + sl * 0.5,
+                f"fairing ⌀{sd:g}×{sl:g} m{flag}".replace(" (", "\n("),
                 va="center", ha="right", fontsize=8, color=SHROUD_E)
         if flag:
             flags.append("fairing" + flag)
@@ -223,7 +273,8 @@ def draw_booster(ax, p, title=None):
         if not shape:
             flag += " (shape unset — cone shown)"
         _nose_patch(ax, x0, y, nd, nl, NOSE, BODY_E, shape or "cone")
-        ax.text(x0 - nd / 2 - 0.15, y + 0.5 * nl, f"payload / RV{flag}",
+        ax.text(x0 - nd / 2 - 0.15, y + 0.5 * nl,
+                f"payload / RV{flag}".replace(" (", "\n("),
                 va="center", ha="right", fontsize=8, color=LABEL_MUT)
         if flag:
             flags.append("nose" + flag)
@@ -259,11 +310,14 @@ def draw_booster(ax, p, title=None):
         root = float(getattr(s, "fin_root_chord_m", 0.0) or 0.8 * span)
         tip = float(getattr(s, "fin_tip_chord_m", 0.0) or 0.4 * root)
         sweep_deg = float(getattr(s, "fin_sweep_deg", 0.0) or 0.0)
+        off = span * math.tan(math.radians(sweep_deg))
         for sgn in (+1, -1):
             pts = fin_polygon(sgn, R, yb, span, root, tip, sweep_deg)
             ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
                                  lw=1.1, zorder=1))
-        ax.text(0, yb - 0.5, f"{int(s.n_fins or 4)} fins  span {span:g} m",
+        # label BELOW the fins (clear of the planform), never across them
+        ax.text(0, yb - max(0.0, off) - 0.4,
+                f"{int(s.n_fins or 4)} fins  span {span:g} m",
                 va="top", ha="center", fontsize=7.5, color=LABEL_MUT)
 
     if grid_finned:
@@ -290,8 +344,8 @@ def draw_booster(ax, p, title=None):
         flag = ""
         if bL <= 0:
             bL = min(0.45 * Lc, 18 * bd)
-            flag = " (length unset — nominal)"
-            flags.append("strap-on" + flag)
+            flag = " (nom.)"
+            flags.append("strap-on (length unset — nominal)")
         cR = float(s.diameter_m) / 2.0
         R = bd / 2.0
         for sgn in (+1, -1):
@@ -299,14 +353,21 @@ def draw_booster(ax, p, title=None):
             ax.add_patch(Rectangle((cx - R, yb), bd, bL,
                                    fc=STRAP, ec=BODY_E, lw=1.1, zorder=1))
             _nose_patch(ax, cx, yb + bL, bd, 1.4 * bd, STRAP, BODY_E, "cone")
-        ax.text(0, yb + bL + 1.4 * bd + 0.2,
-                f"{n}× strap-on ⌀{bd:g}×{bL:.1f} m{flag}",
-                va="bottom", ha="center", fontsize=7.5, color=LABEL_MUT)
+        # label in the tall clear LEFT margin at the strap top, wrapped so it
+        # never runs over the core body (nor off the panel edge)
+        ax.text(-(cR + 2 * R + 0.35), yb + bL,
+                f"{n}× strap-on\n⌀{bd:g}×{bL:.1f} m{flag}",
+                va="center", ha="right", fontsize=7.5, color=LABEL_MUT)
 
     ax.set_aspect("equal")
     ax.relim(); ax.autoscale_view()
     xl, yl = ax.get_xlim(), ax.get_ylim()
-    _draw_scale_reference(ax, xl, yl)
+    _new_left, _view_right = _draw_scale_reference(ax, xl, yl)
+    # A to-scale reentry object in the lower-right corner (when a loadout object
+    # is composed onto the stack); drawn from its own geometry.
+    _ro = getattr(p, "ro", None)
+    if _ro is not None and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0:
+        _draw_reentry_object(ax, _ro, _view_right, yl)
     if title:
         ax.set_title(title, fontsize=11, weight="bold")
     ax.axis("off")
@@ -367,3 +428,4 @@ def _draw_scale_reference(ax, xl, yl):
     # stack toward the right) so the box fills the panel and nothing is centred.
     ax.set_xlim(new_left, view_right)
     ax.set_ylim(yl)
+    return new_left, view_right
