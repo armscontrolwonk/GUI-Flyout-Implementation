@@ -125,6 +125,25 @@ def _reentry_shape(ax, x0, y0, diam, length, nose_r, color, edge):
     ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
 
 
+def _biconic_shape(ax, x0, y0, diam, length, break_d, fore_len, nose_r,
+                   color, edge):
+    """A biconic RV nose-up: an aft frustum from base `diam` up to `break_d` at
+    the junction, then a forward cone to a tip blunted to radius `nose_r`."""
+    r_b, r_1 = diam / 2.0, break_d / 2.0
+    La = length - fore_len                                # aft-frustum height
+    rn = min(max(nose_r, 0.0), 0.9 * r_1)
+    if rn <= 1e-6 or fore_len <= rn:
+        fore = [(x0, y0 + length)]                        # sharp apex
+    else:
+        capc = y0 + length - rn
+        n = 12
+        fore = [(x0 + rn * math.cos(math.pi * i / n),
+                 capc + rn * math.sin(math.pi * i / n)) for i in range(n + 1)]
+    pts = ([(x0 - r_b, y0), (x0 + r_b, y0), (x0 + r_1, y0 + La)]
+           + fore + [(x0 - r_1, y0 + La)])
+    ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
+
+
 _WING_DEFAULT_AR = 2.0        # mirrors trajectory.WING_DEFAULT_AR (stubby fail-safe)
 
 
@@ -174,7 +193,17 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     # a clear margin right of the stack even if the label then runs tight.
     x0 = max(x0, veh_right + 0.4 + wing_ss + R)
 
-    _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
+    # Biconic body when declared and geometrically valid; else a plain cone.
+    bic = None
+    if getattr(ro, "biconic", False):
+        Lf = float(getattr(ro, "fore_length_m", 0.0) or 0.0)
+        Dbrk = float(getattr(ro, "break_diameter_m", 0.0) or 0.0)
+        if 0 < Lf < L and 0 < Dbrk < D:
+            bic = (Lf, Dbrk)
+    if bic is not None:
+        _biconic_shape(ax, x0, 0.0, D, L, bic[1], bic[0], rn, NOSE, BODY_E)
+    else:
+        _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
     if S > 0:                                       # small wings on the body
         for sgn in (+1, -1):
             pts = fin_polygon(sgn, R, 0.0, wing_ss, wing_c, 0.4 * wing_c, 20.0)
@@ -192,11 +221,22 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         tail.append(f"L/D {ld:g}")
     if tail:
         lines.append(" · ".join(tail))
+    if bic is not None:
+        Lf, Dbrk = bic
+        th1 = math.degrees(math.atan2(Dbrk / 2.0, Lf))
+        th2 = math.degrees(math.atan2((D - Dbrk) / 2.0, L - Lf))
+        lines.append(f"biconic {th1:.1f}°/{th2:.1f}°")
     if S > 0:
         lines.append(f"wings S={S:g} m²{wing_flag}")
     # text to the RIGHT of the body/wings
-    ax.text(x0 + R + wing_ss + 0.2, L / 2.0, "\n".join(lines),
+    label_x = x0 + R + wing_ss + 0.2
+    ax.text(label_x, L / 2.0, "\n".join(lines),
             va="center", ha="left", fontsize=7.5, color=LABEL_MUT)
+    # widen the view rightward if the caption would run past the edge (keeps
+    # the RO clear of the stack AND the text on-panel on narrow views)
+    lbl_right = label_x + label_w
+    if lbl_right > view_right:
+        ax.set_xlim(ax.get_xlim()[0], lbl_right + 0.1)
 
 
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
