@@ -1776,6 +1776,32 @@ estimator describes a **bare cone**: wings, fins or flaps add wetted area
 and interference drag it does not carry, so a winged vehicle's true β is
 lower than the bare-cone estimate.
 
+**Biconic (two-cone) bodies** (`cd_biconic_hypersonic`).  A biconic RV — a
+steep forward cone on a shallow aft frustum (the C-HGB / MaRV / HGV class)
+— cannot be represented by the single cone without inventing an
+"equivalent" half-angle.  The build-up is summed over both segments,
+base-area referenced:
+
+```
+C_D,pressure = cd_blunted_cone_newtonian(θ1, r_N/r_break)·(r_break/r_b)²   (fore)
+             + 2·sin²θ2·(1 − (r_break/r_b)²)                              (aft annulus)
+C_D,friction = Cf·[ (r_break² − (ε·cosθ1)²)/sinθ1                          (fore wetted)
+                  + (1 − r_break²)/sinθ2 ]                                (aft wetted)
+C_D,base     = 2/(γM²)
+```
+
+The half-angles are **derived**, not entered: `biconic_angles()` takes the
+two free inputs (`fore_length_m`, `break_diameter_m`) and returns
+(θ1, θ2, r_break/r_b, ε) against the stored base diameter, length, and nose
+radius.  Two exact single-cone reductions anchor it as regression tests:
+`break_ratio → 1` collapses the aft annulus and returns
+`cd_cone_hypersonic(θ1)` component-for-component, and a sharp θ2 = θ1
+biconic equals the single cone for any break location.  The reentry
+trajectory model is unchanged — β and L/D remain the canonical carriers;
+the biconic geometry only sharpens the β *estimate* and the depiction.
+`test_biconic_estimator.py` pins the reductions, the component and geometry
+identities, and a slender-RV β band.
+
 For blunted cones the pressure table is taken from a published
 Newtonian-hypersonic Cd chart cited in the source code as "Ref (4) Ch. 5".
 The full primary reference for "Ref (4)" is not defined in the repository;

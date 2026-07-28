@@ -290,6 +290,14 @@ tabbed notebook**.
   the drag bucket is broadened on the pull side only, so a commanded pull-up
   retains more energy while cruise L/D is untouched (METHODS §12.0.2). Wing
   area = 0 keeps the slender-body polar exactly.
+- **Biconic reentry bodies** — a reentry object can be marked **biconic**
+  (a forward cone on an aft frustum, the C-HGB / MaRV / HGV class): enter the
+  fore-cone length and break diameter and the half-angles derive from the base
+  geometry. The **β estimator** gains a two-cone build-up
+  (`cd_biconic_hypersonic`, summing pressure + friction over both segments;
+  exact single-cone reduction at `break⌀ = base⌀`), and the **Schematic** draws
+  the true two-cone profile. β and L/D remain the reentry carriers; biconic
+  geometry sharpens the estimate and the picture (METHODS §8.8).
 - **Dive-at-target radius is a lead distance, not a target size.** The
   range-triggered terminal dive fires while the glider is *inside* the
   target circle and releases when it leaves — it is a region, not a latch.
