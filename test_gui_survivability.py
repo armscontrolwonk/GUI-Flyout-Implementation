@@ -174,3 +174,27 @@ def test_sweep_context_is_ballistic_only(app):
     assert "Sweep context" not in _render(app, _glider())
 
     app._last_heating_sweep = None
+
+
+# ── Schematic tab (lives here to reuse the app fixture) ─────────────────────
+def test_schematic_tab_exists_and_tracks_booster_switch(app):
+    """The Schematic tab must be present in the right notebook and its axes
+    must redraw when the sidebar booster changes — the live-panel contract."""
+    tabs = [app._right_nb.tab(t, "text") for t in app._right_nb.tabs()]
+    assert any("Schematic" in t for t in tabs)
+    assert hasattr(app, "_schem_ax")
+
+    app._booster_var.set("Strypi VIII R")
+    app._on_booster_changed()
+    n_strypi = len(app._schem_ax.patches)
+    t_strypi = app._schem_ax.get_title()
+
+    app._booster_var.set("No-dong")
+    app._on_booster_changed()
+    n_nodong = len(app._schem_ax.patches)
+    t_nodong = app._schem_ax.get_title()
+
+    assert n_strypi > 0 and n_nodong > 0
+    # Strypi carries fins + strap-ons; No-dong is a plain single stack.
+    assert n_strypi > n_nodong
+    assert "Strypi" in t_strypi and "No-dong" in t_nodong
