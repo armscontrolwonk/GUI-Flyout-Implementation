@@ -247,12 +247,14 @@ def draw_booster(ax, p, title=None):
         d = float(s.diameter_m); R = d / 2.0
         gh = float(getattr(s, "grid_fin_height_m", 0.0) or 0.15 * d)
         gc = float(getattr(s, "grid_fin_chord_m", 0.0) or gh)
-        yg = yb + 0.15 * Lc
+        # Grid fins sit at the stage BASE (aft), like tail fins — the panel's
+        # bottom edge just above the base line, not partway up the body.
+        yg = yb + 0.2
         for sgn in (+1, -1):
             ax.add_patch(Rectangle((sgn * R if sgn > 0 else -R - gh, yg),
                                    gh, gc, fc=FIN, ec=FIN_E, lw=1.0,
                                    zorder=1, hatch="++"))
-        ax.text(0, yg - 0.3,
+        ax.text(0, yb - 0.4,
                 f"{int(s.n_grid_fins)} grid fins {gh:g}×{gc:g} m",
                 va="top", ha="center", fontsize=7.5, color=LABEL_MUT)
 
