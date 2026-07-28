@@ -288,38 +288,56 @@ def draw_booster(ax, p, title=None):
 
 
 def _draw_scale_reference(ax, xl, yl):
-    """Place the ~1.8 m Thrusty mascot to the left of the stack (feet on the
-    y = 0 ground line) beside a thin, dimensioned 5 m reference bar.  Falls
-    back to the bar alone when the silhouette asset is absent."""
-    img = _scale_image()
-    # Left-justify the whole reference group (silhouette · bar · "5 m") toward
-    # the panel's left margin, with a clear gap to the vehicle so it never
-    # crowds the stack.  The bar sits GAP metres left of the vehicle edge.
-    GAP = 2.0
-    line_x = xl[0] - GAP
-    # 5 m reference bar with end ticks — thin, so it reads as a rule, not a beam
-    ax.plot([line_x, line_x], [0, _SCALE_BAR_M], color="k", lw=1.0, zorder=4)
-    for yy in (0.0, _SCALE_BAR_M):
-        ax.plot([line_x - 0.12, line_x + 0.12], [yy, yy],
-                color="k", lw=1.0, zorder=4)
-    ax.text(line_x + 0.18, _SCALE_BAR_M / 2, "5 m",
-            va="center", ha="left", fontsize=9, weight="bold")
+    """Anchor the reference group (~1.8 m Thrusty · thin 5 m bar · "5 m") in the
+    LOWER-LEFT corner of the panel, feet/base on the y = 0 ground line.
 
+    A tall, thin stack makes the equal-aspect axes box tall and narrow, which
+    matplotlib centres in the panel — so a group pinned just left of the stack
+    rides toward the middle and crowds it (all the empty space is panel padding
+    outside the box).  We instead widen the data x-range to fill the axes box
+    exactly, which removes the centring padding, then place the group at the
+    far left.  The mascot's metre height is unchanged (equal aspect), only its
+    position moves.  Falls back to the bar alone when the asset is absent."""
+    img = _scale_image()
+    fig_w = 0.0
     if img is not None:
         h_px, w_px = img.shape[0], img.shape[1]
-        fig_w = _SCALE_FIGURE_M * (w_px / h_px)     # preserve the art's aspect
-        right = line_x - 0.35                        # sit left of the dimension bar
-        left = right - fig_w
+        fig_w = _SCALE_FIGURE_M * (w_px / h_px)         # preserve the art's aspect
+    bar_gap, label_w = 0.35, 0.8
+    group_w = fig_w + bar_gap + 0.2 + label_w           # silhouette · bar · "5 m"
+
+    # Data width that fills the axes box at equal aspect: box_aspect × height.
+    figr = ax.figure
+    pos = ax.get_position(original=True)   # panel rect BEFORE equal-aspect shrink
+    fw_in, fh_in = figr.get_size_inches()
+    box_aspect = (pos.width * fw_in) / max(pos.height * fh_in, 1e-6)
+    H = max(yl[1] - yl[0], 1e-6)
+    want_w = max(box_aspect * H, group_w + 1.0)
+    # Keep the stack centred (its side labels stay clear of the panel edges,
+    # since text is not counted in autoscale) and fill the box; the extra width
+    # opens as empty margin the group drops into at the lower-left.
+    cx = 0.5 * (xl[0] + xl[1])
+    new_left = cx - want_w / 2.0
+    view_right = cx + want_w / 2.0
+
+    x = new_left + 0.3                                   # left margin
+    if img is not None:
+        left, right = x, x + fig_w
         # origin='upper' puts image row 0 (the head) at the top of the extent
-        # aspect="equal" keeps the axes metre-true (matching the stack); the
-        # extent is already sized to the art's own w/h, so it is undistorted.
         ax.imshow(img, extent=(left, right, 0.0, _SCALE_FIGURE_M),
                   aspect="equal", zorder=3, interpolation="antialiased")
-        new_left = left - 0.3
+        bar_x = right + bar_gap
     else:
-        new_left = line_x - 1.0
+        bar_x = x
+    # Thin 5 m reference bar with end ticks — reads as a rule, not a beam
+    ax.plot([bar_x, bar_x], [0, _SCALE_BAR_M], color="k", lw=1.0, zorder=4)
+    for yy in (0.0, _SCALE_BAR_M):
+        ax.plot([bar_x - 0.12, bar_x + 0.12], [yy, yy],
+                color="k", lw=1.0, zorder=4)
+    ax.text(bar_x + 0.18, _SCALE_BAR_M / 2, "5 m",
+            va="center", ha="left", fontsize=9, weight="bold")
 
-    # imshow re-tightens the view; restore the vehicle's full extent plus the
-    # reference on the left.
-    ax.set_xlim(new_left, xl[1])
+    # imshow re-tightens the view; restore the full extent (group at far left,
+    # stack toward the right) so the box fills the panel and nothing is centred.
+    ax.set_xlim(new_left, view_right)
     ax.set_ylim(yl)
