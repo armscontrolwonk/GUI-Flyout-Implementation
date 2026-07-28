@@ -130,6 +130,8 @@ def _draw_borders(ax, center_lon):
 # testable); the "Estimate Object β" dialog is presentation over it.
 from booster_models import (cd_blunted_cone_newtonian as _cd_blunted_cone_newtonian,
                             cd_cone_hypersonic as _cd_cone_hypersonic,
+                            cd_biconic_hypersonic as _cd_biconic_hypersonic,
+                            biconic_angles as _biconic_angles,
                             CONE_CF_TURBULENT as _CONE_CF)
 
 
@@ -2468,6 +2470,25 @@ class ROEditorDialog(tk.Toplevel):
             value=f"{ro.effective_nose_radius_m():.3f}" if ro else "0.050")
         self._nose_entry = _entry(7, self._nose_var, width=10)
 
+        # Biconic (two-cone) body — fore cone + aft frustum.  Only length and
+        # break diameter are entered; the half-angles derive from these against
+        # the base diameter / length (feeds the two-cone β estimator).
+        _lbl(8, "Biconic body:")
+        self._biconic_var = tk.BooleanVar(
+            value=bool(getattr(ro, 'biconic', False)) if ro else False)
+        ttk.Checkbutton(frm, variable=self._biconic_var, text="two-cone (fore + aft)",
+                        command=self._update_biconic_state).grid(
+            row=8, column=1, sticky=tk.W, pady=3)
+        _lbl(9, "Fore-cone length (m):")
+        self._fore_len_var = tk.StringVar(
+            value=f"{getattr(ro, 'fore_length_m', 0.0):.2f}" if ro else "0")
+        self._fore_len_entry = _entry(9, self._fore_len_var, width=10)
+        _lbl(10, "Break diameter (m):")
+        self._break_dia_var = tk.StringVar(
+            value=f"{getattr(ro, 'break_diameter_m', 0.0):.2f}" if ro else "0")
+        self._break_dia_entry = _entry(10, self._break_dia_var, width=10)
+        self._update_biconic_state()
+
         # Sync the read-only state of mass/diameter/length to separation mode
         self._update_separation_state()
 
@@ -2629,7 +2650,7 @@ class ROEditorDialog(tk.Toplevel):
         dia_var = tk.StringVar(value=_dia_dflt)
         ttk.Entry(frm, textvariable=dia_var, width=10).grid(row=1, column=1, sticky=tk.W)
 
-        _lbl(2, "Cone half-angle (°):")
+        _lbl(2, "Fore-cone half-angle (°):")
         theta_var = tk.StringVar(value=_theta0)
         ttk.Entry(frm, textvariable=theta_var, width=10).grid(row=2, column=1, sticky=tk.W)
 
@@ -2666,6 +2687,44 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Entry(_wf, textvariable=wing_var, width=10).pack(side=tk.LEFT)
         ttk.Label(_wf, text="  (0 = bare cone)",
                   foreground="gray50").pack(side=tk.LEFT)
+
+        # ── Biconic (two-cone) option ─────────────────────────────────────
+        # The half-angle above is the FORE cone; ticking biconic adds the aft
+        # frustum (aft half-angle + break-diameter ratio).  Pre-filled from the
+        # object's stored biconic geometry when it has one.
+        _th2_dflt, _br_dflt = "6.0", "0.7"
+        _bic0 = bool(getattr(self, '_biconic_var', None) and self._biconic_var.get())
+        if _bic0:
+            try:
+                _r = _biconic_angles(float(self._dia_var.get()),
+                                     float(self._len_var.get()),
+                                     float(self._fore_len_var.get()),
+                                     float(self._break_dia_var.get()),
+                                     float(self._nose_var.get()))
+                if _r:
+                    theta_var.set(f"{_r[0]:.1f}")
+                    _th2_dflt, _br_dflt = f"{_r[1]:.1f}", f"{_r[2]:.3f}"
+            except (ValueError, AttributeError):
+                pass
+        _lbl(6, "Biconic (two-cone):")
+        bicon_var = tk.BooleanVar(value=_bic0)
+        _bcf = ttk.Frame(frm); _bcf.grid(row=6, column=1, sticky=tk.W)
+        ttk.Checkbutton(_bcf, variable=bicon_var,
+                        text="add aft frustum").pack(side=tk.LEFT)
+        _lbl(7, "Aft half-angle (°):")
+        th2_var = tk.StringVar(value=_th2_dflt)
+        th2_entry = ttk.Entry(frm, textvariable=th2_var, width=10)
+        th2_entry.grid(row=7, column=1, sticky=tk.W)
+        _lbl(8, "Break ⌀ / base ⌀:")
+        br_var = tk.StringVar(value=_br_dflt)
+        br_entry = ttk.Entry(frm, textvariable=br_var, width=10)
+        br_entry.grid(row=8, column=1, sticky=tk.W)
+
+        def _toggle_bicon(*_):
+            st = "normal" if bicon_var.get() else "disabled"
+            th2_entry.config(state=st); br_entry.config(state=st)
+        bicon_var.trace_add("write", _toggle_bicon)
+        _toggle_bicon()
 
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
 
@@ -2714,8 +2773,21 @@ class ROEditorDialog(tk.Toplevel):
                 beta_lbl.config(text="invalid input"); _result[0] = None
                 return
             area = math.pi * (d / 2.0) ** 2
-            c    = _cd_cone_hypersonic(th, ep, mach=mk,
-                                      wing_area_ratio=(wa / area if area > 0 else 0.0))
+            _war = (wa / area if area > 0 else 0.0)
+            if bicon_var.get():
+                try:
+                    th2 = float(th2_var.get()); br = float(br_var.get())
+                    if not (0.0 < br < 1.0) or th2 <= 0:
+                        raise ValueError
+                except ValueError:
+                    for _l in (cdw_lbl, cdf_lbl, cdb_lbl, cdwing_lbl, cd_lbl, area_lbl):
+                        _l.config(text="—")
+                    beta_lbl.config(text="invalid biconic input"); _result[0] = None
+                    return
+                c = _cd_biconic_hypersonic(th, th2, br, ep, mach=mk,
+                                           wing_area_ratio=_war)
+            else:
+                c = _cd_cone_hypersonic(th, ep, mach=mk, wing_area_ratio=_war)
             beta = m / (c['total'] * area) if c['total'] > 0 else float('inf')
             cdw_lbl.config(text=f"{c['pressure']:.4f}")
             cdf_lbl.config(text=f"{c['friction']:.4f}")
@@ -2726,7 +2798,8 @@ class ROEditorDialog(tk.Toplevel):
             beta_lbl.config(text=f"{beta:,.0f} kg/m²")
             _result[0] = beta
 
-        for _v in (mass_var, dia_var, theta_var, eps_var, mach_var):
+        for _v in (mass_var, dia_var, theta_var, eps_var, mach_var,
+                   bicon_var, th2_var, br_var, wing_var):
             _v.trace_add("write", _compute)
         _compute()
 
@@ -2772,6 +2845,26 @@ class ROEditorDialog(tk.Toplevel):
                 "Mass, β, diameter, length, and nose radius must be numbers.",
                 parent=self)
             return None
+
+        biconic = bool(self._biconic_var.get())
+        fore_len_m = break_dia_m = 0.0
+        if biconic:
+            try:
+                fore_len_m = max(0.0, float(self._fore_len_var.get()))
+                break_dia_m = max(0.0, float(self._break_dia_var.get()))
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid input",
+                    "Biconic fore-cone length and break diameter must be numbers.",
+                    parent=self)
+                return None
+            if not (0.0 < fore_len_m < length and 0.0 < break_dia_m < dia):
+                messagebox.showerror(
+                    "Invalid biconic",
+                    "Fore-cone length must be less than total length, and break "
+                    "diameter less than the base diameter.",
+                    parent=self)
+                return None
 
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
@@ -2822,6 +2915,8 @@ class ROEditorDialog(tk.Toplevel):
             name=name, mass_kg=mass_kg, beta_kg_m2=beta,
             shape=shape, diameter_m=dia, length_m=length,
             nose_radius_m=nose_rn,
+            biconic=biconic, fore_length_m=fore_len_m,
+            break_diameter_m=break_dia_m,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -2854,6 +2949,11 @@ class ROEditorDialog(tk.Toplevel):
             self._glider_frm.pack(fill=tk.X)
         else:
             self._glider_frm.pack_forget()
+
+    def _update_biconic_state(self):
+        st = "normal" if self._biconic_var.get() else "disabled"
+        self._fore_len_entry.config(state=st)
+        self._break_dia_entry.config(state=st)
 
     # ---- TPS material dropdown helpers (§10 materials dropdown) --------
     _MAT_NONE_LABEL   = "(none — numbers only)"
