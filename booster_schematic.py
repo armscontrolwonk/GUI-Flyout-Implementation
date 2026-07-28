@@ -24,12 +24,14 @@ import os
 import matplotlib.image as mpimg
 from matplotlib.patches import Polygon, Rectangle
 
-# Thrusty mascot silhouette, used as a human-relatable 2 m scale reference
-# beside the vehicle.  Loaded once and cached; a missing asset falls back to a
-# plain metre bar, so headless renders and stripped checkouts still work.
+# Thrusty mascot silhouette: a human-relatable figure standing beside the
+# vehicle for a felt sense of scale, with the quantitative reference carried by
+# a dimensioned metre bar next to it.  Loaded once and cached; a missing asset
+# falls back to the bar alone, so headless renders and stripped checkouts work.
 _SCALE_IMG_PATH = os.path.join(os.path.dirname(__file__),
                                "assets", "thrusty_scale.png")
-_SCALE_FIGURE_M = 2.0                      # the mascot stands 2 m tall
+_SCALE_FIGURE_M = 1.8                      # the mascot stands ~1.8 m tall (human)
+_SCALE_BAR_M    = 5.0                      # the quantitative reference bar
 _UNLOADED = object()                       # sentinel (image may be an ndarray)
 _scale_img_cache = _UNLOADED
 
@@ -286,21 +288,21 @@ def draw_booster(ax, p, title=None):
 
 
 def _draw_scale_reference(ax, xl, yl):
-    """Place the Thrusty mascot as a 2 m scale reference to the left of the
-    stack, feet on the y = 0 ground line, with a dimensioned "2 m" bar beside
-    it.  Falls back to a plain 2 m bar when the silhouette asset is absent."""
+    """Place the ~1.8 m Thrusty mascot to the left of the stack (feet on the
+    y = 0 ground line) beside a thin, dimensioned 5 m reference bar.  Falls
+    back to the bar alone when the silhouette asset is absent."""
     img = _scale_image()
-    # Left-justify the whole reference group (silhouette · bar · "2 m") toward
+    # Left-justify the whole reference group (silhouette · bar · "5 m") toward
     # the panel's left margin, with a clear gap to the vehicle so it never
     # crowds the stack.  The bar sits GAP metres left of the vehicle edge.
     GAP = 2.0
     line_x = xl[0] - GAP
-    # 2 m dimension bar with end ticks
-    ax.plot([line_x, line_x], [0, _SCALE_FIGURE_M], color="k", lw=1.8, zorder=4)
-    for yy in (0.0, _SCALE_FIGURE_M):
+    # 5 m reference bar with end ticks — thin, so it reads as a rule, not a beam
+    ax.plot([line_x, line_x], [0, _SCALE_BAR_M], color="k", lw=1.0, zorder=4)
+    for yy in (0.0, _SCALE_BAR_M):
         ax.plot([line_x - 0.12, line_x + 0.12], [yy, yy],
-                color="k", lw=1.8, zorder=4)
-    ax.text(line_x + 0.18, _SCALE_FIGURE_M / 2, "2 m",
+                color="k", lw=1.0, zorder=4)
+    ax.text(line_x + 0.18, _SCALE_BAR_M / 2, "5 m",
             va="center", ha="left", fontsize=9, weight="bold")
 
     if img is not None:
