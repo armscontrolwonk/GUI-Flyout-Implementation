@@ -198,3 +198,37 @@ def test_schematic_tab_exists_and_tracks_booster_switch(app):
     # Strypi carries fins + strap-ons; No-dong is a plain single stack.
     assert n_strypi > n_nodong
     assert "Strypi" in t_strypi and "No-dong" in t_nodong
+
+
+# ── Booster Parameters Front-End: guidance is sourced from the live plan ────
+def test_front_end_guidance_tracks_reentry_plan_not_object_default(app):
+    """The Front End "Guidance:" row is a reentry-PLAN choice, so switching the
+    sidebar glide law must change the Booster Parameters panel — it must not be
+    pinned to the object's baked-in glider_guidance."""
+    app._booster_var.set("AUR+HGB")
+    app._on_booster_changed()
+
+    def _front_end_texts():
+        texts = []
+        for lf in app._params_inner.winfo_children():
+            if getattr(lf, "cget", None) and lf.winfo_class() == "TLabelframe" \
+                    and lf.cget("text") == "Front End":
+                for w in lf.winfo_children():
+                    if w.winfo_class() == "TLabel":
+                        texts.append(w.cget("text"))
+        return texts
+
+    app._main_guidance_var.set("Damped phugoid glide")
+    app._update_params_display()
+    assert "Damped phugoid glide" in _front_end_texts()
+
+    app._main_guidance_var.set("Equilibrium glide (Tracy)")
+    app._update_params_display()
+    fe = _front_end_texts()
+    assert "Equilibrium glide (Tracy)" in fe
+    assert "Damped phugoid glide" not in fe
+
+    # Ballistic hides the glide row entirely (no glider L/D or guidance line).
+    app._main_guidance_var.set("Ballistic (drag · gravity · rotation)")
+    app._update_params_display()
+    assert not any("Guidance" in t for t in _front_end_texts())
