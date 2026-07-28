@@ -11,6 +11,8 @@ import glob
 import json
 import math
 
+import pytest
+
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.figure import Figure
@@ -121,7 +123,40 @@ def test_leading_edge_is_swept_back_not_forward():
 
 def test_equal_aspect_is_enforced():
     """Proportion honesty is the whole point: the axes must be metre-true in
-    both directions, not stretched to fit the panel."""
+    both directions, not stretched to fit the panel — including after the
+    scale-figure imshow, which must not flip the axes to aspect='auto'."""
     ax = _ax()
     draw_booster(ax, _load("AUR"))
     assert ax.get_aspect() == 1.0
+
+
+# ── the 2 m Thrusty scale reference ─────────────────────────────────────────
+def test_scale_figure_is_two_metres_tall():
+    """The mascot silhouette is placed exactly 2 m tall (feet on y=0), so it
+    reads as a literal human-scale ruler beside the stack."""
+    import booster_schematic as bs
+    if bs._scale_image() is None:
+        pytest.skip("scale asset not present in this checkout")
+    ax = _ax()
+    draw_booster(ax, _load("Scud-B_-R-17-"))
+    imgs = ax.get_images()
+    assert len(imgs) == 1
+    x0, x1, y0, y1 = imgs[0].get_extent()
+    assert (y0, y1) == (0.0, bs._SCALE_FIGURE_M)          # feet at 0, head at 2 m
+    assert y1 == 2.0
+    # width preserves the art's aspect ratio (never stretched)
+    h_px, w_px = imgs[0].get_array().shape[:2]
+    assert (x1 - x0) == pytest.approx(2.0 * w_px / h_px)
+
+
+def test_scale_reference_falls_back_without_the_asset(monkeypatch):
+    """A stripped checkout (no assets/) must still render — the reference
+    degrades to a plain 2 m bar, never a crash."""
+    import booster_schematic as bs
+    monkeypatch.setattr(bs, "_scale_img_cache", None)     # simulate missing asset
+    ax = _ax()
+    info = draw_booster(ax, _load("Scud-B_-R-17-"))
+    assert info["total_height_m"] > 0
+    assert ax.get_images() == []                          # no silhouette drawn
+    assert ax.get_aspect() == 1.0
+    assert any("2 m" in t.get_text() for t in ax.texts)   # bar still labelled

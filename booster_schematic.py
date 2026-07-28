@@ -19,8 +19,29 @@ and testable headless under Agg.
 """
 
 import math
+import os
 
+import matplotlib.image as mpimg
 from matplotlib.patches import Polygon, Rectangle
+
+# Thrusty mascot silhouette, used as a human-relatable 2 m scale reference
+# beside the vehicle.  Loaded once and cached; a missing asset falls back to a
+# plain metre bar, so headless renders and stripped checkouts still work.
+_SCALE_IMG_PATH = os.path.join(os.path.dirname(__file__),
+                               "assets", "thrusty_scale.png")
+_SCALE_FIGURE_M = 2.0                      # the mascot stands 2 m tall
+_UNLOADED = object()                       # sentinel (image may be an ndarray)
+_scale_img_cache = _UNLOADED
+
+
+def _scale_image():
+    global _scale_img_cache
+    if _scale_img_cache is _UNLOADED:
+        try:
+            _scale_img_cache = mpimg.imread(_SCALE_IMG_PATH)
+        except (FileNotFoundError, OSError):
+            _scale_img_cache = None
+    return _scale_img_cache
 
 # Muted, print-friendly greys; the fairing is the one tinted element because
 # it is the piece most worth eyeballing.
@@ -216,14 +237,43 @@ def draw_booster(ax, p, title=None):
 
     ax.set_aspect("equal")
     ax.relim(); ax.autoscale_view()
-    xl = ax.get_xlim()
-    barx = xl[0] - 0.6
-    ax.plot([barx, barx], [0, 5], color="k", lw=2)
-    for yy in (0, 5):
-        ax.plot([barx - 0.1, barx + 0.1], [yy, yy], color="k", lw=2)
-    ax.text(barx - 0.2, 2.5, "5 m", va="center", ha="right", fontsize=8)
-    ax.set_xlim(barx - 1.0, xl[1])
+    xl, yl = ax.get_xlim(), ax.get_ylim()
+    _draw_scale_reference(ax, xl, yl)
     if title:
         ax.set_title(title, fontsize=11, weight="bold")
     ax.axis("off")
     return {"total_height_m": y, "flags": flags}
+
+
+def _draw_scale_reference(ax, xl, yl):
+    """Place the Thrusty mascot as a 2 m scale reference to the left of the
+    stack, feet on the y = 0 ground line, with a dimensioned "2 m" bar beside
+    it.  Falls back to a plain 2 m bar when the silhouette asset is absent."""
+    img = _scale_image()
+    line_x = xl[0] - 0.6                       # dimension bar just left of vehicle
+    # 2 m dimension bar with end ticks
+    ax.plot([line_x, line_x], [0, _SCALE_FIGURE_M], color="k", lw=1.8, zorder=4)
+    for yy in (0.0, _SCALE_FIGURE_M):
+        ax.plot([line_x - 0.12, line_x + 0.12], [yy, yy],
+                color="k", lw=1.8, zorder=4)
+    ax.text(line_x + 0.18, _SCALE_FIGURE_M / 2, "2 m",
+            va="center", ha="left", fontsize=9, weight="bold")
+
+    if img is not None:
+        h_px, w_px = img.shape[0], img.shape[1]
+        fig_w = _SCALE_FIGURE_M * (w_px / h_px)     # preserve the art's aspect
+        right = line_x - 0.35                        # sit left of the dimension bar
+        left = right - fig_w
+        # origin='upper' puts image row 0 (the head) at the top of the extent
+        # aspect="equal" keeps the axes metre-true (matching the stack); the
+        # extent is already sized to the art's own w/h, so it is undistorted.
+        ax.imshow(img, extent=(left, right, 0.0, _SCALE_FIGURE_M),
+                  aspect="equal", zorder=3, interpolation="antialiased")
+        new_left = left - 0.3
+    else:
+        new_left = line_x - 1.0
+
+    # imshow re-tightens the view; restore the vehicle's full extent plus the
+    # reference on the left.
+    ax.set_xlim(new_left, xl[1])
+    ax.set_ylim(yl)
