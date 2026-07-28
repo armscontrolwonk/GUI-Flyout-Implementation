@@ -22,7 +22,13 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
-matplotlib.use("TkAgg")
+try:
+    matplotlib.use("TkAgg")
+except ImportError:
+    # Headless import (test collection with pyplot already on a non-GUI
+    # backend): keep whatever backend is active.  The app itself needs a
+    # display and will fail later at Tk() init, which callers handle.
+    pass
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
@@ -5446,17 +5452,20 @@ class BoosterFlyoutApp(tk.Tk):
         plots_tab    = ttk.Frame(self._right_nb)
         timeline_tab = ttk.Frame(self._right_nb)
         params_tab   = ttk.Frame(self._right_nb)
+        schem_tab    = ttk.Frame(self._right_nb)
         slv_tab      = ttk.Frame(self._right_nb)
         surv_tab     = ttk.Frame(self._right_nb)
         self._right_nb.add(plots_tab,    text="  Plots  ")
         self._right_nb.add(timeline_tab, text="  Flight Timeline  ")
         self._right_nb.add(params_tab,   text="  Booster Parameters  ")
+        self._right_nb.add(schem_tab,    text="  Schematic  ")
         self._right_nb.add(slv_tab,      text="  SLV Performance  ")
         self._right_nb.add(surv_tab,     text="  Reentry Survivability  ")
 
         self._build_plot_panel(plots_tab)
         self._build_timeline_panel(timeline_tab)
         self._build_params_tab(params_tab)
+        self._build_schematic_tab(schem_tab)
         self._build_slv_tab(slv_tab)
         self._build_surv_tab(surv_tab)
 
@@ -6517,6 +6526,27 @@ class BoosterFlyoutApp(tk.Tk):
             lambda _e: self._params_canvas.bind_all("<MouseWheel>", _mw))
         self._params_canvas.bind("<Leave>",
             lambda _e: self._params_canvas.unbind_all("<MouseWheel>"))
+
+    def _build_schematic_tab(self, parent):
+        """To-scale side elevation of the stack as it will fly (see
+        booster_schematic.py).  Redrawn by _update_params_display, so it
+        tracks every booster change, edit, and loadout choice live."""
+        self._schem_fig = Figure(figsize=(4.5, 8.5), dpi=110)
+        self._schem_ax = self._schem_fig.add_subplot(111)
+        self._schem_fig.subplots_adjust(left=0.02, right=0.98,
+                                        top=0.94, bottom=0.03)
+        self._schem_canvas = FigureCanvasTkAgg(self._schem_fig, master=parent)
+        self._schem_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def _update_schematic(self, p, name):
+        if not hasattr(self, '_schem_ax'):
+            return          # sidebar init may fire before the tab exists
+        import booster_schematic as bsch
+        info = bsch.draw_booster(self._schem_ax, p, title=name)
+        self._schem_ax.set_title(
+            f"{name}   —   {info['total_height_m']:.1f} m",
+            fontsize=11, weight="bold")
+        self._schem_canvas.draw_idle()
 
     # ------------------------------------------------------------------
     # Booster selection
@@ -8269,6 +8299,9 @@ class BoosterFlyoutApp(tk.Tk):
                 _n = 1
             p = mm.compose_loadout(p, _uro, _n)
             p.ro = _uro
+
+        # The Schematic tab draws the same composed as-it-will-fly stack.
+        self._update_schematic(p, self._booster_var.get())
 
         _G0 = 9.80665
         pad = dict(padx=8, pady=4)
