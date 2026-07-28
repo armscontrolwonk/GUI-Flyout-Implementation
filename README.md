@@ -283,6 +283,17 @@ tabbed notebook**.
   the drag bucket is broadened on the pull side only, so a commanded pull-up
   retains more energy while cruise L/D is untouched (METHODS §12.0.2). Wing
   area = 0 keeps the slender-body polar exactly.
+- **Dive-at-target radius is a lead distance, not a target size.** The
+  range-triggered terminal dive fires while the glider is *inside* the
+  target circle and releases when it leaves — it is a region, not a latch.
+  A fast, high glider can cross a small circle before the dive reaches the
+  ground; on exit the glide law arrests the sink and pulls back up, leaving
+  a tell-tale **notch** in the altitude trace and a long overshoot. The cure
+  is to dive earlier by enlarging the radius — but only up to a point: the
+  dependence is non-monotonic, so too small overshoots (with the notch) and
+  too large dives short. Tune the radius as a lead distance (start near
+  *trigger-altitude × L/D*), raising it until the notch clears and impact is
+  closest, backing off if impact then falls short (METHODS §12.5.1).
 - **Thrust Estimator** — back-calculates engine thrust from observed acceleration
   during boost: `T = m · √(a_h² + (a_v + g)²)`.
 - **Dry Mass Estimator** (Analysis menu) — estimates a stage's dry/inert mass

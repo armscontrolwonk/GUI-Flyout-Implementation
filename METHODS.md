@@ -2964,11 +2964,60 @@ Two trigger conditions are available:
   for a glider that dives over the target rather than at a fixed
   altitude band.
 
-Once `_dive_now = True`, the bank angle is held at π for the rest of
-the flight. The inverted-dive section integrates with the same EOM as
-the glide phase but with the lift sign flipped; the vehicle accelerates
-slightly under combined gravity and downward lift, traversing 30 km of
-atmosphere in a few seconds.
+When `_dive_now = True` the bank angle is held at π and the inverted-dive
+section integrates with the same EOM as the glide phase but with the lift
+sign flipped; the vehicle accelerates slightly under combined gravity and
+downward lift, traversing the dense lower atmosphere in a few seconds.
+
+Note that `_dive_now` is **re-evaluated every integration step, not
+latched.** For the altitude trigger this is immaterial — descent is
+monotonic, so once `alt < terminal_alt_km` the condition stays true to
+impact. For the range trigger it matters: `_dive_now` is a *region*
+(inside the target circle), not a *state*, so the dive holds only while the
+vehicle is inside the radius.
+
+#### 12.5.1 The dive radius is a lead distance, not a bullseye
+
+A consequence of the stateless range trigger: a fast, high glider can
+**cross the target circle before the dive brings it to the ground.** On the
+far side `_dist_km ≥ radius_km` goes true, `_dive_now` releases, the bank
+snaps back to the schedule, and the glide law — seeing the large sink rate
+the dive built up — arrests it and pulls the vehicle back up. The altitude
+trace shows a characteristic **notch** (a dip, then a climb) and the vehicle
+overflies the target by a wide margin. The glide law and the dive command
+are not fighting a bug; each is doing its job, and which one owns the step
+depends only on whether the vehicle is inside the circle *this* step.
+
+The radius therefore behaves as a **lead distance**: it must be large enough
+that the vehicle commits to the dive with enough horizontal room to reach
+the ground *before* it crosses the circle, but not so large that it commits
+far short of the target. The dependence is **non-monotonic** — both too-small
+and too-large miss — with three regimes (illustrated with a C-HGB glider off
+the AUR-HGB stack, diving from ≈29 km at ≈Mach 4–5; the numbers are
+vehicle- and speed-specific, the *shape* is general):
+
+| radius | behaviour | impact miss |
+|---|---|---|
+| ≤ ~30 km | dive triggers late/close; vehicle crosses the circle, recovers (the **notch**), overflies | ~130–250 km beyond |
+| ~35–60 km | single committed dive to ground inside the circle; no notch | ~20–30 km |
+| ≥ ~100 km | dives too early; falls **short** of the target, miss growing with radius | 40 → 230 km short |
+
+The residual miss at the sweet spot (~20 km here) is not a dive artefact: it
+is the offset between the glider's ground track and the target (the track
+passes ≈20 km abeam), which is an aim/azimuth matter — no terminal dive can
+recover cross-track error the glide did not already null out.
+
+**Operating guidance.** Treat the radius as a tuning knob, not a target
+size. Start from a value comparable to the horizontal distance the vehicle
+covers while descending from its trigger altitude (roughly *trigger
+altitude × (L/D)* for a lift-down dive), then increase it until the notch
+disappears and the impact is closest; if the impact then begins to fall
+short, the radius has passed the lead distance and should come back down.
+The trigger is stateless by construction, so the radius — not a latch — is
+where the operator sets the commit distance. (A one-way latch that commits
+on first entry is a possible alternative model; it would remove the
+overshoot regime but also remove the operator's control over *where* along
+the approach the commitment happens, and is not the model implemented here.)
 
 ### 12.6 RV library
 
