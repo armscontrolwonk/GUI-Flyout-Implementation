@@ -2525,12 +2525,24 @@ class ROEditorDialog(tk.Toplevel):
         _war = f"{ro.wing_aspect_ratio:g}" if (ro and ro.wing_aspect_ratio > 0) else "0"
         self._wing_area_var = _gfe(1, "Wing area:", _wa, unit="m²")
         self._wing_ar_var = _gfe(2, "  aspect ratio:", _war)
+        # Optional wing PLANFORM — depiction only (the polar needs only S/AR).
+        # With these set the Schematic draws the wings faithfully (root along
+        # the flank, TE on the base, swept LE); without them it draws a small
+        # flagged "(schematic)" tab, never invented dimensions.
+        _wrc = f"{ro.wing_root_chord_m:g}" if (ro and getattr(ro, 'wing_root_chord_m', 0) > 0) else "0"
+        _wss = f"{ro.wing_span_exposed_m:g}" if (ro and getattr(ro, 'wing_span_exposed_m', 0) > 0) else "0"
+        _wsw = f"{ro.wing_sweep_deg:g}" if (ro and getattr(ro, 'wing_sweep_deg', 0) > 0) else "0"
+        self._wing_root_var = _gfe(3, "  root chord (opt.):", _wrc, unit="m")
+        self._wing_span_var = _gfe(4, "  exposed span (opt.):", _wss, unit="m")
+        self._wing_sweep_var = _gfe(5, "  LE sweep (opt.):", _wsw, unit="°")
         ttk.Label(self._glider_frm,
                   text="Wings anchor the drag polar (0 = slender body; AR blank "
-                       "= stubby default).\nPull-up g-limit and re-entry βₛ are "
-                       "in the Reentry Plan editor.",
+                       "= stubby default).  Root chord / span / sweep are for "
+                       "the schematic only —\nwith them the wings draw to scale; "
+                       "without, a flagged schematic tab.  Pull-up g-limit and "
+                       "re-entry βₛ are in the Reentry Plan editor.",
                   foreground="#888888", justify=tk.LEFT).grid(
-                      row=3, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+                      row=6, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._update_glider_state()
 
@@ -2868,6 +2880,7 @@ class ROEditorDialog(tk.Toplevel):
 
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
+        wing_root = wing_span = wing_sweep = 0.0
         if glider_on:
             try:
                 LD = float(self._LD_var.get())
@@ -2878,9 +2891,13 @@ class ROEditorDialog(tk.Toplevel):
             try:
                 wing_area = max(0.0, float(self._wing_area_var.get() or 0.0))
                 wing_ar   = max(0.0, float(self._wing_ar_var.get() or 0.0))
+                wing_root  = max(0.0, float(self._wing_root_var.get() or 0.0))
+                wing_span  = max(0.0, float(self._wing_span_var.get() or 0.0))
+                wing_sweep = max(0.0, float(self._wing_sweep_var.get() or 0.0))
             except ValueError:
                 messagebox.showerror(
-                    "Invalid input", "Wing area / aspect ratio must be numbers.",
+                    "Invalid input", "Wing area / aspect ratio / planform "
+                    "fields must be numbers.",
                     parent=self)
                 return None
         else:
@@ -2921,6 +2938,9 @@ class ROEditorDialog(tk.Toplevel):
             glider_LD=LD,
             wing_area_m2=wing_area,
             wing_aspect_ratio=wing_ar,
+            wing_root_chord_m=wing_root,
+            wing_span_exposed_m=wing_span,
+            wing_sweep_deg=wing_sweep,
             emissivity=emiss,
             nose_tps_material=nose_key,
             body_tps_material=body_key,

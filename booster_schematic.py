@@ -144,16 +144,18 @@ def _biconic_shape(ax, x0, y0, diam, length, break_d, fore_len, nose_r,
     ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
 
 
-_WING_DEFAULT_AR = 2.0        # mirrors trajectory.WING_DEFAULT_AR (stubby fail-safe)
-
-
 def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     """Draw the reentry object to scale in the lower-RIGHT corner, base on the
     y = 0 ground line, from its own stored geometry, with its text to the right.
 
-    Wings are drawn only when a wing area is stored; their span/chord are
-    DERIVED from that area and the aspect ratio (WING_DEFAULT_AR when blank,
-    flagged) — the same convention the wing-decoupled polar uses.  A length of
+    Wings: S and AR alone cannot define a planform on a conical body (they give
+    area and slenderness, not position, root chord, or shape).  So the wings
+    are drawn FAITHFULLY only when the optional planform fields are entered
+    (wing_root_chord_m + wing_span_exposed_m, with wing_sweep_deg): a panel
+    whose root follows the body flank, trailing edge on the base line, leading
+    edge swept back from the spanwise axis.  With only a wing AREA stored, a
+    small fixed-proportion delta tab is drawn at the aft flank and the label
+    says "(schematic)" — an honest marker, never fake dimensions.  A length of
     0 falls back to a nominal cone and is flagged, like the nose."""
     D = float(getattr(ro, "diameter_m", 0.0) or 0.0)
     if D <= 0:
@@ -166,33 +168,6 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     rn = float(getattr(ro, "nose_radius_m", 0.0) or 0.0)
     R = D / 2.0
 
-    # Wing geometry (if any) — needed before placing the body so its span is
-    # reserved.  span b = √(AR·S); mean chord c = S/b; exposed semi-span from
-    # the body edge.  AR blank → the stubby default, flagged.
-    S = float(getattr(ro, "wing_area_m2", 0.0) or 0.0)
-    wing_ss = wing_c = 0.0
-    wing_flag = ""
-    if S > 0:
-        AR = float(getattr(ro, "wing_aspect_ratio", 0.0) or 0.0)
-        if AR <= 0:
-            AR = _WING_DEFAULT_AR
-            wing_flag = " (AR def.)"
-        b = math.sqrt(AR * S)
-        wing_c = S / b
-        wing_ss = max((b - D) / 2.0, 0.25 * R)
-
-    # Reserve room for the right-hand label from its pixel size (text is fixed
-    # points, so its width in metres scales with the view).
-    pos = ax.get_position(original=True)
-    _fw_in, fh_in = ax.figure.get_size_inches()
-    H = max(yl[1] - yl[0], 1e-6)
-    m_per_in = H / max(pos.height * fh_in, 1e-6)
-    label_w = 1.5 * m_per_in           # room for the longest label line
-    x0 = view_right - 0.25 - label_w - (R + wing_ss)
-    # Never drift left into (or past) the vehicle on small views: the RO stays
-    # a clear margin right of the stack even if the label then runs tight.
-    x0 = max(x0, veh_right + 0.4 + wing_ss + R)
-
     # Biconic body when declared and geometrically valid; else a plain cone.
     bic = None
     if getattr(ro, "biconic", False):
@@ -200,17 +175,72 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         Dbrk = float(getattr(ro, "break_diameter_m", 0.0) or 0.0)
         if 0 < Lf < L and 0 < Dbrk < D:
             bic = (Lf, Dbrk)
+
+    def r_local(y):
+        """Body flank radius at height y — cone or biconic piecewise."""
+        if bic is not None:
+            Lf, Dbrk = bic
+            La, R1 = L - Lf, Dbrk / 2.0
+            if y <= La:
+                return R - y * (R - R1) / La
+            return max(0.0, R1 * (1.0 - (y - La) / Lf))
+        return max(0.0, R * (1.0 - y / L))
+
+    # Wing depiction mode.  Faithful when the planform fields are set; a
+    # flagged schematic tab when only the area is; nothing otherwise.
+    S = float(getattr(ro, "wing_area_m2", 0.0) or 0.0)
+    w_rc = float(getattr(ro, "wing_root_chord_m", 0.0) or 0.0)
+    w_ss = float(getattr(ro, "wing_span_exposed_m", 0.0) or 0.0)
+    w_sw = float(getattr(ro, "wing_sweep_deg", 0.0) or 0.0)
+    planform = (w_rc > 0.0 and w_ss > 0.0)
+    wing_flag = ""
+    if S > 0 and float(getattr(ro, "wing_aspect_ratio", 0.0) or 0.0) <= 0:
+        wing_flag = " · AR def."                      # polar fail-safe, flagged
+    if planform:
+        wing_ext, glyph = w_ss, False
+    elif S > 0:
+        wing_ext, glyph = 0.35 * R, True              # fixed-proportion tab
+    else:
+        wing_ext, glyph = 0.0, False
+
+    # Reserve room for the right-hand label from its pixel size (text is fixed
+    # points, so its width in metres scales with the view).
+    pos = ax.get_position(original=True)
+    _fw_in, fh_in = ax.figure.get_size_inches()
+    H = max(yl[1] - yl[0], 1e-6)
+    m_per_in = H / max(pos.height * fh_in, 1e-6)
+    label_w = 1.7 * m_per_in           # room for the longest label line
+    x0 = view_right - 0.25 - label_w - (R + wing_ext)
+    # Never drift left into (or past) the vehicle on small views: the RO stays
+    # a clear margin right of the stack even if the label then runs tight.
+    x0 = max(x0, veh_right + 0.4 + wing_ext + R)
+
     if bic is not None:
         _biconic_shape(ax, x0, 0.0, D, L, bic[1], bic[0], rn, NOSE, BODY_E)
     else:
         _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
-    if S > 0:                                       # small wings on the body
+
+    if planform:
+        # Faithful panel: root follows the flank from the base to the root
+        # chord; trailing edge straight on the base line; the leading edge
+        # sweeps back (from the spanwise axis) so the tip chord shrinks —
+        # collapsing to a delta when the sweep consumes the whole chord.
+        y_tip_le = min(max(w_rc - w_ss * math.tan(math.radians(w_sw)), 0.0), w_rc)
         for sgn in (+1, -1):
-            # fin_polygon returns x centred on 0 (built for the booster stack,
-            # always at x=0) — shift by x0, the RO's own position, or the
-            # wings land at the vehicle's base instead of on the RO.
-            pts = fin_polygon(sgn, R, 0.0, wing_ss, wing_c, 0.4 * wing_c, 20.0)
-            pts = [(x0 + px, py) for (px, py) in pts]
+            pts = [(x0 + sgn * r_local(0.0), 0.0),
+                   (x0 + sgn * r_local(w_rc), w_rc),
+                   (x0 + sgn * (r_local(0.0) + w_ss), y_tip_le),
+                   (x0 + sgn * (r_local(0.0) + w_ss), 0.0)]
+            ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
+                                 lw=1.0, zorder=2))
+    elif glyph:
+        # Schematic tab: a small delta hugging the aft flank, deliberately
+        # fixed-proportion (0.35·R out, 0.22·L up) — a marker, not a claim.
+        rc_g = 0.22 * L
+        for sgn in (+1, -1):
+            pts = [(x0 + sgn * r_local(0.0), 0.0),
+                   (x0 + sgn * r_local(rc_g), rc_g),
+                   (x0 + sgn * (r_local(0.0) + wing_ext), 0.0)]
             ax.add_patch(Polygon(pts, closed=True, fc=FIN, ec=FIN_E,
                                  lw=1.0, zorder=2))
 
@@ -230,10 +260,13 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         th1 = math.degrees(math.atan2(Dbrk / 2.0, Lf))
         th2 = math.degrees(math.atan2((D - Dbrk) / 2.0, L - Lf))
         lines.append(f"biconic {th1:.1f}°/{th2:.1f}°")
-    if S > 0:
-        lines.append(f"wings S={S:g} m²{wing_flag}")
+    if planform:
+        lines.append(f"wings S={S:g} m²{wing_flag}" if S > 0
+                     else f"wings {w_rc:g}×{w_ss:g} m (no area set)")
+    elif glyph:
+        lines.append(f"wings S={S:g} m² (schematic{wing_flag})")
     # text to the RIGHT of the body/wings
-    label_x = x0 + R + wing_ss + 0.2
+    label_x = x0 + R + wing_ext + 0.2
     ax.text(label_x, L / 2.0, "\n".join(lines),
             va="center", ha="left", fontsize=7.5, color=LABEL_MUT)
     # widen the view rightward if the caption would run past the edge (keeps
