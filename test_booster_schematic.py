@@ -16,7 +16,7 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 
 from booster_models import booster_from_dict
-from booster_schematic import draw_booster, stage_chain
+from booster_schematic import draw_booster, stage_chain, fin_polygon
 
 
 def _ax():
@@ -88,6 +88,35 @@ def test_features_draw_iff_the_data_declares_them():
     ax_nd = _ax()
     draw_booster(ax_nd, _load("No-dong"))
     assert len(ax_st.patches) > len(ax_nd.patches)
+
+
+# ── tail fins point the right way ────────────────────────────────────────────
+def test_fin_trailing_edge_sits_at_the_base_not_floating_high():
+    """The reversed-fin bug: anchoring the tip to the leading edge left a
+    clipped fin (tip < root) floating above the base with a forward-swept
+    trailing edge.  A correct tail fin has its trailing edge AT the base (or
+    below, once swept), never hanging above it."""
+    yb = 0.0
+    for sweep in (0.0, 30.0, 45.0):
+        pts = fin_polygon(+1, R=0.66, yb=yb, span=1.0, root=2.0, tip=1.0,
+                          sweep_deg=sweep)
+        ys = [p[1] for p in pts]
+        # the fin's lowest point (a tip trailing corner) is at or below the base
+        assert min(ys) <= yb + 1e-9, (sweep, ys)
+        # and the highest point is the root leading edge, at yb + root
+        assert max(ys) == yb + 2.0
+
+
+def test_leading_edge_is_swept_back_not_forward():
+    """Going outboard, the leading (forward, upper) edge must move AFT (down):
+    the tip leading edge is below the root leading edge.  Forward sweep (tip
+    leading above root leading) is the reversed rendering."""
+    root = 1.5
+    root_leading_y = 0.0 + root
+    for sweep in (0.0, 20.0, 40.0):
+        _, _, tip_leading, _ = fin_polygon(+1, R=0.5, yb=0.0, span=1.0,
+                                           root=root, tip=0.6, sweep_deg=sweep)
+        assert tip_leading[1] < root_leading_y, (sweep, tip_leading)
 
 
 def test_equal_aspect_is_enforced():
