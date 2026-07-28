@@ -299,6 +299,15 @@ class ROParams:
     # and overrides the derived default.
     nose_radius_m: float = 0.0
 
+    # Biconic (two-cone) body.  When True the RV is a forward cone meeting an
+    # aft frustum at break_diameter_m, break_diameter_m across, fore_length_m
+    # from the nose.  The half-angles derive from these + diameter_m/length_m
+    # (booster_models.biconic_angles); the β estimator uses the two-cone
+    # build-up (cd_biconic_hypersonic).  Default off → plain cone, unchanged.
+    biconic:         bool  = False
+    fore_length_m:   float = 0.0    # length of the forward cone (m)
+    break_diameter_m: float = 0.0   # diameter at the cone-cone junction (m)
+
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
@@ -616,6 +625,9 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'diameter_m':            ro.diameter_m,
         'length_m':              ro.length_m,
         'nose_radius_m':         ro.nose_radius_m,
+        'biconic':               ro.biconic,
+        'fore_length_m':         ro.fore_length_m,
+        'break_diameter_m':      ro.break_diameter_m,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -670,6 +682,9 @@ def ro_from_dict(d: dict) -> ROParams:
         diameter_m=float(d.get('diameter_m', 0.0)),
         length_m=float(d.get('length_m', 0.0)),
         nose_radius_m=float(d.get('nose_radius_m', 0.0)),   # 0 = auto (shape)
+        biconic=bool(d.get('biconic', False)),
+        fore_length_m=float(d.get('fore_length_m', 0.0)),
+        break_diameter_m=float(d.get('break_diameter_m', 0.0)),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
@@ -2186,6 +2201,89 @@ def cd_cone_hypersonic(theta_deg: float, eps: float, mach: float = 10.0,
                 base=float(base), wing=wing,
                 total=float(pressure + friction + base + wing),
                 swet_ratio=float(swet))
+
+
+def cd_biconic_hypersonic(theta1_deg: float, theta2_deg: float,
+                          break_ratio: float, eps: float, mach: float = 10.0,
+                          cf: float = CONE_CF_TURBULENT,
+                          wing_area_ratio: float = 0.0) -> dict:
+    """Total zero-AoA hypersonic axial Cd build-up for a BICONIC (two-cone) body.
+
+    A biconic is a forward cone (half-angle theta1, nose-blunted) meeting an aft
+    frustum (half-angle theta2) at a break diameter.  Same physics core as
+    cd_cone_hypersonic, but the pressure and friction terms are summed over BOTH
+    segments — a single cone cannot represent it (a steep fore-cone on a shallow
+    aft-frustum has genuinely different pressure and wetted area than either
+    cone alone).
+
+    Parameters (all ratios to the BASE radius r_b = diameter/2):
+      theta1_deg   : forward-cone half-angle
+      theta2_deg   : aft-frustum half-angle
+      break_ratio  : r_break / r_b  (diameter at the cone-cone junction / base)
+      eps          : r_nose / r_b   (nose-radius ratio, as for cd_cone_hypersonic)
+
+    Newtonian pressure (base-area ref):
+      fore : cd_blunted_cone_newtonian(theta1, r_nose/r_break) · break_ratio²
+             (the blunted fore-cone on its OWN base π·r_break², scaled to A_b)
+      aft  : 2·sin²theta2 · (1 − break_ratio²)   (frustum pressure on the annulus)
+    Friction : Cf · (S_wet,fore + S_wet,aft)/A_b, with
+      S_wet,fore/A_b = (break_ratio² − (eps·cos theta1)²) / sin theta1
+      S_wet,aft /A_b = (1 − break_ratio²) / sin theta2
+    Base : 2/(γM²).  Wing : Cf·2·(S_w/A_b), as in cd_cone_hypersonic.
+
+    Exact single-cone reduction (regression anchor): break_ratio → 1 collapses
+    the aft annulus to zero and returns the cd_cone_hypersonic(theta1, eps)
+    value; and for a sharp cone (eps = 0) with theta2 = theta1 the two segments
+    sum to the single cone for ANY break_ratio.
+
+    Returns {'pressure','friction','base','wing','total','pressure_fore',
+    'pressure_aft','swet_fore','swet_aft'} — all base-area-referenced.
+    """
+    import math
+    th1 = math.radians(max(1.0, min(float(theta1_deg), 89.0)))
+    th2 = math.radians(max(1.0, min(float(theta2_deg), 89.0)))
+    br  = max(1e-3, min(float(break_ratio), 1.0))
+    eps = max(0.0, min(float(eps), 1.0))
+    m   = max(float(mach), 3.0)
+
+    # Pressure: blunted fore-cone (on its own base, scaled to A_b) + aft annulus
+    eps_fore = min(eps / br, 1.0)                       # r_nose / r_break
+    pressure_fore = cd_blunted_cone_newtonian(theta1_deg, eps_fore) * br * br
+    pressure_aft  = 2.0 * math.sin(th2) ** 2 * (1.0 - br * br)
+    pressure = pressure_fore + pressure_aft
+
+    # Friction: exact frustum wetted ratios for both segments
+    r_t = eps * math.cos(th1)                           # fore tangency radius / r_b
+    swet_fore = max(0.0, (br * br - r_t * r_t)) / math.sin(th1)
+    swet_aft  = (1.0 - br * br) / math.sin(th2)
+    friction  = float(cf) * (swet_fore + swet_aft)
+
+    base = 2.0 / (_GAMMA_AIR * m * m)
+    wing = float(cf) * 2.0 * max(0.0, float(wing_area_ratio))
+    return dict(pressure=float(pressure), friction=float(friction),
+                base=float(base), wing=wing,
+                total=float(pressure + friction + base + wing),
+                pressure_fore=float(pressure_fore), pressure_aft=float(pressure_aft),
+                swet_fore=float(swet_fore), swet_aft=float(swet_aft))
+
+
+def biconic_angles(diameter_m: float, length_m: float, fore_length_m: float,
+                   break_diameter_m: float, nose_radius_m: float = 0.0):
+    """Derive (theta1_deg, theta2_deg, break_ratio, eps) for a biconic from its
+    stored geometry — the free inputs are fore_length_m and break_diameter_m;
+    the half-angles fall out.  Returns None if the geometry is not a valid
+    biconic (missing/degenerate break)."""
+    import math
+    r_b = float(diameter_m) / 2.0
+    r_1 = float(break_diameter_m) / 2.0
+    Lf  = float(fore_length_m)
+    La  = float(length_m) - Lf
+    if r_b <= 0 or r_1 <= 0 or r_1 >= r_b or Lf <= 0 or La <= 0:
+        return None
+    theta1 = math.degrees(math.atan2(r_1, Lf))          # fore-cone half-angle
+    theta2 = math.degrees(math.atan2(r_b - r_1, La))    # aft-frustum half-angle
+    eps    = max(0.0, min(float(nose_radius_m) / r_b, 1.0))
+    return theta1, theta2, r_1 / r_b, eps
 
 
 def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
