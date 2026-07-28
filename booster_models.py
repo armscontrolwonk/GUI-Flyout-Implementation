@@ -2011,10 +2011,13 @@ def booster_from_dict(d: dict) -> BoosterParams:
         stage_yaw_final_az_deg=(float(d['stage_yaw_final_az_deg'])
                                 if d.get('stage_yaw_final_az_deg') is not None else None),
     )
-    # Load RV object when present (new format); legacy inline fields stay on
-    # _p for effective_ro() to find when _p.ro is None (old format).
-    if 'ro' in d or 'rv' in d:          # 'rv' = legacy embedded-object key
-        _p.ro = ro_from_dict(d.get('ro') or d['rv'])
+    # Load RV object when actually present (new format); legacy inline fields
+    # stay on _p for effective_ro() to find when _p.ro is None (old format).
+    # A null/absent 'ro' means the booster embeds no object — the reentry
+    # object is composed at run time from the sidebar loadout.
+    _ro_data = d.get('ro') or d.get('rv')      # 'rv' = legacy embedded-object key
+    if _ro_data is not None:
+        _p.ro = ro_from_dict(_ro_data)
     else:
         # Migrate genuinely-old JSON that stored reentry hardware inline on the
         # booster (no embedded 'ro'/'rv' key) into a synthesised ROParams, so the

@@ -207,6 +207,9 @@ def test_front_end_guidance_tracks_reentry_plan_not_object_default(app):
     pinned to the object's baked-in glider_guidance."""
     app._booster_var.set("AUR+HGB")
     app._on_booster_changed()
+    # Compose a glider reentry object via the sidebar loadout (boosters no
+    # longer embed one), so the Front End has a glide row to source.
+    app._ro_main_var.set("C-HGB")
 
     def _front_end_texts():
         texts = []
