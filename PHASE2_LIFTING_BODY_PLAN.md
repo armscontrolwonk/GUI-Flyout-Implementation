@@ -46,48 +46,73 @@ validation shows K = 2 is good up to shock detachment (~57° α for that wing)
 and K = 1.83 recovers agreement above it.  **Validity flag**: results beyond
 the estimated detachment angle are flagged, not silently extrapolated.
 
-**Wedge** (`body_form = "wedge"`): AEDC §2.1.5 swept-wedge closed forms —
-constant pressure on each face, no integration:
+**Wedge** (`body_form = "wedge"`): a sharp-leading-edge delta lifting body —
+flat bottom, ridge-sectioned top (two facets from the centerline ridge down
+to the leading edges; the natural closed solid when the LE is sharp, and
+exactly AEDC's swept-wedge §2.1.5 upper half).  Composition per surface,
+each a plane carrying **constant** Cp (no integration):
 
 ```
-Cp,lower = K·sin²(ε+α) / (1 + tan²Λ·sin²ε)        (Eq. 70)
-Cp,upper = K·sin²(ε−α) / (1 + tan²Λ·sin²ε)        (Eq. 72; shielded for α > ε)
-C_N, C_A from projected planform / base / side areas  (Eqs. 67–75)
+lower (flat delta plate, lit for α > 0):   Cp = K·sin²α
+upper facets (AEDC Eq. 72, lit for α < ε): Cp = K·sin²(ε−α) / (1 + tan²Λ·sin²ε)
+base:                                       Cp = 0 (base-drag term separate)
 ```
 
-with the flat-bottom bookkeeping of AEDC §2 (flat-topped component + flat
-lower-surface pressure load added to normal force).  Optionally a swept-
-cylinder leading edge (§2.1.3) when a leading-edge radius is entered.
+with ridge angle ε = atan(t/L), planform sweep Λ = atan(2L/b), and force
+contributions computed as Cp × the facet's projected areas taken directly
+from the geometry (planform projection → C_N, frontal projection → C_A) —
+not AEDC's rectangular-planform area formulas, which don't apply to a delta.
+At α = 0 the flat bottom carries no load and the facets push DOWN: the wedge
+has negative C_N at α = 0, so the zero-lift and minimum-drag points sit at
+small nonzero α — the C_L0 camber offset emerges rather than being assumed.
+Leading-edge radius: not modeled in the Phase-2 sweep (sharp LE, flagged on
+output); the swept-cylinder component (§2.1.3) is a later refinement.
 
-**Half-cone** (`body_form = "half_cone"`): AEDC §2.2.5 cone frustum at
-incidence — shadow line `φ₀ = −sin⁻¹(tanδ/tanα)` (Eq. 128), closed-form
-C_N/C_A (Eqs. 130–135) — halved at the diametral plane, plus the flat-cut
-pressure load per the flat-bottom rule.  Preferred (default) orientation:
-**flat side down** — Fetterman TN D-2942 shows flat-bottom superiority at all
-tested cone angles for the body alone.
+**Half-cone** (`body_form = "half_cone"`): flat side down (windward) —
+Fetterman TN D-2942 shows flat-bottom superiority for the body alone.  Two
+surfaces: the flat triangular underside (a plate, Cp = K·sin²α, lit α > 0)
+and the retained **upper** half of the cone lateral surface.  CAUTION: the
+AEDC full-cone closed forms (Eqs. 130–135) may NOT simply be halved at
+incidence — windward and leeward halves carry different loads, so ½× the
+full cone is an identity **only at α = 0**.  The φ-integrals must be
+re-derived over the half-range with the shadow clip `sinφ₀ = tanδ/tanα`;
+they stay elementary (`∫(a − b·sinφ)²·{1, sinφ}·dφ` with a = cosα·sinδ,
+b = sinα·cosδ), so closed forms survive — implemented as a general
+frustum-**sector** integral (arbitrary φ-limits), of which the full cone is
+a special case (its own identity test).
 
-**Cone / biconic**: the same α-sweep applied to the existing
-`cd_blunted_cone_newtonian` / `cd_biconic_hypersonic` geometry, upgrading the
-shipped zero-AoA estimators into L/D estimators too.  At α = 0 the sweep
-**must** reproduce the shipped values exactly (continuity identity).
+**Cone / biconic sweep — Phase 2b**, after the lifting forms.  Continuity
+rules fixed now: for SHARP cones the sweep at α = 0 must equal
+`cd_cone_hypersonic` exactly (the sector integral over the full range); for
+BLUNTED noses the spherical-segment closed form will not byte-match the
+shipped chart table (two pressure models for the cap) — it is a cross-check
+within the chart's own accuracy band, which is precisely the validation that
+retires the METHODS §8.8 chart-provenance wart.  The cap's force is treated
+as axial and α-independent at screening level (second-order for small caps;
+stated on output).
 
 **Nose blunting**: spherical-segment closed form (AEDC §2.2.1, tangency
-condition) — replacing/cross-checking the chart table whose provenance
-METHODS §8.8 flags as unverified.  AEDC's own Ref. 5 confirms the conic/
-spheric closed forms trace to Wells & Armstrong, NASA TR R-127 (1962) —
-the citation that retires the "Ref (4) Ch. 5" wart.
+condition) — cross-checking the chart table whose provenance METHODS §8.8
+flags as unverified (see the Phase-2b continuity rules above).  AEDC's own
+Ref. 5 confirms the conic/spheric closed forms trace to Wells & Armstrong,
+NASA TR R-127 (1962) — the citation that retires the "Ref (4) Ch. 5" wart.
 
 ### 2.2 Friction: Eckert reference-temperature Cf (Corda & Anderson 1988)
 
 Pure Newtonian has no drag floor — L/D → cot α unbounded.  Skin friction is
 what makes the ceiling honest (Candler: turbulence alone costs ~8% of L/D on
 an HTV-2-class shape; Fetterman: at Re_ℓ = 1.4×10⁶ the *viscous drag at α=0
-was 2–5× the inviscid drag*).  We compute laminar/turbulent flat-plate Cf at
-the Eckert reference temperature over each component's wetted area — the
-method Corda validated to within 10% of a full integral boundary-layer
-calculation even at high hypersonic Mach.  Per Lobanovskii's experimental
-observation, the viscous increment is treated as α-independent (additive to
-C_D0) over the α range of interest.
+was 2–5× the inviscid drag*).  Cf stays **directly enterable** (the shipped
+estimator behavior — continuity); an Eckert reference-temperature helper
+PRE-FILLS it from (M, Re_ℓ, laminar/turbulent, wall-to-freestream temperature
+ratio) — the method Corda validated to within 10% of a full integral
+boundary-layer calculation even at high hypersonic Mach.  The wall-temperature
+assumption is a stated parameter, never implicit (cold-wall for wind-tunnel
+anchors, hot-wall for flight).  The viscous increment is applied over each
+component's true wetted area and treated as α-independent (additive to C_D)
+per Lobanovskii's experimental observation.  With Cf = 0 the sweep is the
+inviscid ceiling — valid ONLY for friction-off anchor comparisons, and the
+output says so.
 
 ### 2.3 Base drag
 
@@ -111,7 +136,11 @@ implicit.
 
 ## 4. Outputs
 
-One table per run: α sweep (C_L, C_D, L/D), plus the consistent trim row —
+One table per run: α sweep from **−10° to +25°** (C_L, C_D, L/D) — the sweep
+must extend below zero because the asymmetric forms cross C_L = 0 at nonzero
+α (measured: TN D-2942 Fig. 6b) and C_L0 is read off the minimum-drag point.
+Operational definitions: **α\*** = argmax L/D over the sweep; **C_L0** = C_L
+at minimum C_D.  Plus the consistent trim row —
 
 ```
 α*  C_L*  C_D*  (L/D)max   β(α=0)   β(α*)   C_L0   [M, Re, laminar/turb, base on/off, A_ref, K]
@@ -131,12 +160,19 @@ One table per run: α sweep (C_L, C_D, L/D), plus the consistent trim row —
 ## 5. Anchor tests (specified before implementation)
 
 Identities (exact):
-1. α = 0 of the sweep ≡ the shipped zero-AoA estimator values, per form.
-2. Sweep Λ → 0, ε → flat-plate: recovers `C_N = K sin²α·cosα`-family plate
-   relations; upper surface shielded for α > ε exactly at α = ε.
-3. Cone frustum with bluntness ratio → 0 at α = 0 ≡ `cd_cone_hypersonic`.
-4. Half-cone windward pressure integral = ½ × full cone's at α = 0.
-5. K = 2 vs K = 1.83 scale pressure components linearly (K is multiplicative).
+1. Flat plate (wedge with t → 0): `C_N = K·sin²α` on the planform, hence
+   `C_L = K·sin²α·cosα`, `C_D,pressure = K·sin³α`, inviscid L/D = cot α.
+2. Wedge upper facets shielded exactly at α = ε (Cp continuous through zero);
+   at α = 0 the wedge's C_N is negative (facets push down) — the camber
+   offset is present by construction.
+3. Frustum sector over the FULL φ-range at α = 0 ≡ `cd_cone_hypersonic`
+   (sharp cone); the α = 0 blunted build-up cross-checks the shipped chart
+   within its accuracy band (Phase 2b).
+4. Half-cone lateral integral = ½ × full cone's **at α = 0 only** — and the
+   test also asserts the inequality at α > 0 (windward ≠ leeward), guarding
+   against the halving shortcut.
+5. K is multiplicative: K = 1.83 vs K = 2 scales every pressure component by
+   exactly 1.83/2 (friction and base terms unaffected).
 
 Measured / CFD anchors (screening band ±30% unless noted):
 6. **Fetterman TN D-2942, body alone** (M 6.86, Re_ℓ 1.43×10⁶, laminar,
@@ -147,32 +183,44 @@ Measured / CFD anchors (screening band ±30% unless noted):
 7. **Fetterman wing-body**: Λ=75°/θ=5° (L/D)max ≈ 5.4 (Fig. 6a; measured L/D
    uncertainty ±0.2), Λ=81°/θ=5° ≈ 5.0.  (Composite = half-cone + our wing
    planform machinery.)
-7a. **Fetterman TN D-2942 Fig. 6(b) — component-level identity** (the
-    strongest single anchor): the modified-Newtonian theory tracks the
-    *measured* C_N(α) and C_A(α) for θ=5°, Λ=75° and 81° across the swept α
-    range.  Our estimator must reproduce that curve, not merely the peak L/D
-    it implies.  The measured C_N crosses zero at slightly **negative** α —
-    direct experimental confirmation of the camber offset C_L0 (§Objective;
-    Lobanovskii's asymmetric-body trinomial polar), so the Phase-3 offset
-    polar is anchored to data, not only theory.  (Axial force in TN D-2942 is
-    corrected to free-stream base pressure from measured base pressures —
-    hence anchor with base drag OFF.)
-8. **Candler & Leyva CFD wedge** (HTV-2-class, 6 km/s): (L/D)max ≈ 2.4–2.6
+8. **Fetterman TN D-2942 Fig. 6(b) — component-level anchor** (the strongest
+   single anchor): the modified-Newtonian theory tracks the *measured* C_N(α)
+   and C_A(α) for θ=5°, Λ=75° and 81° across the swept α range.  Our
+   estimator must reproduce that curve, not merely the peak L/D it implies.
+   The measured C_N crosses zero at slightly **negative** α — direct
+   experimental confirmation of the camber offset C_L0 (§1; Lobanovskii's
+   asymmetric-body trinomial polar), so the Phase-3 offset polar is anchored
+   to data, not only theory.  (Axial force in TN D-2942 is corrected to
+   free-stream base pressure from measured base pressures — hence anchor
+   with base drag OFF.)
+9. **Candler & Leyva CFD wedge** (HTV-2-class, 6 km/s): (L/D)max ≈ 2.4–2.6
    at α ≈ 13–14°, turbulent Cf at flight Re; our α* must land in ~10–18°.
-9. **Grant & Braun biconic contours** (friction off, K=2): peak L/D ≈ 1.86
-   (d = 21 in family) and ≈ 2.01 (d = 19.6 in, δ1 = 17°, δ2 = 10°).
-10. **Viscous share** (Fetterman fig. 2): at Re_ℓ ≈ 1.4×10⁶, laminar,
+10. **Grant & Braun biconic contours** (friction off, K=2, Phase 2b): peak
+    L/D ≈ 1.86 (d = 21 in family) and ≈ 2.01 (d = 19.6 in, δ1=17°, δ2=10°).
+11. **Viscous share** (Fetterman fig. 2): at Re_ℓ ≈ 1.4×10⁶, laminar,
     viscous/inviscid drag ratio at α=0 in the 2–5× range for slender forms.
-11. **Fetterman wedge≡delta equivalence**: our swept wedge at AR 0.707 / 1.46
+12. **Fetterman wedge≡delta equivalence**: our swept wedge at AR 0.707 / 1.46
     tracks his 80°/70°-sweep delta-wing curves (direction + magnitude band).
 
-## 6. GUI
+## 6. Build stages and code layout
 
-The β-estimator dialog grows a body-form-aware mode: for wedge/half-cone it
-takes the Section-3 inputs, shows the sweep table + trim row, and "Use these
-values" writes β(α=0), glider L/D = (L/D)max, and stores α*/C_L0 on the RO.
-Existing cone/biconic mode gains the same sweep display.  Conditions line is
-always visible.
+- **Phase 2a (next commit): estimator core + tests, no GUI, no trajectory
+  change.**  In `booster_models.py`: `frustum_sector_newtonian(...)` (the
+  general φ-limited pressure integral, full cone = special case),
+  `wedge_newtonian(...)` (facet build-up), `cf_reference_temperature(...)`
+  (Eckert helper), and `lifting_body_sweep(form, geom, M, Re, ...)` returning
+  the α-table + trim row.  Tests in `test_lifting_body_estimator.py`:
+  identities 1–5 first, then measured anchors 6–8, 11–12 (anchor 9/Candler
+  needs a flight-Re Cf case; anchor 10/biconic is 2b).
+- **Phase 2b: cone/biconic sweep** on the same sector machinery (continuity
+  rules in §2.1), the blunted-nose chart cross-check that retires the METHODS
+  §8.8 provenance wart, Grant contours (anchor 10).
+- **Phase 2c — GUI**: the β-estimator dialog grows a body-form-aware mode —
+  for wedge/half-cone it takes the §3 inputs, shows the sweep table + trim
+  row, and "Use these values" writes β(α=0), glider L/D = (L/D)max, and stores
+  α*/C_L0 on the RO; cone/biconic mode gains the same display.  The conditions
+  line (M, Re, laminar/turbulent, base on/off, A_ref, K, wall temp) is always
+  visible.
 
 ## 7. Phase-3 hooks (explicitly out of Phase-2 scope)
 
