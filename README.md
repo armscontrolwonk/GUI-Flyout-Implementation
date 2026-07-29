@@ -298,6 +298,16 @@ tabbed notebook**.
   exact single-cone reduction at `break⌀ = base⌀`), and the **Schematic** draws
   the true two-cone profile. β and L/D remain the reentry carriers; biconic
   geometry sharpens the estimate and the picture (METHODS §8.8).
+- **Lifting-body forms (wedge / half-cone)** — a reentry object can declare
+  its **body form**: body of revolution (default), **flattened wedge**
+  (HTV-2 class; ⌀ = base depth, planform span not modeled and flagged), or
+  **half-cone** (flat diametral plane over a conical surface). The Schematic
+  draws the honest asymmetric side elevation and names the form; the
+  trajectory physics are unchanged — β and L/D carry them, with two caveats
+  worth knowing: published lifting-body β is usually quoted *at trim* (the
+  polar wants zero-lift β), and the pull ceiling is a body-of-revolution
+  value, conservative for wedges (METHODS §8.8). A lifting-body trim
+  estimator is planned.
 - **Dive-at-target radius is a lead distance, not a target size.** The
   range-triggered terminal dive fires while the glider is *inside* the
   target circle and releases when it leaves — it is a region, not a latch.

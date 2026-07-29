@@ -2382,6 +2382,13 @@ class ROEditorDialog(tk.Toplevel):
         "skip_to_equilibrium":     "Damped phugoid glide",
     }
 
+    # ROParams.body_form display labels (the label carries the ⌀ convention).
+    _BODY_FORM_LABELS = {
+        "axisymmetric": "body of revolution",
+        "wedge":        "flattened wedge (⌀ = base depth)",
+        "half_cone":    "half-cone lifting body",
+    }
+
     def __init__(self, parent, ro=None, mass_kg=500.0):
         super().__init__(parent)
         self.title("Edit Reentry Object" if ro is not None else "New Reentry Object")
@@ -2478,9 +2485,10 @@ class ROEditorDialog(tk.Toplevel):
         _lbl(8, "Biconic body:")
         self._biconic_var = tk.BooleanVar(
             value=bool(getattr(ro, 'biconic', False)) if ro else False)
-        ttk.Checkbutton(frm, variable=self._biconic_var, text="two-cone (fore + aft)",
-                        command=self._update_biconic_state).grid(
-            row=8, column=1, sticky=tk.W, pady=3)
+        self._biconic_chk = ttk.Checkbutton(
+            frm, variable=self._biconic_var, text="two-cone (fore + aft)",
+            command=self._update_biconic_state)
+        self._biconic_chk.grid(row=8, column=1, sticky=tk.W, pady=3)
         _lbl(9, "Fore-cone length (m):")
         self._fore_len_var = tk.StringVar(
             value=f"{getattr(ro, 'fore_length_m', 0.0):.2f}" if ro else "0")
@@ -2489,6 +2497,25 @@ class ROEditorDialog(tk.Toplevel):
         self._break_dia_var = tk.StringVar(
             value=f"{getattr(ro, 'break_diameter_m', 0.0):.2f}" if ro else "0")
         self._break_dia_entry = _entry(10, self._break_dia_var, width=10)
+
+        # Body form — body of revolution (default) or a lifting body.  Phase 1:
+        # data + honest depiction only; the physics ride on β / L/D and are
+        # identical across forms.  Biconic is a body-of-revolution concept, so
+        # selecting a lifting body unticks and disables it.
+        _lbl(11, "Body form:")
+        _bf0 = str(getattr(ro, 'body_form', '') or 'axisymmetric') if ro \
+            else 'axisymmetric'
+        self._body_form_var = tk.StringVar(
+            value=self._BODY_FORM_LABELS.get(_bf0,
+                                             self._BODY_FORM_LABELS['axisymmetric']))
+        self._body_form_combo = ttk.Combobox(
+            frm, textvariable=self._body_form_var,
+            values=list(self._BODY_FORM_LABELS.values()),
+            state="readonly", width=28)
+        self._body_form_combo.grid(row=11, column=1, sticky=tk.W, pady=3)
+        self._body_form_combo.bind("<<ComboboxSelected>>",
+                                   lambda _e: self._update_body_form_state())
+        self._update_body_form_state()
         self._update_biconic_state()
 
         # Sync the read-only state of mass/diameter/length to separation mode
@@ -2932,7 +2959,10 @@ class ROEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
-        biconic = bool(self._biconic_var.get())
+        body_form = self._body_form_key()
+        # The editor disables the tick for lifting bodies; the guard makes the
+        # rule hold even if state drifted (biconic = body of revolution only).
+        biconic = bool(self._biconic_var.get()) and body_form == "axisymmetric"
         fore_len_m = break_dia_m = 0.0
         if biconic:
             try:
@@ -3014,6 +3044,7 @@ class ROEditorDialog(tk.Toplevel):
             nose_radius_m=nose_rn,
             biconic=biconic, fore_length_m=fore_len_m,
             break_diameter_m=break_dia_m,
+            body_form=body_form,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -3054,6 +3085,22 @@ class ROEditorDialog(tk.Toplevel):
         st = "normal" if self._biconic_var.get() else "disabled"
         self._fore_len_entry.config(state=st)
         self._break_dia_entry.config(state=st)
+
+    def _body_form_key(self):
+        """The ROParams.body_form key for the current combobox label."""
+        disp = self._body_form_var.get()
+        return next((k for k, v in self._BODY_FORM_LABELS.items() if v == disp),
+                    "axisymmetric")
+
+    def _update_body_form_state(self):
+        """Biconic is a body-of-revolution concept: a lifting-body form unticks
+        and disables it (and its entries, via _update_biconic_state)."""
+        if self._body_form_key() != "axisymmetric":
+            self._biconic_var.set(False)
+            self._biconic_chk.config(state="disabled")
+        else:
+            self._biconic_chk.config(state="normal")
+        self._update_biconic_state()
 
     # ---- TPS material dropdown helpers (§10 materials dropdown) --------
     _MAT_NONE_LABEL   = "(none — numbers only)"

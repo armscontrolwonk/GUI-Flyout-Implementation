@@ -144,6 +144,19 @@ def _biconic_shape(ax, x0, y0, diam, length, break_d, fore_len, nose_r,
     ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
 
 
+def _lifting_body_shape(ax, x0, y0, depth, length, color, edge):
+    """A lifting body in side elevation, nose-up: the flat surface is a
+    straight flank parallel to the axis (drawn on the left), the opposite
+    surface slopes from the base up to the nose tip over the flat flank —
+    visibly NOT a body of revolution.  `depth` is the side-view thickness at
+    the base (wedge: the stored ⌀ = base depth; half-cone: ⌀/2, cut at the
+    diametral plane).  The unmodeled spanwise width is flagged in the caption,
+    never drawn."""
+    h = depth / 2.0
+    pts = [(x0 - h, y0), (x0 + h, y0), (x0 - h, y0 + length)]
+    ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.3, zorder=3))
+
+
 def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     """Draw the reentry object to scale in the lower-RIGHT corner, base on the
     y = 0 ground line, from its own stored geometry, with its text to the right.
@@ -156,7 +169,12 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     edge swept back from the spanwise axis.  With only a wing AREA stored, a
     small fixed-proportion delta tab is drawn at the aft flank and the label
     says "(schematic)" — an honest marker, never fake dimensions.  A length of
-    0 falls back to a nominal cone and is flagged, like the nose."""
+    0 falls back to a nominal cone and is flagged, like the nose.
+
+    body_form "wedge" / "half_cone" draws the asymmetric side elevation (flat
+    flank + sloped surface) with the form named in the caption; the wedge's
+    unmodeled span is flagged, and wings — spanwise, out of the side-elevation
+    plane — are reported in the caption but not drawn."""
     D = float(getattr(ro, "diameter_m", 0.0) or 0.0)
     if D <= 0:
         return
@@ -168,9 +186,20 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     rn = float(getattr(ro, "nose_radius_m", 0.0) or 0.0)
     R = D / 2.0
 
+    # Body form: axisymmetric (default) or a lifting body.  Wedge: the stored
+    # ⌀ is the base DEPTH (side-view thickness); half-cone: the stored ⌀ is
+    # the full cone diameter, so the side view is ⌀/2 deep at the cut plane.
+    form = str(getattr(ro, "body_form", "") or "axisymmetric")
+    if form not in ("wedge", "half_cone"):
+        form = "axisymmetric"
+    lifting = form != "axisymmetric"
+    depth = D if form == "wedge" else D / 2.0        # side-view base thickness
+    R_view = (depth / 2.0) if lifting else R          # half-extent for layout
+
     # Biconic body when declared and geometrically valid; else a plain cone.
+    # A body-of-revolution concept — ignored for the lifting-body forms.
     bic = None
-    if getattr(ro, "biconic", False):
+    if getattr(ro, "biconic", False) and not lifting:
         Lf = float(getattr(ro, "fore_length_m", 0.0) or 0.0)
         Dbrk = float(getattr(ro, "break_diameter_m", 0.0) or 0.0)
         if 0 < Lf < L and 0 < Dbrk < D:
@@ -198,7 +227,11 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     wing_flag = ""
     if w_src == 'direct' and AR_eff <= 0:
         wing_flag = " · AR def."                      # polar fail-safe, flagged
-    if planform:
+    if lifting:
+        # Spanwise panels are out of the drawing plane in a lifting-body side
+        # elevation — the caption still reports S/AR, flagged "not drawn".
+        wing_ext, glyph, planform = 0.0, False, False
+    elif planform:
         wing_ext, glyph = w_ss, False
     elif w_src == 'direct':
         wing_ext, glyph = 0.35 * R, True              # fixed-proportion tab
@@ -212,12 +245,14 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     H = max(yl[1] - yl[0], 1e-6)
     m_per_in = H / max(pos.height * fh_in, 1e-6)
     label_w = 1.7 * m_per_in           # room for the longest label line
-    x0 = view_right - 0.25 - label_w - (R + wing_ext)
+    x0 = view_right - 0.25 - label_w - (R_view + wing_ext)
     # Never drift left into (or past) the vehicle on small views: the RO stays
     # a clear margin right of the stack even if the label then runs tight.
-    x0 = max(x0, veh_right + 0.4 + wing_ext + R)
+    x0 = max(x0, veh_right + 0.4 + wing_ext + R_view)
 
-    if bic is not None:
+    if lifting:
+        _lifting_body_shape(ax, x0, 0.0, depth, L, NOSE, BODY_E)
+    elif bic is not None:
         _biconic_shape(ax, x0, 0.0, D, L, bic[1], bic[0], rn, NOSE, BODY_E)
     else:
         _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
@@ -249,7 +284,15 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     name = getattr(ro, "name", "") or "RV"
     beta = float(getattr(ro, "beta_kg_m2", 0.0) or 0.0)
     ld = float(getattr(ro, "glider_LD", 0.0) or 0.0)
-    lines = [f"reentry object: {name}", f"⌀{D:g}×{L:g} m{flag}"]
+    if form == "wedge":
+        size_line = f"depth {D:g} × {L:g} m{flag}"
+    else:
+        size_line = f"⌀{D:g}×{L:g} m{flag}"
+    lines = [f"reentry object: {name}", size_line]
+    if form == "wedge":
+        lines.append("wedge lifting body · span not modeled")
+    elif form == "half_cone":
+        lines.append("half-cone lifting body (side depth ⌀/2)")
     tail = []
     if beta > 0:
         tail.append(f"β {beta:,.0f}")
@@ -266,8 +309,16 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         lines.append(f"wings S={S_eff:.3g} m² · AR {AR_eff:.2g} (derived)")
     elif glyph:
         lines.append(f"wings S={S_eff:g} m² (schematic{wing_flag})")
+    elif lifting and w_src is not None:
+        # Wing data on a lifting body: reported, honestly not drawn (spanwise
+        # panels are out of the side-elevation plane).
+        if w_src == 'planform':
+            lines.append(f"wings S={S_eff:.3g} m² · AR {AR_eff:.2g} "
+                         "(derived · not drawn)")
+        else:
+            lines.append(f"wings S={S_eff:g} m² (not drawn{wing_flag})")
     # text to the RIGHT of the body/wings
-    label_x = x0 + R + wing_ext + 0.2
+    label_x = x0 + R_view + wing_ext + 0.2
     ax.text(label_x, L / 2.0, "\n".join(lines),
             va="center", ha="left", fontsize=7.5, color=LABEL_MUT)
     # widen the view rightward if the caption would run past the edge (keeps

@@ -1812,6 +1812,39 @@ in publication-grade work.
 For hypersonic glide vehicles the constant-β model is augmented by a
 lift term and (optionally) a polar-drag model — see Section 12.
 
+**Lifting-body forms (wedge, half-cone) — data model and depiction only.**
+`ROParams.body_form` declares how the airframe carries its volume:
+`"axisymmetric"` (default — cone or biconic body of revolution), `"wedge"`
+(flattened wedge lifting body, HTV-2 class; `diameter_m` is the **base
+depth**, and the planform span is *not modeled* — the schematic flags it
+rather than inventing one), or `"half_cone"` (flat diametral plane over a
+conical lower surface; `diameter_m` is the full cone diameter, so the
+side-elevation depth is ⌀/2).  The schematic draws the asymmetric
+silhouette (flat flank + sloped surface) and names the form in the caption;
+`biconic` applies only to bodies of revolution and is ignored otherwise.
+
+The **trajectory physics are deliberately untouched**: β, L/D, and the
+derived polar (§12) remain the canonical carriers, and two ROParams that
+differ only in `body_form` fly byte-identical trajectories.  Three known
+limitations of applying the axisymmetric machinery to a lifting body,
+pending a lifting-body trim estimator (planned):
+
+1. *Pull ceiling understated.*  `C_L,max = 2α` at the 25° AoA limit is a
+   slender-body-of-revolution value; a flat-bottomed wedge generates
+   several times that usable C_L at the same AoA, so maximum lateral
+   acceleration (dive steepness, turn radius) is conservative for
+   HTV-2-class vehicles.
+2. *Trim-β vs zero-lift-β.*  The polar defines β at **zero lift**
+   (`C_D0 = m/(β·A_ref)`), but published lifting-body β figures are usually
+   quoted **at trim**, where induced drag is already included.  Entering a
+   trim β as the zero-lift β double-counts induced drag and flattens the
+   glide.  Prefer a zero-lift estimate; a lifting-body estimator that
+   outputs the right kind of β is the planned Phase 2.
+3. *Reference-area convention.*  The cruise side is invariant to A_ref
+   (β and L/D absorb it), but the physical pull limit is
+   `q·C_L,max·A_ref/m`, so what the `diameter_m` field means (depth, for a
+   wedge) silently scales maximum g.
+
 ### 8.9 Static margin and grid-fin sizing
 
 The static margin tells whether a vehicle's fins are appropriately sized for

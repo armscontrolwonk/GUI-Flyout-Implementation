@@ -281,6 +281,10 @@ class BoosterParams:
 # longer written by the editor or read by the integrator when params.ro is set.
 # ---------------------------------------------------------------------------
 
+# Valid ROParams.body_form values (see the field's comment below).
+BODY_FORMS = ("axisymmetric", "wedge", "half_cone")
+
+
 @dataclass
 class ROParams:
     """Reentry vehicle or hypersonic glide body — independently loadable."""
@@ -307,6 +311,22 @@ class ROParams:
     biconic:         bool  = False
     fore_length_m:   float = 0.0    # length of the forward cone (m)
     break_diameter_m: float = 0.0   # diameter at the cone-cone junction (m)
+
+    # Body form — how the airframe carries its volume.  Phase 1: data model +
+    # honest depiction ONLY.  The trajectory physics ride on β / L/D / the
+    # derived polar and are IDENTICAL across forms (a lifting-body trim
+    # estimator and a shape-derived pull ceiling are Phase 2/3).
+    #   "axisymmetric" — body of revolution (cone / biconic).  Default.
+    #   "wedge"        — flattened wedge lifting body (HTV-2 class).
+    #                    diameter_m is the BASE DEPTH (thickness); the
+    #                    planform span is NOT modeled and the schematic
+    #                    flags it rather than inventing one.
+    #   "half_cone"    — half-cone lifting body (flat diametral plane over a
+    #                    conical lower surface); diameter_m is the full cone
+    #                    diameter, so the side-elevation depth is D/2.
+    # biconic applies only to "axisymmetric" (it is a body-of-revolution
+    # concept); consumers ignore it for the lifting-body forms.
+    body_form: str = "axisymmetric"
 
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
@@ -637,6 +657,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'biconic':               ro.biconic,
         'fore_length_m':         ro.fore_length_m,
         'break_diameter_m':      ro.break_diameter_m,
+        'body_form':             ro.body_form,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -697,6 +718,11 @@ def ro_from_dict(d: dict) -> ROParams:
         biconic=bool(d.get('biconic', False)),
         fore_length_m=float(d.get('fore_length_m', 0.0)),
         break_diameter_m=float(d.get('break_diameter_m', 0.0)),
+        # Unknown/legacy strings normalise to the default rather than crash —
+        # an old JSON simply has no body_form (= body of revolution).
+        body_form=(str(d.get('body_form', '') or '')
+                   if str(d.get('body_form', '') or '') in BODY_FORMS
+                   else 'axisymmetric'),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
