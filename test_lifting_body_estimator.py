@@ -18,6 +18,7 @@ import pytest
 from booster_models import (
     cone_sector_newtonian, flat_plate_newtonian, cf_reference_temperature,
     cd_blunted_cone_newtonian, lifting_body_sweep,
+    _wedge_coeffs, _planar_face_force, wedge_planform_area,
     NEWTON_K_SLENDER, NEWTON_K_BLUNT,
 )
 
@@ -165,3 +166,119 @@ def test_friction_is_first_order_at_test_reynolds():
                               base_drag=False)['trim']['C_D0']
     viscous = full - invisc
     assert viscous > 0.0 and viscous / invisc >= 0.8, (invisc, viscous)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Wedge composer (Phase 2a part 2)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Identity 1: the sharp wedge → flat plate as depth → 0 ───────────────────
+@pytest.mark.parametrize("al", [2.0, 5.0, 10.0, 18.0])
+def test_wedge_reduces_to_flat_plate_at_zero_depth(al):
+    """With no ridge (depth→0) only the flat bottom is lit for α>0, giving the
+    exact plate law C_L = K·sin²α·cosα, C_D,pressure = K·sin³α."""
+    L, b = 4.0, 1.4
+    s_ref = wedge_planform_area(L, b)
+    c = _wedge_coeffs(L, 1e-7, b, al, NEWTON_K_SLENDER, 0.0, False, 10.0, s_ref)
+    a = math.radians(al)
+    assert c['C_L'] == pytest.approx(NEWTON_K_SLENDER * math.sin(a) ** 2 * math.cos(a), abs=1e-4)
+    assert c['C_D'] == pytest.approx(NEWTON_K_SLENDER * math.sin(a) ** 3, abs=1e-4)
+
+
+# ── Identity: the top facet Cp equals AEDC-TDR-64-25 Eq. 72 exactly ─────────
+@pytest.mark.parametrize("al", [0.0, 2.0, 4.0])
+def test_top_facet_pressure_matches_aedc_eq72(al):
+    """Independent check of the wedge's sign/geometry bookkeeping: the facet
+    pressure built from vertices equals AEDC's closed form
+    Cp = K·sin²(ε−α) / (1 + tan²Λ·sin²ε)  (lit region α < ε)."""
+    L, b, t = 4.0, 1.4, 0.6
+    eps = math.atan2(t, L)
+    lam = math.atan2(2.0 * L, b)
+    nose, ridge, rt = (0, 0, 0), (L, 0, t), (L, 0.5 * b, 0)
+    a = math.radians(al)
+    v_hat = (math.cos(a), 0.0, math.sin(a))
+    F, area = _planar_face_force((nose, ridge, rt), v_hat, NEWTON_K_SLENDER, (0, 0, 1))
+    cp = math.sqrt(sum(x * x for x in F)) / area
+    aedc = NEWTON_K_SLENDER * math.sin(eps - a) ** 2 \
+        / (1.0 + math.tan(lam) ** 2 * math.sin(eps) ** 2)
+    assert cp == pytest.approx(aedc, abs=1e-9)
+
+
+def test_top_facet_shadows_exactly_at_ridge_angle():
+    """The top facet is lit for α < ε and shadowed for α > ε — the transition
+    is exactly at the ridge angle ε = atan(t/L)."""
+    L, b, t = 4.0, 1.4, 0.6
+    eps_deg = math.degrees(math.atan2(t, L))
+    nose, ridge, rt = (0, 0, 0), (L, 0, t), (L, 0.5 * b, 0)
+    def facet_cp(al):
+        a = math.radians(al)
+        F, area = _planar_face_force((nose, ridge, rt),
+                                     (math.cos(a), 0.0, math.sin(a)),
+                                     NEWTON_K_SLENDER, (0, 0, 1))
+        return math.sqrt(sum(x * x for x in F)) / area
+    assert facet_cp(eps_deg - 1.0) > 0.0        # lit just below ε
+    assert facet_cp(eps_deg + 1.0) == 0.0       # shadowed just above ε
+
+
+# ── Camber offset emerges (not assumed): C_L(0) < 0 ─────────────────────────
+def test_wedge_has_negative_lift_at_zero_alpha():
+    """At α=0 the flat bottom is edge-on (no load) but the top facets face
+    forward and push DOWN, so C_L(0) < 0 and both zero-lift and min-drag sit
+    at small POSITIVE α — the camber offset is geometric, not assumed."""
+    r = lifting_body_sweep("wedge", length_m=3.6, depth_m=0.5, span_m=0.9,
+                           mach=20.0, reynolds_length=1.5e7, turbulent=True)
+    row0 = min(r['alpha'], key=lambda x: abs(x['alpha_deg']))
+    assert row0['C_L'] < 0.0
+    assert r['trim']['alpha_star_deg'] > 0.0
+
+
+# ── Direction: more friction (lower Re) raises α* and lowers (L/D)max ────────
+def test_wedge_alpha_star_rises_as_reynolds_falls():
+    star = [lifting_body_sweep("wedge", length_m=3.6, depth_m=0.5, span_m=0.9,
+                               mach=20.0, reynolds_length=Re, turbulent=True)['trim']
+            for Re in (1e8, 1e7, 1e6)]
+    a = [s['alpha_star_deg'] for s in star]
+    ld = [s['LD_max'] for s in star]
+    assert a[0] < a[1] < a[2]                    # α* rises as Re falls
+    assert ld[0] > ld[1] > ld[2]                 # L/D falls as friction grows
+
+
+# ── Documented limitation: sweep-independent at trim (NOT Fetterman's trend) ─
+def test_sharp_wedge_LD_is_nearly_sweep_independent_at_trim():
+    """Honest codification of the fidelity limit: with the top facets shadowed
+    at trim, the sharp flat-bottom wedge's (L/D)max barely depends on planform
+    sweep (only through a small change in top-facet wetted area) — span sets the
+    reference area and the picture, not this L/D.  Contrast Fetterman's STRONG
+    sweep trend, a bluntness/tip effect above this fidelity that we do NOT
+    claim."""
+    def ld(b):
+        return lifting_body_sweep("wedge", length_m=1.0, depth_m=0.025, span_m=b,
+                                  mach=6.8, reynolds_length=1.5e6,
+                                  turbulent=False, base_drag=False)['trim']['LD_max']
+    assert ld(0.353) == pytest.approx(ld(0.73), rel=5e-3)   # 80° vs 70°: <0.5%
+
+
+# ── Anchor 13: sharp wedge is an UPPER BOUND above the real HTV-2 ────────────
+def test_wedge_is_an_upper_bound_over_real_htv2():
+    """Sharp-Newtonian over-predicts the real (blunt, viscous) HTV-2: our L/D
+    sits ABOVE Candler's CFD ≈2.5 yet BELOW the viscous-waverider ceiling, and
+    α* is a plausible hypersonic trim.  We assert the bracket, not a fit."""
+    r = lifting_body_sweep("wedge", length_m=3.6, depth_m=0.5, span_m=0.9,
+                           mach=20.0, reynolds_length=1.5e7, turbulent=True)
+    ld = r['trim']['LD_max']
+    assert 2.5 < ld < 6.0                        # above real, below waverider
+    assert 5.0 <= r['trim']['alpha_star_deg'] <= 18.0
+
+
+# ── β / reference area: wedge is planform-referenced ────────────────────────
+def test_wedge_beta_uses_planform_reference():
+    r = lifting_body_sweep("wedge", length_m=3.6, depth_m=0.5, span_m=0.9,
+                           mach=20.0, reynolds_length=1.5e7, turbulent=True,
+                           mass_kg=900.0)
+    assert r['conditions']['a_ref_kind'] == "planform"
+    sp = wedge_planform_area(3.6, 0.9)
+    assert r['conditions']['a_ref_m2'] == pytest.approx(sp)
+    # β = m / (C_D0 · A_ref) at the near-zero-α row
+    assert 'beta_zero_lift' in r['trim'] and r['trim']['beta_zero_lift'] > 0.0
+    assert r['conditions']['sweep_deg'] == pytest.approx(
+        math.degrees(math.atan2(2 * 3.6, 0.9)))
