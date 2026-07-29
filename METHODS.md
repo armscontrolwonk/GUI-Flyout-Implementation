@@ -1802,12 +1802,28 @@ the biconic geometry only sharpens the β *estimate* and the depiction.
 `test_biconic_estimator.py` pins the reductions, the component and geometry
 identities, and a slender-RV β band.
 
-For blunted cones the pressure table is taken from a published
-Newtonian-hypersonic Cd chart cited in the source code as "Ref (4) Ch. 5".
-The full primary reference for "Ref (4)" is not defined in the repository;
-given the surrounding source chain (Section 8.2) it is plausibly Chin
-(1961) Ch. 5, but this should be verified before citing the table as Chin
-in publication-grade work.
+For blunted cones the pressure drag is the **exact closed form**
+
+```
+C_D = 2·sin²θ + ε²·cos⁴θ            (base-area ref, ε = r_N/r_b)
+```
+
+the superposition of the spherical nose cap (`ε²·(1−sin⁴θ)`) and the cone
+frustum it caps (`2·sin²θ·(1−ε²·cos²θ)`, tangency at `r = r_N·cosθ`), which
+sum exactly to the expression above.  It is the zero-AoA reduction of the
+developed Newtonian impact expressions for complete and partial conic and
+spheric bodies in **Wells & Armstrong, NASA TR R-127 (1962)** (also Anderson,
+*Hypersonic and High-Temperature Gas Dynamics*).
+
+This **replaced** an earlier unattributed "Ref (4) Ch. 5" interpolation
+chart (4 half-angles × 6 nose ratios) that was found, on cross-check against
+the closed form, to materially **under-count** blunt-nose pressure drag —
+e.g. at θ=10°, ε=0.6 the chart gave 0.08 where the correct value is 0.40 (a
+5× error), because it merely interpolated between the sharp cone (2·sin²θ)
+and a hemisphere (1.0) rather than integrating the sphere-cone. Estimated β
+for blunt-nosed reentry objects therefore **drops** relative to older runs
+(higher pressure drag → lower β); sharp objects (ε=0) are unchanged, and for
+slender objects friction still dominates the total so the shift is modest.
 
 For hypersonic glide vehicles the constant-β model is augmented by a
 lift term and (optionally) a polar-drag model — see Section 12.

@@ -2128,60 +2128,41 @@ def _hoerner_cp_impact(mach: float) -> float:
 # ---------------------------------------------------------------------------
 # Blunted-cone hypersonic Cd — the "Estimate Object β" physics
 # ---------------------------------------------------------------------------
-# Newtonian blunted-cone PRESSURE Cd table — Ref (4) Ch. 5, hypersonic /
-# zero AoA.  Rows: half-angle 10°, 20°, 30°, 40°.
-# Cols: nose-radius ratio ε = r_N/r_b  0.0, 0.2, 0.4, 0.6, 0.8, 1.0.
-_BCON_THETA = [10.0, 20.0, 30.0, 40.0]
-_BCON_EPS   = [0.0,  0.2,  0.4,  0.6,  0.8,  1.0]
-_BCON_TABLE = [
-    [0.0603, 0.063, 0.068, 0.080, 0.200, 1.00],
-    [0.2340, 0.238, 0.250, 0.310, 0.540, 1.00],
-    [0.5000, 0.507, 0.530, 0.600, 0.750, 1.00],
-    [0.8264, 0.835, 0.860, 0.900, 0.965, 1.00],
-]
-
-
+# Newtonian blunted-cone PRESSURE Cd is a closed form (see below), derived
+# from the Newtonian impact expressions in Wells & Armstrong, NASA TR R-127
+# (1962).  It replaced an earlier unattributed "Ref (4) Ch. 5" chart table
+# that under-counted blunt-nose drag.
 def cd_blunted_cone_newtonian(theta_deg: float, eps: float) -> float:
-    """Newtonian PRESSURE Cd (base-area ref) of a blunted cone, zero AoA.
+    """Newtonian PRESSURE Cd (base-area ref) of a spherically-blunted cone at
+    zero angle of attack — the EXACT closed form, not a chart:
+
+        C_D = 2·sin²θ + ε²·cos⁴θ                 (ε = r_N / r_b)
 
     theta_deg : cone half-angle (degrees)
-    eps       : nose-radius ratio r_N/r_b  (0 = sharp tip, 1 = hemisphere)
+    eps       : nose-radius ratio r_N/r_b (0 = sharp tip, 1 = r_N = r_b)
 
-    For eps = 0 the exact Newtonian formula 2·sin²θ is returned.  For other
-    values bilinear interpolation is used on the Ref (4) Ch. 5 chart table;
-    the bluntness excess is scaled onto the exact sharp-cone value so angles
-    outside the 10°–40° table range are handled smoothly.
+    It is the superposition of the spherical nose cap and the truncated cone
+    frustum it caps, each base-area referenced:
+        cap      drag/q = π·r_N²·(1 − sin⁴θ)   →   ε²·(1 − sin⁴θ)
+        frustum  2·sin²θ·(1 − ε²·cos²θ)          (tangency at r = r_N·cosθ)
+    which sum, exactly, to 2·sin²θ + ε²·cos⁴θ.  Reductions: ε=0 gives the sharp
+    cone 2·sin²θ; the ε²·cos⁴θ term is the blunt-nose pressure the sharp
+    formula omits (dominant for a slender, blunt nose).
 
-    This is the inviscid pressure term ONLY.  On a slender cone (θ ≲ 10°)
-    pressure drag is small and the axial drag is dominated by skin friction —
-    use cd_cone_hypersonic() for a total-Cd estimate.
+    Source: the zero-AoA reduction of the developed Newtonian impact
+    expressions for complete conic and spheric bodies in Wells & Armstrong,
+    NASA TR R-127 (1962); also Anderson, *Hypersonic and High-Temperature Gas
+    Dynamics*.  This REPLACES an earlier unattributed "Ref (4) Ch. 5"
+    interpolation chart that materially UNDER-counted blunt-nose drag (e.g.
+    θ=10°, ε=0.6: chart 0.08 vs. the correct 0.40 — a 5× error).
+
+    Inviscid pressure term ONLY; on a slender cone friction dominates the axial
+    drag — use cd_cone_hypersonic() for a total-Cd estimate.
     """
     import math
-    th        = math.radians(max(1.0, min(float(theta_deg), 89.0)))
-    cd_sharp  = 2.0 * math.sin(th) ** 2
-    eps       = max(0.0, min(float(eps), 1.0))
-    if eps == 0.0:
-        return cd_sharp
-
-    theta_c = max(_BCON_THETA[0], min(float(theta_deg), _BCON_THETA[-1]))
-    i_th = next((i for i in range(len(_BCON_THETA) - 1)
-                 if _BCON_THETA[i + 1] >= theta_c), len(_BCON_THETA) - 2)
-    i_ep = next((i for i in range(len(_BCON_EPS) - 1)
-                 if _BCON_EPS[i + 1] >= eps), len(_BCON_EPS) - 2)
-
-    t_th = (theta_c - _BCON_THETA[i_th]) / (_BCON_THETA[i_th + 1] - _BCON_THETA[i_th])
-    t_ep = (eps     - _BCON_EPS[i_ep])   / (_BCON_EPS[i_ep + 1]   - _BCON_EPS[i_ep])
-
-    c = _BCON_TABLE
-    cd_tbl = (c[i_th    ][i_ep    ] * (1 - t_th) * (1 - t_ep) +
-              c[i_th + 1][i_ep    ] * t_th        * (1 - t_ep) +
-              c[i_th    ][i_ep + 1] * (1 - t_th)  * t_ep       +
-              c[i_th + 1][i_ep + 1] * t_th         * t_ep)
-
-    # Bluntness excess at the (clamped) table half-angle
-    cd_sharp_tbl = c[i_th][0] * (1 - t_th) + c[i_th + 1][0] * t_th
-    bluntness    = cd_tbl - cd_sharp_tbl
-    return cd_sharp + bluntness
+    th = math.radians(max(1.0, min(float(theta_deg), 89.0)))
+    ep = max(0.0, min(float(eps), 1.0))
+    return 2.0 * math.sin(th) ** 2 + ep * ep * math.cos(th) ** 4
 
 
 # Screening constants for the viscous/base completion of the cone Cd.
@@ -2209,8 +2190,8 @@ def cd_cone_hypersonic(theta_deg: float, eps: float, mach: float = 10.0,
     wetted); wing wave drag needs thickness/sweep the geometry alone can't give
     and is omitted (labeled, conservative-low on the wing term).
 
-      pressure : Newtonian 2·sin²θ + published bluntness excess
-                 (cd_blunted_cone_newtonian, Ref (4) Ch. 5 chart)
+      pressure : Newtonian closed form 2·sin²θ + ε²·cos⁴θ
+                 (cd_blunted_cone_newtonian; Wells & Armstrong NASA TR R-127)
       friction : Cf · S_wet/A_base.  Exact frustum geometry: the conical
                  surface runs from the sphere-cone tangency radius
                  r_t = ε·r_b·cosθ to r_b, so
