@@ -283,8 +283,9 @@ tabbed notebook**.
   impact range vs. the swept variable.
 - **β Calculator** — estimates reentry-object ballistic coefficient from cone
   geometry (half-angle, nose bluntness ratio, eval Mach, optional wing area):
-  Newtonian pressure (Ref (4) Ch. 5 chart) + turbulent skin friction +
-  hypersonic base drag + wing friction, each component shown (METHODS §8.8).
+  Newtonian pressure (closed form 2·sin²θ + ε²·cos⁴θ, Wells & Armstrong
+  TR R-127) + turbulent skin friction + hypersonic base drag + wing friction,
+  each component shown (METHODS §8.8).
 - **Wing-decoupled drag polar** — a reentry object with a declared wing area
   (and optional aspect ratio) pulls more efficiently than a bare slender body:
   the drag bucket is broadened on the pull side only, so a commanded pull-up
@@ -774,10 +775,10 @@ mission ΔV; ~10% payload error.
 ### Cone β calculator (`booster_models.cd_cone_hypersonic`)
 
 Hypersonic axial Cd for a blunted cone as a three-term build-up: Newtonian
-pressure (sharp cone `2·sin²θ` exactly; blunted via bilinear interpolation
-on the 4×6 Ref (4) Ch. 5 chart, θ = 10°–40°, ε = 0–1.0) **plus** turbulent
-skin friction (`Cf·S_wet/A_base`, exact frustum geometry, Cf = 0.0012
-screening constant) **plus** hypersonic base drag (`2/γM²`).  The viscous
+pressure (the exact closed form `2·sin²θ + ε²·cos⁴θ`, Wells & Armstrong
+TR R-127 — sharp cone `2·sin²θ` at ε=0) **plus** turbulent skin friction
+(`Cf·S_wet/A_base`, exact frustum geometry, Cf = 0.0012 screening constant)
+**plus** hypersonic base drag (`2/γM²`).  The viscous
 and base terms matter enormously for slender cones — pressure-only
 under-counted a 5.25° cone's Cd ~4× and inflated its estimated β to
 ~10⁵ kg/m² (METHODS §8.8) — and are a 2–4% perturbation for blunt RVs.

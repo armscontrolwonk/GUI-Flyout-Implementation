@@ -2817,10 +2817,10 @@ class ROEditorDialog(tk.Toplevel):
             row=6, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         beta_lbl.grid(row=6, column=1, sticky=tk.W)
         ttk.Label(res,
-                  text="Newtonian pressure (Ref (4) Ch. 5) + turbulent skin\n"
-                       "friction + hypersonic base drag + wing friction.  Cf is\n"
-                       "a screening constant (0.0008–0.0015 band); wing wave\n"
-                       "drag (thickness/sweep) is not carried.",
+                  text="Newtonian pressure 2·sin²θ + ε²·cos⁴θ (Wells &\n"
+                       "Armstrong TR R-127) + turbulent skin friction +\n"
+                       "hypersonic base drag + wing friction.  Cf is a screening\n"
+                       "constant (0.0008–0.0015 band); wing wave drag is not carried.",
                   foreground="gray50", justify=tk.LEFT).grid(
             row=7, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
 

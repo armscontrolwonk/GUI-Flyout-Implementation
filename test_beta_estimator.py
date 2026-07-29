@@ -31,6 +31,30 @@ def test_sharp_cone_pressure_is_exact_newtonian():
         assert cd_cone_hypersonic(th, 0.0)["pressure"] == pytest.approx(want)
 
 
+def test_blunted_cone_pressure_is_the_closed_form():
+    """Spherically-blunted cone Newtonian pressure Cd = 2·sin²θ + ε²·cos⁴θ
+    (Wells & Armstrong TR R-127) — cap ε²(1−sin⁴θ) + frustum 2sin²θ(1−ε²cos²θ)
+    summed.  This retired the Ref-(4) chart, so pin the identity AND the two
+    component pieces it superposes."""
+    for th in (10.0, 20.0, 30.0, 40.0):
+        thr = math.radians(th)
+        for ep in (0.0, 0.2, 0.5, 0.8, 1.0):
+            got = cd_blunted_cone_newtonian(th, ep)
+            closed = 2.0 * math.sin(thr) ** 2 + ep ** 2 * math.cos(thr) ** 4
+            assert got == pytest.approx(closed, rel=1e-12)
+            cap = ep ** 2 * (1.0 - math.sin(thr) ** 4)
+            frustum = 2.0 * math.sin(thr) ** 2 * (1.0 - ep ** 2 * math.cos(thr) ** 2)
+            assert got == pytest.approx(cap + frustum, rel=1e-12)
+
+
+def test_blunting_raises_pressure_drag_monotonically():
+    """Physical direction the retired chart violated: a blunter nose adds
+    pressure drag (more so on a slender cone)."""
+    for th in (5.0, 10.0, 20.0):
+        cds = [cd_blunted_cone_newtonian(th, ep) for ep in (0.0, 0.25, 0.5, 0.75, 1.0)]
+        assert all(cds[i] < cds[i + 1] for i in range(len(cds) - 1)), (th, cds)
+
+
 def test_friction_is_cf_times_exact_frustum_wetted_ratio():
     """S_wet/A_base = (1 − ε²cos²θ)/sinθ — pure geometry, no free constant
     beyond Cf itself."""
@@ -67,7 +91,10 @@ def test_slender_cone_beta_leaves_the_anomalous_decade():
     purpose: it rejects the failure mode without pinning a preferred value."""
     A = math.pi * (0.476 / 2.0) ** 2
     bad = 300.0 / (cd_blunted_cone_newtonian(5.25, 0.07) * A)
-    assert bad > 90_000                       # the bug, reproduced
+    # Pressure-only β is anomalous: well above the plausible band's 60k ceiling.
+    # (≈78k with the correct closed form 2sin²θ+ε²cos⁴θ; the retired Ref-(4)
+    # chart under-counted pressure drag and put it even higher, ≈95k.)
+    assert bad > 70_000                       # the bug, reproduced
     for M in (8.0, 10.0, 12.0, 14.0):
         c = cd_cone_hypersonic(5.25, 0.07, mach=M)
         beta = 300.0 / (c["total"] * A)
