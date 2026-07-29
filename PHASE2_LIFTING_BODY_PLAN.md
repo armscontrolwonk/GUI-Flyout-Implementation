@@ -230,12 +230,15 @@ Documented over-prediction (honesty, not an anchor to hit):
 - **Phase 2b: cone/biconic sweep** on the same sector machinery (continuity
   rules in §2.1), the blunted-nose chart cross-check that retires the METHODS
   §8.8 provenance wart, Grant contours (anchor 10).
-- **Phase 2c — GUI**: the β-estimator dialog grows a body-form-aware mode —
-  for wedge/half-cone it takes the §3 inputs, shows the sweep table + trim
-  row, and "Use these values" writes β(α=0), glider L/D = (L/D)max, and stores
-  α*/C_L0 on the RO; cone/biconic mode gains the same display.  The conditions
-  line (M, Re, laminar/turbulent, base on/off, A_ref, K, wall temp) is always
-  visible.
+- **Phase 2c — GUI (DONE)**: the β-estimator dialog is body-form-aware —
+  `_calc_beta` routes a wedge/half-cone to `_calc_beta_lifting`, which takes
+  the §3 inputs, live-computes the trim row via `lifting_body_sweep`, and
+  "Use β and L/D" writes β(α=0) to the β field and (L/D)max to the glider-L/D
+  field from ONE consistent row.  The always-visible conditions line carries
+  M, Re, laminar/turbulent, base on/off, A_ref (+kind), K, and the sharp-body
+  upper-bound caveat; the viscous-waverider ceiling is flagged.  Bodies of
+  revolution keep the zero-AoA cone/biconic dialog unchanged.  Covered by
+  `test_gui_beta_lifting.py` (routing, write-back, required-span refusal).
 
 ## 7. Phase-3 hooks (explicitly out of Phase-2 scope)
 
