@@ -134,6 +134,7 @@ from booster_models import (cd_blunted_cone_newtonian as _cd_blunted_cone_newton
                             cd_biconic_hypersonic as _cd_biconic_hypersonic,
                             biconic_angles as _biconic_angles,
                             wing_geometry as _wing_geometry,
+                            lifting_body_sweep as _lifting_body_sweep,
                             CONE_CF_TURBULENT as _CONE_CF)
 
 
@@ -2672,7 +2673,12 @@ class ROEditorDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _calc_beta(self):
-        """Open the Newtonian-cone β estimator sub-dialog."""
+        """Open the β estimator sub-dialog.  Body-form aware: a lifting body
+        (wedge / half-cone) gets the α-sweep estimator (β AND L/D, trim-
+        consistent); a body of revolution gets the zero-AoA cone/biconic
+        build-up."""
+        if self._body_form_key() in ("wedge", "half_cone"):
+            return self._calc_beta_lifting(self._body_form_key())
         import math
         dlg = tk.Toplevel(self)
         dlg.title("Estimate Object β")
@@ -2883,6 +2889,190 @@ class ROEditorDialog(tk.Toplevel):
             dlg.destroy()
 
         ttk.Button(bf, text="Use this value", command=_use).pack(side=tk.LEFT)
+        ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+
+    # ------------------------------------------------------------------
+    def _calc_beta_lifting(self, form):
+        """α-sweep β + L/D estimator for the lifting-body forms (Phase 2c).
+
+        Presentation over booster_models.lifting_body_sweep(): modified-
+        Newtonian pressure + Eckert reference-temperature friction + base
+        drag, swept over α, returning ONE consistent trim row — β(α=0) is
+        what the drag polar wants, (L/D)max is quoted WITH the α* that
+        produces it (the Tracy & Wright attitude/L-D inconsistency, per
+        Candler & Leyva, cannot be re-created from this dialog).  The
+        conditions line states M, Re, boundary-layer state, base-drag
+        convention, A_ref, and K — an L/D without its conditions is not a
+        number (Fetterman).
+        """
+        import math
+        dlg = tk.Toplevel(self)
+        dlg.title("Estimate β and L/D — " + ("flattened wedge" if form == "wedge"
+                                             else "half-cone lifting body"))
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill=tk.X)
+        frm.columnconfigure(1, weight=1)
+
+        def _lbl(row, text):
+            ttk.Label(frm, text=text).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+
+        def _entry_row(row, label, default, hint=""):
+            _lbl(row, label)
+            var = tk.StringVar(value=default)
+            inner = ttk.Frame(frm); inner.grid(row=row, column=1, sticky=tk.W)
+            ttk.Entry(inner, textvariable=var, width=10).pack(side=tk.LEFT)
+            if hint:
+                ttk.Label(inner, text=f"  {hint}",
+                          foreground="gray50").pack(side=tk.LEFT)
+            return var
+
+        mass_var = _entry_row(0, "Object mass (kg):", self._mass_var.get())
+        len_var = _entry_row(1, "Length (m):", self._len_var.get() or "0")
+        if form == "wedge":
+            # ⌀ field = base depth for the wedge (editor labels carry this).
+            depth_var = _entry_row(2, "Base depth (m):", self._dia_var.get() or "0")
+            span_var = _entry_row(3, "Planform span (m):", "0",
+                                  "(REQUIRED — measurable off an image)")
+            geo_vars = (depth_var, span_var)
+        else:
+            dia_var = _entry_row(2, "Base diameter (m):", self._dia_var.get() or "0")
+            theta_lbl = ttk.Label(frm, text="—", foreground="gray40")
+            _lbl(3, "Half-cone angle θ (derived):")
+            theta_lbl.grid(row=3, column=1, sticky=tk.W)
+            geo_vars = (dia_var,)
+        mach_var = _entry_row(4, "Eval Mach:", "10")
+        re_var = _entry_row(5, "Reynolds number (length):", "1e7",
+                            "(0 = inviscid ceiling — anchors only)")
+        turb_var = tk.BooleanVar(value=True)
+        _lbl(6, "Boundary layer:")
+        ttk.Checkbutton(frm, variable=turb_var,
+                        text="turbulent (untick = laminar)").grid(
+            row=6, column=1, sticky=tk.W)
+        tw_var = _entry_row(7, "Wall / freestream temp ratio:", "1.0",
+                            "(Eckert T*; cold wall = 1)")
+        base_var = tk.BooleanVar(value=True)
+        _lbl(8, "Base drag 2/(γM²):")
+        ttk.Checkbutton(frm, variable=base_var,
+                        text="include (untick to match base-corrected data)"
+                        ).grid(row=8, column=1, sticky=tk.W)
+
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+        res = ttk.Frame(dlg, padding=(12, 8))
+        res.pack(fill=tk.X)
+        res.columnconfigure(1, weight=1)
+
+        def _res_row(row, label):
+            ttk.Label(res, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            lbl = ttk.Label(res, text="—", foreground="gray40")
+            lbl.grid(row=row, column=1, sticky=tk.W)
+            return lbl
+
+        ld_lbl = ttk.Label(res, text="—", font=("", 11, "bold"), foreground="navy")
+        ttk.Label(res, text="(L/D)max at α*:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        ld_lbl.grid(row=0, column=1, sticky=tk.W)
+        beta_lbl = ttk.Label(res, text="—", font=("", 11, "bold"), foreground="navy")
+        ttk.Label(res, text="β (zero lift) = m/(C_D0·A_ref):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        beta_lbl.grid(row=1, column=1, sticky=tk.W)
+        btrim_lbl = _res_row(2, "β at trim α*:")
+        cl0_lbl = _res_row(3, "Camber offset C_L0 (at min drag):")
+        cond_lbl = ttk.Label(res, text="—", foreground="gray50", justify=tk.LEFT)
+        cond_lbl.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(4, 0))
+        warn_lbl = ttk.Label(res, text="", foreground="#a33", justify=tk.LEFT)
+        warn_lbl.grid(row=5, column=0, columnspan=2, sticky=tk.W)
+
+        _result = [None]           # (beta_zero_lift, LD_max)
+
+        def _clear(msg):
+            for _l in (btrim_lbl, cl0_lbl):
+                _l.config(text="—")
+            ld_lbl.config(text="—"); beta_lbl.config(text=msg)
+            cond_lbl.config(text="—"); warn_lbl.config(text="")
+            _result[0] = None
+
+        def _compute(*_):
+            try:
+                m = float(mass_var.get()); L = float(len_var.get())
+                mk = float(mach_var.get()); re = float(re_var.get() or 0.0)
+                tw = float(tw_var.get())
+                if m <= 0 or L <= 0 or mk <= 0:
+                    raise ValueError
+                if form == "wedge":
+                    t = float(depth_var.get()); b = float(span_var.get())
+                    if t <= 0 or b <= 0:
+                        return _clear("enter base depth and span")
+                    kw = dict(length_m=L, depth_m=t, span_m=b)
+                    a_ref = None                       # planform (derived)
+                else:
+                    d = float(dia_var.get())
+                    if d <= 0:
+                        return _clear("enter base diameter")
+                    th = math.degrees(math.atan2(d / 2.0, L))
+                    theta_lbl.config(text=f"{th:.2f}°  (atan(r_b/ℓ))")
+                    kw = dict(theta_deg=th)
+                    a_ref = math.pi * (d / 2.0) ** 2   # full-circle base area
+            except (ValueError, AttributeError):
+                return _clear("invalid input")
+            r = _lifting_body_sweep(form, mach=mk,
+                                    reynolds_length=(re if re > 0 else None),
+                                    wall_temp_ratio=tw,
+                                    turbulent=bool(turb_var.get()),
+                                    base_drag=bool(base_var.get()),
+                                    mass_kg=m, a_ref_m2=a_ref, **kw)
+            tr, cond = r['trim'], r['conditions']
+            ld_lbl.config(text=f"{tr['LD_max']:.2f}   at α* = "
+                               f"{tr['alpha_star_deg']:.1f}°")
+            beta_lbl.config(text=f"{tr['beta_zero_lift']:,.0f} kg/m²")
+            btrim_lbl.config(text=f"{tr['beta_trim']:,.0f} kg/m²")
+            cl0_lbl.config(text=f"{tr['C_L0']:+.4f}")
+            bl = "inviscid (Cf=0)" if cond['inviscid'] else \
+                ("turbulent" if cond['turbulent'] else "laminar")
+            cond_lbl.config(text=(
+                f"conditions: M {cond['mach']:g} · Re "
+                f"{cond['reynolds_length'] or 0:.3g} · {bl} · Cf "
+                f"{cond['cf']:.5f} · base drag "
+                f"{'on' if cond['base_drag'] else 'off'} ·\n"
+                f"A_ref {cond['a_ref_m2']:.4g} m² ({cond['a_ref_kind']}) · "
+                f"K {cond['K']:g}  — sharp-body Newtonian: an UPPER BOUND on "
+                f"L/D\n(real blunt/viscous vehicles run ~30–40% lower)"))
+            warns = []
+            if cond['inviscid']:
+                warns.append("Cf = 0: inviscid ceiling — for anchor "
+                             "comparisons only, not a vehicle estimate.")
+            if tr['LD_max'] > 6.0:
+                warns.append("(L/D)max exceeds the viscous-optimized-waverider "
+                             "band (≈6–7): treat as non-physical.")
+            warn_lbl.config(text="\n".join(warns))
+            _result[0] = (tr['beta_zero_lift'], tr['LD_max'])
+
+        for _v in (mass_var, len_var, mach_var, re_var, tw_var, turb_var,
+                   base_var) + geo_vars:
+            _v.trace_add("write", _compute)
+        _compute()
+
+        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+        bf = ttk.Frame(dlg, padding=(12, 8))
+        bf.pack(fill=tk.X)
+
+        def _use():
+            if _result[0] is not None:
+                beta0, ldmax = _result[0]
+                self._beta_var.set(f"{beta0:.0f}")
+                # (L/D)max pre-fills the glider L/D — the capability figure the
+                # airframe supports, quoted from the SAME α* as the β above.
+                try:
+                    self._LD_var.set(f"{ldmax:.2f}")
+                except (AttributeError, tk.TclError):
+                    pass
+            dlg.destroy()
+
+        ttk.Button(bf, text="Use β and L/D", command=_use).pack(side=tk.LEFT)
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     # ------------------------------------------------------------------

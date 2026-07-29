@@ -306,8 +306,20 @@ tabbed notebook**.
   trajectory physics are unchanged — β and L/D carry them, with two caveats
   worth knowing: published lifting-body β is usually quoted *at trim* (the
   polar wants zero-lift β), and the pull ceiling is a body-of-revolution
-  value, conservative for wedges (METHODS §8.8). A lifting-body trim
-  estimator is planned.
+  value, conservative for wedges (METHODS §8.8).
+- **Lifting-body β + L/D estimator** — for a wedge or half-cone, the object
+  editor's **Estimate β** button opens an angle-of-attack sweep (modified-
+  Newtonian pressure + Eckert reference-temperature skin friction + base
+  drag) that returns one *consistent* trim row: **β at zero lift** (what the
+  drag polar wants), **(L/D)max quoted with the α\* that produces it**, and
+  the camber offset C_L0. Enter measurable geometry (length, base depth,
+  **required** planform span for the wedge); every result states its
+  conditions (Mach, Reynolds number, boundary-layer state, base-drag
+  convention, reference area, K-factor). The estimate is a **sharp-body
+  upper bound** — real blunt/viscous vehicles run ~30–40% lower, and the
+  dialog says so and flags any L/D above the viscous-waverider band
+  (METHODS §8.8). Bodies of revolution keep the zero-AoA cone/biconic
+  build-up.
 - **Dive-at-target radius is a lead distance, not a target size.** The
   range-triggered terminal dive fires while the glider is *inside* the
   target circle and releases when it leaves — it is a region, not a latch.
