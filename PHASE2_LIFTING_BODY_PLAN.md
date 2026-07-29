@@ -199,8 +199,23 @@ Measured / CFD anchors (screening band ±30% unless noted):
     L/D ≈ 1.86 (d = 21 in family) and ≈ 2.01 (d = 19.6 in, δ1=17°, δ2=10°).
 11. **Viscous share** (Fetterman fig. 2): at Re_ℓ ≈ 1.4×10⁶, laminar,
     viscous/inviscid drag ratio at α=0 in the 2–5× range for slender forms.
-12. **Fetterman wedge≡delta equivalence**: our swept wedge at AR 0.707 / 1.46
-    tracks his 80°/70°-sweep delta-wing curves (direction + magnitude band).
+12. **Fetterman wedge≡delta, MAGNITUDE only**: at M 6.8 laminar the sharp
+    flat-bottom wedge lands in his delta-wing (L/D)max band (≈5 at these
+    conditions).  NOTE (found in 2a build): the sharp-Newtonian model is
+    **sweep-independent at trim** — with ε small, α* > ε shadows the top
+    facets (the only place sweep enters, via AEDC's 1+tan²Λ·sin²ε), and the
+    flat bottom's Cp does not depend on planform shape.  Fetterman's sweep
+    TREND is a leading-edge-bluntness / tip-loss effect above this fidelity,
+    so we do NOT claim it; span still sets the reference area (β) and the
+    depiction, not the sharp L/D.  Documented limitation, not a defect.
+
+Documented over-prediction (honesty, not an anchor to hit):
+13. The sharp wedge is an inviscid-pressure **upper bound** on L/D.  For an
+    HTV-2-class shape it gives ≈3.8 at α*≈9–10° where Candler's CFD of the
+    *real* (blunt-edged, viscous-interaction) vehicle gives ≈2.5 at ≈14°.
+    The estimator states this is a sharp-body ceiling; real vehicles reach
+    ~30–40% less.  The output's ceiling guard still flags anything above the
+    viscous-optimized-waverider band (≈7 at M6 → ≈6 at M14).
 
 ## 6. Build stages and code layout
 

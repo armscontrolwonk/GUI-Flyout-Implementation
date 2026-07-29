@@ -2485,51 +2485,161 @@ def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach):
     return dict(C_L=float(C_L), C_D=float(C_D), C_N=float(C_N), C_A=float(C_A))
 
 
-# forms whose sweep is implemented in Phase 2a (the wedge lands in 2a part 2).
-_LIFTING_SWEEP_FORMS = ("half_cone",)
+def _v_sub(a, b): return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+def _v_dot(a, b): return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+def _v_cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
 
 
-def lifting_body_sweep(form, theta_deg, mach=10.0, cf=None,
+def _planar_face_force(verts, v_hat, K, out_hint):
+    """(force-per-q vector, true area) for one flat triangular face under
+    modified-Newtonian flow.  The outward normal is the face normal flipped to
+    agree with `out_hint` (a direction known a priori to point outward for this
+    face — robust where a global interior point would misfire on thin/near-
+    degenerate faces).  Windward when cos η = −V̂·n̂ > 0 (else shadowed, Cp = 0,
+    but the area still counts toward wetted area).  Pressure pushes along −n̂."""
+    import math
+    v0, v1, v2 = verts
+    n = _v_cross(_v_sub(v1, v0), _v_sub(v2, v0))
+    mag = math.sqrt(_v_dot(n, n))
+    if mag < 1e-15:
+        return (0.0, 0.0, 0.0), 0.0
+    area = 0.5 * mag
+    nhat = (n[0] / mag, n[1] / mag, n[2] / mag)
+    if _v_dot(nhat, out_hint) < 0.0:                    # orient outward
+        nhat = (-nhat[0], -nhat[1], -nhat[2])
+    cos_eta = -_v_dot(v_hat, nhat)
+    if cos_eta <= 0.0:
+        return (0.0, 0.0, 0.0), area                    # shadowed
+    cp = K * cos_eta * cos_eta
+    return (-cp * area * nhat[0], -cp * area * nhat[1], -cp * area * nhat[2]), area
+
+
+def _wedge_coeffs(length, depth, span, alpha_deg, K, cf, base_drag, mach,
+                  s_ref):
+    """Planform-referenced (C_L, C_D) of a sharp-LE flat-bottom delta wedge at
+    one α (PHASE2_LIFTING_BODY_PLAN §2.1).  Geometry: nose at origin, +x aft,
+    +z up; flat bottom in z=0 (delta, span `span`, root `length`); a centreline
+    ridge rising to `depth` at the base; two top facets ridge→leading-edge; a
+    base triangle (always leeward → base-drag term only).
+
+    Faces are built from vertices with an explicit outward normal + Newtonian
+    shadow rule — NOT AEDC's rectangular-planform formulas, which don't apply
+    to a delta.  Verified against both the flat-plate identity (depth→0) and
+    AEDC Eq. 72's swept-wedge upper-surface Cp (see tests).  Friction (Eckert
+    Cf over true wetted area, α-independent) and base drag are drag-aligned."""
+    import math
+    L = max(1e-6, float(length)); t = max(0.0, float(depth))
+    b = max(1e-6, float(span))
+    al = math.radians(float(alpha_deg))
+    v_hat = (math.cos(al), 0.0, math.sin(al))            # freestream direction
+    l_hat = (-math.sin(al), 0.0, math.cos(al))           # lift direction
+    nose = (0.0, 0.0, 0.0); ridge = (L, 0.0, t)
+    rt = (L, 0.5 * b, 0.0); lt = (L, -0.5 * b, 0.0)
+    # (vertices, outward-hint): bottom faces down, top facets up, base aft.
+    faces = [((nose, rt, lt), (0.0, 0.0, -1.0)),        # flat bottom
+             ((nose, ridge, rt), (0.0, 0.0, 1.0)),      # right top facet
+             ((nose, lt, ridge), (0.0, 0.0, 1.0)),      # left top facet
+             ((rt, ridge, lt), (1.0, 0.0, 0.0))]        # base (always leeward)
+    F = [0.0, 0.0, 0.0]; wetted = 0.0; base_area = 0.0
+    for i, (verts, hint) in enumerate(faces):
+        f, area = _planar_face_force(verts, v_hat, K, hint)
+        F[0] += f[0]; F[1] += f[1]; F[2] += f[2]
+        if i == 3:
+            base_area = area
+        else:
+            wetted += area
+    drag = _v_dot(F, v_hat) / s_ref
+    lift = _v_dot(F, l_hat) / s_ref
+    drag += float(cf) * wetted / s_ref                   # friction, drag-aligned
+    if base_drag:
+        drag += (2.0 / (_GAMMA_AIR * max(float(mach), 3.0) ** 2)) \
+            * (base_area / s_ref)
+    return dict(C_L=float(lift), C_D=float(drag), C_N=0.0, C_A=0.0)
+
+
+def wedge_planform_area(length, span):
+    """Planform (reference) area of the flat-bottom delta wedge: ½·span·root."""
+    return 0.5 * float(span) * float(length)
+
+
+# forms whose sweep is implemented in Phase 2a.
+_LIFTING_SWEEP_FORMS = ("half_cone", "wedge")
+
+
+def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
                        reynolds_length=None, wall_temp_ratio=1.0,
                        turbulent=True, K=NEWTON_K_SLENDER, base_drag=True,
                        alpha_min_deg=-10.0, alpha_max_deg=25.0, n_alpha=71,
-                       mass_kg=None, a_ref_m2=None):
+                       mass_kg=None, a_ref_m2=None,
+                       length_m=None, depth_m=None, span_m=None):
     """Angle-of-attack sweep for a lifting body: C_L(α), C_D(α), L/D(α), and a
     single CONSISTENT trim row (α*, C_L*, C_D*, (L/D)max, β at α=0 and α*, and
     the camber offset C_L0 = C_L at min C_D) — never a peak L/D detached from
     the α that produces it (the Tracy & Wright error, per Candler & Leyva).
 
-    All coefficients are BASE-AREA referenced.  Cf is either given directly or
-    pre-filled from (mach, reynolds_length, wall_temp_ratio, turbulent) via the
-    Eckert helper; Cf = 0 (no Re) gives the inviscid ceiling (anchor use only).
-    β columns are filled only when mass_kg and a_ref_m2 are supplied.
+    Half-cone coefficients are BASE-AREA referenced (pass a_ref_m2 = π·r_b²
+    for β); wedge coefficients are PLANFORM referenced (A_ref defaults to
+    ½·span·length).  Cf is either given directly or pre-filled from (mach,
+    reynolds_length, wall_temp_ratio, turbulent) via the Eckert helper; Cf = 0
+    (no Re) gives the inviscid ceiling (anchor use only).  β columns are filled
+    only when mass_kg and an A_ref (given or, for the wedge, the planform
+    default) are available.
 
     Returns dict(conditions=…, alpha=[…rows…], trim=…).  Every row and the
     trim summary carry the evaluation conditions — Fetterman: L/D is meaningful
     only at a stated Mach, Reynolds number, and boundary-layer state.
     """
+    import math
     if form not in _LIFTING_SWEEP_FORMS:
         raise ValueError(f"lifting_body_sweep: form {form!r} not implemented "
                          f"in Phase 2a (have {_LIFTING_SWEEP_FORMS})")
+    if form == "half_cone" and theta_deg is None:
+        raise ValueError("half_cone sweep needs theta_deg")
+    if form == "wedge" and not (length_m and span_m):
+        raise ValueError("wedge sweep needs length_m and span_m (span REQUIRED)")
     if cf is None:
         cf = (cf_reference_temperature(mach, reynolds_length, wall_temp_ratio,
                                        turbulent)
               if reynolds_length else 0.0)
-    conditions = dict(form=form, theta_deg=float(theta_deg), mach=float(mach),
+
+    # Reference area: base area (caller-supplied) for the half-cone; planform
+    # (derived, stated) for the wedge — the pull limit q·C_L,max·A_ref/m is not
+    # invariant to the choice, so A_ref is never implicit.
+    if form == "wedge":
+        s_ref = float(a_ref_m2) if a_ref_m2 else wedge_planform_area(length_m, span_m)
+        eps_deg = math.degrees(math.atan2(float(depth_m or 0.0), float(length_m)))
+        sweep_deg = math.degrees(math.atan2(2.0 * float(length_m), float(span_m)))
+    else:
+        s_ref = a_ref_m2
+        eps_deg = sweep_deg = None
+    beta_ref = s_ref if (form == "wedge") else a_ref_m2
+
+    def _coeffs(a):
+        if form == "wedge":
+            return _wedge_coeffs(length_m, depth_m or 0.0, span_m, a, K, cf,
+                                 base_drag, mach, s_ref)
+        return _half_cone_coeffs(theta_deg, a, K, cf, base_drag, mach)
+
+    conditions = dict(form=form, theta_deg=theta_deg, mach=float(mach),
                       cf=float(cf), reynolds_length=reynolds_length,
                       wall_temp_ratio=float(wall_temp_ratio),
                       turbulent=bool(turbulent), K=float(K),
-                      base_drag=bool(base_drag), a_ref_m2=a_ref_m2,
+                      base_drag=bool(base_drag), a_ref_m2=beta_ref,
+                      a_ref_kind=("planform" if form == "wedge" else "base"),
+                      ridge_angle_deg=eps_deg, sweep_deg=sweep_deg,
                       inviscid=(float(cf) == 0.0))
     n = max(3, int(n_alpha))
     rows = []
     for i in range(n):
         a = alpha_min_deg + (alpha_max_deg - alpha_min_deg) * i / (n - 1)
-        c = _half_cone_coeffs(theta_deg, a, K, cf, base_drag, mach)
+        c = _coeffs(a)
         ld = (c['C_L'] / c['C_D']) if c['C_D'] > 1e-9 else float('-inf')
         row = dict(alpha_deg=float(a), C_L=c['C_L'], C_D=c['C_D'], L_D=float(ld))
-        if mass_kg and a_ref_m2 and c['C_D'] > 1e-9:
-            row['beta'] = float(mass_kg) / (c['C_D'] * float(a_ref_m2))
+        if mass_kg and beta_ref and c['C_D'] > 1e-9:
+            row['beta'] = float(mass_kg) / (c['C_D'] * float(beta_ref))
         rows.append(row)
 
     star = max(rows, key=lambda r: r['L_D'])          # α* = argmax L/D
@@ -2538,9 +2648,9 @@ def lifting_body_sweep(form, theta_deg, mach=10.0, cf=None,
     trim = dict(alpha_star_deg=star['alpha_deg'], C_L_star=star['C_L'],
                 C_D_star=star['C_D'], LD_max=star['L_D'],
                 C_L0=cd0_row['C_L'], C_D0=row0['C_D'])
-    if mass_kg and a_ref_m2:
-        trim['beta_zero_lift'] = float(mass_kg) / (row0['C_D'] * float(a_ref_m2))
-        trim['beta_trim'] = float(mass_kg) / (star['C_D'] * float(a_ref_m2))
+    if mass_kg and beta_ref:
+        trim['beta_zero_lift'] = float(mass_kg) / (row0['C_D'] * float(beta_ref))
+        trim['beta_trim'] = float(mass_kg) / (star['C_D'] * float(beta_ref))
     return dict(conditions=conditions, alpha=rows, trim=trim)
 
 
