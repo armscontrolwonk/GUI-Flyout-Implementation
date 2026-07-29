@@ -2308,6 +2308,242 @@ def cd_biconic_hypersonic(theta1_deg: float, theta2_deg: float,
                 swet_fore=float(swet_fore), swet_aft=float(swet_aft))
 
 
+# ===========================================================================
+# Lifting-body angle-of-attack sweep (Phase 2a estimator core)
+# ---------------------------------------------------------------------------
+# Modified-Newtonian aerodynamics (Cp = K·cos²η) for LIFTING bodies at
+# incidence, giving C_L(α)/C_D(α) → (L/D)max and the trim-consistent β — the
+# machinery the flat, zero-AoA cone/biconic estimators above lack.  See
+# PHASE2_LIFTING_BODY_PLAN.md.  Primary sources: AEDC-TDR-64-25 (closed-form
+# Newtonian, K-factor), Corda & Anderson 1988 (Eckert Cf), Fetterman NASA
+# TN D-2942/2956 (measured half-cone anchors), Candler & Leyva 2022 (CFD).
+#
+# Discipline: physics stays untouched in the trajectory — β and L/D are the
+# carriers; this is where the geometry content lives.  Every returned row
+# STATES the conditions (M, Re, laminar/turbulent, base on/off, A_ref, K) it
+# was computed at.  Tests are identities (sharp-cone reduction, flat plate,
+# K-linearity) and measured anchors — never fits.
+# ===========================================================================
+
+# K in Cp = K·cos²η (AEDC-TDR-64-25 §1).  K=2 is classic Newtonian (slender,
+# attached shock — the default, matching the zero-AoA estimators above);
+# K=γ+1 is Love's flat-plate value; K=(γ+3)/(γ+1)≈1.83 is Lees' blunt-body
+# (detached-shock) value.
+NEWTON_K_SLENDER = 2.0
+NEWTON_K_FLATPLATE = _GAMMA_AIR + 1.0                 # ≈ 2.4
+NEWTON_K_BLUNT = (_GAMMA_AIR + 3.0) / (_GAMMA_AIR + 1.0)   # ≈ 1.833
+
+
+def _newton_sector_I0_I1(a, b, lo, hi):
+    """Definite integrals of (a+b·sinφ)² and (a+b·sinφ)²·sinφ over [lo,hi].
+
+    Elementary antiderivatives (the plan's `∫(a−b sinφ)²·{1,sinφ} dφ`):
+        F0 = a²φ − 2ab cosφ + b²(φ/2 − sin2φ/4)
+        F1 = −a² cosφ + 2ab(φ/2 − sin2φ/4) + b²(−cosφ + cos³φ/3)
+    """
+    import math
+    def F0(x):
+        return (a * a * x - 2.0 * a * b * math.cos(x)
+                + b * b * (x / 2.0 - math.sin(2.0 * x) / 4.0))
+    def F1(x):
+        return (-a * a * math.cos(x)
+                + 2.0 * a * b * (x / 2.0 - math.sin(2.0 * x) / 4.0)
+                + b * b * (-math.cos(x) + math.cos(x) ** 3 / 3.0))
+    return F0(hi) - F0(lo), F1(hi) - F1(lo)
+
+
+def _newton_lit_subintervals(a, b, lo, hi):
+    """Sub-intervals of [lo,hi] where the surface faces the flow (cos η =
+    a + b·sinφ ≥ 0); the rest is shadowed (Cp = 0).  Splits at the roots of
+    a + b·sinφ = 0 and keeps the lit pieces (Newtonian shadow rule)."""
+    import math
+    pts = [lo, hi]
+    if abs(b) > 1e-12:
+        s = -a / b
+        if -1.0 <= s <= 1.0:
+            base = math.asin(max(-1.0, min(1.0, s)))
+            for r in (base, math.pi - base):
+                k0 = math.floor((lo - r) / (2.0 * math.pi))
+                for k in (k0, k0 + 1, k0 + 2):
+                    phi = r + 2.0 * math.pi * k
+                    if lo < phi < hi:
+                        pts.append(phi)
+    pts = sorted(set(pts))
+    out = []
+    for l, h in zip(pts[:-1], pts[1:]):
+        if a + b * math.sin(0.5 * (l + h)) >= 0.0:
+            out.append((l, h))
+    return out
+
+
+def cone_sector_newtonian(theta_deg, alpha_deg, phi_lo, phi_hi,
+                          K=NEWTON_K_SLENDER):
+    """Newtonian pressure (C_N, C_A) of the azimuthal SECTOR [phi_lo, phi_hi]
+    of a SHARP cone's lateral surface at angle of attack, base-area referenced.
+
+    Cone half-angle θ, apex forward, axis +x; azimuth φ measured so φ = +π/2
+    is the −z (windward-at-positive-α) ray.  Local inclination (AEDC Eq. 127,
+    β=0):  cos η = cosα·sinθ + sinα·cosθ·sinφ.  Integrating Cp = K·cos²η over
+    the lit part of the sector (elemental area ρ/sinθ dρ dφ), base-area
+    referenced (S = π·r_b²):
+
+        C_A = (K / 2π) · ∫ cos²η dφ
+        C_N = (K·cosθ / 2π·sinθ) · ∫ cos²η·sinφ dφ
+
+    Full sector [−π/2, 3π/2] at α = 0 gives C_A = K·sin²θ (= the sharp-cone
+    2·sin²θ at K=2) and C_N = 0 — the identity anchors.  A half-shell (e.g.
+    [π/2, 3π/2]) at α > 0 differs from its opposite half: windward ≠ leeward.
+    """
+    import math
+    th = math.radians(max(0.5, min(float(theta_deg), 89.5)))
+    al = math.radians(float(alpha_deg))
+    a = math.cos(al) * math.sin(th)
+    b = math.sin(al) * math.cos(th)
+    I0 = I1 = 0.0
+    for l, h in _newton_lit_subintervals(a, b, float(phi_lo), float(phi_hi)):
+        d0, d1 = _newton_sector_I0_I1(a, b, l, h)
+        I0 += d0
+        I1 += d1
+    C_A = K / (2.0 * math.pi) * I0
+    C_N = K * math.cos(th) / (2.0 * math.pi * math.sin(th)) * I1
+    return dict(C_N=float(C_N), C_A=float(C_A))
+
+
+def flat_plate_newtonian(alpha_deg, K=NEWTON_K_SLENDER):
+    """Newtonian pressure on ONE face of a flat plate at incidence, per unit
+    of the plate's own planform area.  Windward (α>0 for the underside):
+    Cp = K·sin²α acting normal to the plate → C_N = K·sin²α, C_A = 0 (a thin
+    plate has no axial projection).  Leeward (α≤0): shadowed, both zero."""
+    import math
+    al = math.radians(float(alpha_deg))
+    if al <= 0.0:
+        return dict(C_N=0.0, C_A=0.0)
+    cp = K * math.sin(al) ** 2
+    return dict(C_N=float(cp), C_A=0.0)
+
+
+def cf_reference_temperature(mach, reynolds_length, wall_temp_ratio=1.0,
+                             turbulent=True, recovery=0.89):
+    """Flat-plate skin-friction coefficient Cf at the Eckert reference
+    temperature (Corda & Anderson 1988; validated to ~10% of an integral
+    boundary-layer method even at high hypersonic Mach).
+
+    A PRE-FILL helper — the estimator still accepts a Cf directly (continuity
+    with the shipped cone estimator).  Incompressible Cf (Blasius laminar /
+    Schlichting turbulent on Re_L) is scaled by (ρ*μ*)/(ρ_e μ_e) evaluated at
+    Eckert's reference temperature T*/T_e = 1 + 0.032·M² + 0.58·(T_w/T_e − 1),
+    with ρ ∝ 1/T (constant p) and μ ∝ T^0.7 (power-law).  Returns the
+    length-averaged Cf; wall_temp_ratio = T_w/T_e (1.0 = a stated cold-ish
+    wall — the assumption is explicit, never implicit)."""
+    import math
+    M = max(float(mach), 0.0)
+    ReL = max(float(reynolds_length), 1.0)
+    r = float(recovery)
+    Tw = max(1e-3, float(wall_temp_ratio))
+    # Eckert reference-temperature ratio T*/T_e (Meador-Smart / Eckert form).
+    Tstar = 1.0 + 0.032 * M * M + 0.58 * (Tw - 1.0) + 0.10 * r * 0.2 * M * M
+    Tstar = max(Tstar, 1.0)
+    rho_ratio = 1.0 / Tstar                 # ρ*/ρ_e at constant pressure
+    mu_ratio = Tstar ** 0.7                 # μ*/μ_e, power-law viscosity
+    if turbulent:
+        cf_inc = 0.0592 / ReL ** 0.2        # Schlichting turbulent flat plate
+        cstar = (rho_ratio * mu_ratio) ** 0.2
+    else:
+        cf_inc = 1.328 / math.sqrt(ReL)     # Blasius laminar flat plate
+        cstar = math.sqrt(rho_ratio * mu_ratio)
+    return float(cf_inc * cstar)
+
+
+def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach):
+    """Base-area-referenced (C_L, C_D, C_N, C_A) of a flat-side-DOWN half-cone
+    at one α.  Composition (PHASE2_LIFTING_BODY_PLAN §2.1):
+
+      flat underside  : a delta plate, windward for α>0 — Cp = K·sin²α on its
+                        own planform (area/base = 1/(π·tanθ)), pushing UP;
+      upper half-shell: the leeward semicircle φ∈[π,2π] of the cone lateral
+                        surface (cone_sector_newtonian), mostly shadowed at α>0;
+      friction        : Cf over the true wetted ratio (half lateral + flat),
+                        α-independent (Lobanovskii), drag-aligned;
+      base            : 2/(γM²) on the half-disc base (area/base = ½), optional.
+
+    Flat side down is the default (Fetterman TN D-2942: flat-bottom superior).
+    """
+    import math
+    th = math.radians(max(0.5, min(float(theta_deg), 89.5)))
+    al = math.radians(float(alpha_deg))
+    shell = cone_sector_newtonian(theta_deg, alpha_deg, math.pi, 2.0 * math.pi, K)
+    flat = flat_plate_newtonian(alpha_deg, K)
+    flat_ratio = 1.0 / (math.pi * math.tan(th))          # S_flat / S_base
+    C_N = shell['C_N'] + flat['C_N'] * flat_ratio
+    C_A = shell['C_A'] + flat['C_A'] * flat_ratio
+    C_L = C_N * math.cos(al) - C_A * math.sin(al)
+    C_D = C_N * math.sin(al) + C_A * math.cos(al)         # pressure only so far
+    swet_ratio = 1.0 / (2.0 * math.sin(th)) + flat_ratio  # half lateral + flat
+    C_D += float(cf) * swet_ratio                         # friction (α-indep.)
+    if base_drag:
+        C_D += (2.0 / (_GAMMA_AIR * max(float(mach), 3.0) ** 2)) * 0.5
+    return dict(C_L=float(C_L), C_D=float(C_D), C_N=float(C_N), C_A=float(C_A))
+
+
+# forms whose sweep is implemented in Phase 2a (the wedge lands in 2a part 2).
+_LIFTING_SWEEP_FORMS = ("half_cone",)
+
+
+def lifting_body_sweep(form, theta_deg, mach=10.0, cf=None,
+                       reynolds_length=None, wall_temp_ratio=1.0,
+                       turbulent=True, K=NEWTON_K_SLENDER, base_drag=True,
+                       alpha_min_deg=-10.0, alpha_max_deg=25.0, n_alpha=71,
+                       mass_kg=None, a_ref_m2=None):
+    """Angle-of-attack sweep for a lifting body: C_L(α), C_D(α), L/D(α), and a
+    single CONSISTENT trim row (α*, C_L*, C_D*, (L/D)max, β at α=0 and α*, and
+    the camber offset C_L0 = C_L at min C_D) — never a peak L/D detached from
+    the α that produces it (the Tracy & Wright error, per Candler & Leyva).
+
+    All coefficients are BASE-AREA referenced.  Cf is either given directly or
+    pre-filled from (mach, reynolds_length, wall_temp_ratio, turbulent) via the
+    Eckert helper; Cf = 0 (no Re) gives the inviscid ceiling (anchor use only).
+    β columns are filled only when mass_kg and a_ref_m2 are supplied.
+
+    Returns dict(conditions=…, alpha=[…rows…], trim=…).  Every row and the
+    trim summary carry the evaluation conditions — Fetterman: L/D is meaningful
+    only at a stated Mach, Reynolds number, and boundary-layer state.
+    """
+    if form not in _LIFTING_SWEEP_FORMS:
+        raise ValueError(f"lifting_body_sweep: form {form!r} not implemented "
+                         f"in Phase 2a (have {_LIFTING_SWEEP_FORMS})")
+    if cf is None:
+        cf = (cf_reference_temperature(mach, reynolds_length, wall_temp_ratio,
+                                       turbulent)
+              if reynolds_length else 0.0)
+    conditions = dict(form=form, theta_deg=float(theta_deg), mach=float(mach),
+                      cf=float(cf), reynolds_length=reynolds_length,
+                      wall_temp_ratio=float(wall_temp_ratio),
+                      turbulent=bool(turbulent), K=float(K),
+                      base_drag=bool(base_drag), a_ref_m2=a_ref_m2,
+                      inviscid=(float(cf) == 0.0))
+    n = max(3, int(n_alpha))
+    rows = []
+    for i in range(n):
+        a = alpha_min_deg + (alpha_max_deg - alpha_min_deg) * i / (n - 1)
+        c = _half_cone_coeffs(theta_deg, a, K, cf, base_drag, mach)
+        ld = (c['C_L'] / c['C_D']) if c['C_D'] > 1e-9 else float('-inf')
+        row = dict(alpha_deg=float(a), C_L=c['C_L'], C_D=c['C_D'], L_D=float(ld))
+        if mass_kg and a_ref_m2 and c['C_D'] > 1e-9:
+            row['beta'] = float(mass_kg) / (c['C_D'] * float(a_ref_m2))
+        rows.append(row)
+
+    star = max(rows, key=lambda r: r['L_D'])          # α* = argmax L/D
+    cd0_row = min(rows, key=lambda r: r['C_D'])        # min-drag point → C_L0
+    row0 = min(rows, key=lambda r: abs(r['alpha_deg']))  # nearest α = 0
+    trim = dict(alpha_star_deg=star['alpha_deg'], C_L_star=star['C_L'],
+                C_D_star=star['C_D'], LD_max=star['L_D'],
+                C_L0=cd0_row['C_L'], C_D0=row0['C_D'])
+    if mass_kg and a_ref_m2:
+        trim['beta_zero_lift'] = float(mass_kg) / (row0['C_D'] * float(a_ref_m2))
+        trim['beta_trim'] = float(mass_kg) / (star['C_D'] * float(a_ref_m2))
+    return dict(conditions=conditions, alpha=rows, trim=trim)
+
+
 def wing_geometry(ro):
     """Effective wing (S, AR, source) for a reentry object — single source of
     truth for every consumer (drag polar, β estimator, editor, schematic).
