@@ -85,6 +85,21 @@ _R: dict[str, int] = {
     # provenance
     'source':     50,
     'notes':      51,
+    # ── rows below were APPENDED after the original layout: old workbooks
+    # simply have empty cells here, and the reader defaults them (axisymmetric,
+    # no biconic, no wings) — a pre-upgrade file imports unchanged. ──
+    # body form & biconic hardware
+    'body_form':  54,
+    'biconic':    55,
+    'fore_len':   56,
+    'break_dia':  57,
+    # wings (drag-polar anchor + planform; planform is the primary data —
+    # wing_geometry() derives S/AR from it at every consumer)
+    'wing_area':  60,
+    'wing_ar':    61,
+    'wing_root':  62,
+    'wing_span':  63,
+    'wing_sweep': 64,
 }
 
 _VAL_COL = 4   # column D
@@ -219,6 +234,40 @@ def _build_ro_sheet(ws, ro) -> None:
     _inputs(ws, _R['source'], [_VAL_COL], [ro.source])
     _inputs(ws, _R['notes'],  [_VAL_COL], [ro.notes])
 
+    # Body form & biconic (appended rows — see registry note)
+    from booster_models import BODY_FORMS
+    _section(ws, 53, 'Body form & biconic')
+    _label(ws, _R['body_form'], 'Body form', '',
+           'axisymmetric / wedge (⌀ = base depth) / half_cone')
+    _label(ws, _R['biconic'],   'Biconic (two-cone)', '',
+           'axisymmetric only; ignored for lifting forms')
+    _label(ws, _R['fore_len'],  'Fore-cone length', 'm')
+    _label(ws, _R['break_dia'], 'Break diameter', 'm')
+    _dropdown(ws, _R['body_form'], _VAL_COL, list(BODY_FORMS))
+    ws.cell(row=_R['body_form'], column=_VAL_COL,
+            value=(getattr(ro, 'body_form', '') or 'axisymmetric'))
+    _dropdown(ws, _R['biconic'], _VAL_COL, _YESNO_OPTS)
+    ws.cell(row=_R['biconic'], column=_VAL_COL,
+            value=_yn(bool(getattr(ro, 'biconic', False))))
+    put('fore_len', getattr(ro, 'fore_length_m', 0.0))
+    put('break_dia', getattr(ro, 'break_diameter_m', 0.0))
+
+    # Wings (appended rows).  The planform (root chord + exposed span + sweep)
+    # is the PRIMARY data: when present, S and AR are DERIVED from it by
+    # wing_geometry() at every consumer — the S/AR cells here are the direct-
+    # entry fallback and are overridden by a planform, exactly as in the app.
+    _section(ws, 59, 'Wings  (planform is primary; S/AR direct-entry fallback)')
+    _label(ws, _R['wing_area'],  'Wing area S', 'm²', 'fallback if no planform')
+    _label(ws, _R['wing_ar'],    'Aspect ratio AR', '', 'fallback if no planform')
+    _label(ws, _R['wing_root'],  'Root chord', 'm', 'planform')
+    _label(ws, _R['wing_span'],  'Exposed span', 'm', 'planform')
+    _label(ws, _R['wing_sweep'], 'LE sweep', '°', 'planform')
+    put('wing_area',  getattr(ro, 'wing_area_m2', 0.0))
+    put('wing_ar',    getattr(ro, 'wing_aspect_ratio', 0.0))
+    put('wing_root',  getattr(ro, 'wing_root_chord_m', 0.0))
+    put('wing_span',  getattr(ro, 'wing_span_exposed_m', 0.0))
+    put('wing_sweep', getattr(ro, 'wing_sweep_deg', 0.0))
+
 
 def _build_ro_reference_sheet(ws) -> None:
     import heating
@@ -265,9 +314,15 @@ def _read_material(ws, rk, prefix, sentinel):
 
 
 def import_ro_xlsx(path: str):
-    """Read a reentry-object XLSX and return an ROParams."""
+    """Read a reentry-object XLSX and return an ROParams.
+
+    Backward compatible: workbooks written before the appended 'Body form &
+    biconic' / 'Wings' sections have empty cells at those rows, which read as
+    defaults (axisymmetric, no biconic, no wings) — a pre-upgrade file
+    imports exactly as it always did.
+    """
     import heating
-    from booster_models import ROParams, _norm_sep_mode
+    from booster_models import ROParams, _norm_sep_mode, BODY_FORMS
     xl = _xl()
     wb = xl.load_workbook(path, data_only=True)
     # New workbooks use sheet "RO"; accept the legacy "RV" name too.
@@ -279,6 +334,11 @@ def import_ro_xlsx(path: str):
     if struct_key.lower() == _CUSTOM:
         struct_key = ''      # custom not supported for the structure slot
 
+    # Unknown/legacy body-form strings normalise to the default, as in
+    # ro_from_dict — never crash, never propagate an invented form.
+    _bf = _rstr(ws, _R['body_form'], _VAL_COL, 'axisymmetric')
+    body_form = _bf if _bf in BODY_FORMS else 'axisymmetric'
+
     return ROParams(
         name=_rstr(ws, _R['name'], _VAL_COL, 'Unnamed'),
         mass_kg=_rnum(ws, _R['mass'], _VAL_COL),
@@ -287,6 +347,15 @@ def import_ro_xlsx(path: str):
         diameter_m=_rnum(ws, _R['diam'], _VAL_COL),
         length_m=_rnum(ws, _R['length'], _VAL_COL),
         nose_radius_m=_rnum(ws, _R['nose_rn'], _VAL_COL),
+        body_form=body_form,
+        biconic=_rbool(ws, _R['biconic'], _VAL_COL),
+        fore_length_m=_rnum(ws, _R['fore_len'], _VAL_COL),
+        break_diameter_m=_rnum(ws, _R['break_dia'], _VAL_COL),
+        wing_area_m2=_rnum(ws, _R['wing_area'], _VAL_COL),
+        wing_aspect_ratio=_rnum(ws, _R['wing_ar'], _VAL_COL),
+        wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),
+        wing_span_exposed_m=_rnum(ws, _R['wing_span'], _VAL_COL),
+        wing_sweep_deg=_rnum(ws, _R['wing_sweep'], _VAL_COL),
         separation_mode=_norm_sep_mode(_rstr(ws, _R['sep'], _VAL_COL, 'separating_ro')),
         glider_enabled=_rbool(ws, _R['g_on'], _VAL_COL),
         glider_LD=_rnum(ws, _R['g_ld'], _VAL_COL),
