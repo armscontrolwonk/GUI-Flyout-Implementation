@@ -572,6 +572,20 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
 # cone-tail/stagnation ratio ≈ 0.13 (engineering distribution validated vs
 # NASA TN D-5450 to <9%); the STS-1 windward-acreage-vs-RCC-stagnation ratio
 # (~0.1) is consistent.  One number, flagged — not a heating distribution.
+#
+# DOMAIN — this is a CONE number.  Cones and flat-bottom lifting bodies
+# (body_form "wedge"/"half_cone") carry their windward acreage by DIFFERENT
+# physics: a cone flank wraps the flow and heats near 0.13× of stagnation,
+# whereas a flat lower surface at incidence is a flat-plate boundary layer that
+# runs ~7× cooler relative to its blunt-scale stagnation.  The Candler & Leyva
+# 2022 CFD anchor (generic HGV, 6 km/s glide) implies an effective fraction
+# ≈0.018 for the flat case — see METHODS §13.8 and
+# test_candler_windward_anchor.py.  0.13 is kept for its VALIDATED CONE DOMAIN;
+# applying it to a flat-bottom form OVER-predicts (conservative / screening-
+# safe, but imprecise).  Do NOT lower 0.13 to fit the flat case — that would
+# corrupt the cone domain to match the wedge (a compensating error).  The
+# correct fix is a body_form-aware fraction (TODO), not a retune of this
+# constant.  windward_flank_flux() does not yet read body_form.
 BODY_FLUX_FRACTION = 0.13
 
 # --- Windward-flank heating band (glide AoA probe) ---------------------------

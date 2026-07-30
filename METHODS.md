@@ -3718,6 +3718,26 @@ remains the primary hard-fail driver and the AoA/transition uncertainty
 forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
 "Windward/AoA heating probe"; pinned by `test_windward_flank.py`.
 
+**Design decision — cones and flat-bottom lifting bodies use different
+windward physics.**  The windward acreage flux is `BODY_FLUX_FRACTION ×
+q̇_stag(R_body) × A(α)`, and the fraction `0.13` is a **cone** quantity: it is
+the cone tail-to-stagnation ratio (Lu/Shi & Zhang 2024; STS-1 consistent).  A
+**cone flank** wraps the flow around the body and genuinely heats at that
+fraction of the stagnation flux.  A **flat-bottom lifting body** (`body_form`
+= `wedge` / `half_cone`) does not: its windward surface at incidence is a
+flat-plate boundary layer, which runs **~7× cooler** relative to its
+blunt-scale stagnation than a cone flank does.  These are different flow
+regimes, so **one acreage fraction cannot serve both forms.**  The decision
+is to keep `0.13` for its **validated cone domain** and accept that the screen
+**over-predicts flat-bottom forms** (conservative — it over-flags, never
+under-flags) until the model is made `body_form`-aware.  Critically, `0.13` is
+**not** lowered to fit the flat case: that would corrupt the cone domain to
+match the wedge — the compensating-error pattern the whole anchoring
+discipline exists to prevent (cf. the retired Ref-(4) blunt-cone chart, §8.8,
+where a wrong pressure term had been absorbable into a tuned `Cf`).  The
+correct fix is a flat-surface fraction selected by `body_form`, recorded as
+future work with a target (≈0.018) rather than guessed now.
+
 **CFD anchor and its limit (Candler & Leyva 2022, S&GS 30).**  Their US.3D
 CFD of a generic HGV — flight-validated to ~100 K against Shuttle
 thermocouples — at exactly our use case (6 km/s, 49.7 km, ε=0.85, laminar,
