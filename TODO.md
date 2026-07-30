@@ -22,7 +22,25 @@ today it shows what the data says; this shows it against the evidence.
 - Open questions: side-elevation only (matches schematic) or also planform?
   persist the image path + scale with the booster JSON?
 
-### 2. Better geospatial data sources
+### 2. Blender export of the schematic (rough-draft 3D for modelers)
+Export the vehicle as a simple 3D file to hand a modeler a dimensionally
+correct starting point.  The schematic's geometry is mostly bodies of
+revolution (stages = cylinders/frustums, noses/fairings = cones/ogives, RO =
+cone/biconic) plus a few known non-revolved parts (planar fins, grid-fin
+boxes, wedge/half-cone lifting bodies) — all revolve/extrude cleanly from
+the same stored fields the 2-D schematic already draws.
+- Format: a true .blend can only be written by Blender itself, so either
+  (a) export a **bpy Python script** the modeler runs in Blender's scripting
+  tab — builds named, editable primitives (S1, S2, fairing, fin_1…) at true
+  dimensions, organized in a collection (most useful as a "rough draft"), or
+  (b) export **OBJ/glTF** meshes we generate ourselves (zero dependencies,
+  imports anywhere, but frozen geometry).  Doing (a) with (b) as fallback
+  covers both kinds of modeler.
+- Derive-don't-invent carries over: only specified geometry is exported;
+  flagged/unset items (e.g. wedge span) are omitted or stubbed with a
+  clearly-named placeholder, never silently guessed.
+
+### 3. Better geospatial data sources
 Improve the sources behind launch/target locations and the map layers.
 - Open questions to scope first: which layer hurts today — the built-in
   locations database (coverage/accuracy of sites), basemap/coastline detail
