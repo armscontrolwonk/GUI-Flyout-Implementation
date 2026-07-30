@@ -80,9 +80,31 @@ Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
   stage-enclosing fairing geometry.
 - Descent-regime grid fins (Falcon-9-style forward fins; ascent-only today
   by agreement).
-- Heating: Candler & Leyva found the Tauber et al. surface-temperature
-  correlations over-predict at glide conditions — revisit the heating-side
-  correlations against their CFD when heating work resumes.
+- Heating: the Candler-Tauber issue, SCOPED (see chat, 2026-07-30).
+  Thrusty has NO direct exposure to the criticized correlation: Candler &
+  Leyva's target is the Tauber et al. CONVECTIVE flat-plate/acreage
+  correlation used by Tracy & Wright; Thrusty's only Tauber is
+  Tauber-Sutton 1991 RADIATIVE gas heating (exactly zero below 9 km/s —
+  inactive for HGV glide).  Thrusty's acreage/windward path is
+  BODY_FLUX_FRACTION (0.13, cited vs Lu/Shi & Zhang 2024 + STS-1) ×
+  Sutton-Graves stagnation × Newtonian windward amplification — a
+  different, better-anchored method family.  Residual follow-ups, in
+  priority order:
+  1. Free anchor: run the generic-HGV glide point (6 km/s, ~50 km, α=14°)
+     through windward_flank_flux and compare T_eq against Candler's CFD
+     centerline temperatures (Fig. 3/7) — an independent CFD check on the
+     0.13 screening constant at exactly our use case.
+  2. Consistency guard: the windward α band (5–20°) is user-tunable and
+     could be set inconsistently with the vehicle's polar — consider
+     pre-filling α_op from the polar/estimator trim α* (the Candler
+     lesson: attitude must be consistent with L/D).
+  3. Remember the propagation asymmetry when judging deltas: flux errors
+     compress ×4-root into temperature (2× q → +19% T; 3× → +32%) but pass
+     LINEARLY into ablator heat-load/thickness, and AMPLIFY through
+     Planck-band radiance (Candler: T&W's stacked errors → 15–17× IR
+     radiance, yet the detectability judgment only PARTIALLY flipped —
+     below DSP, still visible to SBIRS).  Deltas matter where they cross a
+     tier threshold; report margins, not just verdicts.
 - XLSX round-trip does not carry biconic, wing-planform, or body_form fields
   (pre-existing pattern: JSON is the primary store; extend ro_xlsx if the
   spreadsheet path starts being used for lifting bodies).
