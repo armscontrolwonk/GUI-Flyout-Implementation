@@ -38,7 +38,11 @@ def _editor(root, form):
     ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
     dlg = thrusty.ROEditorDialog(root, ro=ro)
     dlg.withdraw()
-    dlg._body_form_var.set(dlg._BODY_FORM_LABELS[form])
+    # merged Shape selector: a lifting form is its own entry; 'axisymmetric'
+    # is any nose profile (Cone here).
+    label = (dlg._BODY_FORM_LABELS[form] if form in ("wedge", "half_cone")
+             else thrusty.NOSE_SHAPE_LABELS["cone"])
+    dlg._shape_var.set(label)
     dlg._update_body_form_state()
     dlg._mass_var.set("900"); dlg._len_var.set("3.6"); dlg._dia_var.set("0.5")
     return dlg
@@ -91,6 +95,40 @@ def test_use_writes_both_beta_and_ld_from_one_trim_row(root):
     ld = float(dlg._LD_var.get())
     assert beta > 0.0                        # zero-lift β written
     assert 2.0 < ld < 6.0                    # (L/D)max written, sharp-body band
+
+
+def test_merged_shape_selector_sets_both_shape_and_body_form(root):
+    """One selector, two data fields: an axisymmetric nose profile implies a
+    body of revolution; a lifting-body entry sets body_form and keeps a
+    (moot) cone nose."""
+    import dataclasses
+    dlg = _editor(root, "axisymmetric")
+    dlg._shape_var.set(thrusty.NOSE_SHAPE_LABELS["tangent_ogive"])
+    dlg._update_body_form_state()
+    ro = dlg._build_ro()
+    assert ro.shape == "tangent_ogive" and ro.body_form == "axisymmetric"
+    dlg._shape_var.set(dlg._BODY_FORM_LABELS["wedge"])
+    dlg._update_body_form_state()
+    ro2 = dlg._build_ro()
+    assert ro2.body_form == "wedge" and ro2.shape == "cone"
+
+
+def test_lifting_form_wins_the_label_on_reopen_and_disables_biconic(root):
+    """Reopening a stored (shape, body_form): a lifting body_form shows its own
+    label regardless of the stored nose shape, and disables the biconic tick;
+    an axisymmetric body shows its nose profile."""
+    import dataclasses
+    dlg = _editor(root, "wedge")
+    wedge_ro = dataclasses.replace(dlg._build_ro(), shape="tangent_ogive")
+    reopened = thrusty.ROEditorDialog(root, ro=wedge_ro); reopened.withdraw()
+    assert reopened._body_form_key() == "wedge"
+    assert reopened._shape_var.get() == reopened._BODY_FORM_LABELS["wedge"]
+    assert str(reopened._biconic_chk.cget("state")) == "disabled"
+    # an ogive-nosed round body shows the ogive and re-enables biconic
+    og = dataclasses.replace(wedge_ro, body_form="axisymmetric", shape="tangent_ogive")
+    r2 = thrusty.ROEditorDialog(root, ro=og); r2.withdraw()
+    assert r2._shape_key() == "tangent_ogive" and r2._body_form_key() == "axisymmetric"
+    assert str(r2._biconic_chk.cget("state")) == "normal"
 
 
 def test_missing_required_span_yields_no_result(root):

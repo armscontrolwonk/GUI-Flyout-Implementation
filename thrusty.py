@@ -2450,15 +2450,28 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Button(_beta_row, text="Estimate…",
                    command=self._calc_beta).pack(side=tk.LEFT, padx=(6, 0))
 
-        # Shape
+        # Shape — a SINGLE selector merging the nose profile (axisymmetric)
+        # with the lifting-body forms.  From the user's view "shape" and "body
+        # form" are one question; they only differ in physics.  Picking an
+        # axisymmetric profile implies a body of revolution; the two lifting-
+        # body entries set body_form and make the nose profile moot (a wedge is
+        # flat, a half-cone is conical → 'cone' kept internally).  The data
+        # model still stores shape and body_form separately; only the editor
+        # merges them.  _shape_opts is the ONE ordered map both the display and
+        # _build_ro read, so label ↔ (shape, body_form) never drifts.
         _lbl(4, "Shape:")
+        self._shape_opts = self._shape_form_options()   # (label, shape, form)
+        _cur_form = str(getattr(ro, 'body_form', '') or 'axisymmetric') if ro \
+            else 'axisymmetric'
+        _cur_shape = (ro.shape if ro else 'cone') or 'cone'
         self._shape_var = tk.StringVar(
-            value=NOSE_SHAPE_LABELS.get(ro.shape if ro else "cone",
-                                        NOSE_SHAPE_LABELS["cone"]))
-        _ns_labels = list(NOSE_SHAPE_LABELS.values())
-        self._shape_combo = ttk.Combobox(frm, textvariable=self._shape_var,
-                                          values=_ns_labels, state="readonly", width=18)
+            value=self._shape_label_for(_cur_shape, _cur_form))
+        self._shape_combo = ttk.Combobox(
+            frm, textvariable=self._shape_var,
+            values=[o[0] for o in self._shape_opts], state="readonly", width=30)
         self._shape_combo.grid(row=4, column=1, sticky=tk.W, pady=3)
+        self._shape_combo.bind("<<ComboboxSelected>>",
+                               lambda _e: self._update_body_form_state())
 
         # Diameter + length
         _lbl(5, "Diameter (m):")
@@ -2499,23 +2512,9 @@ class ROEditorDialog(tk.Toplevel):
             value=f"{getattr(ro, 'break_diameter_m', 0.0):.2f}" if ro else "0")
         self._break_dia_entry = _entry(10, self._break_dia_var, width=10)
 
-        # Body form — body of revolution (default) or a lifting body.  Phase 1:
-        # data + honest depiction only; the physics ride on β / L/D and are
-        # identical across forms.  Biconic is a body-of-revolution concept, so
-        # selecting a lifting body unticks and disables it.
-        _lbl(11, "Body form:")
-        _bf0 = str(getattr(ro, 'body_form', '') or 'axisymmetric') if ro \
-            else 'axisymmetric'
-        self._body_form_var = tk.StringVar(
-            value=self._BODY_FORM_LABELS.get(_bf0,
-                                             self._BODY_FORM_LABELS['axisymmetric']))
-        self._body_form_combo = ttk.Combobox(
-            frm, textvariable=self._body_form_var,
-            values=list(self._BODY_FORM_LABELS.values()),
-            state="readonly", width=28)
-        self._body_form_combo.grid(row=11, column=1, sticky=tk.W, pady=3)
-        self._body_form_combo.bind("<<ComboboxSelected>>",
-                                   lambda _e: self._update_body_form_state())
+        # Biconic is a body-of-revolution concept; a lifting-body Shape unticks
+        # and disables it.  (Body form now lives in the merged Shape selector
+        # above — no separate dropdown.)
         self._update_body_form_state()
         self._update_biconic_state()
 
@@ -3136,9 +3135,7 @@ class ROEditorDialog(tk.Toplevel):
             name    = self._name_var.get().strip() or "(unnamed)"
             mass_kg = float(self._mass_var.get())
             beta    = float(self._beta_var.get())
-            _sl     = self._shape_var.get()
-            shape   = next((k for k, v in NOSE_SHAPE_LABELS.items()
-                            if v == _sl), "cone")
+            shape   = self._shape_key()          # merged Shape selector
             dia     = float(self._dia_var.get())
             length  = float(self._len_var.get())
             nose_rn = float(self._nose_var.get())
@@ -3276,11 +3273,35 @@ class ROEditorDialog(tk.Toplevel):
         self._fore_len_entry.config(state=st)
         self._break_dia_entry.config(state=st)
 
+    def _shape_form_options(self):
+        """Ordered (display_label, shape_key, body_form_key) for the merged
+        Shape selector: the axisymmetric nose profiles first (each implying a
+        body of revolution), then the two lifting-body forms (nose profile moot
+        → 'cone').  The single source both the dropdown and _build_ro read."""
+        opts = [(v, k, 'axisymmetric') for k, v in NOSE_SHAPE_LABELS.items()]
+        opts.append((self._BODY_FORM_LABELS['wedge'], 'cone', 'wedge'))
+        opts.append((self._BODY_FORM_LABELS['half_cone'], 'cone', 'half_cone'))
+        return opts
+
+    def _shape_label_for(self, shape_key, body_form_key):
+        """The merged-selector label for a stored (shape, body_form): a
+        lifting body_form wins (nose profile is moot for it); otherwise the
+        nose profile.  So an ogive-nosed round body shows 'Tangent Ogive', a
+        wedge shows 'Flattened wedge' regardless of its stored nose shape."""
+        if body_form_key in ('wedge', 'half_cone'):
+            return self._BODY_FORM_LABELS[body_form_key]
+        return NOSE_SHAPE_LABELS.get(shape_key or 'cone', NOSE_SHAPE_LABELS['cone'])
+
+    def _shape_key(self):
+        """The ROParams.shape (nose-profile) key for the current selection."""
+        disp = self._shape_var.get()
+        return next((s for lbl, s, _f in self._shape_opts if lbl == disp), 'cone')
+
     def _body_form_key(self):
-        """The ROParams.body_form key for the current combobox label."""
-        disp = self._body_form_var.get()
-        return next((k for k, v in self._BODY_FORM_LABELS.items() if v == disp),
-                    "axisymmetric")
+        """The ROParams.body_form key for the current Shape selection."""
+        disp = self._shape_var.get()
+        return next((f for lbl, _s, f in self._shape_opts if lbl == disp),
+                    'axisymmetric')
 
     def _update_body_form_state(self):
         """Biconic is a body-of-revolution concept: a lifting-body form unticks
