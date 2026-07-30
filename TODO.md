@@ -90,10 +90,16 @@ Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
   Sutton-Graves stagnation × Newtonian windward amplification — a
   different, better-anchored method family.  Residual follow-ups, in
   priority order:
-  1. Free anchor: run the generic-HGV glide point (6 km/s, ~50 km, α=14°)
-     through windward_flank_flux and compare T_eq against Candler's CFD
-     centerline temperatures (Fig. 3/7) — an independent CFD check on the
-     0.13 screening constant at exactly our use case.
+  1. Free anchor: DONE (2026-07-30, test_candler_windward_anchor.py +
+     METHODS §13.8).  Result: at the Candler glide point the cone-flank
+     windward model OVER-predicts a flat-bottom HGV by ×1.65 in T / ×7 in
+     flux (1934 K vs CFD ~1175 K).  BODY_FLUX_FRACTION 0.13 is a CONE ratio;
+     a flat lower surface implies ~0.018.  0.13 left unchanged (anchored for
+     its cone domain).  → FOLLOW-ON: make windward heating body_form-aware —
+     the wedge/half-cone forms need the lower flat-surface fraction (~0.018
+     is the recorded target); today they are over-flagged (conservative but
+     imprecise).  Ties into Phase 3 (body_form already exists; heating does
+     not yet read it).
   2. Consistency guard: the windward α band (5–20°) is user-tunable and
      could be set inconsistently with the vehicle's polar — consider
      pre-filling α_op from the polar/estimator trim α* (the Candler

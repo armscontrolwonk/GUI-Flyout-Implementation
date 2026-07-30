@@ -3718,6 +3718,26 @@ remains the primary hard-fail driver and the AoA/transition uncertainty
 forbids false precision).  Source pack and inference labels: `BENCHMARKING.md`
 "Windward/AoA heating probe"; pinned by `test_windward_flank.py`.
 
+**CFD anchor and its limit (Candler & Leyva 2022, S&GS 30).**  Their US.3D
+CFD of a generic HGV — flight-validated to ~100 K against Shuttle
+thermocouples — at exactly our use case (6 km/s, 49.7 km, ε=0.85, laminar,
+non-catalytic, α = 14° = L/D_max) puts the **windward centreline plateau at
+≈1150–1200 K** (their Fig. 3).  Run through `windward_flank_flux` with the
+app's geometry mapping (δ = atan((D/2)/L) ≈ 7°, `R_body` = D/2), the model
+returns **≈1934 K — an over-prediction of ×1.65 in temperature, ×7 in flux**.
+The cause is structural and specific: `BODY_FLUX_FRACTION = 0.13` is a **cone
+tail/stagnation ratio**, and a **flat-bottom** lifting body's windward
+surface runs ~7× cooler relative to its blunt-scale stagnation than a cone
+flank does (the effective fraction Candler implies is ≈0.018).  The bias is
+**conservative** (screening-safe — it over-flags, never under-flags) and does
+**not** touch the constant's validated cone domain, so `0.13` is unchanged.
+It does mean the windward screen **over-predicts the new `body_form` wedge /
+half-cone lifting bodies**; a body-form-aware acreage fraction is future work
+(the ≈0.018 flat-surface target is recorded).  The anchor numbers are pinned
+by `test_candler_windward_anchor.py` so any future fix is a deliberate,
+measured change — not silent drift.  (`R_body` cannot explain the gap:
+`T ∝ R_body^−1⁄₈`, so closing it that way needs a ~24 m curvature scale.)
+
 ### 13.9 Adjustable screening thresholds (`thresholds.py`)
 
 The survivability screen rests on a small set of **benchmark numbers**: the
