@@ -114,9 +114,13 @@ Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
 - XLSX round-trip: DONE (2026-07-30) — biconic, wing planform, body_form,
   and body_span_m all carry through ro_xlsx (appended rows; pre-upgrade
   workbooks import with defaults; test_ro_xlsx.py).
-- Two pre-existing test failures, deselected in every run:
-  damped_glide_smoke_test.py::test_lofted_plunges_both_modes and
-  ::test_no_zoom_climb (predate this work; never diagnosed).
+- Two pre-existing test failures: DIAGNOSED AND FIXED (2026-07-30).
+  Bisected to db73fa1 (2026-07-10: terminal-dive default 30 km -> 0 =
+  glide-to-impact), which let the marginal lofted case skip instead of
+  plunge.  Fixtures now pin glider_terminal_alt_km at their 30 km
+  calibration point; the zeta=0 == skip_glide identity is asserted with the
+  dive off (the modes' dive handoff differs by one output sample —
+  discretization, not physics).  Full suite green with NO deselects.
 
 ## Housekeeping
 - References manifest: when the paper library moves to Drive, add
