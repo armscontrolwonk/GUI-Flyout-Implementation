@@ -13,6 +13,17 @@ Both PLUNGE an uncapturable (lofted) entry; capturability is entry-geometry
 dependent (read off by glide_regime.py).
 
 Run:  python damped_glide_smoke_test.py        (needs numpy + scipy)
+
+RE-ANCHORING NOTE (2026-07-30).  These anchors were calibrated with the
+then-default 30 km terminal handoff.  Commit db73fa1 (2026-07-10) changed the
+default glider_terminal_alt_km to 0 = glide-to-impact (and updated the shipped
+reentry plans), which let the marginal lofted case keep flying — verdict
+drifted plunge→skip and the ζ=0 re-climb crossed the 60 km line — and the two
+tests sat failing (deselected) until bisected to that commit.  The fixtures
+now PIN glider_terminal_alt_km explicitly, so the anchors are tied to their
+calibration point rather than to a shippable default that may move again.
+The ζ=0 ≡ skip_glide identity is asserted with the dive OFF: the two modes'
+dive handoff differs by one output sample (discretization, not physics).
 """
 
 import copy
@@ -47,6 +58,12 @@ def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
     p = get_booster(_BOOSTER)
     ro = copy.deepcopy(_CHGB)
     ro.glider_guidance, ro.glider_aero_model = mode, aero
+    # Pin the terminal handoff these anchors were calibrated at (30 km).  The
+    # shipped default changed to 0 = glide-to-impact (db73fa1, 2026-07-10),
+    # which let the marginal lofted case keep flying (skip, 67 km re-climb)
+    # instead of plunging — pinning the knob here keeps the fixtures at their
+    # original operating point regardless of future default drift.
+    ro.glider_terminal_alt_km = 30.0
     if zeta is not None:
         ro.glider_damping_zeta = zeta
     p.ro = ro
@@ -55,7 +72,7 @@ def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
     return r, ro
 
 
-def _fly_aur_shallow(mode, zeta=None, aero="polar"):
+def _fly_aur_shallow(mode, zeta=None, aero="polar", terminal_alt_km=30.0):
     """AUR on a depressed (shallow) insertion — capturable (adv-pitch program:
     stage 1 → 27°, stage 2 → 0° flat, launch elev 80°, az 103°, cutoff 117 s)."""
     p = copy.deepcopy(get_booster("AUR+HGB"))
@@ -68,6 +85,7 @@ def _fly_aur_shallow(mode, zeta=None, aero="polar"):
     # Compose the reentry object explicitly (boosters no longer embed one).
     ro = copy.deepcopy(_HGB)
     ro.glider_guidance, ro.glider_aero_model = mode, aero
+    ro.glider_terminal_alt_km = terminal_alt_km   # pinned; see _fly
     if zeta is not None:
         ro.glider_damping_zeta = zeta
     p.ro = ro
@@ -105,8 +123,11 @@ def test_serialization_roundtrip():
 
 def test_damped_nests_to_skip_glide():
     # damped_glide ζ=0 reduces exactly to skip_glide (α* lift, no feedback).
-    a_s, _ = _fly_aur_shallow("skip_glide")
-    a_d, _ = _fly_aur_shallow("damped_glide", zeta=0.0)
+    # Asserted on the PURE glide (terminal dive off): the identity is about
+    # the glide law, and the two modes' 30-km dive HANDOFF differs by one
+    # output sample (same dive, ±dt_output discretization — not physics).
+    a_s, _ = _fly_aur_shallow("skip_glide", terminal_alt_km=0.0)
+    a_d, _ = _fly_aur_shallow("damped_glide", zeta=0.0, terminal_alt_km=0.0)
     s, d = _alt(a_s), _alt(a_d)
     n = min(len(s), len(d))
     dmax = float(np.max(np.abs(s[:n] - d[:n])))
