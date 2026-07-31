@@ -51,6 +51,50 @@ Core loop:
 6. **Save** through the normal editor save; provenance stamp appended to
    notes; completeness checklist shown (R7).
 
+## GUI placement (recorded 2026-07-30)
+
+**Entry points — two buttons, one dialog.**  A "Measure from image…" button
+in each editor:
+- **Booster editor**, top of the dialog near the stage frames (Phase A scope:
+  stages, fairing, fins, strap-ons);
+- **Reentry-object editor**, beside the geometry fields near "Estimate β…"
+  (⌀/length/nose; span from a plan view in Phase B).
+
+This follows from populate-first + editors-own-the-fields: the tool is
+launched FROM the thing it fills in, writes into the live editor fields
+already open (old→new deltas visible, R8), and the editor's own Save/Cancel
+remains the single commit point.  No new save path; no ambiguity about which
+vehicle is being measured.
+
+**The tool window** is one modal dialog, identical from either entry point:
+
+```
+┌──────────────────────────────────────────────┬───────────────────────────┐
+│                                              │ ① Topology  (declared)    │
+│                                              │   stages, fairing, fins…  │
+│          image canvas                        │ ② Scale                   │
+│          (zoom / pan / click)                │   click 2 pts + distance  │
+│                                              │   anchor provenance       │
+│          [overlay: schematic at scale — ☐]   │ ③ Prompt checklist        │
+│                                              │   ▸ "click stage-1 ends"  │
+│                                              │     proposed: 5.02 m      │
+│                                              │     (1 px = 3.4 cm)       │
+│                                              │     [Accept][Edit][Skip]  │
+├──────────────────────────────────────────────┴───────────────────────────┤
+│  Apply to editor        Cancel                                            │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+"Apply to editor" pushes accepted values into the parent editor's fields
+(still editable there); closing the dialog discards everything else — the
+no-persistence decision, structurally enforced.
+
+**Deliberately NOT entry points:** no Tools-menu launcher in Phase A (a
+free-floating tool would need its own vehicle picker and a second write
+path); the main Schematic tab stays untouched — the overlay lives inside the
+measuring dialog (audit-in-support-of-populate).  A standing Schematic-tab
+overlay for pure auditing would be a separate, deliberate Phase-C addition.
+
 ## The hard cases (from the scoping discussion)
 
 - **Fairing**: has/shape declared (existing enum); length/⌀ measured.
