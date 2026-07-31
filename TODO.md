@@ -111,9 +111,9 @@ Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
      radiance, yet the detectability judgment only PARTIALLY flipped —
      below DSP, still visible to SBIRS).  Deltas matter where they cross a
      tier threshold; report margins, not just verdicts.
-- XLSX round-trip does not carry biconic, wing-planform, or body_form fields
-  (pre-existing pattern: JSON is the primary store; extend ro_xlsx if the
-  spreadsheet path starts being used for lifting bodies).
+- XLSX round-trip: DONE (2026-07-30) — biconic, wing planform, body_form,
+  and body_span_m all carry through ro_xlsx (appended rows; pre-upgrade
+  workbooks import with defaults; test_ro_xlsx.py).
 - Two pre-existing test failures, deselected in every run:
   damped_glide_smoke_test.py::test_lofted_plunges_both_modes and
   ::test_no_zoom_climb (predate this work; never diagnosed).
