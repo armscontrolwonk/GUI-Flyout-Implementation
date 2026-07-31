@@ -13,12 +13,14 @@ cone-flank model OVER-predicts — windward T_eq ≈ 1900 K vs the CFD ≈1175 K
 (×1.65 in T, ×7 in flux).  The cause is structural: BODY_FLUX_FRACTION = 0.13
 is a CONE tail/stagnation ratio (Lu/Shi & Zhang 2024 + STS-1), and a flat
 lower surface runs ~7× cooler relative to its blunt-scale stagnation than a
-cone flank does.  The bias is CONSERVATIVE (screening-safe) but over-flags
-lifting bodies; body_form-aware windward heating is future work (see TODO).
-0.13 is anchored for its validated CONE domain and is left unchanged here.
+cone flank does.  0.13 is anchored for its validated CONE domain and is left
+unchanged.
 
-These tests pin the anchor NUMBERS so any future body_form-aware fix is a
-deliberate, measured change against a recorded target — not silent drift.
+RESOLUTION (2026-07-30): windward heating is now body_form-aware —
+BODY_FLUX_FRACTION_FLAT = 0.018 (the Candler-implied flat-surface value,
+single-point anchor) is selected for wedge/half_cone; the over-prediction
+tests below still pin the CONE model's behavior on this geometry (default
+body_form), and the closure tests pin the fix.
 """
 
 import math
@@ -38,7 +40,7 @@ _ALPHA_LDMAX = 14.0                            # their Fig. 2 L/D_max
 _CFD_WINDWARD_K = 1175.0                        # Fig. 3 lower-surface plateau
 
 
-def _windward(alpha_op):
+def _windward(alpha_op, **kw):
     n = 5
     t = np.linspace(0, 10, n)
     return heating.windward_flank_flux(
@@ -46,7 +48,7 @@ def _windward(alpha_op):
         np.full(n, _ALT), np.linspace(0, 60, n),
         body_radius_m=_R_BODY, nose_radius_m=0.034,
         flank_half_angle_deg=_DELTA, alpha_op_deg=alpha_op,
-        alpha_band_deg=(5.0, 20.0), emissivity=0.85, body_material="")
+        alpha_band_deg=(5.0, 20.0), emissivity=0.85, body_material="", **kw)
 
 
 def test_flight_point_is_laminar_like_the_cfd():
@@ -82,6 +84,38 @@ def test_over_prediction_is_not_an_R_body_artefact():
             emissivity=0.85, body_material="")
         return r["T_eq_windward_K"]["op"]
     assert T_at(2.0) > _CFD_WINDWARD_K * 1.3         # 4× larger radius: still high
+
+
+# ── The body_form-aware fix (the anchor put to work) ────────────────────────
+def test_wedge_body_form_closes_the_candler_gap():
+    """With body_form='wedge' the flat-surface fraction (0.018) applies and
+    the windward T_eq lands ON the CFD plateau — the ×1.65 over-prediction
+    the tests above pin for the naive cone-fraction application is closed.
+    Band ±15% in T: the fraction is a single-point anchor at exactly this
+    flight point, so agreement here is calibration + the model's α/δ/R
+    structure, not an independent prediction."""
+    r = _windward(_ALPHA_LDMAX, body_form="wedge")
+    T_op = r["T_eq_windward_K"]["op"]
+    assert abs(T_op - _CFD_WINDWARD_K) / _CFD_WINDWARD_K < 0.15, T_op
+    assert r["acreage_fraction"] == heating.BODY_FLUX_FRACTION_FLAT
+    assert any("Candler" in w for w in r["warnings"])   # single-point anchor stated
+
+
+def test_half_cone_uses_the_flat_fraction_too():
+    """Flat side down: the half-cone's windward acreage is the flat plane —
+    same flat-plate physics, same fraction."""
+    r = _windward(_ALPHA_LDMAX, body_form="half_cone")
+    assert r["acreage_fraction"] == heating.BODY_FLUX_FRACTION_FLAT
+    assert r["body_form"] == "half_cone"
+
+
+def test_axisymmetric_default_keeps_the_cone_fraction():
+    """Cones are the validated domain of 0.13 — the default is unchanged, and
+    an explicit body_flux_fraction argument still overrides both."""
+    r = _windward(_ALPHA_LDMAX)
+    assert r["acreage_fraction"] == heating.BODY_FLUX_FRACTION == 0.13
+    r2 = _windward(_ALPHA_LDMAX, body_form="wedge", body_flux_fraction=0.05)
+    assert r2["acreage_fraction"] == 0.05
 
 
 def test_implied_flat_bottom_fraction_is_far_below_the_cone_value():

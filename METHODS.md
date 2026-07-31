@@ -3730,15 +3730,23 @@ fraction of the stagnation flux.  A **flat-bottom lifting body** (`body_form`
 flat-plate boundary layer, which runs **~7× cooler** relative to its
 blunt-scale stagnation than a cone flank does.  These are different flow
 regimes, so **one acreage fraction cannot serve both forms.**  The decision
-is to keep `0.13` for its **validated cone domain** and accept that the screen
-**over-predicts flat-bottom forms** (conservative — it over-flags, never
-under-flags) until the model is made `body_form`-aware.  Critically, `0.13` is
-**not** lowered to fit the flat case: that would corrupt the cone domain to
-match the wedge — the compensating-error pattern the whole anchoring
+keeps `0.13` for its **validated cone domain**; critically, `0.13` is
+**not** lowered to fit the flat case — that would corrupt the cone domain to
+match the wedge, the compensating-error pattern the whole anchoring
 discipline exists to prevent (cf. the retired Ref-(4) blunt-cone chart, §8.8,
-where a wrong pressure term had been absorbable into a tuned `Cf`).  The
-correct fix is a flat-surface fraction selected by `body_form`, recorded as
-future work with a target (≈0.018) rather than guessed now.
+where a wrong pressure term had been absorbable into a tuned `Cf`).
+
+**Implemented (2026-07-30): the fraction is selected by `body_form`.**
+`windward_flank_flux` uses `BODY_FLUX_FRACTION_FLAT = 0.018` for
+`wedge`/`half_cone` (flat side windward — the half-cone's windward acreage is
+its flat plane) and `BODY_FLUX_FRACTION = 0.13` for bodies of revolution;
+`trajectory.py` forwards the reentry object's `body_form`.  0.018 is the
+Candler-implied flat-surface value — a **single-point anchor** at the
+generic-HGV glide point, stated as such on the output and in the
+survivability report (an explicit `body_flux_fraction` argument still
+overrides both).  With it, the windward screen lands on the CFD plateau
+(closure pinned by `test_candler_windward_anchor.py`; the naive cone-fraction
+over-prediction remains pinned alongside as the domain-boundary record).
 
 **CFD anchor and its limit (Candler & Leyva 2022, S&GS 30).**  Their US.3D
 CFD of a generic HGV — flight-validated to ~100 K against Shuttle

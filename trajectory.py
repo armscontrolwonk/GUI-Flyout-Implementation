@@ -3165,7 +3165,9 @@ def integrate_trajectory(params: BoosterParams,
                             emissivity=float(getattr(_ero_ms, 'emissivity', 0.85) or 0.85),
                             body_material=(_ero_ms.body_material()
                                            if hasattr(_ero_ms, 'body_material') else ''),
-                            glide_mask=_gmask, delta_defaulted=_delta_defaulted)
+                            glide_mask=_gmask, delta_defaulted=_delta_defaulted,
+                            body_form=str(getattr(_ero_ms, 'body_form', '')
+                                          or 'axisymmetric'))
                     except Exception:
                         pass   # windward is an overlay; never break the FOM
 

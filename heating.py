@@ -584,9 +584,20 @@ def heating_figure_of_merit(t, rho, V, alt, rng, *, nose_radius_m=0.05,
 # applying it to a flat-bottom form OVER-predicts (conservative / screening-
 # safe, but imprecise).  Do NOT lower 0.13 to fit the flat case — that would
 # corrupt the cone domain to match the wedge (a compensating error).  The
-# correct fix is a body_form-aware fraction (TODO), not a retune of this
-# constant.  windward_flank_flux() does not yet read body_form.
+# correct fix is a body_form-aware fraction (below), not a retune of this
+# constant.
 BODY_FLUX_FRACTION = 0.13
+
+# FLAT-BOTTOM lifting bodies (body_form "wedge" / "half_cone", flat side
+# windward): the windward acreage is a flat-plate boundary layer, ~7× cooler
+# relative to its blunt-scale stagnation than a cone flank.  0.018 is the
+# value implied by the Candler & Leyva 2022 CFD of a generic HGV at its glide
+# point (6 km/s, 49.7 km, α=14°, laminar: windward plateau ≈1175 K) —
+# a SINGLE-POINT anchor, stated as such, against flight-validated CFD (their
+# code is within ~100 K of Shuttle thermocouples).  See METHODS §13.8 and
+# test_candler_windward_anchor.py.  windward_flank_flux() selects between
+# the two by body_form; the cone value above is untouched (its own domain).
+BODY_FLUX_FRACTION_FLAT = 0.018
 
 # --- Windward-flank heating band (glide AoA probe) ---------------------------
 # The α=0 acreage flux above times a windward amplification A(α)=sin(δ+α)/sin(δ):
@@ -1050,7 +1061,8 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
                         flank_half_angle_deg, alpha_band_deg=None,
                         alpha_op_deg=None, emissivity=0.85, body_material="",
                         nose_radius_m=0.0, body_flux_fraction=None,
-                        glide_mask=None, delta_defaulted=False):
+                        glide_mask=None, delta_defaulted=False,
+                        body_form="axisymmetric"):
     """Screening windward-flank convective heating for a lifting RV at AoA.
 
     Model (all closed-form, Sutton-Graves altitude):
@@ -1073,8 +1085,21 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
     # Resolve the live module attrs at call time so thresholds.apply() drives them.
     if alpha_band_deg is None:
         alpha_band_deg = _WINDWARD_ALPHA_BAND
+    # Acreage fraction is BODY-FORM-AWARE (METHODS §13.8: cones and flat-bottom
+    # lifting bodies carry windward acreage by different physics): cone flank →
+    # BODY_FLUX_FRACTION (0.13); flat-bottom wedge/half-cone → the ~7× lower
+    # flat-surface value (0.018, single-point Candler CFD anchor).  An explicit
+    # body_flux_fraction argument still overrides both.
+    flat_form = str(body_form or "axisymmetric") in ("wedge", "half_cone")
     if body_flux_fraction is None:
-        body_flux_fraction = BODY_FLUX_FRACTION
+        body_flux_fraction = (BODY_FLUX_FRACTION_FLAT if flat_form
+                              else BODY_FLUX_FRACTION)
+        if flat_form:
+            warnings.append(
+                "Flat-bottom lifting body: acreage fraction "
+                f"{BODY_FLUX_FRACTION_FLAT:g} (Candler & Leyva 2022 CFD "
+                "anchor, single-point) — the cone value "
+                f"{BODY_FLUX_FRACTION:g} does not apply.")
 
     delta = max(float(flank_half_angle_deg or 0.0), _WINDWARD_DELTA_FLOOR)
     if float(flank_half_angle_deg or 0.0) < _WINDWARD_DELTA_FLOOR:
@@ -1187,6 +1212,8 @@ def windward_flank_flux(t, rho, V, alt, rng, *, body_radius_m,
         T_eq_windward_K={"lo": T_lo, "op": T_op, "hi": T_hi},
         delta_deg=delta, alpha_band_deg=(a_lo, a_hi), alpha_op_deg=alpha_op_deg,
         amplification={"lo": A_lo, "op": A_op, "hi": A_hi},
+        acreage_fraction=float(body_flux_fraction),
+        body_form=str(body_form or "axisymmetric"),
         q_flank0_peak_MW_m2=q_flank0_pk / 1e6, body_material=str(body_material or ""),
         transition_state=_tstate, transition_factor_peak=_tf_pk, Re_Rn_peak=_re_pk,
         criteria=criteria, verdict=verdict,

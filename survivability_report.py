@@ -889,6 +889,11 @@ def build_report(result) -> dict:
                      f"(δ={_w['delta_deg']:.0f}° flank; "
                      f"{_qw['lo']:.1f}–{_qw['hi']:.1f} MW/m², "
                      f"{_amp['lo']:.1f}–{_amp['hi']:.1f}× the α=0 acreage flux).")
+            if _w.get('body_form') in ('wedge', 'half_cone'):
+                j.append(f"  Flat-bottom lifting body: acreage fraction "
+                         f"{_w.get('acreage_fraction', 0.0):g} (Candler & "
+                         f"Leyva 2022 CFD anchor, single-point; the cone "
+                         f"value does not apply — METHODS §13.8).")
             _wc = (_w.get('criteria') or {}).get('windward_surface')
             if _wc:
                 j.append(f"  vs body {_w['body_material']}: soak "
