@@ -7,20 +7,18 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image-overlay schematic sizing tool
-A widget/tool where the user loads an image (parade photo, line drawing,
-trade-press cutaway), enters a **single scale** (e.g. a known overall length,
-or two clicked points + a distance), and the to-scale Schematic is drawn
-**over the image** so every entered dimension can be checked against the
-picture at a glance.  This is the Schematic's data-auditor role completed:
-today it shows what the data says; this shows it against the evidence.
-- Likely shape: an "Overlay…" control on the Schematic tab → file dialog →
-  `imshow` the image behind the schematic axes at adjustable opacity; scale
-  from one user-entered dimension (m per pixel); drag/arrow-key alignment.
-- Derive-don't-invent: the tool must never write dimensions back from the
-  image automatically — it makes mismatches visible; the user decides.
-- Open questions: side-elevation only (matches schematic) or also planform?
-  persist the image path + scale with the booster JSON?
+### 1. Image dimensioning tool — DESIGNED, ready to build
+Load a picture, declare type + topology, and be walked (prompted drawing)
+through clicking dimensions off the image into the existing editor fields;
+schematic overlay as live audit.  Decisions taken: NO persistence (text
+provenance stamp in notes only), prompted checklist not free-measure,
+populate-first with audit support.  Full design + 12-risk red-team register
+(clocking foreshortening, scale-anchor circularity, stage-joint illusion,
+nose-radius resolution floor, convention conversions, span-field dependency,
+dimensional-draft status, photogrammetry excluded, …) in
+**IMAGE_DIMENSION_TOOL_DESIGN.md**.  Phase A = single-view booster core loop
+(largest single GUI feature yet); Phase B = multi-view for wedge/half-cone
+(requires the ROParams span field, Phase-3 hook); Phase C = audit polish.
 
 ### 2. Blender export of the schematic (rough-draft 3D for modelers)
 Export the vehicle as a simple 3D file to hand a modeler a dimensionally
