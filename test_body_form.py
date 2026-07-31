@@ -168,6 +168,38 @@ def test_wedge_caption_shows_stored_span_and_flags_unset():
     assert "span not modeled" in "\n".join(t.get_text() for t in ax2.texts)
 
 
+def test_trajectory_passes_body_form_to_windward_heating():
+    """End-to-end wiring: a glide flown with body_form='wedge' must reach the
+    windward screen with the flat-surface acreage fraction (0.018), and the
+    same vehicle as a body of revolution with the cone fraction (0.13) —
+    trajectory.py forwards body_form; heating selects (METHODS §13.8)."""
+    import copy
+    import heating
+    from booster_models import (get_booster, apply_reentry_plan,
+                                load_reentry_plan)
+    from trajectory import integrate_trajectory
+
+    def fly(form):
+        ro = _ro()
+        rp = load_reentry_plan("C-HGB")
+        if rp is not None:
+            ro = apply_reentry_plan(ro, rp)
+        ro = dataclasses.replace(ro, body_form=form, glider_enabled=True)
+        p = get_booster("Minotaur-IV + HTV-2")
+        p.ro = copy.deepcopy(ro)
+        r = integrate_trajectory(p, 0.0, 0.0, 90.0, max_time_s=8000.0,
+                                 dt_output=2.0, cutoff_time_s=170.0)
+        w = (r.get('heating_fom') or {}).get('windward') or {}
+        return w
+
+    w_wedge = fly("wedge")
+    w_cone = fly("axisymmetric")
+    assert w_wedge.get('acreage_fraction') == heating.BODY_FLUX_FRACTION_FLAT
+    assert w_cone.get('acreage_fraction') == heating.BODY_FLUX_FRACTION
+    # same flight, ~7x lower windward flux for the flat form
+    assert w_wedge['q_windward_MW_m2']['hi'] < 0.5 * w_cone['q_windward_MW_m2']['hi']
+
+
 def test_wings_on_a_lifting_body_are_reported_not_drawn():
     """Spanwise panels lie out of a lifting body's side-elevation plane, so
     wing data adds NO patches — the caption reports S/AR flagged 'not drawn'."""
