@@ -93,6 +93,7 @@ _R: dict[str, int] = {
     'biconic':    55,
     'fore_len':   56,
     'break_dia':  57,
+    'body_span':  58,
     # wings (drag-polar anchor + planform; planform is the primary data —
     # wing_geometry() derives S/AR from it at every consumer)
     'wing_area':  60,
@@ -243,6 +244,8 @@ def _build_ro_sheet(ws, ro) -> None:
            'axisymmetric only; ignored for lifting forms')
     _label(ws, _R['fore_len'],  'Fore-cone length', 'm')
     _label(ws, _R['break_dia'], 'Break diameter', 'm')
+    _label(ws, _R['body_span'], 'Planform span', 'm',
+           'wedge only: tip-to-tip base width (body IS the wing)')
     _dropdown(ws, _R['body_form'], _VAL_COL, list(BODY_FORMS))
     ws.cell(row=_R['body_form'], column=_VAL_COL,
             value=(getattr(ro, 'body_form', '') or 'axisymmetric'))
@@ -251,6 +254,7 @@ def _build_ro_sheet(ws, ro) -> None:
             value=_yn(bool(getattr(ro, 'biconic', False))))
     put('fore_len', getattr(ro, 'fore_length_m', 0.0))
     put('break_dia', getattr(ro, 'break_diameter_m', 0.0))
+    put('body_span', getattr(ro, 'body_span_m', 0.0))
 
     # Wings (appended rows).  The planform (root chord + exposed span + sweep)
     # is the PRIMARY data: when present, S and AR are DERIVED from it by
@@ -351,6 +355,7 @@ def import_ro_xlsx(path: str):
         biconic=_rbool(ws, _R['biconic'], _VAL_COL),
         fore_length_m=_rnum(ws, _R['fore_len'], _VAL_COL),
         break_diameter_m=_rnum(ws, _R['break_dia'], _VAL_COL),
+        body_span_m=_rnum(ws, _R['body_span'], _VAL_COL),
         wing_area_m2=_rnum(ws, _R['wing_area'], _VAL_COL),
         wing_aspect_ratio=_rnum(ws, _R['wing_ar'], _VAL_COL),
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),

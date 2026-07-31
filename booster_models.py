@@ -327,6 +327,16 @@ class ROParams:
     # biconic applies only to "axisymmetric" (it is a body-of-revolution
     # concept); consumers ignore it for the lifting-body forms.
     body_form: str = "axisymmetric"
+    # Planform span of a WEDGE lifting body: tip-to-tip base width (m).  The
+    # wedge's BODY is its lifting surface, so this is body geometry — DISTINCT
+    # from wing_span_exposed_m, which is the exposed panel span of a wing
+    # mounted ON a body (and feeds wing_geometry()'s reference-wing S/AR
+    # derivation).  Conflating them would derive a phantom wing from the body
+    # width; wing_geometry() must never read this field.  0 = unset (the
+    # schematic flags "span not modeled").  Meaningful only for
+    # body_form == "wedge": a half-cone's span IS its diameter, and a body of
+    # revolution has none.
+    body_span_m: float = 0.0
 
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
@@ -658,6 +668,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'fore_length_m':         ro.fore_length_m,
         'break_diameter_m':      ro.break_diameter_m,
         'body_form':             ro.body_form,
+        'body_span_m':           ro.body_span_m,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -723,6 +734,7 @@ def ro_from_dict(d: dict) -> ROParams:
         body_form=(str(d.get('body_form', '') or '')
                    if str(d.get('body_form', '') or '') in BODY_FORMS
                    else 'axisymmetric'),
+        body_span_m=float(d.get('body_span_m', 0.0) or 0.0),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),

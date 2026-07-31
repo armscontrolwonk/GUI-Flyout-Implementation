@@ -245,7 +245,10 @@ Documented over-prediction (honesty, not an anchor to hit):
 - Shape-derived C_L,max replacing the universal 0.873 body ceiling — for
   lifting forms only; every axisymmetric vehicle stays byte-identical.
 - Offset polar `C_D = C_D,min + k·(C_L − C_L0)²` for asymmetric forms.
-- Wedge span input removes the schematic's "span not modeled" flag.
+- Wedge span field: DONE (2026-07-30, body_span_m — a SEPARATE field from
+  wing_span_exposed_m; wing_geometry() is blind to it, guarded by test).
+  The schematic flag retires when it is set; the estimator pre-fills from
+  and persists to it.
 
 Out of scope entirely: moment/trim-by-CG (requires a CG we'd have to invent),
 wing-body interference (Fetterman: dissipates by ~M 11 and flat-bottom wins

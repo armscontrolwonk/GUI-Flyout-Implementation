@@ -2512,6 +2512,16 @@ class ROEditorDialog(tk.Toplevel):
             value=f"{getattr(ro, 'break_diameter_m', 0.0):.2f}" if ro else "0")
         self._break_dia_entry = _entry(10, self._break_dia_var, width=10)
 
+        # Planform span — WEDGE only (body geometry: the wedge's body IS its
+        # lifting surface; tip-to-tip base width).  Distinct from the wing
+        # planform in the glider frame, which is a wing ON a body.  A half-
+        # cone's span is its diameter; a body of revolution has none — so the
+        # field greys out for every form but the wedge.
+        _lbl(11, "Planform span (m):")
+        self._body_span_var = tk.StringVar(
+            value=f"{getattr(ro, 'body_span_m', 0.0):.2f}" if ro else "0")
+        self._body_span_entry = _entry(11, self._body_span_var, width=10)
+
         # Biconic is a body-of-revolution concept; a lifting-body Shape unticks
         # and disables it.  (Body form now lives in the merged Shape selector
         # above — no separate dropdown.)
@@ -2566,9 +2576,15 @@ class ROEditorDialog(tk.Toplevel):
         _wrc = f"{ro.wing_root_chord_m:g}" if (ro and getattr(ro, 'wing_root_chord_m', 0) > 0) else "0"
         _wss = f"{ro.wing_span_exposed_m:g}" if (ro and getattr(ro, 'wing_span_exposed_m', 0) > 0) else "0"
         _wsw = f"{ro.wing_sweep_deg:g}" if (ro and getattr(ro, 'wing_sweep_deg', 0) > 0) else "0"
-        self._wing_root_var, _ = _gfe(3, "  root chord:", _wrc, unit="m")
-        self._wing_span_var, _ = _gfe(4, "  exposed span:", _wss, unit="m")
-        self._wing_sweep_var, _ = _gfe(5, "  LE sweep:", _wsw, unit="°")
+        self._wing_root_var, self._wing_root_ent = _gfe(3, "  root chord:", _wrc, unit="m")
+        self._wing_span_var, self._wing_span_ent = _gfe(4, "  exposed span:", _wss, unit="m")
+        self._wing_sweep_var, self._wing_sweep_ent = _gfe(5, "  LE sweep:", _wsw, unit="°")
+        # All five wing entries, for body-form gating: the WEDGE disables them
+        # (its body is the lifting surface — a wing entered here would double-
+        # count through the polar's e_pull while invisible to the user).
+        self._wing_entries = (self._wing_area_ent, self._wing_ar_ent,
+                              self._wing_root_ent, self._wing_span_ent,
+                              self._wing_sweep_ent)
         # Live "derived" indicator + traces: when a planform is present, S/AR are
         # recomputed and locked; otherwise they are editable.
         self._wing_derived_lbl = ttk.Label(
@@ -2590,6 +2606,7 @@ class ROEditorDialog(tk.Toplevel):
 
         self._sync_wing_derived()
         self._update_glider_state()
+        self._update_body_form_state()   # apply wedge gating to the wing rows
 
         # ── Thermal protection (TPS) materials — per location (§10) ──────
         ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
@@ -2934,7 +2951,11 @@ class ROEditorDialog(tk.Toplevel):
         if form == "wedge":
             # ⌀ field = base depth for the wedge (editor labels carry this).
             depth_var = _entry_row(2, "Base depth (m):", self._dia_var.get() or "0")
-            span_var = _entry_row(3, "Planform span (m):", "0",
+            try:                       # pre-fill from the editor's span field
+                _span0 = f"{max(0.0, float(self._body_span_var.get() or 0.0)):g}"
+            except (ValueError, AttributeError):
+                _span0 = "0"
+            span_var = _entry_row(3, "Planform span (m):", _span0,
                                   "(REQUIRED — measurable off an image)")
             geo_vars = (depth_var, span_var)
         else:
@@ -3069,6 +3090,13 @@ class ROEditorDialog(tk.Toplevel):
                     self._LD_var.set(f"{ldmax:.2f}")
                 except (AttributeError, tk.TclError):
                     pass
+                # The span the estimate used persists on the wedge (body_span_m)
+                # — the same number the β/L-D pair was computed from.
+                if form == "wedge":
+                    try:
+                        self._body_span_var.set(f"{float(span_var.get()):g}")
+                    except (ValueError, AttributeError, tk.TclError):
+                        pass
             dlg.destroy()
 
         ttk.Button(bf, text="Use β and L/D", command=_use).pack(side=tk.LEFT)
@@ -3101,7 +3129,10 @@ class ROEditorDialog(tk.Toplevel):
     def _sync_wing_derived(self):
         """When a planform is present, DERIVE S / AR from it and lock the two
         entries read-only; otherwise leave them editable (direct-entry
-        fallback).  Keeps a green indicator line in step."""
+        fallback).  Keeps a green indicator line in step.  No-op for the wedge
+        (wing rows are disabled — _update_body_form_state owns their state)."""
+        if getattr(self, '_shape_opts', None) and self._body_form_key() == "wedge":
+            return
         try:
             c_r = float(self._wing_root_var.get() or 0.0)
             s_e = float(self._wing_span_var.get() or 0.0)
@@ -3169,9 +3200,21 @@ class ROEditorDialog(tk.Toplevel):
                     parent=self)
                 return None
 
+        # Wedge-only planform span (body geometry; disabled for other forms).
+        body_span = 0.0
+        if body_form == "wedge":
+            try:
+                body_span = max(0.0, float(self._body_span_var.get() or 0.0))
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid input", "Planform span must be a number.",
+                    parent=self)
+                return None
+
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
         wing_root = wing_span = wing_sweep = 0.0
+        LD = 0.0
         if glider_on:
             try:
                 LD = float(self._LD_var.get())
@@ -3179,6 +3222,10 @@ class ROEditorDialog(tk.Toplevel):
                 messagebox.showerror(
                     "Invalid input", "L/D must be a number.", parent=self)
                 return None
+        # Wing fields are stored only when VISIBLE (not for the wedge, whose
+        # rows are disabled): hidden-but-active wing physics through the
+        # polar's e_pull would be dishonest.  What you see is what's stored.
+        if glider_on and body_form != "wedge":
             try:
                 wing_area = max(0.0, float(self._wing_area_var.get() or 0.0))
                 wing_ar   = max(0.0, float(self._wing_ar_var.get() or 0.0))
@@ -3197,8 +3244,6 @@ class ROEditorDialog(tk.Toplevel):
             # stale pair).  wing_geometry() is the single source of truth.
             if wing_root > 0.0 and wing_span > 0.0:
                 wing_area, wing_ar, _ = self._current_wing_geometry()
-        else:
-            LD = 0.0
 
         # --- TPS materials (§10): resolve each dropdown to a catalog key, or a
         # 'custom_*' sentinel with the bespoke properties stored on the RV. ---
@@ -3231,7 +3276,7 @@ class ROEditorDialog(tk.Toplevel):
             nose_radius_m=nose_rn,
             biconic=biconic, fore_length_m=fore_len_m,
             break_diameter_m=break_dia_m,
-            body_form=body_form,
+            body_form=body_form, body_span_m=body_span,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -3304,14 +3349,31 @@ class ROEditorDialog(tk.Toplevel):
                     'axisymmetric')
 
     def _update_body_form_state(self):
-        """Biconic is a body-of-revolution concept: a lifting-body form unticks
-        and disables it (and its entries, via _update_biconic_state)."""
-        if self._body_form_key() != "axisymmetric":
+        """Per-form field gating.  Biconic is a body-of-revolution concept: a
+        lifting-body form unticks and disables it.  The planform-span field is
+        WEDGE-only (body geometry); the wing rows are disabled FOR the wedge
+        (its body is the lifting surface — hidden-but-active wing physics
+        would be dishonest).  A half-cone keeps its wing rows: half-cone +
+        delta wing is a real configuration (Fetterman TN D-2942)."""
+        form = self._body_form_key()
+        if form != "axisymmetric":
             self._biconic_var.set(False)
             self._biconic_chk.config(state="disabled")
         else:
             self._biconic_chk.config(state="normal")
         self._update_biconic_state()
+        if hasattr(self, '_body_span_entry'):
+            self._body_span_entry.config(
+                state="normal" if form == "wedge" else "disabled")
+        if hasattr(self, '_wing_entries'):
+            if form == "wedge":
+                for e in self._wing_entries:
+                    e.config(state="disabled")
+                self._wing_derived_lbl.configure(text="")
+            else:
+                for e in self._wing_entries:
+                    e.config(state="normal")
+                self._sync_wing_derived()   # restore derived-S/AR readonly
 
     # ---- TPS material dropdown helpers (§10 materials dropdown) --------
     _MAT_NONE_LABEL   = "(none — numbers only)"

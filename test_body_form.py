@@ -132,6 +132,42 @@ def test_biconic_is_ignored_for_lifting_forms():
     assert "biconic" not in txt
 
 
+def test_body_span_round_trips_and_defaults_zero():
+    assert _ro().body_span_m == 0.0
+    d = ro_to_dict(_ro(body_form="wedge", body_span_m=0.9))
+    assert d["body_span_m"] == 0.9
+    assert ro_from_dict(d).body_span_m == 0.9
+
+
+def test_body_span_never_leaks_into_wing_geometry():
+    """The phantom-wing guard: body_span_m is BODY geometry (the wedge's own
+    lifting surface), distinct from wing_span_exposed_m (a wing ON a body).
+    wing_geometry() must be blind to it — with body_span set and no wing
+    fields it returns nothing, and with both set the wing derivation is
+    byte-identical to the same wing without body_span."""
+    from booster_models import wing_geometry
+    bare = _ro(body_form="wedge", body_span_m=0.9)
+    assert wing_geometry(bare) == (0.0, 0.0, None)
+    winged = _ro(wing_root_chord_m=0.6, wing_span_exposed_m=0.15)
+    winged_plus_span = _ro(wing_root_chord_m=0.6, wing_span_exposed_m=0.15,
+                           body_span_m=0.9)
+    assert wing_geometry(winged) == wing_geometry(winged_plus_span)
+
+
+def test_wedge_caption_shows_stored_span_and_flags_unset():
+    """The schematic's 'span not modeled' flag retires exactly when the span
+    is stored — and the stored span is reported, not drawn (out of the
+    side-elevation plane)."""
+    p, _ = _with_ro(body_form="wedge", body_span_m=0.9)
+    ax = _ax(); draw_booster(ax, p)
+    txt = "\n".join(t.get_text() for t in ax.texts)
+    assert "span 0.9 m (not drawn)" in txt
+    assert "span not modeled" not in txt
+    p2, _ = _with_ro(body_form="wedge")          # span unset
+    ax2 = _ax(); draw_booster(ax2, p2)
+    assert "span not modeled" in "\n".join(t.get_text() for t in ax2.texts)
+
+
 def test_wings_on_a_lifting_body_are_reported_not_drawn():
     """Spanwise panels lie out of a lifting body's side-elevation plane, so
     wing data adds NO patches — the caption reports S/AR flagged 'not drawn'."""
