@@ -1832,8 +1832,10 @@ lift term and (optionally) a polar-drag model — see Section 12.
 `ROParams.body_form` declares how the airframe carries its volume:
 `"axisymmetric"` (default — cone or biconic body of revolution), `"wedge"`
 (flattened wedge lifting body, HTV-2 class; `diameter_m` is the **base
-depth**, and the planform span is *not modeled* — the schematic flags it
-rather than inventing one), or `"half_cone"` (flat diametral plane over a
+depth**, and the planform span is stored in `body_span_m` — tip-to-tip
+base width, BODY geometry distinct from the wing planform, which
+`wing_geometry()` never reads; unset (0) is flagged by the schematic
+rather than invented), or `"half_cone"` (flat diametral plane over a
 conical lower surface; `diameter_m` is the full cone diameter, so the
 side-elevation depth is ⌀/2).  The schematic draws the asymmetric
 silhouette (flat flank + sloped surface) and names the form in the caption;

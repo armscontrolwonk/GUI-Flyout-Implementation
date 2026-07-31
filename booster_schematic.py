@@ -290,7 +290,11 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
         size_line = f"⌀{D:g}×{L:g} m{flag}"
     lines = [f"reentry object: {name}", size_line]
     if form == "wedge":
-        lines.append("wedge lifting body · span not modeled")
+        # span is out of the side-elevation plane: reported, not drawn —
+        # stored (body_span_m) when known, flagged when not.
+        b_span = float(getattr(ro, "body_span_m", 0.0) or 0.0)
+        lines.append(f"wedge lifting body · span {b_span:g} m (not drawn)"
+                     if b_span > 0 else "wedge lifting body · span not modeled")
     elif form == "half_cone":
         lines.append("half-cone lifting body (side depth ⌀/2)")
     tail = []

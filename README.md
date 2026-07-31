@@ -301,7 +301,8 @@ tabbed notebook**.
   geometry sharpens the estimate and the picture (METHODS §8.8).
 - **Lifting-body forms (wedge / half-cone)** — a reentry object can declare
   its **body form**: body of revolution (default), **flattened wedge**
-  (HTV-2 class; ⌀ = base depth, planform span not modeled and flagged), or
+  (HTV-2 class; ⌀ = base depth, planform span stored as body geometry —
+  flagged when unset, never invented), or
   **half-cone** (flat diametral plane over a conical surface). The Schematic
   draws the honest asymmetric side elevation and names the form; the
   trajectory physics are unchanged — β and L/D carry them, with two caveats

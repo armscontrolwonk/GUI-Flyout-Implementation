@@ -26,6 +26,7 @@ def _ro(**kw):
 
 
 _NEW_FIELDS = ("body_form", "biconic", "fore_length_m", "break_diameter_m",
+               "body_span_m",
                "wing_area_m2", "wing_aspect_ratio", "wing_root_chord_m",
                "wing_span_exposed_m", "wing_sweep_deg")
 
@@ -51,6 +52,13 @@ def test_body_form_round_trips(tmp_path, form):
     p = tmp_path / "ro.xlsx"
     export_ro_xlsx(str(p), _ro(body_form=form))
     assert import_ro_xlsx(str(p)).body_form == form
+
+
+def test_wedge_body_span_round_trips(tmp_path):
+    p = tmp_path / "ro.xlsx"
+    export_ro_xlsx(str(p), _ro(body_form="wedge", body_span_m=0.9))
+    back = import_ro_xlsx(str(p))
+    assert back.body_form == "wedge" and back.body_span_m == 0.9
 
 
 def test_unknown_body_form_normalises_not_crashes(tmp_path):

@@ -131,6 +131,45 @@ def test_lifting_form_wins_the_label_on_reopen_and_disables_biconic(root):
     assert str(r2._biconic_chk.cget("state")) == "normal"
 
 
+def test_span_and_wing_fields_gate_by_body_form(root):
+    """The user-visible rule: body span is a WEDGE field; the wing rows are
+    for bodies that can carry a wing ON them — axisymmetric AND half-cone
+    (Fetterman's half-cone delta-wing is a real configuration) — and are
+    disabled for the wedge, whose body IS the lifting surface."""
+    dlg = _editor(root, "wedge")
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    assert str(dlg._body_span_entry.cget("state")) == "normal"
+    assert all(str(e.cget("state")) == "disabled" for e in dlg._wing_entries)
+    for form, span_state in (("axisymmetric", "disabled"),
+                             ("half_cone", "disabled")):
+        d = _editor(root, form)
+        d._glider_var.set(True); d._update_glider_state()
+        assert str(d._body_span_entry.cget("state")) == span_state, form
+        # wing rows live for both (S/AR may be readonly when derived — the
+        # gate only forbids 'disabled')
+        assert all(str(e.cget("state")) != "disabled"
+                   for e in d._wing_entries), form
+
+
+def test_wedge_stores_span_and_zeroes_hidden_wing_fields(root):
+    """What you see is what's stored: the wedge persists body_span_m, and the
+    disabled wing rows save as zero (hidden-but-active wing physics through
+    the polar's e_pull would be dishonest)."""
+    dlg = _editor(root, "wedge")
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    dlg._body_span_var.set("0.9")
+    dlg._wing_area_var.set("0.5")            # stale value from a former form
+    ro = dlg._build_ro()
+    assert ro.body_span_m == 0.9
+    assert ro.wing_area_m2 == 0.0            # not silently carried
+    assert ro.glider_LD > 0.0                # glider L/D survives (dangling-else guard)
+    # and the estimator dialog pre-fills its REQUIRED span from the stored one
+    sub = _capture_dialog(dlg)
+    ents = [w for w in _all_widgets(sub) if isinstance(w, tk.ttk.Entry)]
+    assert ents[3].get() == "0.9"            # span row, pre-filled
+    sub.destroy()
+
+
 def test_missing_required_span_yields_no_result(root):
     """Span is required for the wedge; without it the dialog must refuse to
     produce a β (the derive-don't-invent rule — no fabricated planform)."""

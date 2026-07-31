@@ -67,8 +67,10 @@ Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
   support in Fetterman TN D-2942 fig. 6b).
 - Store α*/C_L0 on the RO (2c displays them; storage deferred until this
   consumer exists).
-- Wedge planform-span field on ROParams → removes the schematic's
-  "span not modeled" flag and persists the estimator's span input.
+- Wedge planform-span field: DONE (body_span_m, 2026-07-30) — separate
+  from the wing planform, wing_geometry-blind (phantom-wing guard tested);
+  schematic flag retires when set; estimator pre-fills/persists it.  This
+  also satisfies the image tool's R6 dependency (Phase B unblocked).
 
 ## Parked earlier in the project (context in METHODS / chat)
 - Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).

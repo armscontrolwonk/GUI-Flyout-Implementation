@@ -90,8 +90,9 @@ Silent data corrupters:
   ("click the side-view depth; stored ⌀ = 2×"); conversions unit-tested.
 
 Dependency gaps:
-- **R6 Wedge span field.**  Plan-view span has no ROParams home yet (Phase-3
-  hook).  The span field must land before/with Phase B.
+- **R6 Wedge span field.**  RESOLVED (2026-07-30): `body_span_m` exists —
+  a separate field from the wing planform, wing_geometry-blind.  Phase B is
+  unblocked.
 - **R7 Dimensional draft ≠ vehicle.**  Images populate dimensions only.  →
   save shows a completeness checklist (mass, propulsion, materials still
   required from sources); the notes stamp says "dimensional draft".
