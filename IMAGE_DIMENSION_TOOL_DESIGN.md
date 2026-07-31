@@ -1,6 +1,7 @@
 # Image Dimensioning Tool — Design
 
-Status: **design agreed, not yet built** (TODO item 1).  Load a picture of a
+Status: **Phase A1 shipped** (2026-07-30; RO-editor slice — see Phasing).
+Load a picture of a
 vehicle, declare what it is, and be walked through clicking its dimensions
 off the image so that every measurement lands in an existing editor field —
 the Schematic run backwards (image → data instead of data → picture).
@@ -158,10 +159,20 @@ Scope and plumbing:
 
 ## Phasing
 
-- **A — core loop, single view** (booster-first): image pane, scale + anchor
-  provenance, prompted pass for stages/fairing/fins/strap-ons with clocking,
-  pixel-quantum display, resolution floor, overlay toggle, notes stamp.
-  Covers cylindrical/conical boosters end to end.
+- **A — core loop, single view.**
+  - **A1 (DONE, 2026-07-30): reentry-object slice.**  `image_measure.py`
+    (pure, tested core: Scale, pixel quantum, resolution floor R4, convention
+    conversions R5, clocking R1, anchor-free note R2, provenance stamp) +
+    the Tk dialog on the RO editor ("Measure from image…"): load image, set
+    scale + provenance, prompted per-body-form measurement (Accept/Edit/Skip
+    with pixel quantum), Apply writes fields + stamps notes.  Pillow is now a
+    dependency (JPEG/PNG).  Tested: test_image_measure.py (14),
+    test_gui_image_measure.py (5).  NOT yet: canvas zoom/pan (fit-only),
+    overlay toggle, the topology-declaration panel, count-replication.
+  - **A2 (next): booster editor + topology/counts.**  The "Measure from
+    image…" button in the booster editor; the declared-topology panel
+    (stages, fairing, fins+count+clocking, strap-ons+count); measure-one-
+    replicate-count; the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).
 - **C — audit polish**: opacity/drag alignment, discrepancy highlighting,

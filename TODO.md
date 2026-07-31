@@ -7,7 +7,17 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image dimensioning tool — DESIGNED, ready to build
+### 1. Image dimensioning tool — Phase A1 SHIPPED (2026-07-30)
+A1 done: image_measure.py (tested core) + "Measure from image…" on the RO
+editor (load image → scale+provenance → prompted per-form measurement with
+pixel quantum + resolution floor → Apply writes fields + notes stamp; Pillow
+dependency).  NEXT (A2): booster-editor button, declared-topology panel
+(stages/fairing/fins+count+clocking/strap-ons), measure-one-replicate-count,
+overlay toggle.  Phase B multi-view (wedge/half-cone plan span) unblocked
+(body_span_m exists).  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
+[superseded lead-in below kept for the risk register pointer]
+
+### 1b. Image tool — original scoping pointer
 Load a picture, declare type + topology, and be walked (prompted drawing)
 through clicking dimensions off the image into the existing editor fields;
 schematic overlay as live audit.  Decisions taken: NO persistence (text
