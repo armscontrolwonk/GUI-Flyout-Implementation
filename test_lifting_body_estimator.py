@@ -282,3 +282,162 @@ def test_wedge_beta_uses_planform_reference():
     assert 'beta_zero_lift' in r['trim'] and r['trim']['beta_zero_lift'] > 0.0
     assert r['conditions']['sweep_deg'] == pytest.approx(
         math.degrees(math.atan2(2 * 3.6, 0.9)))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Phase 2b — cone / biconic sweep, wing-body composite, swept-cylinder LE
+# ═══════════════════════════════════════════════════════════════════════════
+from booster_models import (
+    cd_cone_hypersonic, cd_biconic_hypersonic, _swept_cylinder_force,
+)
+
+
+# ── Continuity (plan §2.1): sweep at α=0 ≡ the shipped zero-AoA build-ups ────
+@pytest.mark.parametrize("theta", [5.0, 10.0, 20.0])
+def test_cone_sweep_matches_zero_aoa_buildup_exactly(theta):
+    sw = lifting_body_sweep("cone", theta_deg=theta, mach=10.0, cf=0.0012,
+                            a_ref_m2=1.0, base_drag=True)
+    row0 = min(sw["alpha"], key=lambda r: abs(r["alpha_deg"]))
+    assert row0["alpha_deg"] == pytest.approx(0.0, abs=1e-9)
+    ref = cd_cone_hypersonic(theta, 0.0, 10.0, 0.0012)["total"]
+    assert row0["C_D"] == pytest.approx(ref, rel=1e-9)
+
+
+@pytest.mark.parametrize("theta,eps", [(10.0, 0.3), (20.0, 0.6)])
+def test_blunted_cone_sweep_matches_r127_closed_form(theta, eps):
+    """The α=0 pressure of the blunted sweep IS the R-127 closed form
+    2·sin²θ + ε²·cos⁴θ (cap axial + self-similar frustum scaling) — the
+    cross-check the plan's §2.1 continuity rules called for."""
+    sw = lifting_body_sweep("cone", theta_deg=theta, eps=eps, cf=0.0,
+                            a_ref_m2=1.0, base_drag=False)
+    row0 = min(sw["alpha"], key=lambda r: abs(r["alpha_deg"]))
+    assert row0["C_D"] == pytest.approx(
+        cd_blunted_cone_newtonian(theta, eps), rel=1e-9)
+    assert sw["conditions"]["cap_axial_alpha_independent"] is True
+
+
+def test_biconic_sweep_matches_zero_aoa_buildup_exactly():
+    sw = lifting_body_sweep("biconic", theta_deg=17.0, theta2_deg=8.0,
+                            break_ratio=0.5, eps=0.1, mach=10.0, cf=0.0012,
+                            a_ref_m2=1.0, base_drag=True)
+    row0 = min(sw["alpha"], key=lambda r: abs(r["alpha_deg"]))
+    ref = cd_biconic_hypersonic(17.0, 8.0, 0.5, 0.1, 10.0, 0.0012)["total"]
+    assert row0["C_D"] == pytest.approx(ref, rel=1e-9)
+
+
+def test_bor_sweep_lifts_under_incidence():
+    """The upgrade the zero-AoA estimators lacked: a cone at incidence lifts,
+    and its trim row is internally consistent (L/D* = C_L*/C_D*)."""
+    sw = lifting_body_sweep("cone", theta_deg=10.0, mach=10.0, cf=0.0012,
+                            a_ref_m2=1.0)
+    t = sw["trim"]
+    assert t["LD_max"] > 0.5
+    assert t["LD_max"] == pytest.approx(t["C_L_star"] / t["C_D_star"], rel=1e-9)
+
+
+# ── Anchor 10: Grant & Braun 2010 sharp-biconic peak-L/D contours ────────────
+def _grant_geometry(d_in, h_in, d1_deg, d2_deg):
+    """Sharp biconic under the paper's §VI.C constraints (height h, base d):
+    fore length from ℓ1·tanδ1 + (h − ℓ1)·tanδ2 = d/2."""
+    rb = d_in / 2.0
+    t1, t2 = math.tan(math.radians(d1_deg)), math.tan(math.radians(d2_deg))
+    l1 = (rb - h_in * t2) / (t1 - t2)
+    return l1 * t1 / rb                                    # break_ratio
+
+
+@pytest.mark.parametrize("d_in,d1,d2,expected", [
+    (21.0, 18.0, 11.0, 1.86),      # Fig. 18: best sharp biconic at d=21 in
+    (19.6, 17.0, 10.0, 2.01),      # Fig. 19: L/D 2 design point at d=19.6 in
+])
+def test_grant_braun_biconic_peak_LD(d_in, d1, d2, expected):
+    """AIAA 2010-1212 §VI.C (48-in height cap): friction OFF, K=2, no base
+    drag — the same Newtonian model family as our sector integral, so the
+    band is tight (5%), not the ±30% screening band."""
+    br = _grant_geometry(d_in, 48.0, d1, d2)
+    sw = lifting_body_sweep("biconic", theta_deg=d1, theta2_deg=d2,
+                            break_ratio=br, eps=0.0, cf=0.0, a_ref_m2=1.0,
+                            base_drag=False, alpha_min_deg=-5.0,
+                            alpha_max_deg=45.0, n_alpha=201)
+    assert sw["conditions"]["inviscid"] is True
+    assert sw["trim"]["LD_max"] == pytest.approx(expected, rel=0.05)
+
+
+# ── Anchor 7: Fetterman TN D-2942 wing-body composite ────────────────────────
+def _fetterman_wing_ratio(theta_deg, sweep_deg):
+    """Exposed delta-wing planform / base area for the Fetterman config: a
+    full delta of root ℓ and semispan ℓ·cotΛ, minus the half-cone footprint
+    (ℓ = r_b·cotθ): (cot²θ·cotΛ − cotθ)/π."""
+    cot_t = 1.0 / math.tan(math.radians(theta_deg))
+    cot_l = 1.0 / math.tan(math.radians(sweep_deg))
+    return cot_t * (cot_t * cot_l - 1.0) / math.pi
+
+
+_FETT = dict(mach=6.86, reynolds_length=1.43e6, turbulent=False,
+             base_drag=False, a_ref_m2=1.0)
+
+
+@pytest.mark.parametrize("sweep,expected", [(75.0, 5.4), (81.0, 5.0)])
+def test_fetterman_wing_body_LDmax(sweep, expected):
+    """TN D-2942 Fig. 6a (measured, ±0.2 quoted): θ=5° half-cone + delta
+    wing.  Screening band ±30%; we land within ~6%.  Planform sweep enters
+    through AREA (a more-swept delta of the same root is smaller) — which is
+    exactly where the composite gets the sweep dependence the bare sharp
+    wedge cannot express."""
+    wr = _fetterman_wing_ratio(5.0, sweep)
+    sw = lifting_body_sweep("half_cone", theta_deg=5.0,
+                            wing_exposed_m2=wr, **_FETT)
+    assert sw["trim"]["LD_max"] == pytest.approx(expected, rel=0.30)
+    assert sw["conditions"]["wing_ratio"] == pytest.approx(wr)
+
+
+def test_fetterman_wing_direction_75_beats_81():
+    """Fig. 6a direction: less sweep (bigger wing) wins at these conditions,
+    and BOTH beat the body alone (favorable wing addition)."""
+    ld = {s: lifting_body_sweep("half_cone", theta_deg=5.0,
+                                wing_exposed_m2=_fetterman_wing_ratio(5.0, s),
+                                **_FETT)["trim"]["LD_max"]
+          for s in (75.0, 81.0)}
+    body = lifting_body_sweep("half_cone", theta_deg=5.0, **_FETT)
+    assert ld[75.0] > ld[81.0] > body["trim"]["LD_max"]
+
+
+def test_winged_half_cone_requires_base_area():
+    with pytest.raises(ValueError):
+        lifting_body_sweep("half_cone", theta_deg=5.0, wing_exposed_m2=1.0,
+                           mach=7.0, cf=0.001)     # no a_ref_m2
+
+
+# ── Swept-cylinder leading edge (AEDC §2.1.3) ────────────────────────────────
+def test_swept_cylinder_drag_scales_as_cos_cubed():
+    """Independence principle: only the crossflow component carries pressure,
+    so LE drag ∝ cos³(effective sweep) — exactly."""
+    def drag(sweep_from_normal_deg):
+        e = (math.sin(math.radians(sweep_from_normal_deg)),
+             math.cos(math.radians(sweep_from_normal_deg)), 0.0)
+        return _swept_cylinder_force(e, 0.01, 1.0, (1.0, 0.0, 0.0), 2.0)[0]
+    want = (math.cos(math.radians(15.0)) / math.cos(math.radians(45.0))) ** 3
+    assert drag(15.0) / drag(45.0) == pytest.approx(want, rel=1e-9)
+
+
+def test_wedge_r_le_zero_is_exact_continuity():
+    kw = dict(length_m=3.0, depth_m=0.3, span_m=1.4, mach=10.0,
+              reynolds_length=2e7, base_drag=False)
+    a = lifting_body_sweep("wedge", **kw)
+    b = lifting_body_sweep("wedge", r_le_m=0.0, **kw)
+    for ra, rb in zip(a["alpha"], b["alpha"]):
+        assert ra["C_L"] == rb["C_L"] and ra["C_D"] == rb["C_D"]
+
+
+def test_wedge_le_bluntness_costs_LD_and_sweep_now_matters():
+    """A real LE radius lowers (L/D)max (bluntness is a cost), and the
+    penalty is SMALLER for the more-swept wedge — the Fetterman sweep trend
+    the sharp model was documented as unable to express (plan anchor 12
+    NOTE), now carried by the cos³Λ leading-edge term."""
+    def penalty(span):
+        kw = dict(length_m=3.0, depth_m=0.3, span_m=span, mach=10.0,
+                  reynolds_length=2e7, base_drag=False)
+        sharp = lifting_body_sweep("wedge", **kw)["trim"]["LD_max"]
+        blunt = lifting_body_sweep("wedge", r_le_m=0.03, **kw)["trim"]["LD_max"]
+        assert blunt < sharp
+        return (sharp - blunt) / sharp
+    assert penalty(1.4) < penalty(2.2)     # more sweep → smaller penalty

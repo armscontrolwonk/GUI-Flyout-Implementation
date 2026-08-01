@@ -81,17 +81,15 @@ Improve the sources behind launch/target locations and the map layers.
 - First step when picked up: inventory current sources in the code and note
   provenance for each (some may be as unattributed as the Ref-(4) chart was).
 
-## Phase 2b — lifting-body estimator completion (deferred by agreement)
-Plan + anchors pre-specified in PHASE2_LIFTING_BODY_PLAN.md §6.
-- Cone/biconic α-sweep on the same sector machinery (upgrades the shipped
-  zero-AoA estimators to L/D estimators; continuity rules already written).
-- Wing-body composite (half-cone + delta wing) — where the Fetterman 2–5×
-  viscous-share anchor properly lands.
-- Grant & Braun biconic peak-L/D contours as a friction-off anchor.
-- Swept-cylinder leading-edge component (AEDC §2.1.3) — the one remaining
-  paper-driven physics upgrade: gives the wedge a real bluntness term and a
-  sweep dependence (documented limitation: sharp-Newtonian is
-  sweep-independent at trim).
+## Phase 2b — lifting-body estimator completion: DONE (2026-08-01)
+All four items shipped (details in PHASE2_LIFTING_BODY_PLAN.md §6):
+cone/biconic α-sweep (α=0 continuity with the zero-AoA build-ups EXACT),
+Grant & Braun anchors hit to 0.2%/0.05% (1.864 vs 1.86, 2.011 vs 2.01),
+wing-body composite (Fetterman Λ75/81 within ~6%, directions correct),
+swept-cylinder LE (cos³Λ exact; sweep dependence now real — penalty 15%
+vs 28% more/less swept at test geometry).  GUI: wedge LE-radius row
+(pre-filled from nose radius), half-cone composites the declared wing
+planform.  BOR dialog stays zero-AoA until a consumer needs the sweep.
 
 ## Phase 3 — polar upgrades for lifting forms (parked; only part that
 ## touches trajectory physics, gated to lifting forms only)

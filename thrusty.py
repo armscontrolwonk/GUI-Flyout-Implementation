@@ -3607,28 +3607,43 @@ class ROEditorDialog(tk.Toplevel):
                 _span0 = "0"
             span_var = _entry_row(3, "Planform span (m):", _span0,
                                   "(REQUIRED — measurable off an image)")
-            geo_vars = (depth_var, span_var)
+            # Phase 2b: swept-cylinder leading edge (AEDC §2.1.3).  For a
+            # wedge the "nose" IS the leading edge, so the RO nose-radius
+            # field pre-fills it; 0 = sharp (the documented upper bound).
+            try:
+                _rle0 = f"{max(0.0, float(self._nose_var.get() or 0.0)):g}"
+            except (ValueError, AttributeError):
+                _rle0 = "0"
+            rle_var = _entry_row(4, "Leading-edge radius (m):", _rle0,
+                                 "(0 = sharp; gives the sweep its cost)")
+            geo_vars = (depth_var, span_var, rle_var)
         else:
             dia_var = _entry_row(2, "Base diameter (m):", self._dia_var.get() or "0")
             theta_lbl = ttk.Label(frm, text="—", foreground="gray40")
             _lbl(3, "Half-cone angle θ (derived):")
             theta_lbl.grid(row=3, column=1, sticky=tk.W)
+            # Phase 2b: wing-body composite — the editor's wing planform (the
+            # Fetterman half-cone + delta-wing configuration) joins the
+            # sweep as a coplanar lower surface.  Derived, shown, not typed.
+            wing_lbl = ttk.Label(frm, text="—", foreground="gray40")
+            _lbl(4, "Wing planform (from editor):")
+            wing_lbl.grid(row=4, column=1, sticky=tk.W)
             geo_vars = (dia_var,)
-        mach_var = _entry_row(4, "Eval Mach:", "10")
-        re_var = _entry_row(5, "Reynolds number (length):", "1e7",
+        mach_var = _entry_row(5, "Eval Mach:", "10")
+        re_var = _entry_row(6, "Reynolds number (length):", "1e7",
                             "(0 = inviscid ceiling — anchors only)")
         turb_var = tk.BooleanVar(value=True)
-        _lbl(6, "Boundary layer:")
+        _lbl(7, "Boundary layer:")
         ttk.Checkbutton(frm, variable=turb_var,
                         text="turbulent (untick = laminar)").grid(
-            row=6, column=1, sticky=tk.W)
-        tw_var = _entry_row(7, "Wall / freestream temp ratio:", "1.0",
+            row=7, column=1, sticky=tk.W)
+        tw_var = _entry_row(8, "Wall / freestream temp ratio:", "1.0",
                             "(Eckert T*; cold wall = 1)")
         base_var = tk.BooleanVar(value=True)
-        _lbl(8, "Base drag 2/(γM²):")
+        _lbl(9, "Base drag 2/(γM²):")
         ttk.Checkbutton(frm, variable=base_var,
                         text="include (untick to match base-corrected data)"
-                        ).grid(row=8, column=1, sticky=tk.W)
+                        ).grid(row=9, column=1, sticky=tk.W)
 
         ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
         res = ttk.Frame(dlg, padding=(12, 8))
@@ -3677,7 +3692,8 @@ class ROEditorDialog(tk.Toplevel):
                     t = float(depth_var.get()); b = float(span_var.get())
                     if t <= 0 or b <= 0:
                         return _clear("enter base depth and span")
-                    kw = dict(length_m=L, depth_m=t, span_m=b)
+                    r_le = max(0.0, float(rle_var.get() or 0.0))
+                    kw = dict(length_m=L, depth_m=t, span_m=b, r_le_m=r_le)
                     a_ref = None                       # planform (derived)
                 else:
                     d = float(dia_var.get())
@@ -3685,7 +3701,25 @@ class ROEditorDialog(tk.Toplevel):
                         return _clear("enter base diameter")
                     th = math.degrees(math.atan2(d / 2.0, L))
                     theta_lbl.config(text=f"{th:.2f}°  (atan(r_b/ℓ))")
-                    kw = dict(theta_deg=th)
+                    # Wing composite: exposed panels (c_r + c_t)·s_e from the
+                    # editor's planform, only when Maneuvering declares wings.
+                    s_exp = 0.0
+                    try:
+                        if bool(self._glider_var.get()):
+                            c_r = float(self._wing_root_var.get() or 0.0)
+                            s_e = float(self._wing_span_var.get() or 0.0)
+                            swp = float(self._wing_sweep_var.get() or 0.0)
+                            if c_r > 0.0 and s_e > 0.0:
+                                c_t = max(0.0, c_r - s_e * math.tan(
+                                    math.radians(swp)))
+                                s_exp = (c_r + c_t) * s_e
+                    except (ValueError, AttributeError, tk.TclError):
+                        s_exp = 0.0
+                    wing_lbl.config(
+                        text=(f"S_exp = {s_exp:.3g} m² (composite, Fetterman "
+                              "config)" if s_exp > 0.0
+                              else "none (body alone)"))
+                    kw = dict(theta_deg=th, wing_exposed_m2=s_exp)
                     a_ref = math.pi * (d / 2.0) ** 2   # full-circle base area
             except (ValueError, AttributeError):
                 return _clear("invalid input")
@@ -3703,14 +3737,22 @@ class ROEditorDialog(tk.Toplevel):
             cl0_lbl.config(text=f"{tr['C_L0']:+.4f}")
             bl = "inviscid (Cf=0)" if cond['inviscid'] else \
                 ("turbulent" if cond['turbulent'] else "laminar")
+            extra = ""
+            if cond.get('wing_ratio'):
+                extra += f" · wing S/A_b {cond['wing_ratio']:.2f}"
+            if cond.get('r_le_m'):
+                extra += f" · LE r {cond['r_le_m']:g} m (swept-cyl)"
+            sharp_note = ("blunt-LE swept-cylinder term included"
+                          if cond.get('r_le_m') else
+                          "sharp-body Newtonian: an UPPER BOUND on L/D\n"
+                          "(real blunt/viscous vehicles run ~30–40% lower)")
             cond_lbl.config(text=(
                 f"conditions: M {cond['mach']:g} · Re "
                 f"{cond['reynolds_length'] or 0:.3g} · {bl} · Cf "
                 f"{cond['cf']:.5f} · base drag "
                 f"{'on' if cond['base_drag'] else 'off'} ·\n"
                 f"A_ref {cond['a_ref_m2']:.4g} m² ({cond['a_ref_kind']}) · "
-                f"K {cond['K']:g}  — sharp-body Newtonian: an UPPER BOUND on "
-                f"L/D\n(real blunt/viscous vehicles run ~30–40% lower)"))
+                f"K {cond['K']:g}{extra}  — {sharp_note}"))
             warns = []
             if cond['inviscid']:
                 warns.append("Cf = 0: inviscid ceiling — for anchor "
