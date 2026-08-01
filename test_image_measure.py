@@ -75,6 +75,18 @@ def test_plain_length_is_identity():
     assert m.value_m == pytest.approx(2.0)
 
 
+def test_all_conventions_are_metre_to_metre():
+    """UNITS CONTRACT: the tool works in metres end-to-end.  Every convention
+    converter is a pure GEOMETRIC factor (identity, ×2 half-cone depth, ×½
+    nose radius) — never a unit change (no cm→m, mm→m hiding here).  The
+    editor fields the tool writes are all metre-labelled (*_m model
+    attributes); non-metre fields (masses kg, sweeps °, motor web mm) are
+    outside the prompt lists by design."""
+    for key, (label, conv) in im.CONVENTIONS.items():
+        assert conv(1.0) in (1.0, 2.0, 0.5), key
+        assert conv(0.0) == 0.0, key
+
+
 # ── R1 clocking correction ──────────────────────────────────────────────────
 def test_x_roll_correction_and_flag():
     s = _scale()

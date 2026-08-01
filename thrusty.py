@@ -1960,6 +1960,11 @@ class BoosterDialog(tk.Toplevel):
                 return None
             return (frames[n - 1]._length if field.endswith("_len")
                     else frames[n - 1]._dia)
+        # UNITS CONTRACT: the tool writes METRES.  Every var mapped here must
+        # be a metre-labelled field backed by a *_m model attribute (audited
+        # 2026-08-01).  Non-metre editor fields (masses kg, sweep °, motor web
+        # mm, jettison km) must never be added to this map without a
+        # conversion at the boundary.
         fixed = {
             "fairing_len": getattr(self, "_shroud_length_var", None),
             "fairing_dia": getattr(self, "_shroud_diameter_var", None),
@@ -3564,6 +3569,10 @@ class ROEditorDialog(tk.Toplevel):
     # image_measure field → editor StringVar map (one place, so the dialog and
     # the tests agree on what a measured field writes to).  Wing S/AR are NOT
     # here: they derive from the planform vars via _sync_wing_derived.
+    # UNITS CONTRACT: the tool writes METRES; every var listed must be a
+    # metre-labelled field backed by a *_m model attribute (audited
+    # 2026-08-01).  Degrees fields (LE sweep, half-angles) stay out — a
+    # two-point distance tool cannot measure an angle anyway.
     _IMG_FIELD_VARS = ("_len_var", "_dia_var", "_nose_var", "_body_span_var",
                        "_fore_len_var", "_break_dia_var",
                        "_wing_root_var", "_wing_span_var")
