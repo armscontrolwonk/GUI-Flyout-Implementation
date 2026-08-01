@@ -7,15 +7,18 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image dimensioning tool — Phase A1+A2 SHIPPED (2026-07-30)
+### 1. Image dimensioning tool — Phase A1+A2+A3 SHIPPED (A3 2026-08-01)
 Working "Measure from image…" on BOTH editors (shared dialog).  RO: load →
 scale+provenance → per-body-form prompts → Apply writes fields + notes stamp.
 Booster: prompts generated from the editor's own declared topology (stages/
 fairing/fins+count/strap-ons); measure-one-declare-count (counts untouched,
-model replicates).  Core in image_measure.py (tested); Pillow dependency.
-REMAINING before B: canvas zoom/pan (fit-only today), overlay toggle, and a
-UI control to feed the clocking correction (cos45 core exists+tested, no UI
-yet).  Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
+model replicates).  A3: the R1 clocking correction is now wired to the UI —
+the fin-span prompt is clocking-sensitive and the dialog offers an in-plane /
+×-rolled / unknown selector (default in-plane) that feeds the tested cos45
+core; built only when the topology has such a span.  Core in image_measure.py
+(tested); Pillow dependency.
+REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle.
+Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
 Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
 
