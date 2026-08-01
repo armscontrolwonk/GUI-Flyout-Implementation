@@ -2468,6 +2468,31 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
 
     _MAXW, _MAXH = 760, 560
 
+    def _set_image(img):
+        """Display a new source image.  The SCALE always resets with it —
+        metres-per-pixel belongs to the image it was anchored on; carrying it
+        to a different picture would be silently wrong."""
+        ow, oh = img.size
+        ds = min(_MAXW / ow, _MAXH / oh, 1.0)
+        disp = img.resize((max(1, int(ow * ds)), max(1, int(oh * ds))))
+        state.update(img=img, disp_scale=ds,
+                     photo=ImageTk.PhotoImage(disp), mode="idle", clicks=[],
+                     scale=None, anchor_total=None)
+        quantum.set("scale: —")
+        canvas.delete("all")
+        canvas.create_image(0, 0, anchor="nw", image=state["photo"])
+        status.set(f"Loaded {ow}×{oh}px.  Set the scale next "
+                   "(click two points a known distance apart).")
+        _refresh_closure()
+
+    def _load_path(path):
+        try:
+            img = Image.open(path)
+        except Exception as e:
+            messagebox.showerror("Cannot open image", str(e), parent=dlg)
+            return
+        _set_image(img)
+
     def _load():
         from tkinter import filedialog
         path = filedialog.askopenfilename(
@@ -2475,22 +2500,30 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             filetypes=[("Images",
                         "*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff"),
                        ("All files", "*.*")])
-        if not path:
-            return
+        if path:
+            _load_path(path)
+
+    def _paste(*_ev):
+        """Clipboard image (⌘V / Ctrl-V) — Pillow's grabclipboard returns an
+        image (screenshot), a list of file paths (copied files), or None."""
         try:
-            img = Image.open(path)
+            from PIL import ImageGrab
+            clip = ImageGrab.grabclipboard()
         except Exception as e:
-            messagebox.showerror("Cannot open image", str(e), parent=dlg)
-            return
-        ow, oh = img.size
-        ds = min(_MAXW / ow, _MAXH / oh, 1.0)
-        disp = img.resize((max(1, int(ow * ds)), max(1, int(oh * ds))))
-        state.update(img=img, disp_scale=ds,
-                     photo=ImageTk.PhotoImage(disp), mode="idle", clicks=[])
-        canvas.delete("all")
-        canvas.create_image(0, 0, anchor="nw", image=state["photo"])
-        status.set(f"Loaded {ow}×{oh}px.  Set the scale next "
-                   "(click two points a known distance apart).")
+            messagebox.showerror(
+                "Paste", f"Clipboard image unavailable here: {e}", parent=dlg)
+            return "break"
+        if isinstance(clip, list):
+            if clip:
+                _load_path(clip[0])
+        elif clip is not None:
+            _set_image(clip)
+        else:
+            status.set("No image on the clipboard.")
+        return "break"
+
+    dlg.bind("<Command-v>", _paste)
+    dlg.bind("<Control-v>", _paste)
 
     def _orig(xy):                       # display px → original-image px
         ds = state["disp_scale"] or 1.0
@@ -2558,6 +2591,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
 
     ttk.Button(panel, text="Load image…", command=_load).pack(
         anchor=tk.W, fill=tk.X)
+    ttk.Button(panel, text="Paste image  (⌘V / Ctrl-V)", command=_paste).pack(
+        anchor=tk.W, fill=tk.X, pady=(4, 0))
     ttk.Button(panel, text="Set scale…", command=_begin_scale).pack(
         anchor=tk.W, fill=tk.X, pady=(4, 0))
     ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
@@ -2701,6 +2736,35 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
               wraplength=560, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 4))
     ttk.Button(af, text="Apply to editor", command=_apply).pack(side=tk.LEFT)
     ttk.Button(af, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+
+    # OS drag-and-drop — OPPORTUNISTIC: enabled only when the optional
+    # tkinterdnd2 package is installed (it bundles the tkdnd Tk extension);
+    # silently absent otherwise.  Load/Paste are the guaranteed paths, so
+    # this is a convenience, not a dependency.
+    def _on_drop(ev):
+        paths = dlg.tk.splitlist(ev.data)
+        if paths:
+            _load_path(paths[0])
+    dnd_on = False
+    try:
+        from tkinterdnd2 import TkinterDnD, DND_FILES
+        TkinterDnD._require(dlg)
+        canvas.drop_target_register(DND_FILES)
+        canvas.dnd_bind("<<Drop>>", _on_drop)
+        dnd_on = True
+    except Exception:
+        pass
+    status.set("Load an image to begin"
+               + (", drop one on the canvas," if dnd_on else "")
+               + " or paste one (⌘V / Ctrl-V).")
+
+    # Test hooks — the loaders live in a closure; expose the seams the GUI
+    # tests exercise (paste path, image-resets-scale, drop availability).
+    dlg._im_state = state
+    dlg._im_paste = _paste
+    dlg._im_load_path = _load_path
+    dlg._im_set_image = _set_image
+    dlg._im_dnd = dnd_on
     return dlg
 
 

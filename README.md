@@ -848,5 +848,8 @@ matplotlib >= 3.7
 folium >= 0.14
 ```
 
-Optional: `openpyxl` (only for XLSX import/export).  Standard library otherwise
-(tkinter, json, pathlib, threading, concurrent.futures, math).
+Optional: `openpyxl` (only for XLSX import/export); `Pillow` (only for the
+"Measure from image…" tool — PNG/JPEG/WebP/TIFF and clipboard paste);
+`tkinterdnd2` (only to drag-and-drop image files onto that tool's canvas —
+detected at runtime, everything else works without it).  Standard library
+otherwise (tkinter, json, pathlib, threading, concurrent.futures, math).
