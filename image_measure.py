@@ -205,6 +205,20 @@ class Measurement:
         return f"1 px = {q * 100:.2g} cm" if q < 1.0 else f"1 px = {q:.3g} m"
 
 
+class HandEntry:
+    """A checklist value the user TYPED instead of clicked — for dimensions
+    already known precisely (a published diameter, the scale-anchor length).
+    Recorded as its own kind so the provenance stamp never claims it came off
+    the image: no pixel quantum, no view, flagged entered-by-hand."""
+
+    def __init__(self, field, value_m):
+        self.field = field
+        self.value_m = float(value_m)
+        self.refused = False
+        self.hand_entered = True
+        self.flags = ["entered by hand — not measured from the image"]
+
+
 # Anchor-free quantities (R2): what survives a WRONG scale anchor.  Absolute
 # lengths inherit the anchor's error 1:1; ratios and angles cancel it.
 ANCHOR_FREE = (
@@ -223,13 +237,19 @@ def anchor_free_note():
 
 def provenance_stamp(measurements, scale, date_str, view_note=""):
     """The text stamp appended to the object's notes on Apply (decision 1: the
-    audit trail without the bytes).  date_str is passed in for determinism."""
+    audit trail without the bytes).  date_str is passed in for determinism.
+    Hand-entered values are listed SEPARATELY — the stamp never claims a typed
+    number was measured off the image."""
     accepted = [m for m in measurements if not getattr(m, "refused", False)]
-    fields = ", ".join(sorted({m.field for m in accepted})) or "(none)"
+    measured = sorted({m.field for m in accepted
+                       if not getattr(m, "hand_entered", False)})
+    entered = sorted({m.field for m in accepted
+                      if getattr(m, "hand_entered", False)})
     bits = [f"[{date_str}] dimensional draft from image",
-            fields,
-            (scale.anchor_note or "scale set"),
-            scale.quantum_str()]
+            ", ".join(measured) or "(none)"]
+    if entered:
+        bits.append("entered by hand (not measured): " + ", ".join(entered))
+    bits += [(scale.anchor_note or "scale set"), scale.quantum_str()]
     if view_note:
         bits.append(view_note)
     return " · ".join(bits)

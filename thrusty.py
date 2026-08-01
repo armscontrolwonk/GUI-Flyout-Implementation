@@ -2692,10 +2692,38 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         acc_btn.config(command=_accept, state="normal")
     state["_finish_measure"] = _finish_measure
 
+    def _type_value():
+        """Manual entry for a dimension the user already knows precisely (a
+        published diameter, the anchor length itself): the checklist never
+        FORCES a click.  Needs no image and no scale — the value is typed in
+        stored metres — and it is recorded as entered-by-hand so the
+        provenance stamp cannot claim it was measured off the image."""
+        from tkinter import simpledialog
+        p = _label_by_field.get(prompt_var.get())
+        if not p:
+            return
+        conv = im.CONVENTIONS.get(p.get("convention"))
+        hint = f"\n({conv[0]})" if conv else ""
+        v = simpledialog.askfloat(
+            "Enter known value",
+            f"{p['label']}{hint}\n\nEnter the STORED value in metres — "
+            "recorded as entered by hand, not measured:",
+            parent=dlg, minvalue=0.0)
+        if v is None:
+            return
+        he = im.HandEntry(p["field"], v)
+        state["accepted"][he.field] = he.value_m
+        state["measurements"] = [x for x in state["measurements"]
+                                 if x.field != he.field] + [he]
+        result_var.set(f"✓ entered {he.field} = {v:g} m (by hand, not measured)")
+        _refresh_closure()
+
     mrow = ttk.Frame(panel); mrow.pack(anchor=tk.W, fill=tk.X, pady=(6, 0))
     ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)
     acc_btn = ttk.Button(mrow, text="Accept", state="disabled")
     acc_btn.pack(side=tk.LEFT, padx=4)
+    ttk.Button(mrow, text="Type value…", command=_type_value).pack(
+        side=tk.LEFT, padx=(4, 0))
 
     # Length-closure line (booster: stages + fairing should tile the overall
     # length).  Warn-only by design — a mismatch is information (wrong claimed
@@ -2758,13 +2786,20 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
                + (", drop one on the canvas," if dnd_on else "")
                + " or paste one (⌘V / Ctrl-V).")
 
+    # The checklist is available from the start: Type value… works with no
+    # image and no scale (only Measure needs those), so a known dimension can
+    # be entered before — or instead of — any clicking.
+    _refresh_prompts()
+
     # Test hooks — the loaders live in a closure; expose the seams the GUI
-    # tests exercise (paste path, image-resets-scale, drop availability).
+    # tests exercise (paste path, image-resets-scale, drop availability,
+    # hand entry).
     dlg._im_state = state
     dlg._im_paste = _paste
     dlg._im_load_path = _load_path
     dlg._im_set_image = _set_image
     dlg._im_dnd = dnd_on
+    dlg._im_type_value = _type_value
     return dlg
 
 

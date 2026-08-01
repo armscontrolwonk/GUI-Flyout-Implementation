@@ -228,14 +228,21 @@ Scope and plumbing:
     bug: loading a NEW image now RESETS the scale (m/px belongs to the image
     it was anchored on; carrying it to another picture was silently wrong).
     Tested: paste both forms, scale reset, opportunistic flag.
-  - **Discussed, deferred (2026-08-01):** anchor-as-field (declare which
-    editor field the scale anchor IS, filling it with honest "declared, not
-    measured" provenance instead of a circular re-measure — not built).
-    Skipping is already structural: the checklist is a pick-list and Apply
-    writes only accepted fields (R8).  Editor save does NOT require all
-    fields — the core five (mass/β/⌀/L/RN) must parse (they are prefilled),
-    and declared topology demands its own numbers (biconic ⇒ valid fore/break
-    geometry; maneuvering ⇒ L/D) — that is validation, not completeness.
+  - **A7 (DONE, 2026-08-01): Type value… — the promised Edit path.**  The
+    original core loop said "Accept / Edit / Skip"; only Accept (after a
+    click-measure) and skip (never select the prompt) existed, so a dimension
+    the user already knew precisely could not be entered in the checklist.
+    A "Type value…" button now takes the STORED value in metres for the
+    selected prompt — gated on NOTHING (no image, no scale; the checklist is
+    populated from dialog open, which also fixed prompts being empty until a
+    scale was set).  Typed values are recorded as `HandEntry` (no pixel
+    quantum, flagged) and the provenance stamp lists them SEPARATELY
+    ("entered by hand (not measured): …") — the audit trail never claims a
+    typed number came off the image.  Typed lengths count toward the length
+    closure exactly like measured ones.  This subsumes the deferred
+    anchor-as-field idea (type the known anchor-field value directly).
+    Skipping remains structural: Apply writes only accepted fields (R8) and
+    is never gated on completeness.
     STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).
