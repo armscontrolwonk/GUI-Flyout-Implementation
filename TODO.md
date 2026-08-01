@@ -24,8 +24,9 @@ prompt or anchor-declared total; warn-only, never normalizes) + WebP/TIFF in
 the load filter.
 REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle;
 LE sweep is an angle (not two-point-measurable) — hand entry by design.
-Discussed & deferred (2026-08-01): drag-and-drop (optional tkinterdnd2,
-opportunistic), clipboard paste, anchor-as-field (honest "declared, not
+A6: clipboard paste (⌘V, image or copied file) + drag-and-drop when the
+optional tkinterdnd2 package is present; new image now resets the scale.
+Discussed & deferred (2026-08-01): anchor-as-field (honest "declared, not
 measured" fill of the field the scale anchor IS).
 Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
 Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.

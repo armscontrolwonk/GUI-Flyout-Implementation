@@ -194,6 +194,60 @@ def test_clocking_control_present_for_fins(root):
     opened2[-1].destroy()
 
 
+def _open_measure_dialog(dlg):
+    opened = []
+    orig = tk.Toplevel
+    tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
+    try:
+        dlg._measure_from_image()
+    finally:
+        tk.Toplevel = orig
+    return opened[-1]
+
+
+def test_paste_and_new_image_resets_scale(root, tmp_path, monkeypatch):
+    """Paste accepts both a raw clipboard image and a copied-file list, and
+    loading ANY new image resets the scale — metres-per-pixel belongs to the
+    image it was anchored on; carrying it to a different picture would be
+    silently wrong."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    # ⌘V of a raw clipboard image (a screenshot)
+    monkeypatch.setattr("PIL.ImageGrab.grabclipboard",
+                        lambda: Image.new("RGB", (300, 200), "white"))
+    d._im_paste()
+    assert d._im_state["img"] is not None
+    # anchor a scale, then load a NEW image → scale must clear
+    d._im_state["scale"] = im.Scale((0, 0), (100, 0), 1.0)
+    p = tmp_path / "v.png"
+    Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    assert d._im_state["scale"] is None
+    assert d._im_state["img"].size == (400, 150)
+    # ⌘V of a copied FILE (Finder copy) → the file loads
+    monkeypatch.setattr("PIL.ImageGrab.grabclipboard", lambda: [str(p)])
+    d._im_state["img"] = None
+    d._im_paste()
+    assert d._im_state["img"] is not None
+    d.destroy()
+
+
+def test_paste_button_and_opportunistic_dnd(root):
+    """The Paste button is always there; drag-and-drop is enabled exactly when
+    the OPTIONAL tkinterdnd2 package is importable (no hard dependency)."""
+    pytest.importorskip("PIL")
+    d = _open_measure_dialog(_editor(root))
+    btxt = [b.cget("text") for b in _all(d) if isinstance(b, tk.ttk.Button)]
+    assert any("Paste image" in t for t in btxt)
+    try:
+        import tkinterdnd2                     # noqa: F401
+        assert d._im_dnd is True
+    except ImportError:
+        assert d._im_dnd is False
+    d.destroy()
+
+
 def test_dialog_builds_without_error(root):
     """Smoke: the Toplevel and all its widgets construct (catches layout/closure
     errors the apply-path test skips).  Pillow present → real dialog."""

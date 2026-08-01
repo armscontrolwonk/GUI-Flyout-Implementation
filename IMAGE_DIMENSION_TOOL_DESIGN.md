@@ -218,13 +218,24 @@ Scope and plumbing:
     Diameters never pollute the sum (length conventions only).  Also: the
     load-image filter now offers WebP/TIFF (Pillow always read them; the
     filetypes list simply omitted them and macOS greys non-matching files).
-  - **Discussed, deferred (2026-08-01):** drag-and-drop (possible via the
-    optional tkinterdnd2 package, opportunistic enable — not built);
-    clipboard paste (Pillow grabclipboard, macOS/Windows — not built);
-    anchor-as-field (declare which editor field the scale anchor IS, filling
-    it with honest "declared, not measured" provenance instead of a circular
-    re-measure — not built).  Skipping is already structural: the checklist
-    is a pick-list and Apply writes only accepted fields (R8).
+  - **A6 (DONE, 2026-08-01): paste + opportunistic drag-and-drop.**
+    "Paste image" button + ⌘V/Ctrl-V (Pillow grabclipboard: handles both a
+    raw clipboard image, e.g. a screenshot, and a copied-file list, e.g. a
+    Finder copy).  OS drag-and-drop onto the canvas is enabled exactly when
+    the OPTIONAL tkinterdnd2 package is importable (it bundles the tkdnd Tk
+    extension); silently absent otherwise — Load/Paste are the guaranteed
+    paths, no new hard dependency.  The loader refactor also fixed a latent
+    bug: loading a NEW image now RESETS the scale (m/px belongs to the image
+    it was anchored on; carrying it to another picture was silently wrong).
+    Tested: paste both forms, scale reset, opportunistic flag.
+  - **Discussed, deferred (2026-08-01):** anchor-as-field (declare which
+    editor field the scale anchor IS, filling it with honest "declared, not
+    measured" provenance instead of a circular re-measure — not built).
+    Skipping is already structural: the checklist is a pick-list and Apply
+    writes only accepted fields (R8).  Editor save does NOT require all
+    fields — the core five (mass/β/⌀/L/RN) must parse (they are prefilled),
+    and declared topology demands its own numbers (biconic ⇒ valid fore/break
+    geometry; maneuvering ⇒ L/D) — that is validation, not completeness.
     STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).
