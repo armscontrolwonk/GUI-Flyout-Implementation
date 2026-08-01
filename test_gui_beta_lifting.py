@@ -151,6 +151,21 @@ def test_span_and_wing_fields_gate_by_body_form(root):
                    for e in d._wing_entries), form
 
 
+def test_wing_rows_gate_on_maneuvering(root):
+    """Two-column layout: the wing planform lives in the GEOMETRY group (a
+    wing is hardware) but stays declared topology of the maneuvering model —
+    rows grey out until the Maneuvering checkbox is ticked (same pattern as
+    the biconic fields), and the L/D row greys with it.  Grey-out, not hide:
+    the checkbox must stay visible either way."""
+    dlg = _editor(root, "axisymmetric")
+    dlg._glider_var.set(False); dlg._update_glider_state()
+    assert all(str(e.cget("state")) == "disabled" for e in dlg._wing_entries)
+    assert str(dlg._LD_entry.cget("state")) == "disabled"
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    assert all(str(e.cget("state")) != "disabled" for e in dlg._wing_entries)
+    assert str(dlg._LD_entry.cget("state")) == "normal"
+
+
 def test_wedge_stores_span_and_zeroes_hidden_wing_fields(root):
     """What you see is what's stored: the wedge persists body_span_m, and the
     disabled wing rows save as zero (hidden-but-active wing physics through
