@@ -90,6 +90,24 @@ def test_apply_maps_body_span_for_wedge(root):
     assert float(dlg._body_span_var.get()) == pytest.approx(0.9)
 
 
+def test_apply_maps_biconic_and_wing_planform(root):
+    """The RO tool covers the editor's FULL dimensional field set: biconic
+    break geometry and the wing planform land in their fields, and the wing
+    S/AR derivation fires from the written planform (measure the planform,
+    derive the area — never the other way)."""
+    dlg = _editor(root)
+    dlg._glider_var.set(True)
+    dlg._biconic_var.set(True); dlg._update_biconic_state()
+    acc = {"_fore_len_var": 1.1, "_break_dia_var": 0.3,
+           "_wing_root_var": 0.7, "_wing_span_var": 0.45}
+    dlg._apply_image_measurements(acc, [], None)
+    assert float(dlg._fore_len_var.get()) == pytest.approx(1.1)
+    assert float(dlg._break_dia_var.get()) == pytest.approx(0.3)
+    assert float(dlg._wing_root_var.get()) == pytest.approx(0.7)
+    assert float(dlg._wing_span_var.get()) == pytest.approx(0.45)
+    assert float(dlg._wing_area_var.get()) > 0.0     # S derived from planform
+
+
 def test_apply_with_nothing_accepted_is_a_noop(root):
     dlg = _editor(root)
     before_len = dlg._len_var.get()
@@ -148,8 +166,10 @@ def test_clocking_control_present_for_fins(root):
     assert im.CLOCKING_OPTIONS[0][0] in clock[0].cget("values")
     opened[-1].destroy(); d.destroy()
 
-    # RO editor: no clocking-sensitive prompt → no clocking selector shown.
+    # RO editor with NO wings declared (Maneuvering off): no clocking-sensitive
+    # prompt → the selector is not built at all.
     dlg = _editor(root)
+    dlg._glider_var.set(False)
     opened2 = []
     tk.Toplevel = lambda *a, **k: (lambda w: (opened2.append(w), w)[1])(orig(*a, **k))
     try:

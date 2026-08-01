@@ -148,6 +148,40 @@ def test_ro_prompts_by_body_form():
     assert depth["convention"] == "half_cone_depth"   # stored ⌀ = 2×
 
 
+def test_ro_prompts_biconic_adds_break_geometry_when_declared():
+    """The biconic checkbox is declared topology: ticking it adds fore-cone
+    length and break diameter to the checklist; unticked, they never appear
+    (the fields are disabled in the editor too)."""
+    plain = [p["field"] for p in im.ro_prompts("axisymmetric", biconic=False)]
+    assert "_fore_len_var" not in plain and "_break_dia_var" not in plain
+    bic = [p["field"] for p in im.ro_prompts("axisymmetric", biconic=True)]
+    assert "_fore_len_var" in bic and "_break_dia_var" in bic
+
+
+def test_ro_prompts_winged_adds_planform_not_area():
+    """Maneuvering (winged) is declared topology.  The tool measures the
+    PLANFORM (root chord + exposed span) — S and AR stay derived by the editor
+    (wing_geometry single source of truth), and LE sweep is an angle a
+    two-point distance tool cannot measure, so neither is ever prompted."""
+    ps = im.ro_prompts("axisymmetric", winged=True)
+    fields = [p["field"] for p in ps]
+    assert "_wing_root_var" in fields and "_wing_span_var" in fields
+    assert not any("area" in f or "sweep" in f or "_wing_ar" in f
+                   for f in fields)
+    # half-cone + delta wing (the Fetterman configuration) keeps its wing rows
+    hc = [p["field"] for p in im.ro_prompts("half_cone", winged=True)]
+    assert "_wing_span_var" in hc
+    # the wedge's body IS the lifting surface — wing rows are disabled in the
+    # editor and must never be prompted (they'd be zeroed on save anyway)
+    wed = [p["field"] for p in im.ro_prompts("wedge", winged=True)]
+    assert not any(f.startswith("_wing") for f in wed)
+
+
+def test_ro_prompts_unwinged_has_no_wing_prompts():
+    assert not any(f.startswith("_wing") for f in
+                   (p["field"] for p in im.ro_prompts("axisymmetric")))
+
+
 def test_booster_prompts_from_topology():
     ps = im.booster_prompts(n_stages=2, has_fairing=True, has_fins=True,
                             n_fins=4, n_strapons=4)
@@ -172,17 +206,20 @@ def test_booster_prompts_minimal_is_just_stage_one():
         ["stage1_len", "stage1_dia"]
 
 
-# ── R1 clocking wired to the prompt that needs it ───────────────────────────
-def test_only_fin_span_is_clocking_sensitive():
+# ── R1 clocking wired to the prompts that need it ───────────────────────────
+def test_only_exposed_spans_are_clocking_sensitive():
     """The ×-roll cos45 correction is offered ONLY where a span can foreshorten:
-    a fin's exposed span.  Chords, diameters, lengths and the (plan-view) wedge
-    span are not clocking-sensitive — so the dialog never offers a correction
-    that would silently inflate them."""
+    a fin's or wing panel's exposed span seen side-on.  Chords, diameters,
+    lengths and the (plan-view) wedge span are not clocking-sensitive — so the
+    dialog never offers a correction that would silently inflate them."""
     ps = im.booster_prompts(n_stages=1, has_fairing=True, has_fins=True,
                             n_fins=4, n_strapons=2)
     sensitive = [p["field"] for p in ps if p.get("clocking_sensitive")]
     assert sensitive == ["fin_span"]
-    wed = im.ro_prompts("wedge")
+    ro = im.ro_prompts("axisymmetric", biconic=True, winged=True)
+    sensitive = [p["field"] for p in ro if p.get("clocking_sensitive")]
+    assert sensitive == ["_wing_span_var"]
+    wed = im.ro_prompts("wedge", winged=True)
     assert not any(p.get("clocking_sensitive") for p in wed)   # plan view = true span
 
 
