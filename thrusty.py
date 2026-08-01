@@ -2701,9 +2701,24 @@ class ROEditorDialog(tk.Toplevel):
         # object being edited so a save round-trips them unchanged.
         self._orig_ro = ro
 
-        frm = ttk.Frame(self, padding=12)
+        # Two-column layout: identity + geometry down the left; maneuvering,
+        # TPS and provenance in labeled groups on the right.  Same fields,
+        # same variable names — only the arrangement differs, so everything
+        # stays visible at once without the single-column scroll.
+        cols = ttk.Frame(self, padding=(12, 8, 12, 0))
+        cols.pack(fill=tk.BOTH, expand=True)
+        left = ttk.Frame(cols)
+        left.grid(row=0, column=0, sticky="nw")
+        right = ttk.Frame(cols)
+        right.grid(row=0, column=1, sticky="new", padx=(18, 0))
+        cols.columnconfigure(1, weight=1)
+
+        frm = ttk.Frame(left)
         frm.pack(fill=tk.X)
-        frm.columnconfigure(1, weight=1)
+        # Geometry group — the shape and every dimensional field, plus the
+        # image tool that populates them.
+        geo = ttk.LabelFrame(left, text="Geometry", padding=(8, 4, 8, 6))
+        geo.pack(fill=tk.X, pady=(8, 0))
 
         def _lbl(row, text, parent=frm):
             ttk.Label(parent, text=text).grid(
@@ -2759,7 +2774,7 @@ class ROEditorDialog(tk.Toplevel):
         # model still stores shape and body_form separately; only the editor
         # merges them.  _shape_opts is the ONE ordered map both the display and
         # _build_ro read, so label ↔ (shape, body_form) never drifts.
-        _lbl(4, "Shape:")
+        _lbl(0, "Shape:", parent=geo)
         self._shape_opts = self._shape_form_options()   # (label, shape, form)
         _cur_form = str(getattr(ro, 'body_form', '') or 'axisymmetric') if ro \
             else 'axisymmetric'
@@ -2767,64 +2782,108 @@ class ROEditorDialog(tk.Toplevel):
         self._shape_var = tk.StringVar(
             value=self._shape_label_for(_cur_shape, _cur_form))
         self._shape_combo = ttk.Combobox(
-            frm, textvariable=self._shape_var,
+            geo, textvariable=self._shape_var,
             values=[o[0] for o in self._shape_opts], state="readonly", width=30)
-        self._shape_combo.grid(row=4, column=1, sticky=tk.W, pady=3)
+        self._shape_combo.grid(row=0, column=1, sticky=tk.W, pady=3)
         self._shape_combo.bind("<<ComboboxSelected>>",
                                lambda _e: self._update_body_form_state())
         # Populate geometry by clicking dimensions off an image (Phase A).
-        ttk.Button(frm, text="Measure from image…",
+        ttk.Button(geo, text="Measure from image…",
                    command=self._measure_from_image).grid(
-            row=4, column=2, sticky=tk.W, padx=(8, 0))
+            row=1, column=1, sticky=tk.W, pady=(0, 3))
 
         # Diameter + length
-        _lbl(5, "Diameter (m):")
+        _lbl(2, "Diameter (m):", parent=geo)
         self._dia_var = tk.StringVar(
             value=f"{ro.diameter_m:.2f}" if ro else "0.5")
-        self._dia_entry = _entry(5, self._dia_var, width=10)
+        self._dia_entry = _entry(2, self._dia_var, width=10, parent=geo)
 
-        _lbl(6, "Length (m):")
+        _lbl(3, "Length (m):", parent=geo)
         self._len_var = tk.StringVar(
             value=f"{ro.length_m:.2f}" if ro else "2.0")
-        self._len_entry = _entry(6, self._len_var, width=10)
+        self._len_entry = _entry(3, self._len_var, width=10, parent=geo)
 
         # Nose-tip radius — drives Sutton-Graves stagnation heating (∝ 1/√RN).
         # Shown as the EFFECTIVE radius: an explicit value, else the
         # shape/diameter screening default (so the field is never a misleading
         # 0.000 for an auto RV).
-        _lbl(7, "Nose radius (m):")
+        _lbl(4, "Nose radius (m):", parent=geo)
         self._nose_var = tk.StringVar(
             value=f"{ro.effective_nose_radius_m():.3f}" if ro else "0.050")
-        self._nose_entry = _entry(7, self._nose_var, width=10)
+        self._nose_entry = _entry(4, self._nose_var, width=10, parent=geo)
 
         # Biconic (two-cone) body — fore cone + aft frustum.  Only length and
         # break diameter are entered; the half-angles derive from these against
         # the base diameter / length (feeds the two-cone β estimator).
-        _lbl(8, "Biconic body:")
+        _lbl(5, "Biconic body:", parent=geo)
         self._biconic_var = tk.BooleanVar(
             value=bool(getattr(ro, 'biconic', False)) if ro else False)
         self._biconic_chk = ttk.Checkbutton(
-            frm, variable=self._biconic_var, text="two-cone (fore + aft)",
+            geo, variable=self._biconic_var, text="two-cone (fore + aft)",
             command=self._update_biconic_state)
-        self._biconic_chk.grid(row=8, column=1, sticky=tk.W, pady=3)
-        _lbl(9, "Fore-cone length (m):")
+        self._biconic_chk.grid(row=5, column=1, sticky=tk.W, pady=3)
+        _lbl(6, "Fore-cone length (m):", parent=geo)
         self._fore_len_var = tk.StringVar(
             value=f"{getattr(ro, 'fore_length_m', 0.0):.2f}" if ro else "0")
-        self._fore_len_entry = _entry(9, self._fore_len_var, width=10)
-        _lbl(10, "Break diameter (m):")
+        self._fore_len_entry = _entry(6, self._fore_len_var, width=10, parent=geo)
+        _lbl(7, "Break diameter (m):", parent=geo)
         self._break_dia_var = tk.StringVar(
             value=f"{getattr(ro, 'break_diameter_m', 0.0):.2f}" if ro else "0")
-        self._break_dia_entry = _entry(10, self._break_dia_var, width=10)
+        self._break_dia_entry = _entry(7, self._break_dia_var, width=10, parent=geo)
 
         # Planform span — WEDGE only (body geometry: the wedge's body IS its
         # lifting surface; tip-to-tip base width).  Distinct from the wing
-        # planform in the glider frame, which is a wing ON a body.  A half-
-        # cone's span is its diameter; a body of revolution has none — so the
-        # field greys out for every form but the wedge.
-        _lbl(11, "Planform span (m):")
+        # planform below, which is a wing ON a body.  A half-cone's span is its
+        # diameter; a body of revolution has none — so the field greys out for
+        # every form but the wedge.
+        _lbl(8, "Planform span (m):", parent=geo)
         self._body_span_var = tk.StringVar(
             value=f"{getattr(ro, 'body_span_m', 0.0):.2f}" if ro else "0")
-        self._body_span_entry = _entry(11, self._body_span_var, width=10)
+        self._body_span_entry = _entry(8, self._body_span_var, width=10, parent=geo)
+
+        # Wing planform + derived S/AR — GEOMETRY (hardware on the body), even
+        # though it is STORED only with the maneuvering model (wings exist in
+        # Thrusty to anchor the glide polar).  The rows grey out until
+        # Maneuvering is ticked — the same declared-topology pattern as the
+        # biconic fields above greying until their checkbox.
+        def _we(row, label, default, unit=""):
+            ttk.Label(geo, text=label).grid(
+                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+            var = tk.StringVar(value=default)
+            inner = ttk.Frame(geo)
+            inner.grid(row=row, column=1, sticky=tk.W, pady=2)
+            ent = ttk.Entry(inner, textvariable=var, width=10)
+            ent.pack(side=tk.LEFT)
+            if unit:
+                ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
+            return var, ent
+
+        _wa = f"{ro.wing_area_m2:g}" if (ro and ro.wing_area_m2 > 0) else "0"
+        _war = f"{ro.wing_aspect_ratio:g}" if (ro and ro.wing_aspect_ratio > 0) else "0"
+        _wrc = f"{ro.wing_root_chord_m:g}" if (ro and getattr(ro, 'wing_root_chord_m', 0) > 0) else "0"
+        _wss = f"{ro.wing_span_exposed_m:g}" if (ro and getattr(ro, 'wing_span_exposed_m', 0) > 0) else "0"
+        _wsw = f"{ro.wing_sweep_deg:g}" if (ro and getattr(ro, 'wing_sweep_deg', 0) > 0) else "0"
+        self._wing_root_var, self._wing_root_ent = _we(9, "Wing root chord:", _wrc, unit="m")
+        self._wing_span_var, self._wing_span_ent = _we(10, "  exposed span:", _wss, unit="m")
+        self._wing_sweep_var, self._wing_sweep_ent = _we(11, "  LE sweep:", _wsw, unit="°")
+        self._wing_area_var, self._wing_area_ent = _we(12, "  wing area:", _wa, unit="m²")
+        self._wing_ar_var, self._wing_ar_ent = _we(13, "  aspect ratio:", _war)
+        # All five wing entries, for gating: enabled iff Maneuvering is on AND
+        # the form can carry a wing (the WEDGE disables them — its body is the
+        # lifting surface; a wing entered here would double-count through the
+        # polar's e_pull while invisible to the user).
+        self._wing_entries = (self._wing_area_ent, self._wing_ar_ent,
+                              self._wing_root_ent, self._wing_span_ent,
+                              self._wing_sweep_ent)
+        # Live "derived" indicator + traces: when a planform is present, S/AR
+        # are recomputed and locked; otherwise they are editable.
+        self._wing_derived_lbl = ttk.Label(
+            geo, text="", foreground="#2a7", justify=tk.LEFT, wraplength=300)
+        self._wing_derived_lbl.grid(row=14, column=0, columnspan=2,
+                                    sticky=tk.W, pady=(0, 0))
+        for _v in (self._wing_root_var, self._wing_span_var,
+                   self._wing_sweep_var, self._dia_var):
+            _v.trace_add("write", lambda *_a: self._sync_wing_derived())
 
         # Biconic is a body-of-revolution concept; a lifting-body Shape unticks
         # and disables it.  (Body form now lives in the merged Shape selector
@@ -2835,88 +2894,43 @@ class ROEditorDialog(tk.Toplevel):
         # Sync the read-only state of mass/diameter/length to separation mode
         self._update_separation_state()
 
-        # ── Maneuvering (glider / HGV) — vehicle properties only ──────
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
+        # ── Maneuvering (glider / HGV) — HOW it flies, not what it is.  The
+        # wing PLANFORM lives in Geometry (it is hardware); this group keeps
+        # only the capability flag and L/D.  The checkbox IS the group label.
         self._glider_var = tk.BooleanVar(value=ro.glider_enabled if ro else False)
-        ttk.Checkbutton(self, text="Maneuvering (glider / HGV)",
-                        variable=self._glider_var,
-                        command=self._update_glider_state).pack(
-            anchor=tk.W, padx=12, pady=(8, 0))
-
-        self._glider_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        _glider_chk = ttk.Checkbutton(right, text="Maneuvering (glider / HGV)",
+                                      variable=self._glider_var,
+                                      command=self._update_glider_state)
+        _man_box = ttk.LabelFrame(right, labelwidget=_glider_chk)
+        _man_box.pack(fill=tk.X)
+        self._glider_frm = ttk.Frame(_man_box, padding=(8, 2, 8, 6))
         self._glider_frm.pack(fill=tk.X)
         self._glider_frm.columnconfigure(1, weight=1)
 
-        def _gfe(row, label, default, unit=""):
-            ttk.Label(self._glider_frm, text=label).grid(
-                row=row, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-            var = tk.StringVar(value=default)
-            inner = ttk.Frame(self._glider_frm)
-            inner.grid(row=row, column=1, sticky=tk.W, pady=2)
-            ent = ttk.Entry(inner, textvariable=var, width=10)
-            ent.pack(side=tk.LEFT)
-            if unit:
-                ttk.Label(inner, text=f" {unit}").pack(side=tk.LEFT)
-            return var, ent
-
+        ttk.Label(self._glider_frm, text="Lift/drag (L/D):").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
-        self._LD_var, _ = _gfe(0, "Lift/drag (L/D):", _LD)
-        # Wing geometry — the physical anchor for the decoupled drag polar
-        # (a winged vehicle pulls more efficiently than a bare cone; 0 = no
-        # wings = slender-body polar).  The planform (root chord + exposed span,
-        # + optional sweep) is the PRIMARY input: whenever it is set, reference
-        # area S and aspect ratio AR are DERIVED from it (single source of truth
-        # = wing_geometry()) and shown read-only, so the drawing and the polar
-        # can never disagree with a hand-typed number.  Direct S/AR entry is the
-        # fallback for when only those figures are known (no planform).
-        _wa = f"{ro.wing_area_m2:g}" if (ro and ro.wing_area_m2 > 0) else "0"
-        _war = f"{ro.wing_aspect_ratio:g}" if (ro and ro.wing_aspect_ratio > 0) else "0"
-        self._wing_area_var, self._wing_area_ent = _gfe(1, "Wing area:", _wa, unit="m²")
-        self._wing_ar_var, self._wing_ar_ent = _gfe(2, "  aspect ratio:", _war)
-        # Wing PLANFORM — root chord, exposed span, LE sweep.  Drives BOTH the
-        # faithful Schematic depiction (root along the flank, TE on the base,
-        # swept LE) AND the derived S/AR above.  Leave blank to fall back to a
-        # flagged "(schematic)" tab and direct S/AR entry.
-        _wrc = f"{ro.wing_root_chord_m:g}" if (ro and getattr(ro, 'wing_root_chord_m', 0) > 0) else "0"
-        _wss = f"{ro.wing_span_exposed_m:g}" if (ro and getattr(ro, 'wing_span_exposed_m', 0) > 0) else "0"
-        _wsw = f"{ro.wing_sweep_deg:g}" if (ro and getattr(ro, 'wing_sweep_deg', 0) > 0) else "0"
-        self._wing_root_var, self._wing_root_ent = _gfe(3, "  root chord:", _wrc, unit="m")
-        self._wing_span_var, self._wing_span_ent = _gfe(4, "  exposed span:", _wss, unit="m")
-        self._wing_sweep_var, self._wing_sweep_ent = _gfe(5, "  LE sweep:", _wsw, unit="°")
-        # All five wing entries, for body-form gating: the WEDGE disables them
-        # (its body is the lifting surface — a wing entered here would double-
-        # count through the polar's e_pull while invisible to the user).
-        self._wing_entries = (self._wing_area_ent, self._wing_ar_ent,
-                              self._wing_root_ent, self._wing_span_ent,
-                              self._wing_sweep_ent)
-        # Live "derived" indicator + traces: when a planform is present, S/AR are
-        # recomputed and locked; otherwise they are editable.
-        self._wing_derived_lbl = ttk.Label(
-            self._glider_frm, text="", foreground="#2a7", justify=tk.LEFT)
-        self._wing_derived_lbl.grid(row=6, column=0, columnspan=2,
-                                    sticky=tk.W, pady=(0, 0))
-        for _v in (self._wing_root_var, self._wing_span_var,
-                   self._wing_sweep_var, self._dia_var):
-            _v.trace_add("write", lambda *_a: self._sync_wing_derived())
+        self._LD_var = tk.StringVar(value=_LD)
+        self._LD_entry = ttk.Entry(self._glider_frm, textvariable=self._LD_var,
+                                   width=10)
+        self._LD_entry.grid(row=0, column=1, sticky=tk.W, pady=2)
         ttk.Label(self._glider_frm,
-                  text="Wings anchor the drag polar (0 = slender body; AR blank "
-                       "= stubby default).  Enter the planform (root chord + "
-                       "exposed span) and S / AR are derived and the wings draw "
-                       "to scale;\nwithout it, type S / AR directly and the "
-                       "schematic shows a flagged tab.  Pull-up g-limit and "
-                       "re-entry βₛ are in the Reentry Plan editor.",
-                  foreground="#888888", justify=tk.LEFT).grid(
-                      row=7, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+                  text="Wings (in Geometry) anchor the drag polar: enter the "
+                       "planform and S / AR derive; without one, type S / AR "
+                       "directly (flagged tab).  Pull-up g-limit and re-entry "
+                       "βₛ are in the Reentry Plan editor.",
+                  foreground="#888888", justify=tk.LEFT, wraplength=340).grid(
+                      row=1, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._sync_wing_derived()
         self._update_glider_state()
         self._update_body_form_state()   # apply wedge gating to the wing rows
 
         # ── Thermal protection (TPS) materials — per location (§10) ──────
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
-        ttk.Label(self, text="Thermal protection (TPS) materials",
-                  font=("TkDefaultFont", 9, "bold")).pack(anchor=tk.W, padx=12, pady=(8, 0))
-        tps_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        _tps_box = ttk.LabelFrame(right, text="Thermal protection (TPS) materials",
+                                  padding=(8, 2, 8, 6))
+        _tps_box.pack(fill=tk.X, pady=(8, 0))
+        tps_frm = ttk.Frame(_tps_box)
         tps_frm.pack(fill=tk.X)
         tps_frm.columnconfigure(1, weight=1)
 
@@ -2965,18 +2979,17 @@ class ROEditorDialog(tk.Toplevel):
         self._update_custom_state("body")
 
         # ── Provenance — where these numbers came from / how firm they are ──
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(8, 0))
-        ttk.Label(self, text="Provenance",
-                  font=("TkDefaultFont", 9, "bold")).pack(anchor=tk.W, padx=12, pady=(8, 0))
-        prov_frm = ttk.Frame(self, padding=(24, 0, 12, 0))
+        _prov_box = ttk.LabelFrame(right, text="Provenance", padding=(8, 2, 8, 6))
+        _prov_box.pack(fill=tk.X, pady=(8, 0))
+        prov_frm = ttk.Frame(_prov_box)
         prov_frm.pack(fill=tk.X)
         prov_frm.columnconfigure(1, weight=1)
         ttk.Label(prov_frm, text="Source:").grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         self._source_var = tk.StringVar(value=(ro.source if ro else ""))
-        ttk.Entry(prov_frm, textvariable=self._source_var, width=52).grid(
+        ttk.Entry(prov_frm, textvariable=self._source_var, width=42).grid(
             row=0, column=1, sticky=tk.EW, pady=2)
         ttk.Label(prov_frm, text="Notes:").grid(row=1, column=0, sticky=tk.NW, padx=(0, 8), pady=2)
-        self._notes_text = tk.Text(prov_frm, width=52, height=3, wrap=tk.WORD)
+        self._notes_text = tk.Text(prov_frm, width=42, height=4, wrap=tk.WORD)
         self._notes_text.grid(row=1, column=1, sticky=tk.EW, pady=2)
         if ro and ro.notes:
             self._notes_text.insert("1.0", ro.notes)
@@ -3480,6 +3493,9 @@ class ROEditorDialog(tk.Toplevel):
         (wing rows are disabled — _update_body_form_state owns their state)."""
         if getattr(self, '_shape_opts', None) and self._body_form_key() == "wedge":
             return
+        if getattr(self, '_glider_var', None) is not None \
+                and not self._glider_var.get():
+            return                       # rows disabled — _update_wing_state owns them
         try:
             c_r = float(self._wing_root_var.get() or 0.0)
             s_e = float(self._wing_span_var.get() or 0.0)
@@ -3655,10 +3671,32 @@ class ROEditorDialog(tk.Toplevel):
         return ro_new
 
     def _update_glider_state(self):
-        if self._glider_var.get():
-            self._glider_frm.pack(fill=tk.X)
+        # Grey-out, not hide: the L/D row (and the wing rows in Geometry)
+        # disable until Maneuvering is ticked — the same declared-topology
+        # pattern as the biconic fields.  Hiding the frame would collapse the
+        # LabelFrame to nothing, checkbox and all.
+        self._LD_entry.config(
+            state="normal" if self._glider_var.get() else "disabled")
+        self._update_wing_state()
+
+    def _update_wing_state(self):
+        """The wing rows live in the GEOMETRY group (a wing is hardware) but
+        are declared topology of the maneuvering model: enabled iff
+        Maneuvering is on AND the form can carry a wing ON the body (not the
+        wedge, whose body IS the lifting surface — hidden-but-active wing
+        physics through the polar's e_pull would be dishonest)."""
+        if not hasattr(self, '_wing_entries') or not hasattr(self, '_glider_var'):
+            return                       # __init__ mid-build; re-run at the end
+        on = (bool(self._glider_var.get())
+              and self._body_form_key() != "wedge")
+        if on:
+            for e in self._wing_entries:
+                e.config(state="normal")
+            self._sync_wing_derived()   # restore derived-S/AR readonly
         else:
-            self._glider_frm.pack_forget()
+            for e in self._wing_entries:
+                e.config(state="disabled")
+            self._wing_derived_lbl.configure(text="")
 
     def _update_biconic_state(self):
         st = "normal" if self._biconic_var.get() else "disabled"
@@ -3712,15 +3750,7 @@ class ROEditorDialog(tk.Toplevel):
         if hasattr(self, '_body_span_entry'):
             self._body_span_entry.config(
                 state="normal" if form == "wedge" else "disabled")
-        if hasattr(self, '_wing_entries'):
-            if form == "wedge":
-                for e in self._wing_entries:
-                    e.config(state="disabled")
-                self._wing_derived_lbl.configure(text="")
-            else:
-                for e in self._wing_entries:
-                    e.config(state="normal")
-                self._sync_wing_derived()   # restore derived-S/AR readonly
+        self._update_wing_state()
 
     # ---- TPS material dropdown helpers (§10 materials dropdown) --------
     _MAT_NONE_LABEL   = "(none — numbers only)"
