@@ -267,6 +267,23 @@ Scope and plumbing:
   inherit it (red beyond ±2%).  Measurements are view-tagged; the stamp
   notes "views: plan+side" when both contributed.  The missing-view rule is
   structural: skip the plan view and the span field stays unset + flagged.
+- **Angles (DONE, 2026-08-01)** — built with Phase 2b, the moment sweep
+  became load-bearing (the wing-body composite derives the exposed planform
+  from `wing_sweep_deg`).  Three-click measurement (vertex + two rays),
+  ANCHOR-FREE: needs an image but NO scale (R2 — an angle survives a wrong
+  anchor completely); the resolution guard is on RAY length (2× the R4
+  floor).  Stored targets: RO wing LE sweep and booster fin LE sweep
+  (degrees — kept in separate field maps from the metre contract; angle
+  prompts never touch CONVENTIONS).  Built-in cross-checks, warn-only like
+  the closure line, because angles fail differently (non-uniform image
+  stretch and perspective tilt corrupt them silently):
+  - **identity twins**: measured sweep vs tan Λ = (c_r − c_t)/s_e from the
+    accepted planform; mean cone flank vs tan θ = (⌀/2)/L from accepted
+    lengths — disagreement on a clean orthographic image is impossible, so
+    it diagnoses stretch/tilt/mis-click specifically;
+  - **flank symmetry** (axisymmetric, check-only fields, never stored):
+    upper vs lower half-angle must match; asymmetry impeaches the WHOLE
+    image (tilt/perspective) — the R9 screening upgraded to a measurement.
 - **C — audit polish**: opacity/drag alignment, discrepancy highlighting,
   hatched stylization, mixed-provenance delta view.
 

@@ -35,6 +35,10 @@ A7: "Type value…" per prompt (the promised Edit path) — known dimensions
 entered by hand, no image/scale needed, stamped separately ("entered by
 hand, not measured"); checklist populated from dialog open.  Subsumes the
 anchor-as-field idea.
+Angles (2026-08-01, with Phase 2b): 3-click anchor-free angle measurement —
+stores wing/fin LE sweep (degrees, separate from the metre contract), with
+warn-only identity twins (sweep vs planform, flank vs ⌀/L) and the
+two-flank symmetry check as a perspective/tilt detector (R9 → measurement).
 REMAINING: Phase C audit polish only (schematic-at-scale overlay with
 alignment UX, discrepancy highlighting, hatched stylization, old-vs-new
 delta view).  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.

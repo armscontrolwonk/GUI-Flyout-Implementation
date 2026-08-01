@@ -1937,7 +1937,8 @@ class BoosterDialog(tk.Toplevel):
             has_fairing=bool(self._shroud_var.get()),
             has_fins=bool(self._fins_var.get()),
             n_fins=_i(self._fin_n_var, 0),
-            n_strapons=_i(self._n_boosters_var, 0))
+            n_strapons=_i(self._n_boosters_var, 0)) \
+            + im.booster_angle_prompts(has_fins=bool(self._fins_var.get()))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
             self._apply_image_measurements)
@@ -1973,6 +1974,9 @@ class BoosterDialog(tk.Toplevel):
             "fin_tip": getattr(self, "_fin_tip_var", None),
             "strapon_dia": getattr(self, "_b_diam_var", None),
             "strapon_len": getattr(self, "_b_length_var", None),
+            # DEGREES, not metres: written only by the 3-click angle prompt
+            # (never through the metre CONVENTIONS).
+            "fin_sweep": getattr(self, "_fin_sweep_var", None),
         }
         for field, value in (accepted or {}).items():
             var = _stage_var(field) if field.startswith("stage") else fixed.get(field)
@@ -2527,9 +2531,15 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             x, y = ix * z, iy * z
             canvas.create_oval(x - 3, y - 3, x + 3, y + 3, outline="#ff4",
                                width=2, tags="mark")
-        if len(state["clicks"]) == 2:
-            (x0, y0), (x1, y1) = [(ix * z, iy * z) for ix, iy in state["clicks"]]
-            canvas.create_line(x0, y0, x1, y1, fill="#ff4", width=1, tags="mark")
+        pts = [(ix * z, iy * z) for ix, iy in state["clicks"]]
+        if len(pts) == 2:
+            canvas.create_line(*pts[0], *pts[1], fill="#ff4", width=1,
+                               tags="mark")
+        elif len(pts) == 3:                    # angle: vertex first, two rays
+            canvas.create_line(*pts[0], *pts[1], fill="#ff4", width=1,
+                               tags="mark")
+            canvas.create_line(*pts[0], *pts[2], fill="#ff4", width=1,
+                               tags="mark")
 
     def _sync_quantum():
         s = _cv()["scale"]
@@ -2601,7 +2611,10 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         state["clicks"].append((canvas.canvasx(ev.x) / z,
                                 canvas.canvasy(ev.y) / z))
         _render()
-        if len(state["clicks"]) == 2:
+        # angles take THREE clicks (vertex + two rays); everything else two
+        need = (3 if (state["mode"] == "measure"
+                      and (state.get("prompt") or {}).get("angle")) else 2)
+        if len(state["clicks"]) == need:
             (state["_finish_scale"] if state["mode"] == "scale"
              else state["_finish_measure"])()
 
@@ -2808,14 +2821,46 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             status.set(f"This dimension needs the {p['view'].upper()} view — "
                        "load that image first (each view has its own scale).")
             return
-        if v["scale"] is None:
+        # Angles are anchor-free (R2): they need an image but NO scale.
+        if v["scale"] is None and not p.get("angle"):
             status.set(f"Set the {p['view'].upper()} view's scale first.")
             return
         state["prompt"] = p; _clear_marks(); state["mode"] = "measure"
-        status.set(f"MEASURE: {p['label']}")
+        status.set(("ANGLE — 3 clicks (vertex, then two rays): " if p.get("angle")
+                    else "MEASURE: ") + p['label'])
 
     def _finish_measure():
-        p = state["prompt"]; s = _cv()["scale"]
+        p = state["prompt"]
+        if p.get("angle"):
+            vertex, a1, a2 = state["clicks"]
+            m = im.AngleMeasurement(p["field"], vertex, a1, a2)
+            state["_pending_pts"] = (vertex, a1, state["cur"])
+            _clear_marks(); state["mode"] = "idle"
+            if m.refused:
+                result_var.set("✗ " + "; ".join(m.flags)
+                               + " — nothing recorded.")
+                return
+            result_var.set(f"{p['field']} = {m.value_deg:.1f}°  (anchor-free)"
+                           "\nAccept to record, or re-measure.")
+            state["_pending"] = m
+
+            def _accept_angle():
+                mm = state.get("_pending")
+                if mm is None:
+                    return
+                state["accepted"][mm.field] = mm.value_deg
+                state["measurements"] = [x for x in state["measurements"]
+                                         if x.field != mm.field] + [mm]
+                pp1, pp2, pview = state["_pending_pts"]
+                state["annotations"][mm.field] = (
+                    pview, pp1, pp2, f"{mm.field} = {mm.value_deg:.1f}°")
+                result_var.set(f"✓ recorded {mm.field} = {mm.value_deg:.1f}°")
+                state["_pending"] = None
+                _refresh_angle_checks()
+                _render()
+            acc_btn.config(command=_accept_angle, state="normal")
+            return
+        s = _cv()["scale"]
         p1, p2 = state["clicks"]
         click_m, span = s.measure(p1, p2)
         clocking = (_clock_key.get(clock_var.get(), "in_plane")
@@ -2862,9 +2907,10 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             return
         conv = im.CONVENTIONS.get(p.get("convention"))
         hint = f"\n({conv[0]})" if conv else ""
+        unit = "degrees" if p.get("angle") else "metres"
         v = simpledialog.askfloat(
             "Enter known value",
-            f"{p['label']}{hint}\n\nEnter the STORED value in metres — "
+            f"{p['label']}{hint}\n\nEnter the STORED value in {unit} — "
             "recorded as entered by hand, not measured:",
             parent=dlg, minvalue=0.0)
         if v is None:
@@ -2916,8 +2962,52 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             viewcheck_lbl.config(
                 foreground="#b00" if abs(vc["rel"]) > 0.02 else "#2a7")
 
+    # Angle cross-checks (warn-only, like the closure): every measurable
+    # angle has an independent twin — derived-from-lengths identities and the
+    # two-flank symmetry test (a failed symmetry impeaches the whole image:
+    # tilt/perspective, the R9 screening upgraded to a measurement).
+    _has_angles = any(p.get("angle") for p in prompts)
+    anglecheck_var = tk.StringVar(value="")
+    anglecheck_lbl = ttk.Label(panel, textvariable=anglecheck_var,
+                               foreground="#888", wraplength=250,
+                               justify=tk.LEFT)
+    if _has_angles:
+        anglecheck_lbl.pack(anchor=tk.W, pady=(6, 0))
+
+    def _refresh_angle_checks():
+        if not _has_angles:
+            return
+        acc = state["accepted"]
+        notes = []
+        if "_wing_sweep_var" in acc and "_wing_root_var" in acc \
+                and "_wing_span_var" in acc:
+            d = im.sweep_from_planform(acc["_wing_root_var"],
+                                       acc["_wing_span_var"])
+            notes.append(im.angle_check_note(acc["_wing_sweep_var"], d,
+                                             "wing sweep (delta TE assumed)"))
+        if "fin_sweep" in acc and "fin_root" in acc and "fin_span" in acc:
+            d = im.sweep_from_planform(acc["fin_root"], acc["fin_span"],
+                                       acc.get("fin_tip", 0.0))
+            notes.append(im.angle_check_note(acc["fin_sweep"], d, "fin sweep"))
+        up, lo = acc.get(im.FLANK_UPPER_FIELD), acc.get(im.FLANK_LOWER_FIELD)
+        if up is not None and lo is not None:
+            notes.append(im.symmetry_note(up, lo))
+            if "_dia_var" in acc and "_len_var" in acc:
+                d = im.cone_half_angle_from_lengths(acc["_dia_var"],
+                                                    acc["_len_var"])
+                notes.append(im.angle_check_note(0.5 * (up + lo), d,
+                                                 "mean flank vs ⌀/L"))
+        bad = any("DISAGREES" in n or "ASYMMETRIC" in n for n in notes if n)
+        anglecheck_var.set("\n".join(n for n in notes if n)
+                           or "angle checks: measure an angle (and its "
+                           "lengths) to cross-check")
+        anglecheck_lbl.config(foreground=("#b00" if bad
+                                          else "#2a7" if notes else "#888"))
+    _refresh_angle_checks()
+
     def _refresh_closure():
         _refresh_viewcheck()
+        _refresh_angle_checks()      # a late-accepted length completes a twin
         if not _closure_applies:
             return
         total = (state["accepted"].get(im.OVERALL_LEN_CHECK_FIELD)
@@ -3805,6 +3895,10 @@ class ROEditorDialog(tk.Toplevel):
     _IMG_FIELD_VARS = ("_len_var", "_dia_var", "_nose_var", "_body_span_var",
                        "_fore_len_var", "_break_dia_var",
                        "_wing_root_var", "_wing_span_var")
+    # Angle targets, in DEGREES — written by the 3-click angle prompts, which
+    # never pass through the metre CONVENTIONS.  The flank check fields are
+    # deliberately absent (check-only, never stored).
+    _IMG_ANGLE_FIELD_VARS = ("_wing_sweep_var",)
 
     def _apply_image_measurements(self, accepted, measurements, scale):
         """Write accepted image measurements into this editor's fields and
@@ -3814,7 +3908,7 @@ class ROEditorDialog(tk.Toplevel):
         reach here."""
         import datetime
         import image_measure as im
-        for field in self._IMG_FIELD_VARS:
+        for field in self._IMG_FIELD_VARS + self._IMG_ANGLE_FIELD_VARS:
             if field in accepted:
                 var = getattr(self, field, None)
                 if var is not None:
@@ -3834,11 +3928,13 @@ class ROEditorDialog(tk.Toplevel):
         come from the declared body_form, and Apply writes fields + stamps
         notes via _apply_image_measurements."""
         import image_measure as im
+        form = self._body_form_key()
+        winged = bool(self._glider_var.get())
         _open_image_measure_dialog(
             self, "Measure from image — reentry object",
-            im.ro_prompts(self._body_form_key(),
-                          biconic=bool(self._biconic_var.get()),
-                          winged=bool(self._glider_var.get())),
+            im.ro_prompts(form, biconic=bool(self._biconic_var.get()),
+                          winged=winged)
+            + im.ro_angle_prompts(form, winged=winged),
             self._apply_image_measurements)
 
     # ------------------------------------------------------------------

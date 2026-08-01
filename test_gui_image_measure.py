@@ -387,3 +387,73 @@ def test_dialog_builds_without_error(root):
     for want in ("Load image…", "Set scale…", "Measure", "Apply to editor"):
         assert any(want in t for t in btxt), want
     opened[-1].destroy()
+
+
+def test_angle_measure_accept_and_apply(root, tmp_path):
+    """Angles end-to-end: a winged RO's checklist carries the sweep angle
+    prompt; the 3-click finish proposes degrees with NO scale set (anchor-
+    free); Accept records it; Apply writes the DEGREES field.  The flank
+    check fields are check-only and never reach the editor."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    dlg = _editor(root)
+    dlg._glider_var.set(True)
+    d = _open_measure_dialog(dlg)
+    st = d._im_state
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
+    d._im_load_path(str(p))
+    assert d._im_views["side"]["scale"] is None            # no scale on purpose
+    ang = [q for q in im.ro_angle_prompts("axisymmetric", winged=True)
+           if q["field"] == "_wing_sweep_var"][0]
+    st["prompt"] = ang
+    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]   # 45°
+    st["_finish_measure"]()
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    acc.invoke()
+    assert st["accepted"]["_wing_sweep_var"] == pytest.approx(45.0)
+    dlg._apply_image_measurements(
+        {"_wing_sweep_var": st["accepted"]["_wing_sweep_var"],
+         im.FLANK_UPPER_FIELD: 10.0}, st["measurements"], None)
+    assert float(dlg._wing_sweep_var.get()) == pytest.approx(45.0)
+    assert not hasattr(dlg, im.FLANK_UPPER_FIELD)          # check-only: no var
+    d.destroy()
+
+
+def test_angle_check_line_flags_disagreement(root, tmp_path):
+    """The identity twin fires once the lengths arrive: a measured sweep that
+    contradicts the accepted planform turns the check line red-worded
+    (DISAGREES) — warn-only, nothing is corrected."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    dlg = _editor(root)
+    dlg._glider_var.set(True)
+    d = _open_measure_dialog(dlg)
+    st = d._im_state
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
+    d._im_load_path(str(p))
+    st["accepted"].update({"_wing_root_var": 1.0, "_wing_span_var": 1.0})
+    ang = [q for q in im.ro_angle_prompts("axisymmetric", winged=True)
+           if q["field"] == "_wing_sweep_var"][0]
+    st["prompt"] = ang
+    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (100.0, 173.2)]   # 60° ≠ 45°
+    st["_finish_measure"]()
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    acc.invoke()
+    texts = [str(w.cget("text")) for w in _all(d)
+             if isinstance(w, tk.ttk.Label)]
+    joined = " ".join(texts)
+    # the check line is a textvariable label; read it via the recorded vars
+    st["_refresh_closure"]()
+    lbls = [w for w in _all(d) if isinstance(w, tk.ttk.Label)]
+    var_texts = []
+    for w in lbls:
+        tv = str(w.cget("textvariable"))
+        if tv:
+            try:
+                var_texts.append(str(w.tk.globalgetvar(tv)))
+            except Exception:
+                pass
+    assert any("DISAGREES" in t for t in var_texts + texts)
+    d.destroy()
