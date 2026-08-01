@@ -234,6 +234,143 @@ class Measurement:
         return f"1 px = {q * 100:.2g} cm" if q < 1.0 else f"1 px = {q:.3g} m"
 
 
+# ── Angle measurement (3 clicks: vertex + two rays) ─────────────────────────
+# Angles are the premier anchor-free quantity (R2): they need NO scale and
+# survive a wrong anchor completely.  Their failure mode is different —
+# non-uniform stretch (a figure resized in one axis) and perspective tilt
+# corrupt every angle silently — so every measurable angle ships WITH an
+# independent cross-check: an identity twin derived from measured lengths
+# (tan θ = (⌀/2)/L for the cone flank; tan Λ = (c_r − c_t)/s_e for sweep) and,
+# on symmetric bodies, a two-flank symmetry check that doubles as a
+# perspective/tilt detector.  Warn-only, like the length closure.
+
+def angle_between_deg(vertex, p1, p2):
+    """Angle at `vertex` between rays vertex→p1 and vertex→p2, in degrees
+    (0–180).  Raises ValueError on a degenerate (zero-length) ray."""
+    ax, ay = float(p1[0]) - float(vertex[0]), float(p1[1]) - float(vertex[1])
+    bx, by = float(p2[0]) - float(vertex[0]), float(p2[1]) - float(vertex[1])
+    na, nb = math.hypot(ax, ay), math.hypot(bx, by)
+    if na <= 0.0 or nb <= 0.0:
+        raise ValueError("angle ray has zero length")
+    c = max(-1.0, min(1.0, (ax * bx + ay * by) / (na * nb)))
+    return math.degrees(math.acos(c))
+
+
+class AngleMeasurement:
+    """One proposed ANGLE value (degrees).  Anchor-free: needs no scale and
+    has no pixel quantum; the resolution guard is on RAY LENGTH instead — a
+    short ray makes the angle noisy, so rays under the floor are refused."""
+
+    def __init__(self, field, vertex, p1, p2):
+        self.field = field
+        self.hand_entered = False
+        self.view = "angle"                    # not tied to a scale/view
+        self.flags = ["angle — anchor-free (no scale involved)"]
+        rays = [math.hypot(float(p[0]) - float(vertex[0]),
+                           float(p[1]) - float(vertex[1])) for p in (p1, p2)]
+        if min(rays) < 2.0 * RESOLUTION_FLOOR_PX:
+            self.refused = True
+            self.value_deg = None
+            self.flags.append(
+                f"ray shorter than {2.0 * RESOLUTION_FLOOR_PX:.0f} px — angle "
+                "too noisy, refused")
+        else:
+            self.refused = False
+            self.value_deg = angle_between_deg(vertex, p1, p2)
+
+
+def sweep_from_planform(root_chord_m, span_exposed_m, tip_chord_m=0.0):
+    """The identity twin of a measured LE sweep: with a straight trailing
+    edge, tan Λ = (c_r − c_t)/s_e (delta wing: c_t = 0 → tan Λ = c_r/s_e).
+    Anchor-free too — a ratio of two same-scale lengths."""
+    s = float(span_exposed_m)
+    if s <= 0.0:
+        return None
+    return math.degrees(math.atan2(float(root_chord_m) - float(tip_chord_m), s))
+
+
+def cone_half_angle_from_lengths(diameter_m, length_m):
+    """Identity twin of a measured cone flank angle: tan θ = (⌀/2)/L."""
+    L = float(length_m)
+    if L <= 0.0:
+        return None
+    return math.degrees(math.atan2(0.5 * float(diameter_m), L))
+
+
+ANGLE_CHECK_REL = 0.05          # warn beyond ±5% — stretch/tilt/mis-click
+
+
+def angle_check_note(measured_deg, derived_deg, what):
+    """Warn-only comparator between a measured angle and its derived-from-
+    lengths twin.  Disagreement on a clean orthographic image is impossible,
+    so it specifically diagnoses non-uniform stretch, perspective tilt, or a
+    mis-click — never auto-corrected."""
+    if derived_deg is None:
+        return ""
+    m, d = float(measured_deg), float(derived_deg)
+    rel = (m - d) / d if d else 0.0
+    verdict = ("agrees" if abs(rel) <= ANGLE_CHECK_REL
+               else "DISAGREES — image stretch/tilt or a mis-click?")
+    return (f"{what}: measured {m:.1f}° vs derived-from-lengths {d:.1f}° "
+            f"({rel:+.1%}) — {verdict}")
+
+
+def symmetry_note(upper_deg, lower_deg):
+    """Two-flank symmetry check on an axisymmetric body: the flanks must be
+    equal; asymmetry impeaches the IMAGE (tilt / perspective), lengths and
+    all — the R9 screening upgraded to a measurement."""
+    u, d = float(upper_deg), float(lower_deg)
+    mean = 0.5 * (u + d)
+    if mean <= 0.0:
+        return ""
+    rel = abs(u - d) / mean
+    verdict = ("symmetric — no tilt detected" if rel <= ANGLE_CHECK_REL
+               else "ASYMMETRIC — image tilted or perspective-distorted; "
+                    "treat ALL measurements from this view with suspicion")
+    return (f"flank symmetry: upper {u:.1f}° vs lower {d:.1f}° "
+            f"({rel:.1%} apart) — {verdict}")
+
+
+# Check-only flank fields (axisymmetric): never stored; they exist to audit
+# the image and the ⌀/L pair.
+FLANK_UPPER_FIELD = "flank_upper_deg"
+FLANK_LOWER_FIELD = "flank_lower_deg"
+
+
+def ro_angle_prompts(body_form="axisymmetric", winged=False):
+    """Angle checklist for the RO editor.  The stored target is the wing LE
+    sweep (degrees — load-bearing since the Phase-2b wing-body composite
+    derives the exposed planform from it); the cone flank angles are
+    CHECK-ONLY audits (symmetry + identity vs the ⌀/L pair)."""
+    p = []
+    if winged and body_form != "wedge":
+        p.append(dict(field="_wing_sweep_var", angle=True, unit="deg",
+                      label="ANGLE: click the wing-root LE corner (vertex), "
+                      "then a point along the LE, then a point spanwise "
+                      "(perpendicular to the body axis) — LE sweep Λ",
+                      view="side"))
+    if body_form == "axisymmetric":
+        p.append(dict(field=FLANK_UPPER_FIELD, angle=True, unit="deg",
+                      label="ANGLE (check only): nose tip (vertex), then a "
+                      "point along the UPPER flank, then a point along the "
+                      "body axis — upper half-angle", view="side"))
+        p.append(dict(field=FLANK_LOWER_FIELD, angle=True, unit="deg",
+                      label="ANGLE (check only): nose tip (vertex), then a "
+                      "point along the LOWER flank, then a point along the "
+                      "body axis — lower half-angle", view="side"))
+    return p
+
+
+def booster_angle_prompts(has_fins=False):
+    """Angle checklist for the booster editor: the fin LE sweep (degrees)."""
+    if not has_fins:
+        return []
+    return [dict(field="fin_sweep", angle=True, unit="deg",
+                 label="ANGLE: click the fin-root LE corner (vertex), then a "
+                 "point along the fin LE, then a point spanwise — fin LE "
+                 "sweep", view="side")]
+
+
 class HandEntry:
     """A checklist value the user TYPED instead of clicked — for dimensions
     already known precisely (a published diameter, the scale-anchor length).
@@ -279,7 +416,7 @@ def provenance_stamp(measurements, scale, date_str, view_note=""):
     if entered:
         bits.append("entered by hand (not measured): " + ", ".join(entered))
     views = sorted({getattr(m, "view", "side") for m in accepted
-                    if not getattr(m, "hand_entered", False)})
+                    if not getattr(m, "hand_entered", False)} - {"angle"})
     if len(views) > 1:
         bits.append("views: " + "+".join(views))
     bits += [(scale.anchor_note or "scale set"), scale.quantum_str()]

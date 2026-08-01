@@ -340,3 +340,80 @@ def test_clocking_options_default_to_no_correction():
     assert im.CLOCKING_OPTIONS[0][1] == "in_plane"
     keys = [k for _, k in im.CLOCKING_OPTIONS]
     assert keys == ["in_plane", "x_rolled", "unknown"]
+
+
+# ── Angle measurement (3 clicks; anchor-free) and its cross-checks ──────────
+def test_angle_between_deg_basics():
+    assert im.angle_between_deg((0, 0), (10, 0), (0, 10)) == pytest.approx(90.0)
+    assert im.angle_between_deg((0, 0), (10, 0), (10, 10)) == pytest.approx(45.0)
+    with pytest.raises(ValueError):
+        im.angle_between_deg((0, 0), (0, 0), (10, 0))     # degenerate ray
+
+
+def test_angle_measurement_needs_no_scale_but_refuses_short_rays():
+    """Angles are anchor-free (no Scale object anywhere), but a short ray is
+    noisy — the guard is on RAY LENGTH, the angle analogue of R4."""
+    m = im.AngleMeasurement("_wing_sweep_var", (0, 0), (200, 0), (140, 140))
+    assert m.refused is False
+    assert m.value_deg == pytest.approx(45.0)
+    assert any("anchor-free" in f for f in m.flags)
+    short = im.AngleMeasurement("_wing_sweep_var", (0, 0), (6, 0), (0, 200))
+    assert short.refused is True
+
+
+def test_sweep_from_planform_identity():
+    """tan Λ = (c_r − c_t)/s_e; delta wing (c_t = 0) → tan Λ = c_r/s_e."""
+    assert im.sweep_from_planform(1.0, 1.0) == pytest.approx(45.0)
+    assert im.sweep_from_planform(2.0, 1.0, tip_chord_m=1.0) == pytest.approx(45.0)
+    assert im.sweep_from_planform(1.0, 0.0) is None
+
+
+def test_cone_half_angle_identity():
+    assert im.cone_half_angle_from_lengths(1.0, 0.5) == pytest.approx(45.0)
+    assert im.cone_half_angle_from_lengths(1.0, 0.0) is None
+
+
+def test_angle_check_note_diagnoses_disagreement():
+    ok = im.angle_check_note(45.5, 45.0, "wing sweep")
+    assert "agrees" in ok and "DISAGREES" not in ok
+    bad = im.angle_check_note(52.0, 45.0, "wing sweep")
+    assert "DISAGREES" in bad and "stretch" in bad
+
+
+def test_symmetry_note_is_a_tilt_detector():
+    ok = im.symmetry_note(10.1, 10.0)
+    assert "no tilt" in ok
+    bad = im.symmetry_note(12.0, 10.0)
+    assert "ASYMMETRIC" in bad and "suspicion" in bad
+
+
+def test_ro_angle_prompts_store_sweep_and_check_flanks():
+    """The ONE stored angle target is the wing LE sweep (load-bearing since
+    the 2b wing-body composite); the cone flank angles are check-only and
+    absent from the RO apply map by design."""
+    ps = im.ro_angle_prompts("axisymmetric", winged=True)
+    fields = [p["field"] for p in ps]
+    assert fields == ["_wing_sweep_var", im.FLANK_UPPER_FIELD,
+                      im.FLANK_LOWER_FIELD]
+    assert all(p["angle"] and p["unit"] == "deg" for p in ps)
+    # wedge: no wing rows → no sweep target, and no flanks (not axisymmetric)
+    assert im.ro_angle_prompts("wedge", winged=True) == []
+    # unwinged axisymmetric: flank checks only
+    assert [p["field"] for p in im.ro_angle_prompts("axisymmetric")] == \
+        [im.FLANK_UPPER_FIELD, im.FLANK_LOWER_FIELD]
+
+
+def test_booster_angle_prompts_gated_on_fins():
+    assert im.booster_angle_prompts(has_fins=False) == []
+    ps = im.booster_angle_prompts(has_fins=True)
+    assert [p["field"] for p in ps] == ["fin_sweep"]
+
+
+def test_stamp_ignores_the_angle_pseudo_view():
+    s = _scale()
+    m = im.Measurement("_len_var", *s.measure((0, 0), (200, 0)), scale=s,
+                       convention="ro_length", view="side")
+    a = im.AngleMeasurement("_wing_sweep_var", (0, 0), (200, 0), (140, 140))
+    stamp = im.provenance_stamp([m, a], s, "2026-08-01")
+    assert "views:" not in stamp          # side + angle ≠ two real views
+    assert "_wing_sweep_var" in stamp
