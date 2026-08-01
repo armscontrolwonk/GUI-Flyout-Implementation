@@ -2447,7 +2447,8 @@ def cf_reference_temperature(mach, reynolds_length, wall_temp_ratio=1.0,
     return float(cf_inc * cstar)
 
 
-def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach):
+def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach,
+                      wing_ratio=0.0):
     """Base-area-referenced (C_L, C_D, C_N, C_A) of a flat-side-DOWN half-cone
     at one α.  Composition (PHASE2_LIFTING_BODY_PLAN §2.1):
 
@@ -2460,6 +2461,16 @@ def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach):
       base            : 2/(γM²) on the half-disc base (area/base = ½), optional.
 
     Flat side down is the default (Fetterman TN D-2942: flat-bottom superior).
+
+    Phase 2b — WING-BODY COMPOSITE (`wing_ratio` = exposed wing planform /
+    base area, both panels): the delta wing is mounted flush with the flat
+    underside, so the whole lower surface (body flat + wing panels) is ONE
+    coplanar plate — its Cp is K·sin²α regardless of planform shape, so the
+    wing enters through AREA alone (which is where planform sweep enters:
+    a more-swept delta of the same root has less area).  At α < 0 the wing
+    UPPER faces are lit and push down; friction wets both wing faces.
+    Non-interference superposition (Fetterman: interference dissipates by
+    ~M 11 and flat-bottom wins in the glide regime — the defensible choice).
     """
     import math
     th = math.radians(max(0.5, min(float(theta_deg), 89.5)))
@@ -2467,14 +2478,76 @@ def _half_cone_coeffs(theta_deg, alpha_deg, K, cf, base_drag, mach):
     shell = cone_sector_newtonian(theta_deg, alpha_deg, math.pi, 2.0 * math.pi, K)
     flat = flat_plate_newtonian(alpha_deg, K)
     flat_ratio = 1.0 / (math.pi * math.tan(th))          # S_flat / S_base
-    C_N = shell['C_N'] + flat['C_N'] * flat_ratio
-    C_A = shell['C_A'] + flat['C_A'] * flat_ratio
+    wr = max(0.0, float(wing_ratio))
+    lower_ratio = flat_ratio + wr                        # coplanar lower plate
+    C_N = shell['C_N'] + flat['C_N'] * lower_ratio
+    C_A = shell['C_A'] + flat['C_A'] * lower_ratio
+    if wr > 0.0:
+        up = flat_plate_newtonian(-alpha_deg, K)         # wing tops, lit α<0
+        C_N -= up['C_N'] * wr                            # pushes DOWN
     C_L = C_N * math.cos(al) - C_A * math.sin(al)
     C_D = C_N * math.sin(al) + C_A * math.cos(al)         # pressure only so far
-    swet_ratio = 1.0 / (2.0 * math.sin(th)) + flat_ratio  # half lateral + flat
+    swet_ratio = (1.0 / (2.0 * math.sin(th)) + flat_ratio
+                  + 2.0 * wr)                            # + wing, both faces
     C_D += float(cf) * swet_ratio                         # friction (α-indep.)
     if base_drag:
         C_D += (2.0 / (_GAMMA_AIR * max(float(mach), 3.0) ** 2)) * 0.5
+    return dict(C_L=float(C_L), C_D=float(C_D), C_N=float(C_N), C_A=float(C_A))
+
+
+def _bor_coeffs(theta1_deg, alpha_deg, K, cf, base_drag, mach,
+                eps=0.0, theta2_deg=None, break_ratio=1.0):
+    """Base-area-referenced (C_L, C_D, C_N, C_A) of a body of revolution —
+    (blunted) cone or biconic — at incidence (Phase 2b: the α-sweep upgrade
+    of the zero-AoA cd_cone_hypersonic / cd_biconic_hypersonic build-ups).
+
+    Superposition with rescaling (Grant & Braun 2010 Eq. 23), each component
+    on the SAME full-range sector integral machinery as the lifting forms:
+
+      fore-cone lateral : cone_sector_newtonian at θ1 over the full φ range,
+                          restricted to its frustum (tangency ρ_t = ε_f·cosθ1
+                          to the break) by self-similar area scaling — the
+                          lit-φ set is ρ-independent, so the sub-cone
+                          subtraction is exact at every α;
+      aft frustum       : the θ2 virtual cone scaled by (1 − br²);
+      nose cap          : spherical segment, treated as AXIAL and
+                          α-INDEPENDENT at screening level (stated in the
+                          sweep conditions; second-order for small caps):
+                          C_A,cap = (K/2)·ε²·(1 − sin⁴θ1) — the R-127 closed
+                          form, so the α = 0 pressure sums EXACTLY to
+                          cd_blunted_cone_newtonian / the biconic build-up;
+      friction          : Cf × exact frustum wetted ratios (α-independent);
+      base              : 2/(γM²), optional.
+
+    A plain cone is the theta2_deg=None / break_ratio=1 special case.
+    """
+    import math
+    th1 = math.radians(max(1.0, min(float(theta1_deg), 89.0)))
+    br = max(1e-3, min(float(break_ratio if theta2_deg is not None else 1.0), 1.0))
+    ep = max(0.0, min(float(eps), 1.0))
+    al = math.radians(float(alpha_deg))
+    eps_fore = min(ep / br, 1.0)                        # r_nose / r_break
+    rho_t = eps_fore * math.cos(th1)                    # tangency / r_break
+
+    fore = cone_sector_newtonian(theta1_deg, alpha_deg,
+                                 -0.5 * math.pi, 1.5 * math.pi, K)
+    C_N = fore['C_N'] * (1.0 - rho_t * rho_t) * br * br
+    C_A = fore['C_A'] * (1.0 - rho_t * rho_t) * br * br
+    swet = max(0.0, (br * br - (ep * math.cos(th1)) ** 2)) / math.sin(th1)
+    if theta2_deg is not None and br < 1.0:
+        th2 = math.radians(max(1.0, min(float(theta2_deg), 89.0)))
+        aft = cone_sector_newtonian(theta2_deg, alpha_deg,
+                                    -0.5 * math.pi, 1.5 * math.pi, K)
+        C_N += aft['C_N'] * (1.0 - br * br)
+        C_A += aft['C_A'] * (1.0 - br * br)
+        swet += (1.0 - br * br) / math.sin(th2)
+    if ep > 0.0:
+        C_A += 0.5 * K * ep * ep * (1.0 - math.sin(th1) ** 4)   # cap, axial
+    C_L = C_N * math.cos(al) - C_A * math.sin(al)
+    C_D = C_N * math.sin(al) + C_A * math.cos(al)
+    C_D += float(cf) * swet
+    if base_drag:
+        C_D += 2.0 / (_GAMMA_AIR * max(float(mach), 3.0) ** 2)
     return dict(C_L=float(C_L), C_D=float(C_D), C_N=float(C_N), C_A=float(C_A))
 
 
@@ -2510,8 +2583,29 @@ def _planar_face_force(verts, v_hat, K, out_hint):
     return (-cp * area * nhat[0], -cp * area * nhat[1], -cp * area * nhat[2]), area
 
 
+def _swept_cylinder_force(axis_hat, radius, seg_length, v_hat, K):
+    """Force-per-q vector of a SWEPT circular-cylinder leading edge under
+    Newtonian flow (AEDC-TDR-64-25 §2.1.3 / the independence principle): only
+    the freestream component NORMAL to the cylinder axis carries pressure.
+    With crossflow fraction w = |V̂ − (V̂·ê)ê|, integrating Cp = K·(w·cosφ)²
+    over the lit half gives force = (4/3)·K·w²·r·ℓ per q, along the crossflow
+    direction n̂ — so the drag contribution scales as w³ = cos³(effective
+    sweep): more sweep, less leading-edge drag (the Fetterman trend the sharp
+    facets cannot express)."""
+    import math
+    d = _v_dot(v_hat, axis_hat)
+    vn = (v_hat[0] - d * axis_hat[0], v_hat[1] - d * axis_hat[1],
+          v_hat[2] - d * axis_hat[2])
+    w2 = _v_dot(vn, vn)
+    if w2 < 1e-15:
+        return (0.0, 0.0, 0.0)
+    mag = (4.0 / 3.0) * K * w2 * float(radius) * float(seg_length)
+    w = math.sqrt(w2)
+    return (mag * vn[0] / w, mag * vn[1] / w, mag * vn[2] / w)
+
+
 def _wedge_coeffs(length, depth, span, alpha_deg, K, cf, base_drag, mach,
-                  s_ref):
+                  s_ref, r_le=0.0):
     """Planform-referenced (C_L, C_D) of a sharp-LE flat-bottom delta wedge at
     one α (PHASE2_LIFTING_BODY_PLAN §2.1).  Geometry: nose at origin, +x aft,
     +z up; flat bottom in z=0 (delta, span `span`, root `length`); a centreline
@@ -2544,6 +2638,15 @@ def _wedge_coeffs(length, depth, span, alpha_deg, K, cf, base_drag, mach,
             base_area = area
         else:
             wetted += area
+    # Phase 2b: swept-cylinder leading edges (r_le = 0 → sharp, term vanishes
+    # exactly — continuity).  Superposed on the sharp facets (the facet-area
+    # overlap is second-order in r_le, stated in the sweep conditions).
+    if r_le and float(r_le) > 0.0:
+        ell = math.sqrt(L * L + 0.25 * b * b)            # one LE's true length
+        for sign in (1.0, -1.0):
+            e = (L / ell, sign * 0.5 * b / ell, 0.0)
+            f = _swept_cylinder_force(e, float(r_le), ell, v_hat, K)
+            F[0] += f[0]; F[1] += f[1]; F[2] += f[2]
     drag = _v_dot(F, v_hat) / s_ref
     lift = _v_dot(F, l_hat) / s_ref
     drag += float(cf) * wetted / s_ref                   # friction, drag-aligned
@@ -2558,8 +2661,9 @@ def wedge_planform_area(length, span):
     return 0.5 * float(span) * float(length)
 
 
-# forms whose sweep is implemented in Phase 2a.
-_LIFTING_SWEEP_FORMS = ("half_cone", "wedge")
+# forms whose sweep is implemented (2a: lifting forms; 2b: bodies of
+# revolution on the same sector machinery).
+_LIFTING_SWEEP_FORMS = ("half_cone", "wedge", "cone", "biconic")
 
 
 def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
@@ -2567,7 +2671,9 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
                        turbulent=True, K=NEWTON_K_SLENDER, base_drag=True,
                        alpha_min_deg=-10.0, alpha_max_deg=25.0, n_alpha=71,
                        mass_kg=None, a_ref_m2=None,
-                       length_m=None, depth_m=None, span_m=None):
+                       length_m=None, depth_m=None, span_m=None,
+                       wing_exposed_m2=0.0, r_le_m=0.0,
+                       eps=0.0, theta2_deg=None, break_ratio=1.0):
     """Angle-of-attack sweep for a lifting body: C_L(α), C_D(α), L/D(α), and a
     single CONSISTENT trim row (α*, C_L*, C_D*, (L/D)max, β at α=0 and α*, and
     the camber offset C_L0 = C_L at min C_D) — never a peak L/D detached from
@@ -2588,9 +2694,11 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
     import math
     if form not in _LIFTING_SWEEP_FORMS:
         raise ValueError(f"lifting_body_sweep: form {form!r} not implemented "
-                         f"in Phase 2a (have {_LIFTING_SWEEP_FORMS})")
-    if form == "half_cone" and theta_deg is None:
-        raise ValueError("half_cone sweep needs theta_deg")
+                         f"(have {_LIFTING_SWEEP_FORMS})")
+    if form in ("half_cone", "cone", "biconic") and theta_deg is None:
+        raise ValueError(f"{form} sweep needs theta_deg")
+    if form == "biconic" and theta2_deg is None:
+        raise ValueError("biconic sweep needs theta2_deg (and break_ratio)")
     if form == "wedge" and not (length_m and span_m):
         raise ValueError("wedge sweep needs length_m and span_m (span REQUIRED)")
     if cf is None:
@@ -2598,9 +2706,10 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
                                        turbulent)
               if reynolds_length else 0.0)
 
-    # Reference area: base area (caller-supplied) for the half-cone; planform
-    # (derived, stated) for the wedge — the pull limit q·C_L,max·A_ref/m is not
-    # invariant to the choice, so A_ref is never implicit.
+    # Reference area: base area (caller-supplied) for the half-cone and the
+    # bodies of revolution; planform (derived, stated) for the wedge — the
+    # pull limit q·C_L,max·A_ref/m is not invariant to the choice, so A_ref is
+    # never implicit.
     if form == "wedge":
         s_ref = float(a_ref_m2) if a_ref_m2 else wedge_planform_area(length_m, span_m)
         eps_deg = math.degrees(math.atan2(float(depth_m or 0.0), float(length_m)))
@@ -2610,11 +2719,25 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
         eps_deg = sweep_deg = None
     beta_ref = s_ref if (form == "wedge") else a_ref_m2
 
+    # Wing-body composite (half-cone + planform, Phase 2b): the wing enters
+    # as exposed-planform / base-area — needs a base area to ratio against.
+    wing_ratio = 0.0
+    if form == "half_cone" and wing_exposed_m2 and float(wing_exposed_m2) > 0.0:
+        if not a_ref_m2:
+            raise ValueError("winged half_cone sweep needs a_ref_m2 (base "
+                             "area) to reference the wing planform")
+        wing_ratio = float(wing_exposed_m2) / float(a_ref_m2)
+
     def _coeffs(a):
         if form == "wedge":
             return _wedge_coeffs(length_m, depth_m or 0.0, span_m, a, K, cf,
-                                 base_drag, mach, s_ref)
-        return _half_cone_coeffs(theta_deg, a, K, cf, base_drag, mach)
+                                 base_drag, mach, s_ref, r_le=r_le_m)
+        if form == "half_cone":
+            return _half_cone_coeffs(theta_deg, a, K, cf, base_drag, mach,
+                                     wing_ratio=wing_ratio)
+        return _bor_coeffs(theta_deg, a, K, cf, base_drag, mach, eps=eps,
+                           theta2_deg=(theta2_deg if form == "biconic" else None),
+                           break_ratio=(break_ratio if form == "biconic" else 1.0))
 
     conditions = dict(form=form, theta_deg=theta_deg, mach=float(mach),
                       cf=float(cf), reynolds_length=reynolds_length,
@@ -2623,7 +2746,13 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
                       base_drag=bool(base_drag), a_ref_m2=beta_ref,
                       a_ref_kind=("planform" if form == "wedge" else "base"),
                       ridge_angle_deg=eps_deg, sweep_deg=sweep_deg,
-                      inviscid=(float(cf) == 0.0))
+                      inviscid=(float(cf) == 0.0),
+                      wing_ratio=wing_ratio, r_le_m=float(r_le_m or 0.0),
+                      eps=float(eps or 0.0),
+                      theta2_deg=(theta2_deg if form == "biconic" else None),
+                      break_ratio=(float(break_ratio) if form == "biconic"
+                                   else None),
+                      cap_axial_alpha_independent=(float(eps or 0.0) > 0.0))
     n = max(3, int(n_alpha))
     rows = []
     for i in range(n):

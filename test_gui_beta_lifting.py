@@ -195,3 +195,51 @@ def test_missing_required_span_yields_no_result(root):
                if isinstance(w, tk.ttk.Button) and w.cget("text").startswith("Use"))
     use.invoke()
     assert dlg._beta_var.get() == before     # unchanged — nothing written
+
+
+# ── Phase 2b GUI wiring: LE radius (wedge) + wing composite (half-cone) ──────
+def test_wedge_dialog_offers_le_radius_prefilled_from_nose(root):
+    """The wedge's 'nose' IS its leading edge, so the RO nose-radius field
+    pre-fills the swept-cylinder LE radius (0 = sharp keeps the documented
+    upper-bound behavior)."""
+    dlg = _editor(root, "wedge")
+    dlg._nose_var.set("0.03")
+    dlg._body_span_var.set("1.4")
+    sub = _capture_dialog(dlg)
+    labels = [str(w.cget("text")) for w in _all_widgets(sub)
+              if isinstance(w, tk.ttk.Label)]
+    assert any("Leading-edge radius" in t for t in labels)
+    ents = [w for w in _all_widgets(sub) if isinstance(w, tk.ttk.Entry)]
+    # mass, length, depth, span, LE radius
+    assert ents[4].get() == "0.03"
+    sub.destroy()
+
+
+def test_half_cone_dialog_composites_declared_wings(root):
+    """The Fetterman configuration end-to-end: a half-cone whose editor
+    declares a wing planform shows the composite S_exp in the dialog, and the
+    conditions line carries the wing ratio (S/A_b) so the number can never be
+    quoted without its configuration."""
+    dlg = _editor(root, "half_cone")
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    dlg._wing_root_var.set("2.0"); dlg._wing_span_var.set("0.8")
+    dlg._wing_sweep_var.set("0")
+    sub = _capture_dialog(dlg)
+    sub.update_idletasks()
+    labels = [str(w.cget("text")) for w in _all_widgets(sub)
+              if isinstance(w, tk.ttk.Label)]
+    assert any("S_exp = 3.2" in t for t in labels), \
+        [t for t in labels if "S_exp" in t or "none" in t]
+    assert any("wing S/A_b" in t for t in labels)
+    sub.destroy()
+
+
+def test_half_cone_dialog_without_wings_says_body_alone(root):
+    dlg = _editor(root, "half_cone")
+    dlg._glider_var.set(False); dlg._update_glider_state()
+    sub = _capture_dialog(dlg)
+    sub.update_idletasks()
+    labels = [str(w.cget("text")) for w in _all_widgets(sub)
+              if isinstance(w, tk.ttk.Label)]
+    assert any("none (body alone)" in t for t in labels)
+    sub.destroy()

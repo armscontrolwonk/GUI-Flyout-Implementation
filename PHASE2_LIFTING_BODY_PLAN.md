@@ -227,9 +227,34 @@ Documented over-prediction (honesty, not an anchor to hit):
   the α-table + trim row.  Tests in `test_lifting_body_estimator.py`:
   identities 1–5 first, then measured anchors 6–8, 11–12 (anchor 9/Candler
   needs a flight-Re Cf case; anchor 10/biconic is 2b).
-- **Phase 2b: cone/biconic sweep** on the same sector machinery (continuity
-  rules in §2.1), the blunted-nose chart cross-check that retires the METHODS
-  §8.8 provenance wart, Grant contours (anchor 10).
+- **Phase 2b (DONE, 2026-08-01): cone/biconic sweep, wing-body composite,
+  swept-cylinder LE.**  Results, all in `booster_models.py` +
+  `test_lifting_body_estimator.py`:
+  - `_bor_coeffs`: (blunted) cone / biconic at incidence on the SAME sector
+    integral (self-similar frustum scaling is exact at every α because the
+    lit-φ set is ρ-independent; the nose cap is axial and α-independent at
+    screening level, stated in the conditions).  Continuity at α = 0 with
+    `cd_cone_hypersonic` / `cd_biconic_hypersonic` / the R-127 closed form
+    is EXACT (machine precision), retiring the §2.1 cross-check.
+  - **Anchor 10 (Grant & Braun §VI.C, geometry reconstructed from the
+    48-in height cap): our sweep gives (L/D)max = 1.864 vs the paper's 1.86
+    (d = 21 in, δ1 = 18°, δ2 = 11°) and 2.011 vs 2.01 (d = 19.6 in, 17°/10°)
+    — 0.2% / 0.05%,** same exact-Newtonian family both sides (5% test band).
+  - Wing-body composite (`wing_ratio` on the half-cone): the wing joins the
+    flat underside as ONE coplanar plate, so planform sweep enters through
+    AREA — anchor 7 lands at 5.13 vs Fetterman's ≈5.4 (Λ=75°) and 4.98 vs
+    ≈5.0 (Λ=81°), direction 75° > 81° > body-alone (4.74) all correct.
+  - Swept-cylinder LE (`r_le_m` on the wedge; AEDC §2.1.3): drag ∝ cos³Λ
+    (exact test); r_le = 0 is byte-exact continuity; bluntness costs L/D and
+    the penalty is SMALLER for more sweep (15% vs 28% at the test geometry) —
+    the Fetterman sweep trend the sharp model was documented as unable to
+    express (anchor-12 NOTE) is now carried by the LE term.
+  - GUI: wedge dialog gains "Leading-edge radius (m)" (pre-filled from the
+    nose-radius field — a wedge's nose IS its LE; 0 = sharp upper bound);
+    the half-cone dialog composites the editor's DECLARED wing planform
+    (shown as S_exp, wing S/A_b in the conditions line).  The cone/biconic
+    α-sweep is estimator-core capability (anchors + Phase 3 consumers); the
+    body-of-revolution dialog stays zero-AoA until a consumer needs more.
 - **Phase 2c — GUI (DONE)**: the β-estimator dialog is body-form-aware —
   `_calc_beta` routes a wedge/half-cone to `_calc_beta_lifting`, which takes
   the §3 inputs, live-computes the trim row via `lifting_body_sweep`, and

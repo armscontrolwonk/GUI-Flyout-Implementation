@@ -1843,9 +1843,15 @@ silhouette (flat flank + sloped surface) and names the form in the caption;
 
 The **trajectory physics are deliberately untouched**: β, L/D, and the
 derived polar (§12) remain the canonical carriers, and two ROParams that
-differ only in `body_form` fly byte-identical trajectories.  Three known
-limitations of applying the axisymmetric machinery to a lifting body,
-pending a lifting-body trim estimator (planned):
+differ only in `body_form` fly byte-identical trajectories.  The
+lifting-body trim estimator (Phases 2a–2c, and the 2b completion:
+cone/biconic α-sweep on the same sector machinery, the half-cone + delta-wing
+composite, and the swept-cylinder leading edge — design and anchors in
+PHASE2_LIFTING_BODY_PLAN.md, implementation `lifting_body_sweep` in
+`booster_models.py`) now supplies trim-consistent β and L/D from measurable
+geometry; limitation 2 below is CLOSED by it (the dialog's "Use β" writes
+β at zero lift, never trim β).  Remaining known limitations of applying the
+axisymmetric machinery to a lifting body:
 
 1. *Pull ceiling understated.*  `C_L,max = 2α` at the 25° AoA limit is a
    slender-body-of-revolution value; a flat-bottomed wedge generates
