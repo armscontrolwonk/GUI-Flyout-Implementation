@@ -58,6 +58,17 @@ class Scale:
         return float(pixel_span) < RESOLUTION_FLOOR_PX
 
 
+# R1: the clocking choices offered at a clocking-sensitive prompt.  Ordered
+# (label shown → key passed to Measurement); default is the first (in-plane, no
+# correction) so the tool never silently inflates a span — the correction is
+# OFFERED, never inferred.
+CLOCKING_OPTIONS = (
+    ("in-plane (fin edge-on, true span)", "in_plane"),
+    ("×-rolled 45° (apply cos45 correction)", "x_rolled"),
+    ("unknown (no correction; may under-read)", "unknown"),
+)
+
+
 def clocking_correction(measured_m, clocking):
     """R1: a span measured side-on under-reads if the feature is rolled out of
     the image plane.  ×-rolled (4-fin "×") divides by cos45°; 'in_plane' and
@@ -224,8 +235,11 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
     if has_fins:
         note = (f" — measure ONE; the model replicates to the {int(n_fins)} "
                 "declared fins, assumed identical") if n_fins else ""
+        # R1: span is the dimension a ×-rolled fin set foreshortens side-on;
+        # the prompt flags itself so the dialog offers the cos correction.
         p.append(dict(field="fin_span", label="Click ONE fin's exposed SPAN"
-                      + note, view="side", convention="fin_span"))
+                      + note, view="side", convention="fin_span",
+                      clocking_sensitive=True))
         p.append(dict(field="fin_root", label="Click ONE fin's ROOT chord",
                       view="side", convention="fin_root"))
         p.append(dict(field="fin_tip", label="Click ONE fin's TIP chord",

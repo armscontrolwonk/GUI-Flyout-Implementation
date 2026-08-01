@@ -113,9 +113,11 @@ overlay for pure auditing would be a separate, deliberate Phase-C addition.
 
 Silent data corrupters:
 - **R1 Roll/clocking foreshortening.**  A ×-rolled fin set seen side-on
-  under-measures span by cos45° ≈ 29% with full confidence.  → topology
-  gains a clocking declaration (in-plane / ×-rolled / unknown); the cos
-  correction is offered explicitly and flagged, never inferred.
+  under-measures span by cos45° ≈ 29% with full confidence.  → the fin-span
+  prompt is clocking-sensitive; the dialog offers a clocking selector
+  (in-plane / ×-rolled / unknown, default in-plane) that feeds
+  `Measurement(clocking=…)`; the cos correction is offered explicitly and
+  flagged, never inferred.  WIRED to the UI (A3, 2026-08-01).
 - **R2 Scale-anchor circularity.**  The anchor is usually a CLAIMED overall
   length — often the most contested number (cf. the AUR 10.2 m error).  →
   anchor provenance recorded with the scale; the tool reports which derived
@@ -181,9 +183,17 @@ Scope and plumbing:
     replicates to the 4 declared fins, assumed identical").  Apply writes
     stage/fairing/one-fin/one-strap-on geometry; the declared counts are
     untouched.  Tests: booster_prompts unit tests + a booster apply GUI test.
-    STILL A-phase remainder: canvas zoom/pan (fit-only), overlay toggle,
-    clocking declaration in the UI (the cos45 CORE exists + is tested, but
-    no UI control feeds it yet).
+  - **A3 (DONE, 2026-08-01): clocking control (R1) wired to the UI.**  The
+    fin-span prompt now carries `clocking_sensitive`; the shared dialog builds
+    a clocking selector (`image_measure.CLOCKING_OPTIONS`: in-plane / ×-rolled
+    45° / unknown, default in-plane) ONLY when the declared topology has a
+    clocking-sensitive span, and shows it only while that prompt is selected.
+    The chosen value flows into `Measurement(clocking=…)`, so the previously
+    unreachable cos45 correction now fires from the GUI — offered, flagged,
+    never inferred.  Tests: `test_only_fin_span_is_clocking_sensitive`,
+    `test_clocking_options_default_to_no_correction`,
+    `test_clocking_control_present_for_fins`.
+    STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).
 - **C — audit polish**: opacity/drag alignment, discrepancy highlighting,

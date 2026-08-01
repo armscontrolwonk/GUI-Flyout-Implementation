@@ -125,6 +125,42 @@ def test_booster_button_and_apply(root):
     d.destroy()
 
 
+def test_clocking_control_present_for_fins(root):
+    """R1: when the declared topology has fins, the shared dialog carries the
+    clocking selector (the cos45 correction the pure core already applies) with
+    the do-nothing option first.  The RO dialog, whose prompts have no span a
+    ×-roll foreshortens, must not offer it."""
+    pytest.importorskip("PIL")
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._fins_var.set(True); d._update_fins_state(); d._fin_n_var.set("4")
+    opened = []
+    orig = tk.Toplevel
+    tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
+    try:
+        d._measure_from_image()
+    finally:
+        tk.Toplevel = orig
+    combos = [w for w in _all(opened[-1]) if isinstance(w, tk.ttk.Combobox)]
+    clock = [c for c in combos
+             if any("×-rolled" in v for v in c.cget("values"))]
+    assert clock, "fin topology must expose the clocking selector"
+    assert im.CLOCKING_OPTIONS[0][0] in clock[0].cget("values")
+    opened[-1].destroy(); d.destroy()
+
+    # RO editor: no clocking-sensitive prompt → no clocking selector shown.
+    dlg = _editor(root)
+    opened2 = []
+    tk.Toplevel = lambda *a, **k: (lambda w: (opened2.append(w), w)[1])(orig(*a, **k))
+    try:
+        dlg._measure_from_image()
+    finally:
+        tk.Toplevel = orig
+    ro_combos = [w for w in _all(opened2[-1]) if isinstance(w, tk.ttk.Combobox)]
+    assert not any("×-rolled" in v for c in ro_combos for v in c.cget("values"))
+    opened2[-1].destroy()
+
+
 def test_dialog_builds_without_error(root):
     """Smoke: the Toplevel and all its widgets construct (catches layout/closure
     errors the apply-path test skips).  Pillow present → real dialog."""

@@ -2558,6 +2558,24 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     prompt_hint = ttk.Label(panel, text="", foreground="#777",
                             wraplength=250, justify=tk.LEFT)
     prompt_hint.pack(anchor=tk.W, pady=(2, 4))
+
+    # R1 clocking (only shown for spans a ×-roll can foreshorten, e.g. fins).
+    # Default in-plane → no silent inflation; the correction is offered here.
+    # The control is built only when the declared topology HAS such a dimension,
+    # so its mere presence means "this vehicle has a clocking-sensitive span".
+    _clock_labels = [lab for lab, _ in im.CLOCKING_OPTIONS]
+    _clock_key = dict(im.CLOCKING_OPTIONS)
+    _has_clocking = any(p.get("clocking_sensitive") for p in prompts)
+    clock_var = tk.StringVar(value=_clock_labels[0])
+    clock_frame = None
+    if _has_clocking:
+        clock_frame = ttk.Frame(panel)
+        ttk.Label(clock_frame, text="Fin clocking (R1):").pack(anchor=tk.W)
+        clock_combo = ttk.Combobox(clock_frame, textvariable=clock_var,
+                                   state="readonly", width=36,
+                                   values=_clock_labels)
+        clock_combo.pack(anchor=tk.W, fill=tk.X)          # hidden until selected
+
     result_var = tk.StringVar(value="")
     ttk.Label(panel, textvariable=result_var, foreground="#2a7",
               wraplength=250, justify=tk.LEFT).pack(anchor=tk.W)
@@ -2578,6 +2596,12 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     def _on_prompt(*_):
         p = _label_by_field.get(prompt_var.get())
         prompt_hint.config(text=(p["label"] + f"   [{p['view']} view]") if p else "")
+        if clock_frame is not None:
+            if p and p.get("clocking_sensitive"):
+                clock_frame.pack(anchor=tk.W, fill=tk.X, pady=(0, 4),
+                                 after=prompt_hint)
+            else:
+                clock_frame.pack_forget()
     prompt_combo.bind("<<ComboboxSelected>>", _on_prompt)
 
     def _begin_measure():
@@ -2593,8 +2617,11 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         p = state["prompt"]; s = state["scale"]
         p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
         click_m, span = s.measure(p1, p2)
+        clocking = (_clock_key.get(clock_var.get(), "in_plane")
+                    if p.get("clocking_sensitive") else "in_plane")
         m = im.Measurement(p["field"], click_m, span, scale=s,
-                           view=p["view"], convention=p["convention"])
+                           view=p["view"], convention=p["convention"],
+                           clocking=clocking)
         _clear_marks(); state["mode"] = "idle"
         if m.refused:
             result_var.set("✗ " + "; ".join(m.flags) + " — nothing recorded.")

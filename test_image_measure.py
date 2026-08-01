@@ -170,3 +170,25 @@ def test_booster_prompts_state_the_count_assumption():
 def test_booster_prompts_minimal_is_just_stage_one():
     assert [p["field"] for p in im.booster_prompts(n_stages=1)] == \
         ["stage1_len", "stage1_dia"]
+
+
+# ── R1 clocking wired to the prompt that needs it ───────────────────────────
+def test_only_fin_span_is_clocking_sensitive():
+    """The ×-roll cos45 correction is offered ONLY where a span can foreshorten:
+    a fin's exposed span.  Chords, diameters, lengths and the (plan-view) wedge
+    span are not clocking-sensitive — so the dialog never offers a correction
+    that would silently inflate them."""
+    ps = im.booster_prompts(n_stages=1, has_fairing=True, has_fins=True,
+                            n_fins=4, n_strapons=2)
+    sensitive = [p["field"] for p in ps if p.get("clocking_sensitive")]
+    assert sensitive == ["fin_span"]
+    wed = im.ro_prompts("wedge")
+    assert not any(p.get("clocking_sensitive") for p in wed)   # plan view = true span
+
+
+def test_clocking_options_default_to_no_correction():
+    """First option must be the do-nothing choice: the correction is OFFERED,
+    never the default (design R1 — never silently inflate a span)."""
+    assert im.CLOCKING_OPTIONS[0][1] == "in_plane"
+    keys = [k for _, k in im.CLOCKING_OPTIONS]
+    assert keys == ["in_plane", "x_rolled", "unknown"]
