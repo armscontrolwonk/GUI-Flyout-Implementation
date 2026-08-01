@@ -7,17 +7,20 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image dimensioning tool — Phase A1+A2+A3 SHIPPED (A3 2026-08-01)
+### 1. Image dimensioning tool — Phase A1–A4 SHIPPED (A3/A4 2026-08-01)
 Working "Measure from image…" on BOTH editors (shared dialog).  RO: load →
-scale+provenance → per-body-form prompts → Apply writes fields + notes stamp.
+scale+provenance → prompts from the FULL declared topology (body form +
+biconic checkbox → fore-cone length/break ⌀ + Maneuvering → wing planform,
+S/AR derived not measured) → Apply writes fields + notes stamp.
 Booster: prompts generated from the editor's own declared topology (stages/
 fairing/fins+count/strap-ons); measure-one-declare-count (counts untouched,
-model replicates).  A3: the R1 clocking correction is now wired to the UI —
-the fin-span prompt is clocking-sensitive and the dialog offers an in-plane /
-×-rolled / unknown selector (default in-plane) that feeds the tested cos45
-core; built only when the topology has such a span.  Core in image_measure.py
-(tested); Pillow dependency.
-REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle.
+model replicates).  A3: the R1 clocking correction is wired to the UI —
+fin-span and RO wing-span prompts are clocking-sensitive and the dialog
+offers an in-plane / ×-rolled / unknown selector (default in-plane) feeding
+the tested cos45 core; built only when the topology has such a span.  Core in
+image_measure.py (tested); Pillow dependency.
+REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle;
+LE sweep is an angle (not two-point-measurable) — hand entry by design.
 Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
 Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]

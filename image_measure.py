@@ -101,6 +101,10 @@ CONVENTIONS = {
     "wedge_depth":  ("side-view base DEPTH (stored as ⌀ = the depth)", _identity),
     "half_cone_depth": ("side-view depth = ⌀/2 → stored ⌀ = 2×", _twice),
     "wedge_span":   ("plan-view span (tip to tip) — needs a PLAN view", _identity),
+    "fore_cone_length": ("fore-cone length (nose tip to the cone break)", _identity),
+    "break_diameter": ("diameter at the fore/aft cone break (across)", _identity),
+    "wing_root":    ("ONE wing/fin panel's root chord", _identity),
+    "wing_span":    ("ONE wing/fin panel's exposed span (root to tip)", _identity),
     # booster
     "stage_diameter": ("stage body diameter (across)", _identity),
     "stage_length":   ("stage length (top to bottom of the stage)", _identity),
@@ -182,8 +186,12 @@ def provenance_stamp(measurements, scale, date_str, view_note=""):
 # The prompt checklist (R5 conventions embedded).  Generated from the declared
 # reentry-object topology; each prompt names the field var, the instruction,
 # the view it needs, and the convention that converts click→stored value.
-def ro_prompts(body_form="axisymmetric", biconic=False):
-    """Ordered prompts for the reentry-object editor, by declared body form."""
+def ro_prompts(body_form="axisymmetric", biconic=False, winged=False):
+    """Ordered prompts for the reentry-object editor, generated from the
+    topology the editor ALREADY declares: body form (shape dropdown), biconic
+    (its checkbox — body-of-revolution only), and winged (the Maneuvering
+    section, whose wing fields are stored for every form except the wedge,
+    whose body IS the lifting surface)."""
     p = []
     if body_form == "wedge":
         p.append(dict(field="_len_var", label="Click the two ends of the LENGTH "
@@ -208,6 +216,25 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
         p.append(dict(field="_nose_var", label="Click across the blunt NOSE TIP "
                       "(radius = half the tip width; often below the floor)",
                       view="side", convention="ro_nose_r"))
+        if biconic:                             # declared: the biconic checkbox
+            p.append(dict(field="_fore_len_var", label="Click the FORE-CONE "
+                          "length (nose tip to the cone break)", view="side",
+                          convention="fore_cone_length"))
+            p.append(dict(field="_break_dia_var", label="Click across the BREAK "
+                          "diameter (where the fore cone meets the aft frustum)",
+                          view="side", convention="break_diameter"))
+    if winged and body_form != "wedge":
+        # Declared: the Maneuvering section.  S and AR are DERIVED from this
+        # planform by the editor (single source of truth = wing_geometry), so
+        # the tool measures the planform, never the area.  LE sweep is an
+        # angle — outside a two-point distance tool, left to hand entry.
+        p.append(dict(field="_wing_root_var", label="Click ONE wing/fin panel's "
+                      "ROOT chord (leading to trailing edge at the body)",
+                      view="side", convention="wing_root"))
+        # R1: an exposed span foreshortens when the panel set is ×-rolled.
+        p.append(dict(field="_wing_span_var", label="Click ONE wing/fin panel's "
+                      "exposed SPAN (root to tip)", view="side",
+                      convention="wing_span", clocking_sensitive=True))
     return p
 
 

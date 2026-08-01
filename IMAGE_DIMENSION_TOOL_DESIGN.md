@@ -193,6 +193,17 @@ Scope and plumbing:
     never inferred.  Tests: `test_only_fin_span_is_clocking_sensitive`,
     `test_clocking_options_default_to_no_correction`,
     `test_clocking_control_present_for_fins`.
+  - **A4 (DONE, 2026-08-01): full RO dimensional coverage.**  `ro_prompts`
+    now honours the editor's OTHER topology declarations: the biconic
+    checkbox adds fore-cone length + break diameter (axisymmetric only), and
+    the Maneuvering section adds the wing PLANFORM — root chord + exposed
+    span, the span clocking-sensitive (R1 applies to a ×-rolled fin/wing set
+    exactly as to booster fins).  S and AR are never prompted: they derive
+    from the written planform (`_sync_wing_derived` fires on the var writes —
+    measure the planform, derive the area).  LE sweep is an angle, outside a
+    two-point distance tool — hand entry.  Wedge never gets wing prompts (its
+    wing rows are disabled/zeroed by design).  Tests: prompt-generation units
+    + a GUI apply test asserting the derivation fires.
     STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).

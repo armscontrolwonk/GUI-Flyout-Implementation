@@ -2570,7 +2570,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     clock_frame = None
     if _has_clocking:
         clock_frame = ttk.Frame(panel)
-        ttk.Label(clock_frame, text="Fin clocking (R1):").pack(anchor=tk.W)
+        ttk.Label(clock_frame, text="Fin/wing clocking (R1):").pack(anchor=tk.W)
         clock_combo = ttk.Combobox(clock_frame, textvariable=clock_var,
                                    state="readonly", width=36,
                                    values=_clock_labels)
@@ -3408,8 +3408,11 @@ class ROEditorDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     # image_measure field → editor StringVar map (one place, so the dialog and
-    # the tests agree on what a measured field writes to).
-    _IMG_FIELD_VARS = ("_len_var", "_dia_var", "_nose_var", "_body_span_var")
+    # the tests agree on what a measured field writes to).  Wing S/AR are NOT
+    # here: they derive from the planform vars via _sync_wing_derived.
+    _IMG_FIELD_VARS = ("_len_var", "_dia_var", "_nose_var", "_body_span_var",
+                       "_fore_len_var", "_break_dia_var",
+                       "_wing_root_var", "_wing_span_var")
 
     def _apply_image_measurements(self, accepted, measurements, scale):
         """Write accepted image measurements into this editor's fields and
@@ -3442,7 +3445,8 @@ class ROEditorDialog(tk.Toplevel):
         _open_image_measure_dialog(
             self, "Measure from image — reentry object",
             im.ro_prompts(self._body_form_key(),
-                          biconic=bool(self._biconic_var.get())),
+                          biconic=bool(self._biconic_var.get()),
+                          winged=bool(self._glider_var.get())),
             self._apply_image_measurements)
 
     # ------------------------------------------------------------------
