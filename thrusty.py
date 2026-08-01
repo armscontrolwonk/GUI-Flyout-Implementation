@@ -2538,10 +2538,22 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         except ValueError as e:
             messagebox.showerror("Bad scale", str(e), parent=dlg)
             _clear_marks(); state["mode"] = "idle"; return
+        # Anchor-as-total: when the anchor IS the overall length (the common
+        # case), it doubles as the closure total for free — no need to
+        # re-measure the same span through the check-only prompt.
+        if _closure_applies:
+            state["anchor_total"] = (
+                float(d) if messagebox.askyesno(
+                    "Scale anchor",
+                    "Is this distance the vehicle's OVERALL length?\n"
+                    "(if so it doubles as the total for the stage-length "
+                    "cross-check)", parent=dlg)
+                else None)
         quantum.set("scale: " + state["scale"].quantum_str())
         status.set("Scale set.  Pick a dimension and click Measure.")
         _clear_marks(); state["mode"] = "idle"
         _refresh_prompts()
+        _refresh_closure()
     state["_finish_scale"] = _finish_scale
 
     ttk.Button(panel, text="Load image…", command=_load).pack(
@@ -2641,6 +2653,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
                                      if x.field != mm.field] + [mm]
             result_var.set(f"✓ recorded {mm.field} = {mm.value_m:.4g} m")
             state["_pending"] = None
+            _refresh_closure()
         acc_btn.config(command=_accept, state="normal")
     state["_finish_measure"] = _finish_measure
 
@@ -2648,6 +2661,34 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)
     acc_btn = ttk.Button(mrow, text="Accept", state="disabled")
     acc_btn.pack(side=tk.LEFT, padx=4)
+
+    # Length-closure line (booster: stages + fairing should tile the overall
+    # length).  Warn-only by design — a mismatch is information (wrong claimed
+    # total, mis-clicked invisible joint, real gap), never auto-corrected.
+    _closure_applies = bool(im.closure_segments(prompts))
+    closure_var = tk.StringVar(value="")
+    closure_lbl = ttk.Label(panel, textvariable=closure_var, foreground="#888",
+                            wraplength=250, justify=tk.LEFT)
+    if _closure_applies:
+        closure_lbl.pack(anchor=tk.W, pady=(6, 0))
+
+    def _refresh_closure():
+        if not _closure_applies:
+            return
+        total = (state["accepted"].get(im.OVERALL_LEN_CHECK_FIELD)
+                 or state.get("anchor_total"))
+        c = im.length_closure(state["accepted"], prompts, total)
+        if c is None:
+            closure_var.set("length cross-check: measure the overall length "
+                            "(or anchor the scale on it)")
+            closure_lbl.config(foreground="#888")
+        else:
+            closure_var.set(im.closure_note(c))
+            closure_lbl.config(
+                foreground=("#888" if not c["complete"]
+                            else "#b00" if abs(c["rel"]) > 0.02 else "#2a7"))
+    state["_refresh_closure"] = _refresh_closure
+    _refresh_closure()
 
     ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8)
     af = ttk.Frame(dlg, padding=(8, 6)); af.pack(fill=tk.X)

@@ -204,6 +204,27 @@ Scope and plumbing:
     two-point distance tool — hand entry.  Wedge never gets wing prompts (its
     wing rows are disabled/zeroed by design).  Tests: prompt-generation units
     + a GUI apply test asserting the derivation fires.
+  - **A5 (DONE, 2026-08-01): length closure + format filter.**  The booster
+    checklist ends with a CHECK-ONLY prompt (overall length — never stored;
+    there is no editor field for the derived total), and the dialog shows a
+    live closure line: Σ(stage lengths + fairing) vs the total, where the
+    total is the check measurement or the scale anchor when the user declares
+    it IS the overall length (asked once at scale time — the anchor then
+    doubles as the total for free).  WARN-ONLY by design: a mismatch is
+    information (wrong claimed total — the AUR 10.2 m case; a mis-clicked
+    invisible joint, R3; a real gap) and auto-normalizing segments would
+    launder the disagreement into the data.  Pending state lists unmeasured
+    segments; complete state shows the signed error (red beyond ±2%).
+    Diameters never pollute the sum (length conventions only).  Also: the
+    load-image filter now offers WebP/TIFF (Pillow always read them; the
+    filetypes list simply omitted them and macOS greys non-matching files).
+  - **Discussed, deferred (2026-08-01):** drag-and-drop (possible via the
+    optional tkinterdnd2 package, opportunistic enable — not built);
+    clipboard paste (Pillow grabclipboard, macOS/Windows — not built);
+    anchor-as-field (declare which editor field the scale anchor IS, filling
+    it with honest "declared, not measured" provenance instead of a circular
+    re-measure — not built).  Skipping is already structural: the checklist
+    is a pick-list and Apply writes only accepted fields (R8).
     STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).

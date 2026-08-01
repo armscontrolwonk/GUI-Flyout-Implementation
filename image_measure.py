@@ -115,7 +115,59 @@ CONVENTIONS = {
     "fin_tip":      ("ONE fin's tip chord", _identity),
     "strapon_diameter": ("ONE strap-on's diameter (across)", _identity),
     "strapon_length": ("ONE strap-on's length", _identity),
+    "overall_length": ("overall length (tip to base) — cross-check only, "
+                       "never stored", _identity),
 }
+
+
+# ── Length closure (booster) ────────────────────────────────────────────────
+# The measured stage lengths (+ fairing) should tile the vehicle's overall
+# length.  A mismatch is INFORMATION — a wrong claimed total (the AUR 10.2 m
+# case), a mis-clicked invisible joint (R3), a real gap — so the tool WARNS
+# and reports, never normalizes: auto-correcting the segments to force
+# closure would launder the disagreement into the data.
+OVERALL_LEN_CHECK_FIELD = "overall_len_check"    # never written to the editor
+_SEGMENT_CONVENTIONS = ("stage_length", "fairing_length")
+
+
+def closure_segments(prompts):
+    """The prompt fields whose accepted values should tile the overall
+    length (stage lengths + fairing length)."""
+    return [p["field"] for p in prompts
+            if p.get("convention") in _SEGMENT_CONVENTIONS]
+
+
+def length_closure(accepted, prompts, total_m):
+    """Compare sum(measured length segments) against the overall length.
+    total_m comes from the check-only measurement or from a scale anchor the
+    user declared to BE the overall length.  Returns None when no total is
+    available (nothing to check against); otherwise a dict with the running
+    sum, the missing segments, and — once every declared segment is
+    measured — the signed error."""
+    if not total_m or float(total_m) <= 0.0:
+        return None
+    segs = closure_segments(prompts)
+    if not segs:
+        return None
+    missing = [f for f in segs if f not in (accepted or {})]
+    s = sum(float(accepted[f]) for f in segs if f in (accepted or {}))
+    out = dict(sum_m=s, total_m=float(total_m), missing=missing,
+               complete=not missing)
+    if not missing:
+        out["delta_m"] = s - float(total_m)
+        out["rel"] = (s - float(total_m)) / float(total_m)
+    return out
+
+
+def closure_note(c):
+    """One-line human reading of a length_closure() result."""
+    if c is None:
+        return ""
+    if not c["complete"]:
+        return ("length closure pending — unmeasured: "
+                + ", ".join(c["missing"]))
+    return (f"length closure: segments sum {c['sum_m']:.4g} m vs total "
+            f"{c['total_m']:.4g} m ({c['rel']:+.1%})")
 
 
 class Measurement:
@@ -278,4 +330,10 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
                       + note, view="side", convention="strapon_diameter"))
         p.append(dict(field="strapon_len", label="Click ONE strap-on's LENGTH",
                       view="side", convention="strapon_length"))
+    # Closure cross-check: overall length is never stored (no such editor
+    # field — the model derives it from the parts), but measuring it lets the
+    # dialog check that the stage (+ fairing) lengths tile it.  Warn-only.
+    p.append(dict(field=OVERALL_LEN_CHECK_FIELD,
+                  label="Click the OVERALL length (tip to base) — cross-check "
+                  "only, not stored", view="side", convention="overall_length"))
     return p
