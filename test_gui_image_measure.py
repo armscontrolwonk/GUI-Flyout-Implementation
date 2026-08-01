@@ -213,23 +213,24 @@ def test_paste_and_new_image_resets_scale(root, tmp_path, monkeypatch):
     pytest.importorskip("PIL")
     from PIL import Image
     d = _open_measure_dialog(_editor(root))
+    side = d._im_views["side"]
     # ⌘V of a raw clipboard image (a screenshot)
     monkeypatch.setattr("PIL.ImageGrab.grabclipboard",
                         lambda: Image.new("RGB", (300, 200), "white"))
     d._im_paste()
-    assert d._im_state["img"] is not None
+    assert side["img"] is not None
     # anchor a scale, then load a NEW image → scale must clear
-    d._im_state["scale"] = im.Scale((0, 0), (100, 0), 1.0)
+    side["scale"] = im.Scale((0, 0), (100, 0), 1.0)
     p = tmp_path / "v.png"
     Image.new("RGB", (400, 150), "gray").save(p)
     d._im_load_path(str(p))
-    assert d._im_state["scale"] is None
-    assert d._im_state["img"].size == (400, 150)
+    assert side["scale"] is None
+    assert side["img"].size == (400, 150)
     # ⌘V of a copied FILE (Finder copy) → the file loads
     monkeypatch.setattr("PIL.ImageGrab.grabclipboard", lambda: [str(p)])
-    d._im_state["img"] = None
+    side["img"] = None
     d._im_paste()
-    assert d._im_state["img"] is not None
+    assert side["img"] is not None
     d.destroy()
 
 
@@ -259,9 +260,110 @@ def test_type_value_needs_no_image_or_scale(root, monkeypatch):
     monkeypatch.setattr(sd, "askfloat", lambda *a, **k: 0.58)
     d._im_type_value()
     st = d._im_state
-    assert st["img"] is None and st["scale"] is None      # truly ungated
+    assert d._im_views["side"]["img"] is None             # truly ungated:
+    assert d._im_views["side"]["scale"] is None           # no image, no scale
     assert list(st["accepted"].values()) == [pytest.approx(0.58)]
     assert getattr(st["measurements"][0], "hand_entered", False) is True
+    d.destroy()
+
+
+def _wedge_editor(root):
+    dlg = _editor(root)
+    dlg._shape_var.set(dlg._BODY_FORM_LABELS["wedge"])
+    dlg._update_body_form_state()
+    return dlg
+
+
+def test_multiview_gating_and_per_view_scales(root, tmp_path):
+    """Phase B: the wedge checklist needs side + plan.  The dialog gets a view
+    selector; each view carries its OWN image and scale; a plan-view prompt is
+    HARD-GATED on the plan view being loaded and scaled (the old label-only
+    warning let a span be clicked off a side elevation — pure garbage, the
+    span runs into the page); and the side view's scale survives plan loads."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_wedge_editor(root))
+    assert set(d._im_views) == {"side", "plan"}
+
+    # side view: load + scale
+    ps = tmp_path / "side.png"; Image.new("RGB", (400, 100), "gray").save(ps)
+    d._im_load_path(str(ps))
+    d._im_views["side"]["scale"] = im.Scale((0, 0), (400, 0), 8.0)
+
+    # select the plan-only span prompt and try to measure with NO plan image:
+    # must refuse to arm
+    span_label = next(lab for lab, p in
+                      [(f"{p['field']}  —  {p['label']}", p)
+                       for p in im.ro_prompts("wedge")]
+                      if "_body_span_var" in lab)
+    d._im_prompt_var.set(span_label)
+    d._im_begin_measure()
+    assert d._im_state["mode"] == "idle"          # refused: no plan image
+    assert d._im_state["cur"] == "plan"           # but auto-switched view
+
+    # load the plan image: side's scale must be untouched, plan's is its own
+    pp = tmp_path / "plan.png"; Image.new("RGB", (500, 300), "gray").save(pp)
+    d._im_load_path(str(pp))                       # loads into CURRENT (plan)
+    assert d._im_views["plan"]["img"].size == (500, 300)
+    assert d._im_views["side"]["scale"] is not None   # untouched
+    d._im_begin_measure()
+    assert d._im_state["mode"] == "idle"          # still refused: no plan scale
+    d._im_views["plan"]["scale"] = im.Scale((0, 0), (250, 0), 8.0)
+    d._im_begin_measure()
+    assert d._im_state["mode"] == "measure"       # armed at last
+    d.destroy()
+
+
+def test_single_view_dialog_has_no_view_selector(root):
+    pytest.importorskip("PIL")
+    d = _open_measure_dialog(_editor(root))       # axisymmetric: side only
+    assert set(d._im_views) == {"side"}
+    assert not any(isinstance(w, tk.ttk.Radiobutton) for w in _all(d))
+    d.destroy()
+
+
+def test_zoom_never_touches_measurements(root, tmp_path):
+    """Zoom is display-only: clicks are stored in ORIGINAL-image pixels, so a
+    measurement's value and quantum are identical at any zoom."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    side = d._im_views["side"]
+    side["scale"] = im.Scale((0, 0), (400, 0), 10.0)
+    d._im_state["clicks"] = [(0.0, 0.0), (200.0, 0.0)]
+    before = list(d._im_state["clicks"])
+    z0 = side["zoom"]
+    d._im_zoom_at(2.0)
+    assert side["zoom"] == pytest.approx(z0 * 2.0)
+    assert d._im_state["clicks"] == before        # image-px clicks unmoved
+    assert side["scale"].m_per_px == pytest.approx(0.025)   # 10 m / 400 px
+    d._im_fit()
+    assert side["zoom"] == pytest.approx(z0)
+    d.destroy()
+
+
+def test_accept_records_overlay_annotation(root, tmp_path):
+    """The overlay audits what was clicked: accepting a measurement stores its
+    clicked segment (view-tagged, original-image px) for drawing."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    d._im_views["side"]["scale"] = im.Scale((0, 0), (400, 0), 10.0)
+    st = d._im_state
+    st["prompt"] = im.ro_prompts("axisymmetric")[0]        # _len_var, side
+    st["clicks"] = [(50.0, 40.0), (250.0, 40.0)]
+    st["_finish_measure"]()                                 # proposes 5.0 m
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    acc.invoke()
+    assert st["accepted"]["_len_var"] == pytest.approx(5.0)
+    view, p1, p2, label = st["annotations"]["_len_var"]
+    assert view == "side" and p1 == (50.0, 40.0) and p2 == (250.0, 40.0)
+    assert "5" in label
     d.destroy()
 
 

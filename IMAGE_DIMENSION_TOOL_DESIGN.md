@@ -243,9 +243,30 @@ Scope and plumbing:
     anchor-as-field idea (type the known anchor-field value directly).
     Skipping remains structural: Apply writes only accepted fields (R8) and
     is never gated on completeness.
-    STILL A-phase remainder: canvas zoom/pan (fit-only) and the overlay toggle.
-- **B — multiple named views**: side + plan with per-view scale and tagging;
-  unlocks wedge/half-cone ROs.  Requires the span field (R6).
+  - **A8 (DONE, 2026-08-01): zoom/pan + overlay toggle — A-phase complete.**
+    Wheel zooms about the cursor (0.05–8×), right- or middle-drag pans, Fit
+    resets; clicks are stored in ORIGINAL-image pixels so zoom is display-
+    only and can never touch a measurement or its quantum (tested).  The
+    overlay toggle draws every ACCEPTED measurement's clicked segment +
+    field label on its view — the audit of what was clicked, mis-clicks
+    visible at a glance.  SCOPE NOTE: the schematic-at-scale-over-image
+    comparison originally sketched for the overlay needs renderer
+    integration + alignment UX and stays in Phase C; the accepted-
+    measurement overlay is the first-order audit of the tool's own outputs.
+- **B — multiple named views: DONE (2026-08-01).**  Views are generated
+  from the checklist ({p["view"]}): single-view checklists (booster,
+  axisymmetric RO) are unchanged — one slot, no selector.  The wedge gets
+  Side/Plan radio buttons; EACH view carries its OWN image and its OWN
+  scale (two figures are never at the same resolution); loading an image
+  into one view never touches the other's scale.  Measure is HARD-GATED on
+  the prompt's view being loaded and scaled (auto-switches view; the old
+  label-only warning let a span be clicked off a side elevation — garbage,
+  the span runs into the page).  Cross-view audit: the plan-view length is
+  a check-only prompt (never stored) compared live against the stored side
+  length — disagreement means one scale anchor is wrong and the span would
+  inherit it (red beyond ±2%).  Measurements are view-tagged; the stamp
+  notes "views: plan+side" when both contributed.  The missing-view rule is
+  structural: skip the plan view and the span field stays unset + flagged.
 - **C — audit polish**: opacity/drag alignment, discrepancy highlighting,
   hatched stylization, mixed-provenance delta view.
 

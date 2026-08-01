@@ -2456,9 +2456,27 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     dlg.title(title)
     dlg.grab_set()
 
-    state = dict(scale=None, img=None, disp_scale=1.0, photo=None,
-                 mode="idle", clicks=[], prompt=None, accepted={},
-                 measurements=[])
+    # ── Views (Phase B) ────────────────────────────────────────────────
+    # Each named view (side / plan) carries its OWN image and its OWN scale —
+    # two figures in a paper are almost never at the same resolution, so a
+    # side-view m/px is meaningless on the plan view.  Single-view checklists
+    # (booster, axisymmetric RO) get one "side" slot and no selector.
+    views_needed = sorted({p["view"] for p in prompts}) or ["side"]
+    multiview = len(views_needed) > 1
+    _VIEW_LABELS = {"side": "Side view", "plan": "Plan (top) view"}
+
+    def _blank_view():
+        return dict(img=None, photo=None, zoom=1.0, scale=None,
+                    anchor_total=None)
+
+    views = {v: _blank_view() for v in views_needed}
+    state = dict(cur=("side" if "side" in views else views_needed[0]),
+                 mode="idle", clicks=[],       # clicks in ORIGINAL-image px
+                 prompt=None, accepted={}, measurements=[],
+                 overlay=True, annotations={})  # field → (view, p1, p2, label)
+
+    def _cv():
+        return views[state["cur"]]
 
     body = ttk.Frame(dlg, padding=8); body.pack(fill=tk.BOTH, expand=True)
     canvas = tk.Canvas(body, width=760, height=560, bg="#222",
@@ -2473,20 +2491,65 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
 
     _MAXW, _MAXH = 760, 560
 
-    def _set_image(img):
-        """Display a new source image.  The SCALE always resets with it —
-        metres-per-pixel belongs to the image it was anchored on; carrying it
-        to a different picture would be silently wrong."""
+    def _fit_zoom(img):
         ow, oh = img.size
-        ds = min(_MAXW / ow, _MAXH / oh, 1.0)
-        disp = img.resize((max(1, int(ow * ds)), max(1, int(oh * ds))))
-        state.update(img=img, disp_scale=ds,
-                     photo=ImageTk.PhotoImage(disp), mode="idle", clicks=[],
-                     scale=None, anchor_total=None)
-        quantum.set("scale: —")
+        return min(_MAXW / ow, _MAXH / oh, 1.0)
+
+    def _render():
+        """Redraw the current view at its zoom: image, the accepted-
+        measurement overlay (audit of what was clicked, per view), and any
+        in-progress click marks.  All geometry lives in original-image px;
+        zoom is display-only, so measurements are zoom-independent."""
         canvas.delete("all")
-        canvas.create_image(0, 0, anchor="nw", image=state["photo"])
-        status.set(f"Loaded {ow}×{oh}px.  Set the scale next "
+        v = _cv()
+        if v["img"] is None:
+            return
+        z = v["zoom"]
+        ow, oh = v["img"].size
+        disp = v["img"].resize((max(1, int(ow * z)), max(1, int(oh * z))))
+        v["photo"] = ImageTk.PhotoImage(disp)
+        canvas.create_image(0, 0, anchor="nw", image=v["photo"])
+        canvas.configure(scrollregion=(0, 0, int(ow * z), int(oh * z)))
+        if state["overlay"]:
+            for _f, (vw, p1, p2, lab) in state["annotations"].items():
+                if vw != state["cur"]:
+                    continue
+                x0, y0, x1, y1 = p1[0] * z, p1[1] * z, p2[0] * z, p2[1] * z
+                canvas.create_line(x0, y0, x1, y1, fill="#3c6", width=1,
+                                   tags="ann")
+                for xx, yy in ((x0, y0), (x1, y1)):
+                    canvas.create_oval(xx - 2, yy - 2, xx + 2, yy + 2,
+                                       outline="#3c6", tags="ann")
+                canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 9, text=lab,
+                                   fill="#3c6", font=("TkDefaultFont", 8),
+                                   tags="ann")
+        for ix, iy in state["clicks"]:
+            x, y = ix * z, iy * z
+            canvas.create_oval(x - 3, y - 3, x + 3, y + 3, outline="#ff4",
+                               width=2, tags="mark")
+        if len(state["clicks"]) == 2:
+            (x0, y0), (x1, y1) = [(ix * z, iy * z) for ix, iy in state["clicks"]]
+            canvas.create_line(x0, y0, x1, y1, fill="#ff4", width=1, tags="mark")
+
+    def _sync_quantum():
+        s = _cv()["scale"]
+        vtag = f"{state['cur']} " if multiview else ""
+        quantum.set(f"{vtag}scale: " + (s.quantum_str() if s else "—"))
+
+    def _set_image(img):
+        """Display a new source image IN THE CURRENT VIEW.  That view's scale
+        always resets with it — metres-per-pixel belongs to the image it was
+        anchored on; carrying it to a different picture would be silently
+        wrong.  Other views' images and scales are untouched."""
+        _cv().update(img=img, zoom=_fit_zoom(img), scale=None,
+                     anchor_total=None)
+        state.update(mode="idle", clicks=[])
+        _sync_quantum()
+        _render()
+        canvas.xview_moveto(0); canvas.yview_moveto(0)
+        ow, oh = img.size
+        vtag = f" into the {state['cur'].upper()} view" if multiview else ""
+        status.set(f"Loaded {ow}×{oh}px{vtag}.  Set the scale next "
                    "(click two points a known distance apart).")
         _refresh_closure()
 
@@ -2530,39 +2593,100 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     dlg.bind("<Command-v>", _paste)
     dlg.bind("<Control-v>", _paste)
 
-    def _orig(xy):                       # display px → original-image px
-        ds = state["disp_scale"] or 1.0
-        return (xy[0] / ds, xy[1] / ds)
-
     def _on_click(ev):
-        if state["mode"] not in ("scale", "measure") or state["img"] is None:
+        v = _cv()
+        if state["mode"] not in ("scale", "measure") or v["img"] is None:
             return
-        x, y = canvas.canvasx(ev.x), canvas.canvasy(ev.y)
-        state["clicks"].append((x, y))
-        canvas.create_oval(x - 3, y - 3, x + 3, y + 3, outline="#ff4",
-                           width=2, tags="mark")
+        z = v["zoom"]
+        state["clicks"].append((canvas.canvasx(ev.x) / z,
+                                canvas.canvasy(ev.y) / z))
+        _render()
         if len(state["clicks"]) == 2:
-            (x0, y0), (x1, y1) = state["clicks"]
-            canvas.create_line(x0, y0, x1, y1, fill="#ff4", width=1, tags="mark")
             (state["_finish_scale"] if state["mode"] == "scale"
              else state["_finish_measure"])()
 
     canvas.bind("<Button-1>", _on_click)
 
+    # Zoom (wheel, about the cursor) + pan (right- or middle-drag).  Clicks
+    # are stored in original-image px, so zoom never touches a measurement.
+    def _zoom_at(factor, wx=None, wy=None):
+        v = _cv()
+        if v["img"] is None:
+            return
+        z0 = v["zoom"]
+        z1 = min(8.0, max(0.05, z0 * float(factor)))
+        if z1 == z0:
+            return
+        if wx is None:
+            wx, wy = canvas.winfo_width() / 2, canvas.winfo_height() / 2
+        ix, iy = canvas.canvasx(wx) / z0, canvas.canvasy(wy) / z0
+        v["zoom"] = z1
+        _render()
+        ow, oh = v["img"].size
+        canvas.xview_moveto(max(0.0, (ix * z1 - wx) / (ow * z1)))
+        canvas.yview_moveto(max(0.0, (iy * z1 - wy) / (oh * z1)))
+
+    def _fit(*_ev):
+        v = _cv()
+        if v["img"] is None:
+            return
+        v["zoom"] = _fit_zoom(v["img"])
+        _render()
+        canvas.xview_moveto(0); canvas.yview_moveto(0)
+
+    canvas.bind("<MouseWheel>", lambda e: (_zoom_at(
+        1.15 if getattr(e, "delta", 0) > 0 else 1 / 1.15, e.x, e.y), "break")[1])
+    canvas.bind("<Button-4>", lambda e: (_zoom_at(1.15, e.x, e.y), "break")[1])
+    canvas.bind("<Button-5>", lambda e: (_zoom_at(1 / 1.15, e.x, e.y), "break")[1])
+    for press, drag in (("<ButtonPress-2>", "<B2-Motion>"),
+                        ("<ButtonPress-3>", "<B3-Motion>")):
+        canvas.bind(press, lambda e: canvas.scan_mark(e.x, e.y))
+        canvas.bind(drag, lambda e: canvas.scan_dragto(e.x, e.y, gain=1))
+
     def _clear_marks():
-        canvas.delete("mark"); state["clicks"] = []
+        state["clicks"] = []
+        _render()
 
     quantum = tk.StringVar(value="scale: —")
 
+    # View selector (multi-view checklists only: wedge needs side + plan).
+    view_var = tk.StringVar(value=state["cur"])
+
+    def _select_view(vname):
+        if vname not in views:
+            return
+        state.update(cur=vname, mode="idle", clicks=[])
+        view_var.set(vname)
+        _sync_quantum()
+        _render()
+        v = _cv()
+        if v["img"] is None:
+            status.set(f"{_VIEW_LABELS.get(vname, vname)}: load its image "
+                       "(each view has its own image AND its own scale).")
+        elif v["scale"] is None:
+            status.set(f"{_VIEW_LABELS.get(vname, vname)}: set its scale.")
+        else:
+            status.set(f"{_VIEW_LABELS.get(vname, vname)}: ready.")
+
+    if multiview:
+        vrow = ttk.Frame(panel); vrow.pack(anchor=tk.W, fill=tk.X, pady=(0, 4))
+        ttk.Label(vrow, text="View:").pack(side=tk.LEFT)
+        for vn in views_needed:
+            ttk.Radiobutton(vrow, text=_VIEW_LABELS.get(vn, vn),
+                            variable=view_var, value=vn,
+                            command=lambda n=vn: _select_view(n)).pack(
+                side=tk.LEFT, padx=(6, 0))
+
     def _begin_scale():
-        if state["img"] is None:
+        if _cv()["img"] is None:
             return
         _clear_marks(); state["mode"] = "scale"
         status.set("SCALE: click two points a known distance apart.")
 
     def _finish_scale():
         from tkinter import simpledialog
-        p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
+        v = _cv()
+        p1, p2 = state["clicks"]
         d = simpledialog.askfloat("Scale", "Real distance between the two "
                                   "points (metres):", parent=dlg, minvalue=1e-6)
         if not d:
@@ -2572,7 +2696,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             "(e.g. 'claimed overall length 10.2 m, source X')",
             parent=dlg) or ""
         try:
-            state["scale"] = im.Scale(p1, p2, d, anchor_note=note)
+            v["scale"] = im.Scale(p1, p2, d, anchor_note=note)
         except ValueError as e:
             messagebox.showerror("Bad scale", str(e), parent=dlg)
             _clear_marks(); state["mode"] = "idle"; return
@@ -2580,14 +2704,14 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         # case), it doubles as the closure total for free — no need to
         # re-measure the same span through the check-only prompt.
         if _closure_applies:
-            state["anchor_total"] = (
+            v["anchor_total"] = (
                 float(d) if messagebox.askyesno(
                     "Scale anchor",
                     "Is this distance the vehicle's OVERALL length?\n"
                     "(if so it doubles as the total for the stage-length "
                     "cross-check)", parent=dlg)
                 else None)
-        quantum.set("scale: " + state["scale"].quantum_str())
+        _sync_quantum()
         status.set("Scale set.  Pick a dimension and click Measure.")
         _clear_marks(); state["mode"] = "idle"
         _refresh_prompts()
@@ -2600,6 +2724,18 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         anchor=tk.W, fill=tk.X, pady=(4, 0))
     ttk.Button(panel, text="Set scale…", command=_begin_scale).pack(
         anchor=tk.W, fill=tk.X, pady=(4, 0))
+
+    zrow = ttk.Frame(panel); zrow.pack(anchor=tk.W, fill=tk.X, pady=(4, 0))
+    ttk.Button(zrow, text="Fit", width=4, command=_fit).pack(side=tk.LEFT)
+    overlay_var = tk.BooleanVar(value=True)
+
+    def _toggle_overlay():
+        state["overlay"] = bool(overlay_var.get())
+        _render()
+    ttk.Checkbutton(zrow, text="Overlay accepted", variable=overlay_var,
+                    command=_toggle_overlay).pack(side=tk.LEFT, padx=(8, 0))
+    ttk.Label(panel, text="wheel zooms · right-drag pans",
+              foreground="#999").pack(anchor=tk.W)
     ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
         anchor=tk.W, pady=(2, 8))
 
@@ -2658,23 +2794,36 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     prompt_combo.bind("<<ComboboxSelected>>", _on_prompt)
 
     def _begin_measure():
-        if state["scale"] is None:
-            status.set("Set the scale first."); return
         p = _label_by_field.get(prompt_var.get())
         if not p:
+            return
+        # View gating (Phase B): a plan-view dimension can only be clicked on
+        # the plan view — the old label-only warning is now a hard guard (a
+        # span clicked off a side elevation would be pure garbage: the span
+        # runs into the page).  Auto-switch when the right view is loaded.
+        if multiview and p["view"] != state["cur"]:
+            _select_view(p["view"])
+        v = _cv()
+        if v["img"] is None:
+            status.set(f"This dimension needs the {p['view'].upper()} view — "
+                       "load that image first (each view has its own scale).")
+            return
+        if v["scale"] is None:
+            status.set(f"Set the {p['view'].upper()} view's scale first.")
             return
         state["prompt"] = p; _clear_marks(); state["mode"] = "measure"
         status.set(f"MEASURE: {p['label']}")
 
     def _finish_measure():
-        p = state["prompt"]; s = state["scale"]
-        p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
+        p = state["prompt"]; s = _cv()["scale"]
+        p1, p2 = state["clicks"]
         click_m, span = s.measure(p1, p2)
         clocking = (_clock_key.get(clock_var.get(), "in_plane")
                     if p.get("clocking_sensitive") else "in_plane")
         m = im.Measurement(p["field"], click_m, span, scale=s,
                            view=p["view"], convention=p["convention"],
                            clocking=clocking)
+        state["_pending_pts"] = (p1, p2, state["cur"])
         _clear_marks(); state["mode"] = "idle"
         if m.refused:
             result_var.set("✗ " + "; ".join(m.flags) + " — nothing recorded.")
@@ -2691,9 +2840,13 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
             state["accepted"][mm.field] = mm.value_m
             state["measurements"] = [x for x in state["measurements"]
                                      if x.field != mm.field] + [mm]
+            pp1, pp2, pview = state["_pending_pts"]
+            state["annotations"][mm.field] = (
+                pview, pp1, pp2, f"{mm.field} = {mm.value_m:.4g} m")
             result_var.set(f"✓ recorded {mm.field} = {mm.value_m:.4g} m")
             state["_pending"] = None
             _refresh_closure()
+            _render()
         acc_btn.config(command=_accept, state="normal")
     state["_finish_measure"] = _finish_measure
 
@@ -2740,11 +2893,35 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     if _closure_applies:
         closure_lbl.pack(anchor=tk.W, pady=(6, 0))
 
+    # Cross-view consistency line (multi-view only): the length measured in
+    # BOTH views audits the two independent scale anchors — disagreement
+    # means one anchor is wrong, and the span would inherit the error.
+    viewcheck_var = tk.StringVar(value="")
+    viewcheck_lbl = ttk.Label(panel, textvariable=viewcheck_var,
+                              foreground="#888", wraplength=250,
+                              justify=tk.LEFT)
+    if multiview:
+        viewcheck_lbl.pack(anchor=tk.W, pady=(6, 0))
+
+    def _refresh_viewcheck():
+        if not multiview:
+            return
+        vc = im.view_consistency(state["accepted"])
+        if vc is None:
+            viewcheck_var.set("view cross-check: measure the length in BOTH "
+                              "views to audit the two scales")
+            viewcheck_lbl.config(foreground="#888")
+        else:
+            viewcheck_var.set(im.view_consistency_note(vc))
+            viewcheck_lbl.config(
+                foreground="#b00" if abs(vc["rel"]) > 0.02 else "#2a7")
+
     def _refresh_closure():
+        _refresh_viewcheck()
         if not _closure_applies:
             return
         total = (state["accepted"].get(im.OVERALL_LEN_CHECK_FIELD)
-                 or state.get("anchor_total"))
+                 or views.get("side", {}).get("anchor_total"))
         c = im.length_closure(state["accepted"], prompts, total)
         if c is None:
             closure_var.set("length cross-check: measure the overall length "
@@ -2762,7 +2939,11 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     af = ttk.Frame(dlg, padding=(8, 6)); af.pack(fill=tk.X)
 
     def _apply():
-        apply_fn(state["accepted"], state["measurements"], state["scale"])
+        # The stamp's primary scale is the side view's (or the first set one).
+        order = ["side"] + [v for v in views_needed if v != "side"]
+        sc = next((views[vn]["scale"] for vn in order
+                   if vn in views and views[vn]["scale"] is not None), None)
+        apply_fn(state["accepted"], state["measurements"], sc)
         dlg.destroy()
 
     ttk.Label(af, text=im.anchor_free_note(), foreground="#888",
@@ -2798,13 +2979,19 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
 
     # Test hooks — the loaders live in a closure; expose the seams the GUI
     # tests exercise (paste path, image-resets-scale, drop availability,
-    # hand entry).
+    # hand entry, views, zoom, measure gating).
     dlg._im_state = state
+    dlg._im_views = views
     dlg._im_paste = _paste
     dlg._im_load_path = _load_path
     dlg._im_set_image = _set_image
     dlg._im_dnd = dnd_on
     dlg._im_type_value = _type_value
+    dlg._im_select_view = _select_view
+    dlg._im_begin_measure = _begin_measure
+    dlg._im_zoom_at = _zoom_at
+    dlg._im_fit = _fit
+    dlg._im_prompt_var = prompt_var
     return dlg
 
 
