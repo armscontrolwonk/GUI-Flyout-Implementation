@@ -143,6 +143,19 @@ def test_booster_button_and_apply(root):
     d.destroy()
 
 
+def test_booster_apply_ignores_the_check_only_total(root):
+    """The overall-length cross-check measurement exists only to feed the
+    closure warning: apply must not write it anywhere (there is no editor
+    field for a derived total)."""
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._n_stages_var.set("1"); d._update_stage_frames()
+    before = d._stage_frames[0]._length.get()
+    d._apply_image_measurements({im.OVERALL_LEN_CHECK_FIELD: 10.2}, [], None)
+    assert d._stage_frames[0]._length.get() == before
+    d.destroy()
+
+
 def test_clocking_control_present_for_fins(root):
     """R1: when the declared topology has fins, the shared dialog carries the
     clocking selector (the cos45 correction the pure core already applies) with

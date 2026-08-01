@@ -189,6 +189,7 @@ def test_booster_prompts_from_topology():
     assert fields[:4] == ["stage1_len", "stage1_dia", "stage2_len", "stage2_dia"]
     assert {"fairing_len", "fairing_dia", "fin_span", "fin_root", "fin_tip",
             "strapon_dia", "strapon_len"} <= set(fields)
+    assert fields[-1] == im.OVERALL_LEN_CHECK_FIELD    # closure check, always last
 
 
 def test_booster_prompts_state_the_count_assumption():
@@ -201,9 +202,57 @@ def test_booster_prompts_state_the_count_assumption():
     assert "3" in strap["label"] and "assumed identical" in strap["label"]
 
 
-def test_booster_prompts_minimal_is_just_stage_one():
+def test_booster_prompts_minimal_is_stage_one_plus_check():
+    """Every booster checklist ends with the check-only overall length — the
+    one 'measurement' that never writes a field (the model derives the total
+    from its parts); it exists to feed the length-closure warning."""
     assert [p["field"] for p in im.booster_prompts(n_stages=1)] == \
-        ["stage1_len", "stage1_dia"]
+        ["stage1_len", "stage1_dia", im.OVERALL_LEN_CHECK_FIELD]
+
+
+# ── length closure (warn-only, never normalizes) ────────────────────────────
+def _closure_prompts():
+    return im.booster_prompts(n_stages=2, has_fairing=True)
+
+
+def test_length_closure_needs_a_total():
+    assert im.length_closure({"stage1_len": 5.0}, _closure_prompts(), None) is None
+    assert im.length_closure({"stage1_len": 5.0}, _closure_prompts(), 0.0) is None
+
+
+def test_length_closure_not_applicable_without_segments():
+    # the RO checklist has no stage/fairing segments — nothing to tile
+    assert im.length_closure({"_len_var": 2.0},
+                             im.ro_prompts("axisymmetric"), 2.0) is None
+
+
+def test_length_closure_pending_lists_missing_segments():
+    c = im.length_closure({"stage1_len": 5.0, "stage2_len": 2.6},
+                          _closure_prompts(), 10.2)
+    assert c["complete"] is False
+    assert c["missing"] == ["fairing_len"]
+    assert c["sum_m"] == pytest.approx(7.6)
+    assert "pending" in im.closure_note(c) and "fairing_len" in im.closure_note(c)
+
+
+def test_length_closure_complete_reports_signed_error():
+    acc = {"stage1_len": 5.0, "stage2_len": 2.6, "fairing_len": 2.2}
+    c = im.length_closure(acc, _closure_prompts(), 10.2)
+    assert c["complete"] is True
+    assert c["delta_m"] == pytest.approx(-0.4)
+    assert c["rel"] == pytest.approx(-0.4 / 10.2)
+    note = im.closure_note(c)
+    assert "9.8" in note and "10.2" in note and "-3.9%" in note
+
+
+def test_length_closure_diameters_do_not_count():
+    """Only LENGTH segments tile the stack — a diameter accepted along the way
+    must not pollute the sum."""
+    acc = {"stage1_len": 5.0, "stage1_dia": 3.0, "stage2_len": 5.2}
+    c = im.length_closure(acc, im.booster_prompts(n_stages=2), 10.2)
+    assert c["complete"] is True
+    assert c["sum_m"] == pytest.approx(10.2)
+    assert c["rel"] == pytest.approx(0.0)
 
 
 # ── R1 clocking wired to the prompts that need it ───────────────────────────

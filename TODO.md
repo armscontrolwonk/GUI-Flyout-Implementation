@@ -19,8 +19,14 @@ fin-span and RO wing-span prompts are clocking-sensitive and the dialog
 offers an in-plane / ×-rolled / unknown selector (default in-plane) feeding
 the tested cos45 core; built only when the topology has such a span.  Core in
 image_measure.py (tested); Pillow dependency.
+A5: length-closure warning (stages+fairing vs overall length — check-only
+prompt or anchor-declared total; warn-only, never normalizes) + WebP/TIFF in
+the load filter.
 REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle;
 LE sweep is an angle (not two-point-measurable) — hand entry by design.
+Discussed & deferred (2026-08-01): drag-and-drop (optional tkinterdnd2,
+opportunistic), clipboard paste, anchor-as-field (honest "declared, not
+measured" fill of the field the scale anchor IS).
 Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
 Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
