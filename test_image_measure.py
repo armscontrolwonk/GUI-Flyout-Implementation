@@ -146,3 +146,27 @@ def test_ro_prompts_by_body_form():
     hc = im.ro_prompts("half_cone")
     depth = next(p for p in hc if p["field"] == "_dia_var")
     assert depth["convention"] == "half_cone_depth"   # stored ⌀ = 2×
+
+
+def test_booster_prompts_from_topology():
+    ps = im.booster_prompts(n_stages=2, has_fairing=True, has_fins=True,
+                            n_fins=4, n_strapons=4)
+    fields = [p["field"] for p in ps]
+    assert fields[:4] == ["stage1_len", "stage1_dia", "stage2_len", "stage2_dia"]
+    assert {"fairing_len", "fairing_dia", "fin_span", "fin_root", "fin_tip",
+            "strapon_dia", "strapon_len"} <= set(fields)
+
+
+def test_booster_prompts_state_the_count_assumption():
+    """Measure-one-declare-count: a repeated feature's prompt says how many the
+    single measurement will be replicated to (design 'measure one')."""
+    ps = im.booster_prompts(has_fins=True, n_fins=4, n_strapons=3)
+    fin = next(p for p in ps if p["field"] == "fin_span")
+    strap = next(p for p in ps if p["field"] == "strapon_dia")
+    assert "4" in fin["label"] and "assumed identical" in fin["label"]
+    assert "3" in strap["label"] and "assumed identical" in strap["label"]
+
+
+def test_booster_prompts_minimal_is_just_stage_one():
+    assert [p["field"] for p in im.booster_prompts(n_stages=1)] == \
+        ["stage1_len", "stage1_dia"]

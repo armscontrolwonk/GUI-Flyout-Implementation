@@ -7,14 +7,16 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image dimensioning tool — Phase A1 SHIPPED (2026-07-30)
-A1 done: image_measure.py (tested core) + "Measure from image…" on the RO
-editor (load image → scale+provenance → prompted per-form measurement with
-pixel quantum + resolution floor → Apply writes fields + notes stamp; Pillow
-dependency).  NEXT (A2): booster-editor button, declared-topology panel
-(stages/fairing/fins+count+clocking/strap-ons), measure-one-replicate-count,
-overlay toggle.  Phase B multi-view (wedge/half-cone plan span) unblocked
-(body_span_m exists).  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
+### 1. Image dimensioning tool — Phase A1+A2 SHIPPED (2026-07-30)
+Working "Measure from image…" on BOTH editors (shared dialog).  RO: load →
+scale+provenance → per-body-form prompts → Apply writes fields + notes stamp.
+Booster: prompts generated from the editor's own declared topology (stages/
+fairing/fins+count/strap-ons); measure-one-declare-count (counts untouched,
+model replicates).  Core in image_measure.py (tested); Pillow dependency.
+REMAINING before B: canvas zoom/pan (fit-only today), overlay toggle, and a
+UI control to feed the clocking correction (cos45 core exists+tested, no UI
+yet).  Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
+Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
 
 ### 1b. Image tool — original scoping pointer

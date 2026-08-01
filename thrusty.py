@@ -1450,6 +1450,8 @@ class BoosterDialog(tk.Toplevel):
         self._n_boosters_spin.pack(side=tk.LEFT, padx=(4, 0))
         self._n_boosters_var.trace_add("write",
                                        lambda *_: self._update_booster_frame())
+        ttk.Button(nf, text="Measure from image…",
+                   command=self._measure_from_image).pack(side=tk.LEFT, padx=(16, 0))
 
         # Scrollable body: canvas + scrollbar sandwiched between the name row
         # and the Save/Cancel buttons so buttons are always visible.
@@ -1919,6 +1921,68 @@ class BoosterDialog(tk.Toplevel):
             self._booster_frame.pack_forget()
 
     # ------------------------------------------------------------------
+    def _measure_from_image(self):
+        """Open the shared image-measure dialog for the booster.  Prompts are
+        generated from the topology the editor ALREADY declares (stage count,
+        fairing on/off, fins on/off + count, strap-on count) — the editor IS
+        the topology declaration; the tool reads it."""
+        import image_measure as im
+        def _i(var, default=0):
+            try:
+                return int(float(var.get()))
+            except (ValueError, tk.TclError, AttributeError):
+                return default
+        prompts = im.booster_prompts(
+            n_stages=_i(self._n_stages_var, 1),
+            has_fairing=bool(self._shroud_var.get()),
+            has_fins=bool(self._fins_var.get()),
+            n_fins=_i(self._fin_n_var, 0),
+            n_strapons=_i(self._n_boosters_var, 0))
+        _open_image_measure_dialog(
+            self, "Measure from image — booster", prompts,
+            self._apply_image_measurements)
+
+    def _apply_image_measurements(self, accepted, measurements, scale):
+        """Write accepted booster measurements into the editor's fields.  The
+        image tool measures ONE of a repeated feature (a fin, a strap-on); the
+        model already stores count + one geometry, so the declared count is
+        untouched and the single geometry is filled — measure-one-declare-count
+        (design).  No booster notes field, so the provenance stamp is dropped
+        into the (transient) status; the values are the durable output."""
+        def _stage_var(field):
+            # "stage2_len" / "stage3_dia" → the StringVar on that stage frame
+            try:
+                n = int(field[5])
+            except (ValueError, IndexError):
+                return None
+            frames = getattr(self, "_stage_frames", [])
+            if not (1 <= n <= len(frames)):
+                return None
+            return (frames[n - 1]._length if field.endswith("_len")
+                    else frames[n - 1]._dia)
+        fixed = {
+            "fairing_len": getattr(self, "_shroud_length_var", None),
+            "fairing_dia": getattr(self, "_shroud_diameter_var", None),
+            "fin_span": getattr(self, "_fin_span_var", None),
+            "fin_root": getattr(self, "_fin_root_var", None),
+            "fin_tip": getattr(self, "_fin_tip_var", None),
+            "strapon_dia": getattr(self, "_b_diam_var", None),
+            "strapon_len": getattr(self, "_b_length_var", None),
+        }
+        for field, value in (accepted or {}).items():
+            var = _stage_var(field) if field.startswith("stage") else fixed.get(field)
+            if var is not None:
+                var.set(f"{float(value):.4g}")
+        # Turning on the fairing/fins sections if their geometry was measured
+        # keeps what-you-measured visible (the editor owns the count/on flags).
+        if any(f.startswith("fairing") for f in (accepted or {})) and \
+                hasattr(self, "_shroud_var"):
+            self._shroud_var.set(True); self._update_shroud_state()
+        if any(f.startswith("fin_") for f in (accepted or {})) and \
+                hasattr(self, "_fins_var"):
+            self._fins_var.set(True); self._update_fins_state()
+
+    # ------------------------------------------------------------------
     def _update_stage_frames(self):
         """Show the right number of stage frames and coast-time rows."""
         n = int(self._n_stages_var.get())
@@ -2360,6 +2424,215 @@ class BoosterDialog(tk.Toplevel):
 # the strip; New Reentry Plan chooses the family).  See REENTRY_FAMILY_DESIGN.md.
 _FAMILY_LABELS = {'numerical': "numerical (EOM)",
                   'analytic':  "closed-form analytic"}
+
+
+def _open_image_measure_dialog(parent, title, prompts, apply_fn):
+    """Shared image-dimensioning dialog (Phase A) for the RO and booster
+    editors.  `prompts` is a list of {field,label,view,convention} (from
+    image_measure); `apply_fn(accepted, measurements, scale)` writes the
+    accepted {field:value_m} into the parent's fields and stamps its notes.
+
+    The image PROPOSES; the human Accepts each value; Apply commits.  The
+    image, scale, and clicks are session-only (no persistence) — only the
+    accepted values and the stamp survive.  image_measure.py is the tested
+    core; this is the shell (canvas + scale + prompt loop).
+    """
+    try:
+        from PIL import Image, ImageTk
+    except ImportError:
+        messagebox.showerror(
+            "Pillow required",
+            "Measuring from an image needs the Pillow library.\n"
+            "Install it with:  pip install pillow", parent=parent)
+        return
+    import image_measure as im
+
+    dlg = tk.Toplevel(parent)
+    dlg.title(title)
+    dlg.grab_set()
+
+    state = dict(scale=None, img=None, disp_scale=1.0, photo=None,
+                 mode="idle", clicks=[], prompt=None, accepted={},
+                 measurements=[])
+
+    body = ttk.Frame(dlg, padding=8); body.pack(fill=tk.BOTH, expand=True)
+    canvas = tk.Canvas(body, width=760, height=560, bg="#222",
+                       highlightthickness=1, highlightbackground="#888")
+    canvas.grid(row=0, column=0, rowspan=2, sticky="nsew")
+    panel = ttk.Frame(body, padding=(10, 0, 0, 0))
+    panel.grid(row=0, column=1, sticky="n")
+
+    status = tk.StringVar(value="Load an image to begin.")
+    ttk.Label(panel, textvariable=status, foreground="#367",
+              wraplength=250, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 6))
+
+    _MAXW, _MAXH = 760, 560
+
+    def _load():
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=dlg, title="Load vehicle image",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"),
+                       ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            img = Image.open(path)
+        except Exception as e:
+            messagebox.showerror("Cannot open image", str(e), parent=dlg)
+            return
+        ow, oh = img.size
+        ds = min(_MAXW / ow, _MAXH / oh, 1.0)
+        disp = img.resize((max(1, int(ow * ds)), max(1, int(oh * ds))))
+        state.update(img=img, disp_scale=ds,
+                     photo=ImageTk.PhotoImage(disp), mode="idle", clicks=[])
+        canvas.delete("all")
+        canvas.create_image(0, 0, anchor="nw", image=state["photo"])
+        status.set(f"Loaded {ow}×{oh}px.  Set the scale next "
+                   "(click two points a known distance apart).")
+
+    def _orig(xy):                       # display px → original-image px
+        ds = state["disp_scale"] or 1.0
+        return (xy[0] / ds, xy[1] / ds)
+
+    def _on_click(ev):
+        if state["mode"] not in ("scale", "measure") or state["img"] is None:
+            return
+        x, y = canvas.canvasx(ev.x), canvas.canvasy(ev.y)
+        state["clicks"].append((x, y))
+        canvas.create_oval(x - 3, y - 3, x + 3, y + 3, outline="#ff4",
+                           width=2, tags="mark")
+        if len(state["clicks"]) == 2:
+            (x0, y0), (x1, y1) = state["clicks"]
+            canvas.create_line(x0, y0, x1, y1, fill="#ff4", width=1, tags="mark")
+            (state["_finish_scale"] if state["mode"] == "scale"
+             else state["_finish_measure"])()
+
+    canvas.bind("<Button-1>", _on_click)
+
+    def _clear_marks():
+        canvas.delete("mark"); state["clicks"] = []
+
+    quantum = tk.StringVar(value="scale: —")
+
+    def _begin_scale():
+        if state["img"] is None:
+            return
+        _clear_marks(); state["mode"] = "scale"
+        status.set("SCALE: click two points a known distance apart.")
+
+    def _finish_scale():
+        from tkinter import simpledialog
+        p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
+        d = simpledialog.askfloat("Scale", "Real distance between the two "
+                                  "points (metres):", parent=dlg, minvalue=1e-6)
+        if not d:
+            _clear_marks(); state["mode"] = "idle"; return
+        note = simpledialog.askstring(
+            "Scale provenance", "Where does this distance come from?\n"
+            "(e.g. 'claimed overall length 10.2 m, source X')",
+            parent=dlg) or ""
+        try:
+            state["scale"] = im.Scale(p1, p2, d, anchor_note=note)
+        except ValueError as e:
+            messagebox.showerror("Bad scale", str(e), parent=dlg)
+            _clear_marks(); state["mode"] = "idle"; return
+        quantum.set("scale: " + state["scale"].quantum_str())
+        status.set("Scale set.  Pick a dimension and click Measure.")
+        _clear_marks(); state["mode"] = "idle"
+        _refresh_prompts()
+    state["_finish_scale"] = _finish_scale
+
+    ttk.Button(panel, text="Load image…", command=_load).pack(
+        anchor=tk.W, fill=tk.X)
+    ttk.Button(panel, text="Set scale…", command=_begin_scale).pack(
+        anchor=tk.W, fill=tk.X, pady=(4, 0))
+    ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
+        anchor=tk.W, pady=(2, 8))
+
+    ttk.Label(panel, text="Dimension to measure:").pack(anchor=tk.W)
+    prompt_var = tk.StringVar()
+    prompt_combo = ttk.Combobox(panel, textvariable=prompt_var,
+                                state="readonly", width=36)
+    prompt_combo.pack(anchor=tk.W, fill=tk.X)
+    prompt_hint = ttk.Label(panel, text="", foreground="#777",
+                            wraplength=250, justify=tk.LEFT)
+    prompt_hint.pack(anchor=tk.W, pady=(2, 4))
+    result_var = tk.StringVar(value="")
+    ttk.Label(panel, textvariable=result_var, foreground="#2a7",
+              wraplength=250, justify=tk.LEFT).pack(anchor=tk.W)
+
+    _label_by_field = {}
+
+    def _refresh_prompts():
+        _label_by_field.clear()
+        labels = []
+        for p in prompts:
+            disp = f"{p['field']}  —  {p['label']}"
+            labels.append(disp)
+            _label_by_field[disp] = p
+        prompt_combo["values"] = labels
+        if labels:
+            prompt_var.set(labels[0]); _on_prompt()
+
+    def _on_prompt(*_):
+        p = _label_by_field.get(prompt_var.get())
+        prompt_hint.config(text=(p["label"] + f"   [{p['view']} view]") if p else "")
+    prompt_combo.bind("<<ComboboxSelected>>", _on_prompt)
+
+    def _begin_measure():
+        if state["scale"] is None:
+            status.set("Set the scale first."); return
+        p = _label_by_field.get(prompt_var.get())
+        if not p:
+            return
+        state["prompt"] = p; _clear_marks(); state["mode"] = "measure"
+        status.set(f"MEASURE: {p['label']}")
+
+    def _finish_measure():
+        p = state["prompt"]; s = state["scale"]
+        p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
+        click_m, span = s.measure(p1, p2)
+        m = im.Measurement(p["field"], click_m, span, scale=s,
+                           view=p["view"], convention=p["convention"])
+        _clear_marks(); state["mode"] = "idle"
+        if m.refused:
+            result_var.set("✗ " + "; ".join(m.flags) + " — nothing recorded.")
+            return
+        flag = ("  (" + "; ".join(m.flags) + ")") if m.flags else ""
+        result_var.set(f"{p['field']} = {m.value_m:.4g} m   [{m.quantum_str()}]"
+                       f"{flag}\nAccept to record, or re-measure.")
+        state["_pending"] = m
+
+        def _accept():
+            mm = state.get("_pending")
+            if mm is None:
+                return
+            state["accepted"][mm.field] = mm.value_m
+            state["measurements"] = [x for x in state["measurements"]
+                                     if x.field != mm.field] + [mm]
+            result_var.set(f"✓ recorded {mm.field} = {mm.value_m:.4g} m")
+            state["_pending"] = None
+        acc_btn.config(command=_accept, state="normal")
+    state["_finish_measure"] = _finish_measure
+
+    mrow = ttk.Frame(panel); mrow.pack(anchor=tk.W, fill=tk.X, pady=(6, 0))
+    ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)
+    acc_btn = ttk.Button(mrow, text="Accept", state="disabled")
+    acc_btn.pack(side=tk.LEFT, padx=4)
+
+    ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8)
+    af = ttk.Frame(dlg, padding=(8, 6)); af.pack(fill=tk.X)
+
+    def _apply():
+        apply_fn(state["accepted"], state["measurements"], state["scale"])
+        dlg.destroy()
+
+    ttk.Label(af, text=im.anchor_free_note(), foreground="#888",
+              wraplength=560, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 4))
+    ttk.Button(af, text="Apply to editor", command=_apply).pack(side=tk.LEFT)
+    ttk.Button(af, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+    return dlg
 
 
 class ROEditorDialog(tk.Toplevel):
@@ -3135,218 +3408,15 @@ class ROEditorDialog(tk.Toplevel):
                 pass
 
     def _measure_from_image(self):
-        """Phase A: load an image, set a scale, and click geometry off it into
-        this editor's fields (image_measure.py is the tested core; this is the
-        shell).  The image PROPOSES; you Accept/Edit/Skip each value; Apply
-        writes the accepted ones and stamps the notes.  Nothing is persisted
-        but the values and the stamp — the image is session-only."""
-        try:
-            from PIL import Image, ImageTk
-        except ImportError:
-            messagebox.showerror(
-                "Pillow required",
-                "Measuring from an image needs the Pillow library.\n"
-                "Install it with:  pip install pillow", parent=self)
-            return
-        import datetime
+        """Open the shared image-measure dialog for the reentry object: prompts
+        come from the declared body_form, and Apply writes fields + stamps
+        notes via _apply_image_measurements."""
         import image_measure as im
-
-        dlg = tk.Toplevel(self)
-        dlg.title("Measure from image — reentry object")
-        dlg.grab_set()
-
-        state = dict(scale=None, img=None, disp_scale=1.0, photo=None,
-                     mode="idle", clicks=[], prompt=None, accepted={},
-                     measurements=[])
-
-        # ── layout: canvas left, control panel right ──────────────────────
-        body = ttk.Frame(dlg, padding=8); body.pack(fill=tk.BOTH, expand=True)
-        canvas = tk.Canvas(body, width=760, height=560, bg="#222",
-                           highlightthickness=1, highlightbackground="#888")
-        canvas.grid(row=0, column=0, rowspan=2, sticky="nsew")
-        panel = ttk.Frame(body, padding=(10, 0, 0, 0))
-        panel.grid(row=0, column=1, sticky="n")
-
-        status = tk.StringVar(value="Load an image to begin.")
-        ttk.Label(panel, textvariable=status, foreground="#367",
-                  wraplength=250, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 6))
-
-        _MAXW, _MAXH = 760, 560
-
-        def _load():
-            from tkinter import filedialog
-            path = filedialog.askopenfilename(
-                parent=dlg, title="Load vehicle image",
-                filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"),
-                           ("All files", "*.*")])
-            if not path:
-                return
-            try:
-                img = Image.open(path)
-            except Exception as e:
-                messagebox.showerror("Cannot open image", str(e), parent=dlg)
-                return
-            ow, oh = img.size
-            ds = min(_MAXW / ow, _MAXH / oh, 1.0)
-            disp = img.resize((max(1, int(ow * ds)), max(1, int(oh * ds))))
-            state.update(img=img, disp_scale=ds,
-                         photo=ImageTk.PhotoImage(disp), mode="idle", clicks=[])
-            canvas.delete("all")
-            canvas.create_image(0, 0, anchor="nw", image=state["photo"])
-            status.set(f"Loaded {ow}×{oh}px.  Set the scale next "
-                       "(click two points a known distance apart).")
-
-        def _orig(xy):                       # display px → original-image px
-            ds = state["disp_scale"] or 1.0
-            return (xy[0] / ds, xy[1] / ds)
-
-        def _on_click(ev):
-            if state["mode"] not in ("scale", "measure") or state["img"] is None:
-                return
-            x, y = canvas.canvasx(ev.x), canvas.canvasy(ev.y)
-            state["clicks"].append((x, y))
-            canvas.create_oval(x - 3, y - 3, x + 3, y + 3, outline="#ff4",
-                               width=2, tags="mark")
-            if len(state["clicks"]) == 2:
-                (x0, y0), (x1, y1) = state["clicks"]
-                canvas.create_line(x0, y0, x1, y1, fill="#ff4", width=1,
-                                   tags="mark")
-                (state["_finish_scale"] if state["mode"] == "scale"
-                 else state["_finish_measure"])()
-
-        canvas.bind("<Button-1>", _on_click)
-
-        def _clear_marks():
-            canvas.delete("mark"); state["clicks"] = []
-
-        # ── scale ─────────────────────────────────────────────────────────
-        quantum = tk.StringVar(value="scale: —")
-
-        def _begin_scale():
-            if state["img"] is None:
-                return
-            _clear_marks(); state["mode"] = "scale"
-            status.set("SCALE: click two points a known distance apart.")
-
-        def _finish_scale():
-            from tkinter import simpledialog
-            p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
-            d = simpledialog.askfloat("Scale", "Real distance between the two "
-                                      "points (metres):", parent=dlg, minvalue=1e-6)
-            if not d:
-                _clear_marks(); state["mode"] = "idle"; return
-            note = simpledialog.askstring(
-                "Scale provenance", "Where does this distance come from?\n"
-                "(e.g. 'claimed overall length 10.2 m, source X')",
-                parent=dlg) or ""
-            try:
-                state["scale"] = im.Scale(p1, p2, d, anchor_note=note)
-            except ValueError as e:
-                messagebox.showerror("Bad scale", str(e), parent=dlg)
-                _clear_marks(); state["mode"] = "idle"; return
-            quantum.set("scale: " + state["scale"].quantum_str())
-            status.set("Scale set.  Pick a dimension and click Measure.")
-            _clear_marks(); state["mode"] = "idle"
-            _refresh_prompts()
-        state["_finish_scale"] = _finish_scale
-
-        ttk.Button(panel, text="Load image…", command=_load).pack(
-            anchor=tk.W, fill=tk.X)
-        ttk.Button(panel, text="Set scale…", command=_begin_scale).pack(
-            anchor=tk.W, fill=tk.X, pady=(4, 0))
-        ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
-            anchor=tk.W, pady=(2, 8))
-
-        # ── prompted measurement ──────────────────────────────────────────
-        ttk.Label(panel, text="Dimension to measure:").pack(anchor=tk.W)
-        prompt_var = tk.StringVar()
-        prompt_combo = ttk.Combobox(panel, textvariable=prompt_var,
-                                    state="readonly", width=34)
-        prompt_combo.pack(anchor=tk.W, fill=tk.X)
-        prompt_hint = ttk.Label(panel, text="", foreground="#777",
-                                wraplength=250, justify=tk.LEFT)
-        prompt_hint.pack(anchor=tk.W, pady=(2, 4))
-        result_var = tk.StringVar(value="")
-        ttk.Label(panel, textvariable=result_var, foreground="#2a7",
-                  wraplength=250, justify=tk.LEFT).pack(anchor=tk.W)
-
-        def _prompts():
-            return im.ro_prompts(self._body_form_key(),
-                                 biconic=bool(self._biconic_var.get()))
-
-        _label_by_field = {}
-
-        def _refresh_prompts():
-            ps = _prompts()
-            labels = []
-            for p in ps:
-                lab, _conv = im.CONVENTIONS.get(p["convention"], (p["label"], None))
-                disp = f"{p['field']}  —  {lab}"
-                labels.append(disp)
-                _label_by_field[disp] = p
-            prompt_combo["values"] = labels
-            if labels:
-                prompt_var.set(labels[0]); _on_prompt()
-
-        def _on_prompt(*_):
-            p = _label_by_field.get(prompt_var.get())
-            prompt_hint.config(text=(p["label"] + f"   [{p['view']} view]") if p else "")
-        prompt_combo.bind("<<ComboboxSelected>>", _on_prompt)
-
-        def _begin_measure():
-            if state["scale"] is None:
-                status.set("Set the scale first."); return
-            p = _label_by_field.get(prompt_var.get())
-            if not p:
-                return
-            state["prompt"] = p; _clear_marks(); state["mode"] = "measure"
-            status.set(f"MEASURE: {p['label']}")
-
-        def _finish_measure():
-            p = state["prompt"]; s = state["scale"]
-            p1, p2 = (_orig(state["clicks"][0]), _orig(state["clicks"][1]))
-            click_m, span = s.measure(p1, p2)
-            m = im.Measurement(p["field"], click_m, span, scale=s,
-                               view=p["view"], convention=p["convention"])
-            _clear_marks(); state["mode"] = "idle"
-            if m.refused:
-                result_var.set("✗ " + "; ".join(m.flags) + " — nothing recorded.")
-                return
-            flag = ("  (" + "; ".join(m.flags) + ")") if m.flags else ""
-            result_var.set(f"{p['field']} = {m.value_m:.4g} m   [{m.quantum_str()}]"
-                           f"{flag}\nAccept to record, or re-measure.")
-            state["_pending"] = m
-
-            def _accept():
-                mm = state.get("_pending")
-                if mm is None:
-                    return
-                state["accepted"][mm.field] = mm.value_m
-                state["measurements"] = [x for x in state["measurements"]
-                                         if x.field != mm.field] + [mm]
-                result_var.set(f"✓ recorded {mm.field} = {mm.value_m:.4g} m")
-                state["_pending"] = None
-            acc_btn.config(command=_accept, state="normal")
-        state["_finish_measure"] = _finish_measure
-
-        mrow = ttk.Frame(panel); mrow.pack(anchor=tk.W, fill=tk.X, pady=(6, 0))
-        ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)
-        acc_btn = ttk.Button(mrow, text="Accept", state="disabled")
-        acc_btn.pack(side=tk.LEFT, padx=4)
-
-        # ── apply ─────────────────────────────────────────────────────────
-        ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8)
-        af = ttk.Frame(dlg, padding=(8, 6)); af.pack(fill=tk.X)
-
-        def _apply():
-            self._apply_image_measurements(
-                state["accepted"], state["measurements"], state["scale"])
-            dlg.destroy()
-
-        ttk.Label(af, text=im.anchor_free_note(), foreground="#888",
-                  wraplength=560, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 4))
-        ttk.Button(af, text="Apply to editor", command=_apply).pack(side=tk.LEFT)
-        ttk.Button(af, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
+        _open_image_measure_dialog(
+            self, "Measure from image — reentry object",
+            im.ro_prompts(self._body_form_key(),
+                          biconic=bool(self._biconic_var.get())),
+            self._apply_image_measurements)
 
     # ------------------------------------------------------------------
     def _current_wing_geometry(self):
