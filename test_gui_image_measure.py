@@ -248,6 +248,23 @@ def test_paste_button_and_opportunistic_dnd(root):
     d.destroy()
 
 
+def test_type_value_needs_no_image_or_scale(root, monkeypatch):
+    """The checklist never forces a click: a known dimension can be TYPED for
+    the selected prompt with no image loaded and no scale set (only Measure
+    needs those).  The value lands in accepted, recorded as hand-entered so
+    the stamp cannot claim it was measured."""
+    pytest.importorskip("PIL")
+    d = _open_measure_dialog(_editor(root))
+    import tkinter.simpledialog as sd
+    monkeypatch.setattr(sd, "askfloat", lambda *a, **k: 0.58)
+    d._im_type_value()
+    st = d._im_state
+    assert st["img"] is None and st["scale"] is None      # truly ungated
+    assert list(st["accepted"].values()) == [pytest.approx(0.58)]
+    assert getattr(st["measurements"][0], "hand_entered", False) is True
+    d.destroy()
+
+
 def test_dialog_builds_without_error(root):
     """Smoke: the Toplevel and all its widgets construct (catches layout/closure
     errors the apply-path test skips).  Pillow present → real dialog."""

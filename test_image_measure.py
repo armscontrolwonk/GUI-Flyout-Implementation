@@ -119,6 +119,21 @@ def test_provenance_stamp_is_a_dimensional_draft_with_fields_and_quantum():
     assert "claimed L=10 m" in stamp and "1 px = 1 cm" in stamp
 
 
+def test_hand_entry_is_stamped_as_entered_not_measured():
+    """Type-value path: a known dimension can be ENTERED instead of clicked.
+    The stamp lists it separately — the audit trail never claims a typed
+    number came off the image."""
+    s = _scale(note="claimed L=10 m")
+    m = im.Measurement("_len_var", *s.measure((0, 0), (200, 0)), scale=s,
+                       convention="ro_length")
+    h = im.HandEntry("_dia_var", 0.58)
+    assert h.refused is False and h.value_m == pytest.approx(0.58)
+    assert any("entered by hand" in f for f in h.flags)
+    stamp = im.provenance_stamp([m, h], s, "2026-08-01")
+    assert "entered by hand (not measured): _dia_var" in stamp
+    assert "_dia_var" not in stamp.split("entered by hand")[0]  # not in measured list
+
+
 def test_provenance_stamp_excludes_refused_measurements():
     s = _scale()
     good = im.Measurement("_dia_var", *s.measure((0, 0), (60, 0)), scale=s,

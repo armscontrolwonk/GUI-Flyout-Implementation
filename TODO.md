@@ -26,8 +26,10 @@ REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle;
 LE sweep is an angle (not two-point-measurable) — hand entry by design.
 A6: clipboard paste (⌘V, image or copied file) + drag-and-drop when the
 optional tkinterdnd2 package is present; new image now resets the scale.
-Discussed & deferred (2026-08-01): anchor-as-field (honest "declared, not
-measured" fill of the field the scale anchor IS).
+A7: "Type value…" per prompt (the promised Edit path) — known dimensions
+entered by hand, no image/scale needed, stamped separately ("entered by
+hand, not measured"); checklist populated from dialog open.  Subsumes the
+anchor-as-field idea.
 Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
 Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
