@@ -169,10 +169,21 @@ Scope and plumbing:
     dependency (JPEG/PNG).  Tested: test_image_measure.py (14),
     test_gui_image_measure.py (5).  NOT yet: canvas zoom/pan (fit-only),
     overlay toggle, the topology-declaration panel, count-replication.
-  - **A2 (next): booster editor + topology/counts.**  The "Measure from
-    image…" button in the booster editor; the declared-topology panel
-    (stages, fairing, fins+count+clocking, strap-ons+count); measure-one-
-    replicate-count; the overlay toggle.
+  - **A2 (DONE, 2026-07-30): booster editor + measure-one-declare-count.**
+    The RO dialog is extracted to a shared `_open_image_measure_dialog`
+    (prompts + apply_fn); the booster editor gets the "Measure from image…"
+    button.  KEY SIMPLIFICATION vs the original design: the editor ALREADY
+    declares topology (stage combobox, fairing/fins checkboxes+counts,
+    strap-on spinbox) and ALREADY stores count + one-geometry — so no
+    separate topology panel and no replication logic; `booster_prompts()`
+    reads the editor's declared topology, and each repeated-feature prompt
+    states the count it will be replicated to ("measure ONE … the model
+    replicates to the 4 declared fins, assumed identical").  Apply writes
+    stage/fairing/one-fin/one-strap-on geometry; the declared counts are
+    untouched.  Tests: booster_prompts unit tests + a booster apply GUI test.
+    STILL A-phase remainder: canvas zoom/pan (fit-only), overlay toggle,
+    clocking declaration in the UI (the cos45 CORE exists + is tested, but
+    no UI control feeds it yet).
 - **B — multiple named views**: side + plan with per-view scale and tagging;
   unlocks wedge/half-cone ROs.  Requires the span field (R6).
 - **C — audit polish**: opacity/drag alignment, discrepancy highlighting,

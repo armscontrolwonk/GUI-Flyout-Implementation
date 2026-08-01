@@ -90,6 +90,16 @@ CONVENTIONS = {
     "wedge_depth":  ("side-view base DEPTH (stored as ⌀ = the depth)", _identity),
     "half_cone_depth": ("side-view depth = ⌀/2 → stored ⌀ = 2×", _twice),
     "wedge_span":   ("plan-view span (tip to tip) — needs a PLAN view", _identity),
+    # booster
+    "stage_diameter": ("stage body diameter (across)", _identity),
+    "stage_length":   ("stage length (top to bottom of the stage)", _identity),
+    "fairing_diameter": ("fairing base diameter (across)", _identity),
+    "fairing_length": ("fairing length (base to nose tip)", _identity),
+    "fin_span":     ("ONE fin's exposed span (root to tip)", _identity),
+    "fin_root":     ("ONE fin's root chord (leading to trailing edge at root)", _identity),
+    "fin_tip":      ("ONE fin's tip chord", _identity),
+    "strapon_diameter": ("ONE strap-on's diameter (across)", _identity),
+    "strapon_length": ("ONE strap-on's length", _identity),
 }
 
 
@@ -187,4 +197,44 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
         p.append(dict(field="_nose_var", label="Click across the blunt NOSE TIP "
                       "(radius = half the tip width; often below the floor)",
                       view="side", convention="ro_nose_r"))
+    return p
+
+
+def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
+                    n_fins=0, n_strapons=0):
+    """Ordered prompts for the booster editor, generated from the topology the
+    editor ALREADY declares (stage count, fairing on/off, fins on/off + count,
+    strap-on count).  Repeated features (fins, strap-ons) are measured ONCE and
+    the model replicates them to the declared count — so a prompt asks for ONE
+    instance and the label states the count assumption (R1/design 'measure one,
+    declare count')."""
+    p = []
+    for i in range(1, max(1, int(n_stages)) + 1):
+        p.append(dict(field=f"stage{i}_len",
+                      label=f"Click STAGE {i} length (top to bottom)",
+                      view="side", convention="stage_length"))
+        p.append(dict(field=f"stage{i}_dia",
+                      label=f"Click STAGE {i} diameter (across)",
+                      view="side", convention="stage_diameter"))
+    if has_fairing:
+        p.append(dict(field="fairing_len", label="Click FAIRING length "
+                      "(base to nose tip)", view="side", convention="fairing_length"))
+        p.append(dict(field="fairing_dia", label="Click FAIRING base diameter",
+                      view="side", convention="fairing_diameter"))
+    if has_fins:
+        note = (f" — measure ONE; the model replicates to the {int(n_fins)} "
+                "declared fins, assumed identical") if n_fins else ""
+        p.append(dict(field="fin_span", label="Click ONE fin's exposed SPAN"
+                      + note, view="side", convention="fin_span"))
+        p.append(dict(field="fin_root", label="Click ONE fin's ROOT chord",
+                      view="side", convention="fin_root"))
+        p.append(dict(field="fin_tip", label="Click ONE fin's TIP chord",
+                      view="side", convention="fin_tip"))
+    if int(n_strapons) > 0:
+        note = (f" — measure ONE; replicated to the {int(n_strapons)} declared "
+                "strap-ons, assumed identical")
+        p.append(dict(field="strapon_dia", label="Click ONE strap-on's DIAMETER"
+                      + note, view="side", convention="strapon_diameter"))
+        p.append(dict(field="strapon_len", label="Click ONE strap-on's LENGTH",
+                      view="side", convention="strapon_length"))
     return p

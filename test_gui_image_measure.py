@@ -99,6 +99,32 @@ def test_apply_with_nothing_accepted_is_a_noop(root):
     assert dlg._notes_text.get("1.0", "end-1c") == before_notes
 
 
+def test_booster_button_and_apply(root):
+    """A2: the booster editor gets the same tool.  Its apply writes stage,
+    fairing, one-fin and one-strap-on GEOMETRY into the existing fields while
+    leaving the declared COUNTS untouched (measure-one-declare-count — the
+    model replicates)."""
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    assert any("Measure from image" in b.cget("text")
+               for b in _all(d) if isinstance(b, tk.ttk.Button))
+    d._n_stages_var.set("2"); d._update_stage_frames()
+    d._shroud_var.set(True); d._update_shroud_state()
+    d._fins_var.set(True); d._update_fins_state(); d._fin_n_var.set("4")
+    d._n_boosters_var.set("4")
+    s = im.Scale((0, 0), (1000, 0), 10.0, anchor_note="L=10 m")
+    acc = {"stage1_len": 9.0, "stage2_dia": 0.88, "fairing_len": 2.6,
+           "fin_span": 0.5, "strapon_dia": 1.2}
+    d._apply_image_measurements(acc, [], s)
+    assert float(d._stage_frames[0]._length.get()) == pytest.approx(9.0)
+    assert float(d._stage_frames[1]._dia.get()) == pytest.approx(0.88)
+    assert float(d._shroud_length_var.get()) == pytest.approx(2.6)
+    assert float(d._fin_span_var.get()) == pytest.approx(0.5)
+    assert float(d._b_diam_var.get()) == pytest.approx(1.2)
+    assert d._fin_n_var.get() == "4"          # declared count untouched
+    d.destroy()
+
+
 def test_dialog_builds_without_error(root):
     """Smoke: the Toplevel and all its widgets construct (catches layout/closure
     errors the apply-path test skips).  Pillow present → real dialog."""
