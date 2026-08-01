@@ -170,6 +170,35 @@ def closure_note(c):
             f"{c['total_m']:.4g} m ({c['rel']:+.1%})")
 
 
+# ── Cross-view consistency (Phase B multi-view) ─────────────────────────────
+# The overall length appears in BOTH the side and plan views, so measuring it
+# twice audits the two views' independent scale anchors for free: if they
+# disagree, one anchor is wrong — and the span (which only the plan view can
+# give) would inherit that error.  Check-only, like the closure total: the
+# plan-view length is never stored.
+PLAN_LEN_CHECK_FIELD = "plan_len_check"
+
+
+def view_consistency(accepted):
+    """Compare the stored (side-view) length with the plan-view check
+    measurement.  None until both exist; then the signed disagreement,
+    relative to the side view."""
+    a = accepted or {}
+    side = a.get("_len_var")
+    plan = a.get(PLAN_LEN_CHECK_FIELD)
+    if not side or not plan or float(side) <= 0.0:
+        return None
+    return dict(side_m=float(side), plan_m=float(plan),
+                rel=(float(plan) - float(side)) / float(side))
+
+
+def view_consistency_note(vc):
+    if vc is None:
+        return ""
+    return (f"view cross-check: length side {vc['side_m']:.4g} m vs plan "
+            f"{vc['plan_m']:.4g} m ({vc['rel']:+.1%})")
+
+
 class Measurement:
     """One proposed field value with its full provenance and flags.  Immutable
     record; the caller reads .value_m and .flags to present Accept/Edit/Skip."""
@@ -249,6 +278,10 @@ def provenance_stamp(measurements, scale, date_str, view_note=""):
             ", ".join(measured) or "(none)"]
     if entered:
         bits.append("entered by hand (not measured): " + ", ".join(entered))
+    views = sorted({getattr(m, "view", "side") for m in accepted
+                    if not getattr(m, "hand_entered", False)})
+    if len(views) > 1:
+        bits.append("views: " + "+".join(views))
     bits += [(scale.anchor_note or "scale set"), scale.quantum_str()]
     if view_note:
         bits.append(view_note)
@@ -274,6 +307,12 @@ def ro_prompts(body_form="axisymmetric", biconic=False, winged=False):
         p.append(dict(field="_body_span_var", label="Click the PLAN-view SPAN "
                       "(tip to tip) — requires a top/plan view", view="plan",
                       convention="wedge_span"))
+        # Cross-view audit: length in the plan view too (check-only, never
+        # stored) — if the two views' scales disagree on it, one anchor is
+        # wrong and the span would inherit the error.
+        p.append(dict(field=PLAN_LEN_CHECK_FIELD, label="Click the LENGTH in "
+                      "the PLAN view — cross-checks the two views' scales; "
+                      "not stored", view="plan", convention="ro_length"))
     elif body_form == "half_cone":
         p.append(dict(field="_len_var", label="Click the two ends of the LENGTH",
                       view="side", convention="ro_length"))

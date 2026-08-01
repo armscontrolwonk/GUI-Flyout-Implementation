@@ -7,7 +7,7 @@ invent.
 
 ## New — not yet planned
 
-### 1. Image dimensioning tool — Phase A1–A4 SHIPPED (A3/A4 2026-08-01)
+### 1. Image dimensioning tool — Phases A (complete) + B SHIPPED (2026-08-01)
 Working "Measure from image…" on BOTH editors (shared dialog).  RO: load →
 scale+provenance → prompts from the FULL declared topology (body form +
 biconic checkbox → fore-cone length/break ⌀ + Maneuvering → wing planform,
@@ -22,16 +22,22 @@ image_measure.py (tested); Pillow dependency.
 A5: length-closure warning (stages+fairing vs overall length — check-only
 prompt or anchor-declared total; warn-only, never normalizes) + WebP/TIFF in
 the load filter.
-REMAINING before B: canvas zoom/pan (fit-only today) and the overlay toggle;
-LE sweep is an angle (not two-point-measurable) — hand entry by design.
+A8: zoom/pan (wheel about cursor, right-drag pan, Fit; clicks stored in
+original-image px so zoom never touches a measurement) + overlay toggle
+(accepted measurements drawn on their view — audit of what was clicked).
+Phase B: named Side/Plan views, per-view image + scale, hard view gating
+for plan-only dimensions (wedge span), live cross-view length check
+(check-only), view-tagged stamp.  LE sweep is an angle (not two-point-
+measurable) — hand entry by design.
 A6: clipboard paste (⌘V, image or copied file) + drag-and-drop when the
 optional tkinterdnd2 package is present; new image now resets the scale.
 A7: "Type value…" per prompt (the promised Edit path) — known dimensions
 entered by hand, no image/scale needed, stamped separately ("entered by
 hand, not measured"); checklist populated from dialog open.  Subsumes the
 anchor-as-field idea.
-Phase B multi-view (wedge/half-cone plan span) unblocked (body_span_m).
-Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
+REMAINING: Phase C audit polish only (schematic-at-scale overlay with
+alignment UX, discrepancy highlighting, hatched stylization, old-vs-new
+delta view).  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
 
 ### 1b. Image tool — original scoping pointer

@@ -156,6 +156,41 @@ def test_provenance_stamp_excludes_refused_measurements():
     assert "_dia_var" in stamp and "_nose_var" not in stamp   # refused omitted
 
 
+# ── Phase B: cross-view consistency (two views, two scales, one truth) ─────
+def test_view_consistency_needs_both_lengths():
+    assert im.view_consistency({}) is None
+    assert im.view_consistency({"_len_var": 3.0}) is None
+    assert im.view_consistency({im.PLAN_LEN_CHECK_FIELD: 3.0}) is None
+
+
+def test_view_consistency_reports_scale_disagreement():
+    vc = im.view_consistency({"_len_var": 3.0, im.PLAN_LEN_CHECK_FIELD: 3.3})
+    assert vc["rel"] == pytest.approx(0.10)
+    note = im.view_consistency_note(vc)
+    assert "3" in note and "+10" in note
+
+
+def test_wedge_prompts_include_the_plan_length_check():
+    """The plan-view length is check-only (never stored) — it exists to audit
+    the two views' independent scale anchors against each other."""
+    wed = im.ro_prompts("wedge")
+    chk = next(p for p in wed if p["field"] == im.PLAN_LEN_CHECK_FIELD)
+    assert chk["view"] == "plan"
+    assert chk["convention"] == "ro_length"
+
+
+def test_stamp_notes_multiple_views():
+    s = _scale()
+    m1 = im.Measurement("_len_var", *s.measure((0, 0), (200, 0)), scale=s,
+                        convention="ro_length", view="side")
+    m2 = im.Measurement("_body_span_var", *s.measure((0, 0), (90, 0)), scale=s,
+                        convention="wedge_span", view="plan")
+    stamp = im.provenance_stamp([m1, m2], s, "2026-08-01")
+    assert "views: plan+side" in stamp
+    single = im.provenance_stamp([m1], s, "2026-08-01")
+    assert "views:" not in single
+
+
 # ── the prompt checklist by body form (R5 embedding) ────────────────────────
 def test_ro_prompts_by_body_form():
     ax = im.ro_prompts("axisymmetric")
