@@ -2472,7 +2472,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
         from tkinter import filedialog
         path = filedialog.askopenfilename(
             parent=dlg, title="Load vehicle image",
-            filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"),
+            filetypes=[("Images",
+                        "*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff"),
                        ("All files", "*.*")])
         if not path:
             return
