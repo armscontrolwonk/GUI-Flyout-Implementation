@@ -73,14 +73,26 @@ def test_round_trip_default_and_normalisation():
                              body_form="waverider")).body_form == "axisymmetric"
 
 
-# ── the hard guarantee: body_form is not physics ────────────────────────────
-def test_polar_is_byte_identical_across_forms():
-    polars = [_aero_polar(_ro(body_form=f)) for f in BODY_FORMS]
-    base = polars[0]
-    for p in polars[1:]:
-        assert (p.C_D0, p.k, p.A_ref, p.C_L_star, p.C_L_max, p.e_pull) == \
-            (base.C_D0, base.k, base.A_ref, base.C_L_star, base.C_L_max,
-             base.e_pull)
+# ── the amended guarantee (Phase 3): cruise polar is form-blind; the pull
+# ceiling is geometry ────────────────────────────────────────────────────────
+def test_cruise_polar_is_form_identical_but_ceiling_is_geometry():
+    """Phase 1 promised body_form was not physics; Phase 3 amends that
+    DELIBERATELY and narrowly: the CRUISE polar (C_D0, k, A_ref, C_L*,
+    e_pull, C_L0) still depends only on β / L-D — identical across forms
+    when no estimator trim row is stored — but C_L_max is now SHAPE-DERIVED
+    for a lifting form with sufficient geometry.  The half-cone derives from
+    ⌀ + length alone; the wedge needs its span and keeps the body ceiling
+    without it (flagged elsewhere, never invented)."""
+    polars = {f: _aero_polar(_ro(body_form=f)) for f in BODY_FORMS}
+    base = polars["axisymmetric"]
+    for f, p in polars.items():
+        assert (p.C_D0, p.k, p.A_ref, p.C_L_star, p.e_pull, p.C_L0) == \
+            (base.C_D0, base.k, base.A_ref, base.C_L_star, base.e_pull,
+             base.C_L0), f
+    # C-HGB stores no body span → the wedge cannot state a planform: ceiling
+    # unchanged.  The half-cone CAN derive from ⌀/L: ceiling is its own.
+    assert polars["wedge"].C_L_max == base.C_L_max
+    assert polars["half_cone"].C_L_max != base.C_L_max
 
 
 # ── the silhouette is the stored geometry, asymmetric ───────────────────────

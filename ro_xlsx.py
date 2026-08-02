@@ -101,6 +101,9 @@ _R: dict[str, int] = {
     'wing_root':  62,
     'wing_span':  63,
     'wing_sweep': 64,
+    # trim row from the lifting-body estimator (sweep-native coefficients)
+    'trim_alpha': 65,
+    'trim_cl0':   66,
 }
 
 _VAL_COL = 4   # column D
@@ -271,6 +274,13 @@ def _build_ro_sheet(ws, ro) -> None:
     put('wing_root',  getattr(ro, 'wing_root_chord_m', 0.0))
     put('wing_span',  getattr(ro, 'wing_span_exposed_m', 0.0))
     put('wing_sweep', getattr(ro, 'wing_sweep_deg', 0.0))
+    # Estimator trim row (Phase 3: offset polar + windward-α guard).
+    _label(ws, _R['trim_alpha'], 'Trim α* (estimator)', '°',
+           'from the α-sweep; 0 = absent')
+    _label(ws, _R['trim_cl0'], 'Camber offset C_L0', '',
+           'sweep-native coefficients; 0 = symmetric polar')
+    put('trim_alpha', getattr(ro, 'trim_alpha_deg', 0.0))
+    put('trim_cl0',   getattr(ro, 'trim_CL0', 0.0))
 
 
 def _build_ro_reference_sheet(ws) -> None:
@@ -361,6 +371,8 @@ def import_ro_xlsx(path: str):
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),
         wing_span_exposed_m=_rnum(ws, _R['wing_span'], _VAL_COL),
         wing_sweep_deg=_rnum(ws, _R['wing_sweep'], _VAL_COL),
+        trim_alpha_deg=_rnum(ws, _R['trim_alpha'], _VAL_COL),
+        trim_CL0=_rnum(ws, _R['trim_cl0'], _VAL_COL),
         separation_mode=_norm_sep_mode(_rstr(ws, _R['sep'], _VAL_COL, 'separating_ro')),
         glider_enabled=_rbool(ws, _R['g_on'], _VAL_COL),
         glider_LD=_rnum(ws, _R['g_ld'], _VAL_COL),

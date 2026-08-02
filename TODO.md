@@ -95,17 +95,23 @@ vs 28% more/less swept at test geometry).  GUI: wedge LE-radius row
 (pre-filled from nose radius), half-cone composites the declared wing
 planform.  BOR dialog stays zero-AoA until a consumer needs the sweep.
 
-## Phase 3 — polar upgrades for lifting forms (parked; only part that
-## touches trajectory physics, gated to lifting forms only)
-- Shape-derived C_L,max replacing the universal 0.873 body ceiling.
-- Offset polar C_D = C_D,min + k·(C_L − C_L0)² (camber offset; measured
-  support in Fetterman TN D-2942 fig. 6b).
-- Store α*/C_L0 on the RO (2c displays them; storage deferred until this
-  consumer exists).
-- Wedge planform-span field: DONE (body_span_m, 2026-07-30) — separate
-  from the wing planform, wing_geometry-blind (phantom-wing guard tested);
-  schematic flag retires when set; estimator pre-fills/persists it.  This
-  also satisfies the image tool's R6 dependency (Phase B unblocked).
+## Phase 3 — polar upgrades for lifting forms: DONE (2026-08-01)
+The one phase that touches trajectory physics, gated to lifting forms
+(axisymmetric byte-identity pinned by test; details in METHODS §8.8):
+- Shape-derived C_L,max: Newtonian pressure C_L at the 25° cap from stored
+  geometry (wedge needs body_span_m, else keeps 0.873 flagged; half-cone
+  from ⌀/L + declared wings).  Force-level conversion makes the pull limit
+  invariant to the A_ref convention (closes old limitation 3 too).
+- Offset polar C_D = C_D0 + k·[(C_L−C_L0)²−C_L0²]: C_D(0)=C_D0 exactly (β
+  keeps its zero-lift meaning), k back-solved on the offset parabola so
+  (L/D)max stays exactly glider_LD; inconsistent C_L0 (> LD·C_D0/2) falls
+  back to symmetric.  Anchored to Fetterman fig. 6b's negative-α C_N zero.
+- trim_alpha_deg/trim_CL0 stored on the RO (sweep-native; "Use β and L/D"
+  writes them; zeroed on save for bodies of revolution; json+xlsx
+  round-trip).  α* now pre-fills the windward-heating operating AoA when no
+  static-margin trim exists — the Candler attitude/L-D consistency guard
+  (heating follow-up 2 CLOSED).
+- Wedge planform-span field: DONE earlier (body_span_m, 2026-07-30).
 
 ## Parked earlier in the project (context in METHODS / chat)
 - Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).

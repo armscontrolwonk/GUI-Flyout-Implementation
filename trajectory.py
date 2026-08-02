@@ -79,7 +79,8 @@ from booster_models import (
     BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_ro, booster_separation_time,
-    wing_geometry,
+    wing_geometry, wedge_planform_area,
+    _wedge_coeffs, _half_cone_coeffs, NEWTON_K_SLENDER,
     SHROUD_Q_FAIRING,
 )
 
@@ -570,7 +571,12 @@ def _yaw_program(t, launch_az_rad, active_stage, yaw_maneuvers):
 # The polar as a named record — richer than the old (C_D0, k, A_ref) tuple so
 # the wing-decoupled ceiling (C_L_max) and pull-efficiency (e_pull) travel with
 # it.  All call sites take the record and read attributes.
-_Polar = _namedtuple('_Polar', 'C_D0 k A_ref C_L_star C_L_max e_pull')
+_Polar = _namedtuple('_Polar', 'C_D0 k A_ref C_L_star C_L_max e_pull C_L0')
+# C_L0 (Phase 3, lifting forms only): the camber offset — the C_L at minimum
+# drag, in POLAR coefficients (converted from the estimator's sweep-native
+# value).  Default 0 = the symmetric polar, byte-identical for every existing
+# vehicle.
+_Polar.__new__.__defaults__ = (0.0,)
 
 # Bare-body maximum usable C_L: Munk C_L = 2α evaluated at |α| ≲ 25° — the
 # un-physical hardcoded ceiling the wing decoupling replaces when wings exist.
@@ -599,18 +605,32 @@ _WING_E_PULL_CAP = 3.0   # bound the induced-drag softening.
 def _polar_cd(C_L: float, pol: '_Polar') -> float:
     """Drag coefficient at lift C_L on the (possibly wing-decoupled) polar.
 
-    Cruise side (C_L ≤ C_L*): the standard C_D = C_D0 + k·C_L² — untouched, so
-    a winged vehicle's cruise L/D is EXACTLY its glider_LD (no double-count).
+    Cruise side (C_L ≤ C_L*): the OFFSET polar
+        C_D = C_D0 + k·[(C_L − C_L0)² − C_L0²]
+    (Lobanovskii's asymmetric-body trinomial; Fetterman Fig. 6b measured).
+    Anchored so C_D(0) = C_D0 EXACTLY — β keeps its zero-lift meaning — and
+    minimum drag sits at C_L0, nonzero for a cambered body.  C_L0 = 0 (every
+    body of revolution, and any lifting form without an estimator trim row)
+    reduces to the symmetric C_D0 + k·C_L², byte-identical.  Commanded lift
+    is taken in the camber-favored direction (|C_L|), the screening reading
+    of a trimmed glide.
+
     Pull side (C_L > C_L*): the induced-drag rise above the bucket is softened
-    by e_pull (≥ 1, from aspect ratio) — a higher-AR wing has a flatter L/D
-    curve.  e_pull = 1 (no wings, or wings without a declared AR) reproduces the
-    single-k polar exactly, so this is byte-identical off the wing path.
+    by e_pull (≥ 1, from aspect ratio) — the same offset parabola about C_L0
+    with k/e_pull curvature.  e_pull = 1 reproduces the single-k polar
+    exactly, so this is byte-identical off the wing path.
     """
     cl = min(abs(float(C_L)), pol.C_L_max)
+    cl0 = getattr(pol, 'C_L0', 0.0)
+
+    def _base(c):
+        return pol.C_D0 + pol.k * ((c - cl0) * (c - cl0) - cl0 * cl0)
+
     if cl <= pol.C_L_star or pol.e_pull <= 1.0:
-        return pol.C_D0 + pol.k * cl * cl
-    cd_star = pol.C_D0 + pol.k * pol.C_L_star * pol.C_L_star
-    return cd_star + (pol.k / pol.e_pull) * (cl * cl - pol.C_L_star * pol.C_L_star)
+        return _base(cl)
+    return _base(pol.C_L_star) + (pol.k / pol.e_pull) * (
+        (cl - cl0) * (cl - cl0)
+        - (pol.C_L_star - cl0) * (pol.C_L_star - cl0))
 
 
 def _aero_polar(ro, ld_override: float = None) -> '_Polar':
@@ -656,10 +676,47 @@ def _aero_polar(ro, ld_override: float = None) -> '_Polar':
         C_D0 = m / (bet * A_ref)               # β at zero lift
     else:
         C_D0 = 0.08                             # generic HGV C_D0
-    k = 1.0 / (4.0 * C_D0 * LD * LD) if LD > 0.0 else 0.5
+
+    form = str(getattr(ro, 'body_form', '') or 'axisymmetric')
+    L_body = float(getattr(ro, 'length_m', 0.0) or 0.0)
+    b_span = float(getattr(ro, 'body_span_m', 0.0) or 0.0)
+
+    # ---- camber offset (Phase 3, lifting forms with an estimator trim row) --
+    # trim_CL0 is stored SWEEP-native (the estimator's A_ref: planform for a
+    # wedge, base area otherwise); lift force is invariant, so the polar's
+    # value is scaled by A_sweep/A_ref.  A wedge without its span cannot state
+    # A_sweep — offset off, matching the schematic's span-not-modeled flag.
+    cl0 = 0.0
+    trim_cl0 = float(getattr(ro, 'trim_CL0', 0.0) or 0.0)
+    if trim_cl0 != 0.0 and form in ('wedge', 'half_cone'):
+        if form == 'wedge':
+            a_sweep = (wedge_planform_area(L_body, b_span)
+                       if (L_body > 0.0 and b_span > 0.0) else 0.0)
+        else:
+            a_sweep = A_ref                     # half-cone: full-circle base
+        if a_sweep > 0.0:
+            cl0 = trim_cl0 * a_sweep / A_ref
+
+    # k back-solved so the polar's (L/D)max is EXACTLY glider_LD on the
+    # OFFSET parabola (C_L* = √(C_D0/k) is unchanged by the offset; the
+    # optimum satisfies u = √(C_D0·k):  2·LD·C_L0·u² − 2·LD·C_D0·u + C_D0 = 0,
+    # minus root → the symmetric 1/(4·C_D0·LD²) as C_L0 → 0).  A C_L0 too
+    # large for the discriminant (C_L0 > LD·C_D0/2) is inconsistent with the
+    # stated L/D — fall back to the symmetric polar rather than invent.
+    if LD > 0.0:
+        disc = LD * LD * C_D0 * C_D0 - 2.0 * LD * cl0 * C_D0
+        if cl0 != 0.0 and disc > 0.0:
+            u = (LD * C_D0 - float(np.sqrt(disc))) / (2.0 * LD * cl0)
+            k = u * u / C_D0
+        else:
+            cl0 = 0.0
+            k = 1.0 / (4.0 * C_D0 * LD * LD)
+    else:
+        cl0 = 0.0
+        k = 0.5
     k = max(min(k, 5.0), 0.05)
-    C_D0 = max(min(C_D0, 1.0), 0.005)
-    C_L_star = float(np.sqrt(C_D0 / k))
+    C_D0 = max(min(C_D0, 1.0), 0.005)          # clamp AFTER the back-solve,
+    C_L_star = float(np.sqrt(C_D0 / k))        # matching the original order
 
     # ---- wing decoupling (default off: byte-identical to the old polar) -----
     # Wings broaden the pull-side bucket only (e_pull); the ceiling stays the
@@ -673,10 +730,38 @@ def _aero_polar(ro, ld_override: float = None) -> '_Polar':
         AR = _AR_eff or WING_DEFAULT_AR
         e_pull = 1.0 + WING_PULL_GAIN * lam * AR / (AR + WING_PULL_AR0)
         e_pull = min(e_pull, _WING_E_PULL_CAP)
-    # Ceiling: universal max-AoA limit, floored above the cruise trim so a
-    # pull always has margin.
-    C_L_max = max(_C_L_MAX_BODY, 1.05 * C_L_star)
-    return _Polar(C_D0, k, A_ref, C_L_star, C_L_max, e_pull)
+    # ---- ceiling (Phase 3): shape-derived for lifting forms ------------------
+    # The universal 0.873 is Munk's slender-BODY-OF-REVOLUTION C_L = 2α at the
+    # 25° AoA cap — badly conservative for a flat-bottomed wedge (several
+    # times the usable lift) and honest in neither direction for a half-cone.
+    # For lifting forms with sufficient stored geometry, evaluate the Newtonian
+    # pressure C_L at the SAME 25° cap (Cf/base drag do not move C_L) and
+    # convert to polar coefficients (× A_sweep/A_ref).  Missing geometry
+    # (a wedge without its span) keeps the body ceiling — flagged elsewhere,
+    # never invented.  Axisymmetric vehicles are byte-identical.
+    C_L_max = _C_L_MAX_BODY
+    _cap_deg = 25.0
+    if form == 'wedge' and L_body > 0.0 and b_span > 0.0:
+        s_plan = wedge_planform_area(L_body, b_span)
+        c = _wedge_coeffs(L_body, d, b_span, _cap_deg, NEWTON_K_SLENDER,
+                          0.0, False, 10.0, s_plan)
+        C_L_max = max(c['C_L'] * s_plan / A_ref, 1e-6)
+    elif form == 'half_cone' and L_body > 0.0 and d > 0.0:
+        th_deg = float(np.degrees(np.arctan2(d / 2.0, L_body)))
+        # Wing composite: the same exposed planform the estimator uses.
+        wr = 0.0
+        c_r = float(getattr(ro, 'wing_root_chord_m', 0.0) or 0.0)
+        s_e = float(getattr(ro, 'wing_span_exposed_m', 0.0) or 0.0)
+        if c_r > 0.0 and s_e > 0.0:
+            sw = np.radians(float(getattr(ro, 'wing_sweep_deg', 0.0) or 0.0))
+            c_t = max(0.0, c_r - s_e * float(np.tan(sw)))
+            wr = (c_r + c_t) * s_e / A_ref
+        c = _half_cone_coeffs(th_deg, _cap_deg, NEWTON_K_SLENDER,
+                              0.0, False, 10.0, wing_ratio=wr)
+        C_L_max = max(c['C_L'], 1e-6)          # base-referenced = A_ref
+    # Floored above the cruise trim so a pull always has margin.
+    C_L_max = max(C_L_max, 1.05 * C_L_star)
+    return _Polar(C_D0, k, A_ref, C_L_star, C_L_max, e_pull, cl0)
 
 
 # ---------------------------------------------------------------------------
@@ -3149,10 +3234,16 @@ def integrate_trajectory(params: BoosterParams,
                     _delta_deg = (float(np.degrees(np.arctan((_diam / 2.0) / _L_fore)))
                                   if _L_fore > 0.0 else 8.0)
                     # Operating glide AoA: the trimmed AoA already found by the
-                    # static-margin gate (non-sep body); a separating RV has no
-                    # trimmable geometry -> None -> windward reported band-only.
+                    # static-margin gate (non-sep body); else the ESTIMATOR'S
+                    # stored trim α* (Phase 3 — the Candler consistency guard:
+                    # the attitude the heating is evaluated at comes from the
+                    # same sweep as the L/D, so they can never contradict);
+                    # else None -> windward reported band-only.
                     _alpha_op = (_reentry_trim.get('alpha_glide_deg')
                                  if _reentry_trim else None)
+                    if _alpha_op is None:
+                        _ta = float(getattr(_ero_ms, 'trim_alpha_deg', 0.0) or 0.0)
+                        _alpha_op = _ta if _ta > 0.0 else None
                     # Glide sub-arc: exclude the commanded terminal dive.
                     _term_alt = (float(getattr(_ero_ms, 'glider_terminal_alt_km', 0.0) or 0.0) * 1000.0
                                  if getattr(_ero_ms, 'glider_terminal_dive', False) else 0.0)

@@ -407,6 +407,15 @@ class ROParams:
     wing_root_chord_m:      float = 0.0   # root chord along the body flank (m)
     wing_span_exposed_m:    float = 0.0   # per-side exposed span from the surface (m)
     wing_sweep_deg:         float = 0.0   # leading-edge sweep (0 = tip at TE height)
+    # Trim row from the lifting-body α-sweep estimator (Phase 3 consumers:
+    # the offset polar and the windward-α consistency guard).  SWEEP-native
+    # coefficients — referenced to the estimator's stated A_ref (planform for
+    # a wedge, base area otherwise); the polar converts.  0 = absent → the
+    # symmetric polar, byte-identical.  Written by "Use β and L/D" (lifting
+    # forms only; zeroed on save for a body of revolution — a stale offset
+    # from a former form would silently skew the polar).
+    trim_alpha_deg:         float = 0.0   # α* of (L/D)max
+    trim_CL0:               float = 0.0   # camber offset: C_L at minimum drag
     # Default reentry mode for a freshly-built maneuvering object is a CORE
     # glide law (the smooth numerical equilibrium glide), not the legacy
     # analytic Tracy `equilibrium_glide`.  Legacy .json files that omit the key
@@ -676,6 +685,8 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'wing_root_chord_m':     ro.wing_root_chord_m,
         'wing_span_exposed_m':   ro.wing_span_exposed_m,
         'wing_sweep_deg':        ro.wing_sweep_deg,
+        'trim_alpha_deg':        ro.trim_alpha_deg,
+        'trim_CL0':              ro.trim_CL0,
         'glider_guidance':       ro.glider_guidance,
         'glider_pullup_g_max':   ro.glider_pullup_g_max,
         'glider_terminal_dive':  ro.glider_terminal_dive,
@@ -742,6 +753,8 @@ def ro_from_dict(d: dict) -> ROParams:
         wing_root_chord_m=float(d.get('wing_root_chord_m', 0.0) or 0.0),
         wing_span_exposed_m=float(d.get('wing_span_exposed_m', 0.0) or 0.0),
         wing_sweep_deg=float(d.get('wing_sweep_deg', 0.0) or 0.0),
+        trim_alpha_deg=float(d.get('trim_alpha_deg', 0.0) or 0.0),
+        trim_CL0=float(d.get('trim_CL0', 0.0) or 0.0),
         glider_guidance=_g,
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),

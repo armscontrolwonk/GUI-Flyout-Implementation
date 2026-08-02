@@ -265,11 +265,18 @@ Documented over-prediction (honesty, not an anchor to hit):
   revolution keep the zero-AoA cone/biconic dialog unchanged.  Covered by
   `test_gui_beta_lifting.py` (routing, write-back, required-span refusal).
 
-## 7. Phase-3 hooks (explicitly out of Phase-2 scope)
+## 7. Phase 3 — DONE (2026-08-01; details in METHODS §8.8, tests in
+## test_phase3_polar.py)
 
-- Shape-derived C_L,max replacing the universal 0.873 body ceiling — for
-  lifting forms only; every axisymmetric vehicle stays byte-identical.
-- Offset polar `C_D = C_D,min + k·(C_L − C_L0)²` for asymmetric forms.
+- Shape-derived C_L,max: SHIPPED (Newtonian pressure at the 25° cap from
+  stored geometry; wedge gated on body_span_m; force-level A_sweep/A_ref
+  conversion makes the pull limit convention-invariant).  Axisymmetric
+  vehicles byte-identical, pinned by test.
+- Offset polar: SHIPPED (`C_D = C_D0 + k·[(C_L−C_L0)²−C_L0²]`; C_D(0)=C_D0
+  exactly; k back-solved on the offset parabola so (L/D)max ≡ glider_LD;
+  discriminant fallback to symmetric).  trim_alpha_deg/trim_CL0 stored on
+  the RO by "Use β and L/D" (sweep-native; zeroed for bodies of revolution);
+  α* pre-fills the windward-heating AoA (the Candler consistency guard).
 - Wedge span field: DONE (2026-07-30, body_span_m — a SEPARATE field from
   wing_span_exposed_m; wing_geometry() is blind to it, guarded by test).
   The schematic flag retires when it is set; the estimator pre-fills from
