@@ -385,6 +385,36 @@ class HandEntry:
         self.flags = ["entered by hand — not measured from the image"]
 
 
+# ── R8: the mixed-provenance delta view ─────────────────────────────────────
+# Apply must NEVER silently overwrite: before anything is written, the user
+# sees field → current editor value → proposed value → Δ%.  A large delta is
+# a FINDING (a hand-entered number contradicted by the image, or vice versa),
+# surfaced rather than silently resolved either way.
+DELTA_WARN_REL = 0.05            # highlight |Δ| beyond ±5%
+
+
+def apply_deltas(accepted, current):
+    """Rows for the apply-preview table.  `accepted` is {field: proposed};
+    `current` maps each WRITABLE field to its present editor value (None when
+    blank/unparseable).  Fields absent from `current` — the check-only
+    cross-checks (overall length, plan length, flank angles) — are excluded:
+    they are never written.  Rows sort biggest |Δ| first (findings on top),
+    fields with no prior value ("new") last."""
+    rows = []
+    for f, new in (accepted or {}).items():
+        if f not in current:
+            continue
+        old = current[f]
+        rel = None
+        if old is not None and float(old) != 0.0:
+            rel = (float(new) - float(old)) / float(old)
+        rows.append(dict(field=f, old=(None if old is None else float(old)),
+                         new=float(new), rel=rel))
+    return sorted(rows, key=lambda r: (r["rel"] is None,
+                                       -(abs(r["rel"]) if r["rel"] is not None
+                                         else 0.0)))
+
+
 # Anchor-free quantities (R2): what survives a WRONG scale anchor.  Absolute
 # lengths inherit the anchor's error 1:1; ratios and angles cancel it.
 ANCHOR_FREE = (

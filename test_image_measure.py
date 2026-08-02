@@ -417,3 +417,28 @@ def test_stamp_ignores_the_angle_pseudo_view():
     stamp = im.provenance_stamp([m, a], s, "2026-08-01")
     assert "views:" not in stamp          # side + angle ≠ two real views
     assert "_wing_sweep_var" in stamp
+
+
+# ── R8: the apply delta view (never silently overwrite) ─────────────────────
+def test_apply_deltas_orders_findings_first_and_excludes_checks():
+    """Biggest |Δ| first (findings on top), fields with no prior value last,
+    and check-only fields (absent from `current`) never appear — they are
+    never written."""
+    accepted = {"_len_var": 3.3, "_dia_var": 0.58, "_nose_var": 0.02,
+                im.OVERALL_LEN_CHECK_FIELD: 10.2}
+    current = {"_len_var": 3.0, "_dia_var": 0.575, "_nose_var": None}
+    rows = im.apply_deltas(accepted, current)
+    assert [r["field"] for r in rows] == ["_len_var", "_dia_var", "_nose_var"]
+    assert rows[0]["rel"] == pytest.approx(0.10)
+    assert rows[1]["rel"] == pytest.approx(0.58 / 0.575 - 1.0)
+    assert rows[2]["rel"] is None                 # blank field → "new"
+    assert all(r["field"] != im.OVERALL_LEN_CHECK_FIELD for r in rows)
+
+
+def test_apply_deltas_zero_current_counts_as_new():
+    rows = im.apply_deltas({"_body_span_var": 1.4}, {"_body_span_var": 0.0})
+    assert rows[0]["rel"] is None                 # 0 = unset, not a baseline
+
+
+def test_delta_warn_threshold_is_five_percent():
+    assert im.DELTA_WARN_REL == pytest.approx(0.05)

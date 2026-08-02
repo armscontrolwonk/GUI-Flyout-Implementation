@@ -457,3 +457,44 @@ def test_angle_check_line_flags_disagreement(root, tmp_path):
                 pass
     assert any("DISAGREES" in t for t in var_texts + texts)
     d.destroy()
+
+
+def test_apply_shows_delta_preview_and_writes_only_on_confirm(root):
+    """R8 end-to-end: Apply opens the old-vs-new preview instead of writing;
+    Back leaves every field untouched; Write commits.  The check-only total
+    is counted as audit-only, never listed as a write."""
+    pytest.importorskip("PIL")
+    dlg = _editor(root)
+    dlg._len_var.set("3.0")
+    d = _open_measure_dialog(dlg)
+    d._im_state["accepted"] = {"_len_var": 3.3}
+    apply_btn = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+                 and "Apply to editor" in b.cget("text")][0]
+
+    opened = []
+    orig = tk.Toplevel
+    tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
+    try:
+        apply_btn.invoke()
+    finally:
+        tk.Toplevel = orig
+    pv = opened[-1]
+    assert "Apply preview" in pv.title()
+    assert dlg._len_var.get() == "3.0"            # nothing written yet
+    texts = [str(w.cget("text")) for w in _all(pv)
+             if isinstance(w, tk.ttk.Label)]
+    assert any("+10.0%" in t for t in texts)      # the delta is shown
+    # Back: no write
+    [b for b in _all(pv) if isinstance(b, tk.ttk.Button)
+     and b.cget("text") == "Back"][0].invoke()
+    assert dlg._len_var.get() == "3.0"
+    # Apply again and confirm: written
+    tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
+    try:
+        apply_btn.invoke()
+    finally:
+        tk.Toplevel = orig
+    pv2 = opened[-1]
+    [b for b in _all(pv2) if isinstance(b, tk.ttk.Button)
+     and "Write" in b.cget("text")][0].invoke()
+    assert float(dlg._len_var.get()) == pytest.approx(3.3)

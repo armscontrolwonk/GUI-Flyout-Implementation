@@ -1941,16 +1941,21 @@ class BoosterDialog(tk.Toplevel):
             + im.booster_angle_prompts(has_fins=bool(self._fins_var.get()))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
-            self._apply_image_measurements)
+            self._apply_image_measurements,
+            current_fn=self._current_image_values)
 
-    def _apply_image_measurements(self, accepted, measurements, scale):
-        """Write accepted booster measurements into the editor's fields.  The
-        image tool measures ONE of a repeated feature (a fin, a strap-on); the
-        model already stores count + one geometry, so the declared count is
-        untouched and the single geometry is filled — measure-one-declare-count
-        (design).  No booster notes field, so the provenance stamp is dropped
-        into the (transient) status; the values are the durable output."""
-        def _stage_var(field):
+    def _img_field_var(self, field):
+        """The editor StringVar an image-tool field writes to, or None for a
+        field this editor cannot store (the check-only cross-checks).  ONE
+        map shared by apply and the R8 delta preview, so they can never
+        disagree about what is writable.
+        UNITS CONTRACT: the tool writes METRES.  Every var mapped here must
+        be a metre-labelled field backed by a *_m model attribute (audited
+        2026-08-01) — except fin_sweep, DEGREES, written only by the 3-click
+        angle prompt (never through the metre CONVENTIONS).  Other non-metre
+        editor fields (masses kg, motor web mm, jettison km) must never be
+        added without a conversion at the boundary."""
+        if field.startswith("stage"):
             # "stage2_len" / "stage3_dia" → the StringVar on that stage frame
             try:
                 n = int(field[5])
@@ -1961,12 +1966,7 @@ class BoosterDialog(tk.Toplevel):
                 return None
             return (frames[n - 1]._length if field.endswith("_len")
                     else frames[n - 1]._dia)
-        # UNITS CONTRACT: the tool writes METRES.  Every var mapped here must
-        # be a metre-labelled field backed by a *_m model attribute (audited
-        # 2026-08-01).  Non-metre editor fields (masses kg, sweep °, motor web
-        # mm, jettison km) must never be added to this map without a
-        # conversion at the boundary.
-        fixed = {
+        return {
             "fairing_len": getattr(self, "_shroud_length_var", None),
             "fairing_dia": getattr(self, "_shroud_diameter_var", None),
             "fin_span": getattr(self, "_fin_span_var", None),
@@ -1974,12 +1974,32 @@ class BoosterDialog(tk.Toplevel):
             "fin_tip": getattr(self, "_fin_tip_var", None),
             "strapon_dia": getattr(self, "_b_diam_var", None),
             "strapon_len": getattr(self, "_b_length_var", None),
-            # DEGREES, not metres: written only by the 3-click angle prompt
-            # (never through the metre CONVENTIONS).
             "fin_sweep": getattr(self, "_fin_sweep_var", None),
-        }
+        }.get(field)
+
+    def _current_image_values(self, fields):
+        """{field: current editor value} for the R8 delta preview — only the
+        fields this editor can actually write; None = blank/unparseable."""
+        out = {}
+        for f in fields:
+            var = self._img_field_var(f)
+            if var is None:
+                continue
+            try:
+                out[f] = float(var.get())
+            except (ValueError, tk.TclError):
+                out[f] = None
+        return out
+
+    def _apply_image_measurements(self, accepted, measurements, scale):
+        """Write accepted booster measurements into the editor's fields.  The
+        image tool measures ONE of a repeated feature (a fin, a strap-on); the
+        model already stores count + one geometry, so the declared count is
+        untouched and the single geometry is filled — measure-one-declare-count
+        (design).  No booster notes field, so the provenance stamp is dropped
+        into the (transient) status; the values are the durable output."""
         for field, value in (accepted or {}).items():
-            var = _stage_var(field) if field.startswith("stage") else fixed.get(field)
+            var = self._img_field_var(field)
             if var is not None:
                 var.set(f"{float(value):.4g}")
         # Turning on the fairing/fins sections if their geometry was measured
@@ -2435,7 +2455,8 @@ _FAMILY_LABELS = {'numerical': "numerical (EOM)",
                   'analytic':  "closed-form analytic"}
 
 
-def _open_image_measure_dialog(parent, title, prompts, apply_fn):
+def _open_image_measure_dialog(parent, title, prompts, apply_fn,
+                               current_fn=None):
     """Shared image-dimensioning dialog (Phase A) for the RO and booster
     editors.  `prompts` is a list of {field,label,view,convention} (from
     image_measure); `apply_fn(accepted, measurements, scale)` writes the
@@ -3028,13 +3049,71 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn):
     ttk.Separator(dlg, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8)
     af = ttk.Frame(dlg, padding=(8, 6)); af.pack(fill=tk.X)
 
-    def _apply():
+    def _do_apply():
         # The stamp's primary scale is the side view's (or the first set one).
         order = ["side"] + [v for v in views_needed if v != "side"]
         sc = next((views[vn]["scale"] for vn in order
                    if vn in views and views[vn]["scale"] is not None), None)
         apply_fn(state["accepted"], state["measurements"], sc)
         dlg.destroy()
+
+    def _apply():
+        """R8 delta preview: before ANYTHING is written, show field →
+        current editor value → proposed → Δ%, biggest deltas first.  A large
+        delta is a FINDING (a hand-entered number contradicted by the image,
+        or vice versa) — surfaced, never silently resolved."""
+        acc = state["accepted"]
+        if not acc or current_fn is None:
+            _do_apply()
+            return
+        rows = im.apply_deltas(acc, current_fn(list(acc)))
+        if not rows:
+            _do_apply()
+            return
+        units = {p["field"]: ("°" if p.get("angle") else "m") for p in prompts}
+        kinds = {m.field: ("entered" if getattr(m, "hand_entered", False)
+                           else "measured") for m in state["measurements"]}
+        pv = tk.Toplevel(dlg)
+        pv.title("Apply preview — old vs new")
+        pv.grab_set()
+        frm = ttk.Frame(pv, padding=12); frm.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frm, text="Nothing is written until you confirm.  Large "
+                  "deltas are findings — a stored number contradicted by the "
+                  "image (or a mis-click), not noise to smooth over.",
+                  wraplength=460, foreground="#555",
+                  justify=tk.LEFT).grid(row=0, column=0, columnspan=5,
+                                        sticky=tk.W, pady=(0, 8))
+        for col, head in enumerate(("field", "current", "proposed", "Δ", "")):
+            ttk.Label(frm, text=head, font=("TkDefaultFont", 9, "bold")).grid(
+                row=1, column=col, sticky=tk.W, padx=(0, 12))
+        for i, r in enumerate(rows, start=2):
+            u = units.get(r["field"], "m")
+            big = r["rel"] is not None and abs(r["rel"]) > im.DELTA_WARN_REL
+            fg = "#b00" if big else "#333"
+            old_txt = "—" if r["old"] is None else f"{r['old']:.4g} {u}"
+            rel_txt = ("new" if r["rel"] is None else f"{r['rel']:+.1%}")
+            for col, txt in enumerate(
+                    (r["field"], old_txt, f"{r['new']:.4g} {u}", rel_txt,
+                     kinds.get(r["field"], ""))):
+                ttk.Label(frm, text=txt, foreground=fg).grid(
+                    row=i, column=col, sticky=tk.W, padx=(0, 12), pady=1)
+        skipped = len(acc) - len(rows)
+        if skipped:
+            ttk.Label(frm, text=f"({skipped} cross-check value"
+                      f"{'s' if skipped != 1 else ''} not written — "
+                      "audit only)", foreground="#888").grid(
+                row=len(rows) + 2, column=0, columnspan=5, sticky=tk.W,
+                pady=(6, 0))
+        bf = ttk.Frame(pv, padding=(12, 8)); bf.pack(fill=tk.X)
+
+        def _confirm():
+            pv.destroy()
+            _do_apply()
+        ttk.Button(bf, text=f"Write {len(rows)} field"
+                   f"{'s' if len(rows) != 1 else ''}",
+                   command=_confirm).pack(side=tk.LEFT)
+        ttk.Button(bf, text="Back", command=pv.destroy).pack(
+            side=tk.LEFT, padx=6)
 
     ttk.Label(af, text=im.anchor_free_note(), foreground="#888",
               wraplength=560, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 4))
@@ -3918,6 +3997,28 @@ class ROEditorDialog(tk.Toplevel):
     # deliberately absent (check-only, never stored).
     _IMG_ANGLE_FIELD_VARS = ("_wing_sweep_var",)
 
+    def _img_field_var(self, field):
+        """The editor StringVar an image-tool field writes to, or None for a
+        field this editor cannot store (check-only cross-checks).  Shared by
+        apply and the R8 delta preview."""
+        if field in self._IMG_FIELD_VARS + self._IMG_ANGLE_FIELD_VARS:
+            return getattr(self, field, None)
+        return None
+
+    def _current_image_values(self, fields):
+        """{field: current editor value} for the R8 delta preview — only the
+        fields this editor can actually write; None = blank/unparseable."""
+        out = {}
+        for f in fields:
+            var = self._img_field_var(f)
+            if var is None:
+                continue
+            try:
+                out[f] = float(var.get())
+            except (ValueError, tk.TclError):
+                out[f] = None
+        return out
+
     def _apply_image_measurements(self, accepted, measurements, scale):
         """Write accepted image measurements into this editor's fields and
         append the provenance stamp to notes (the image tool's ONLY durable
@@ -3953,7 +4054,8 @@ class ROEditorDialog(tk.Toplevel):
             im.ro_prompts(form, biconic=bool(self._biconic_var.get()),
                           winged=winged)
             + im.ro_angle_prompts(form, winged=winged),
-            self._apply_image_measurements)
+            self._apply_image_measurements,
+            current_fn=self._current_image_values)
 
     # ------------------------------------------------------------------
     def _current_wing_geometry(self):

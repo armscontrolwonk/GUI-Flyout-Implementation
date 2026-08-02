@@ -145,6 +145,7 @@ Dependency gaps:
   required from sources); the notes stamp says "dimensional draft".
 - **R8 Mixed-provenance collisions.**  Existing hand-entered values vs new
   clicks → always show old/new delta; never silently overwrite.
+  BUILT (2026-08-01, Phase C): the Apply delta preview.
 
 Scope and plumbing:
 - **R9 Photogrammetry creep.**  Vanishing points, camera pose, multi-view
@@ -284,8 +285,19 @@ Scope and plumbing:
   - **flank symmetry** (axisymmetric, check-only fields, never stored):
     upper vs lower half-angle must match; asymmetry impeaches the WHOLE
     image (tilt/perspective) — the R9 screening upgraded to a measurement.
-- **C — audit polish**: opacity/drag alignment, discrepancy highlighting,
-  hatched stylization, mixed-provenance delta view.
+- **C — audit polish**:
+  - **Delta view (DONE, 2026-08-01)** — the R8 mitigation ("always show
+    old/new delta; never silently overwrite"), previously promised but not
+    built: Apply now opens a preview table — field → current editor value →
+    proposed value → Δ% (red beyond ±5%, `DELTA_WARN_REL`), measured vs
+    entered marked, biggest deltas first (findings on top), blank/zero
+    fields shown as "new", check-only cross-checks counted as audit-only.
+    Nothing is written until "Write N fields"; Back returns to measuring
+    with everything untouched.  One field→var map per editor
+    (`_img_field_var`) is shared by apply and the preview, so they can
+    never disagree about what is writable.
+  - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
+    hatched stylization (R12) + live discrepancy highlighting.
 
 Out of scope: persistence of images/clicks (decision 1), photogrammetry (R9),
 auto-detection of features (everything is declared or clicked), writing any
