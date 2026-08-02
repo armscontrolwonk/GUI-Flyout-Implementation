@@ -39,9 +39,12 @@ Angles (2026-08-01, with Phase 2b): 3-click anchor-free angle measurement —
 stores wing/fin LE sweep (degrees, separate from the metre contract), with
 warn-only identity twins (sweep vs planform, flank vs ⌀/L) and the
 two-flank symmetry check as a perspective/tilt detector (R9 → measurement).
-REMAINING: Phase C audit polish only (schematic-at-scale overlay with
-alignment UX, discrepancy highlighting, hatched stylization, old-vs-new
-delta view).  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
+Phase C delta view (2026-08-01): Apply now previews field → current →
+proposed → Δ% (red beyond ±5%, findings first; measured vs entered marked;
+check-only values counted audit-only) — the R8 "never silently overwrite"
+promise, built.  REMAINING Phase C: schematic-at-scale overlay with
+opacity/drag alignment + hatched stylization (R12) + live discrepancy
+highlighting.  Full design in IMAGE_DIMENSION_TOOL_DESIGN.md.
 [superseded lead-in below kept for the risk register pointer]
 
 ### 1b. Image tool — original scoping pointer
