@@ -1841,33 +1841,40 @@ side-elevation depth is ⌀/2).  The schematic draws the asymmetric
 silhouette (flat flank + sloped surface) and names the form in the caption;
 `biconic` applies only to bodies of revolution and is ignored otherwise.
 
-The **trajectory physics are deliberately untouched**: β, L/D, and the
-derived polar (§12) remain the canonical carriers, and two ROParams that
-differ only in `body_form` fly byte-identical trajectories.  The
-lifting-body trim estimator (Phases 2a–2c, and the 2b completion:
+The lifting-body trim estimator (Phases 2a–2c, and the 2b completion:
 cone/biconic α-sweep on the same sector machinery, the half-cone + delta-wing
 composite, and the swept-cylinder leading edge — design and anchors in
 PHASE2_LIFTING_BODY_PLAN.md, implementation `lifting_body_sweep` in
-`booster_models.py`) now supplies trim-consistent β and L/D from measurable
-geometry; limitation 2 below is CLOSED by it (the dialog's "Use β" writes
-β at zero lift, never trim β).  Remaining known limitations of applying the
-axisymmetric machinery to a lifting body:
+`booster_models.py`) supplies trim-consistent β and L/D from measurable
+geometry.  **Phase 3 (2026-08-01)** then closed the three limitations this
+section used to list, touching trajectory physics for the FIRST time and
+only behind a body-form gate (every axisymmetric vehicle is byte-identical,
+pinned by test):
 
-1. *Pull ceiling understated.*  `C_L,max = 2α` at the 25° AoA limit is a
-   slender-body-of-revolution value; a flat-bottomed wedge generates
-   several times that usable C_L at the same AoA, so maximum lateral
-   acceleration (dive steepness, turn radius) is conservative for
-   HTV-2-class vehicles.
-2. *Trim-β vs zero-lift-β.*  The polar defines β at **zero lift**
-   (`C_D0 = m/(β·A_ref)`), but published lifting-body β figures are usually
-   quoted **at trim**, where induced drag is already included.  Entering a
-   trim β as the zero-lift β double-counts induced drag and flattens the
-   glide.  Prefer a zero-lift estimate; a lifting-body estimator that
-   outputs the right kind of β is the planned Phase 2.
-3. *Reference-area convention.*  The cruise side is invariant to A_ref
-   (β and L/D absorb it), but the physical pull limit is
-   `q·C_L,max·A_ref/m`, so what the `diameter_m` field means (depth, for a
-   wedge) silently scales maximum g.
+1. *Pull ceiling — CLOSED for lifting forms.*  `C_L,max` is now derived
+   from the stored geometry: the Newtonian pressure C_L at the same 25° AoA
+   cap (wedge: needs its `body_span_m`, else keeps the Munk 0.873 body
+   value, flagged not invented; half-cone: from ⌀/L plus any declared wing
+   planform).  A flat-bottomed wedge's pull limit rises severalfold; a fat
+   half-cone's honestly falls.  Because the derived value is converted at
+   force level (× A_sweep/A_ref), the pull limit `q·C_L,max·A_ref/m` is now
+   INVARIANT to the reference-area convention — which also closes old
+   limitation 3 for the derived forms.
+2. *Trim-β vs zero-lift-β — CLOSED by the estimator* (the dialog's "Use β"
+   writes β at zero lift, never trim β, from one consistent sweep row).
+3. *Symmetric-polar camber — CLOSED by the offset polar.*  "Use β and L/D"
+   also persists the sweep's trim row (`trim_alpha_deg`, `trim_CL0`,
+   sweep-native coefficients) on the RO.  The polar becomes Lobanovskii's
+   trinomial `C_D = C_D0 + k·[(C_L − C_L0)² − C_L0²]` — anchored so
+   `C_D(0) = C_D0` exactly (β keeps its zero-lift meaning) with k
+   back-solved ON the offset parabola so the polar's (L/D)max stays exactly
+   `glider_LD` (C_L* = √(C_D0/k) is unchanged by the offset; a C_L0 too
+   large for the discriminant, > LD·C_D0/2, is inconsistent with the stated
+   L/D and falls back to symmetric rather than inventing).  Measured
+   support: Fetterman TN D-2942 Fig. 6b's C_N zero-crossing at negative α.
+   The stored α* additionally pre-fills the windward-heating operating AoA
+   (§13.8) when no static-margin trim exists — attitude and L/D from the
+   SAME sweep, the Candler consistency guard.
 
 ### 8.9 Static margin and grid-fin sizing
 

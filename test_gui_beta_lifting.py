@@ -243,3 +243,28 @@ def test_half_cone_dialog_without_wings_says_body_alone(root):
               if isinstance(w, tk.ttk.Label)]
     assert any("none (body alone)" in t for t in labels)
     sub.destroy()
+
+
+# ── Phase 3: the trim row persists from the SAME sweep as β and L/D ──────────
+def test_use_stores_trim_row_and_axisymmetric_zeroes_it(root):
+    """"Use β and L/D" persists α* and C_L0 alongside β/L-D — one consistent
+    row (the anti-Tracy&Wright invariant, now stored).  Switching the form
+    back to a body of revolution zeroes them on save: a stale camber offset
+    on an axisymmetric body would silently skew the polar."""
+    dlg = _editor(root, "half_cone")
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    sub = _capture_dialog(dlg)
+    sub.update_idletasks()
+    # the live compute has run; take its consistent row via the Use button
+    use = [b for b in _all_widgets(sub) if isinstance(b, tk.ttk.Button)
+           and "Use β" in b.cget("text")][0]
+    use.invoke()
+    assert dlg._trim_alpha_val > 0.0            # α* of a real sweep
+    ro = dlg._build_ro()
+    assert ro.trim_alpha_deg == pytest.approx(dlg._trim_alpha_val)
+    assert ro.trim_CL0 == pytest.approx(dlg._trim_cl0_val)
+    # same editor, form switched to a body of revolution → zeroed on save
+    dlg._shape_var.set(thrusty.NOSE_SHAPE_LABELS["cone"])
+    dlg._update_body_form_state()
+    ro2 = dlg._build_ro()
+    assert ro2.trim_alpha_deg == 0.0 and ro2.trim_CL0 == 0.0

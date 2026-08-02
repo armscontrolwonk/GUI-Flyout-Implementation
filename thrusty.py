@@ -3337,13 +3337,24 @@ class ROEditorDialog(tk.Toplevel):
         self._LD_entry = ttk.Entry(self._glider_frm, textvariable=self._LD_var,
                                    width=10)
         self._LD_entry.grid(row=0, column=1, sticky=tk.W, pady=2)
+        # Estimator trim row (Phase 3): α* feeds the windward-α consistency
+        # guard, C_L0 the offset polar.  Set only by "Use β and L/D" (lifting
+        # forms); shown read-only so the stored state is never invisible.
+        self._trim_alpha_val = float(getattr(ro, 'trim_alpha_deg', 0.0) or 0.0) \
+            if ro else 0.0
+        self._trim_cl0_val = float(getattr(ro, 'trim_CL0', 0.0) or 0.0) \
+            if ro else 0.0
+        self._trim_lbl = ttk.Label(self._glider_frm, text="",
+                                   foreground="#2a7", justify=tk.LEFT)
+        self._trim_lbl.grid(row=1, column=0, columnspan=2, sticky=tk.W)
+        self._sync_trim_label()
         ttk.Label(self._glider_frm,
                   text="Wings (in Geometry) anchor the drag polar: enter the "
                        "planform and S / AR derive; without one, type S / AR "
                        "directly (flagged tab).  Pull-up g-limit and re-entry "
                        "βₛ are in the Reentry Plan editor.",
                   foreground="#888888", justify=tk.LEFT, wraplength=340).grid(
-                      row=1, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+                      row=2, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
 
         self._sync_wing_derived()
         self._update_glider_state()
@@ -3851,7 +3862,8 @@ class ROEditorDialog(tk.Toplevel):
                 warns.append("(L/D)max exceeds the viscous-optimized-waverider "
                              "band (≈6–7): treat as non-physical.")
             warn_lbl.config(text="\n".join(warns))
-            _result[0] = (tr['beta_zero_lift'], tr['LD_max'])
+            _result[0] = (tr['beta_zero_lift'], tr['LD_max'],
+                          tr['alpha_star_deg'], tr['C_L0'])
 
         for _v in (mass_var, len_var, mach_var, re_var, tw_var, turb_var,
                    base_var) + geo_vars:
@@ -3864,7 +3876,7 @@ class ROEditorDialog(tk.Toplevel):
 
         def _use():
             if _result[0] is not None:
-                beta0, ldmax = _result[0]
+                beta0, ldmax, a_star, cl0 = _result[0]
                 self._beta_var.set(f"{beta0:.0f}")
                 # (L/D)max pre-fills the glider L/D — the capability figure the
                 # airframe supports, quoted from the SAME α* as the β above.
@@ -3872,6 +3884,12 @@ class ROEditorDialog(tk.Toplevel):
                     self._LD_var.set(f"{ldmax:.2f}")
                 except (AttributeError, tk.TclError):
                     pass
+                # Phase 3: the trim row persists on the RO from the SAME sweep
+                # — α* feeds the windward-α consistency guard, C_L0 the offset
+                # polar (sweep-native coefficients; _build_ro stores them).
+                self._trim_alpha_val = float(a_star)
+                self._trim_cl0_val = float(cl0)
+                self._sync_trim_label()
                 # The span the estimate used persists on the wedge (body_span_m)
                 # — the same number the β/L-D pair was computed from.
                 if form == "wedge":
@@ -4122,6 +4140,13 @@ class ROEditorDialog(tk.Toplevel):
             wing_root_chord_m=wing_root,
             wing_span_exposed_m=wing_span,
             wing_sweep_deg=wing_sweep,
+            # Estimator trim row (Phase 3): kept only for the lifting forms
+            # its sweep produced it for — a stale offset carried onto a body
+            # of revolution would silently skew the polar.
+            trim_alpha_deg=(self._trim_alpha_val
+                            if body_form in ("wedge", "half_cone") else 0.0),
+            trim_CL0=(self._trim_cl0_val
+                      if body_form in ("wedge", "half_cone") else 0.0),
             emissivity=emiss,
             nose_tps_material=nose_key,
             body_tps_material=body_key,
@@ -4177,6 +4202,18 @@ class ROEditorDialog(tk.Toplevel):
         st = "normal" if self._biconic_var.get() else "disabled"
         self._fore_len_entry.config(state=st)
         self._break_dia_entry.config(state=st)
+
+    def _sync_trim_label(self):
+        """Read-only display of the stored estimator trim row (Phase 3)."""
+        if not hasattr(self, '_trim_lbl'):
+            return
+        if self._trim_alpha_val or self._trim_cl0_val:
+            self._trim_lbl.configure(
+                text=f"↳ estimator trim: α* = {self._trim_alpha_val:.1f}° · "
+                     f"C_L0 = {self._trim_cl0_val:+.4f}  (offset polar + "
+                     "windward α)")
+        else:
+            self._trim_lbl.configure(text="")
 
     def _shape_form_options(self):
         """Ordered (display_label, shape_key, body_form_key) for the merged
