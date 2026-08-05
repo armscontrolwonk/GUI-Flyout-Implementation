@@ -113,22 +113,53 @@ def test_merged_shape_selector_sets_both_shape_and_body_form(root):
     assert ro2.body_form == "wedge" and ro2.shape == "cone"
 
 
-def test_lifting_form_wins_the_label_on_reopen_and_disables_biconic(root):
-    """Reopening a stored (shape, body_form): a lifting body_form shows its own
-    label regardless of the stored nose shape, and disables the biconic tick;
-    an axisymmetric body shows its nose profile."""
+def test_lifting_form_wins_the_label_on_reopen_and_clears_biconic(root):
+    """Reopening a stored (shape, body_form, biconic): a lifting body_form
+    shows its own label regardless of the stored nose shape and clears the
+    biconic flag (body-of-revolution only); an axisymmetric body shows its
+    nose profile; a stored biconic shows the Biconic dropdown entry."""
     import dataclasses
     dlg = _editor(root, "wedge")
     wedge_ro = dataclasses.replace(dlg._build_ro(), shape="tangent_ogive")
     reopened = thrusty.ROEditorDialog(root, ro=wedge_ro); reopened.withdraw()
     assert reopened._body_form_key() == "wedge"
     assert reopened._shape_var.get() == reopened._BODY_FORM_LABELS["wedge"]
-    assert str(reopened._biconic_chk.cget("state")) == "disabled"
-    # an ogive-nosed round body shows the ogive and re-enables biconic
+    assert reopened._biconic_var.get() is False
+    # an ogive-nosed round body shows the ogive; not biconic
     og = dataclasses.replace(wedge_ro, body_form="axisymmetric", shape="tangent_ogive")
     r2 = thrusty.ROEditorDialog(root, ro=og); r2.withdraw()
     assert r2._shape_key() == "tangent_ogive" and r2._body_form_key() == "axisymmetric"
-    assert str(r2._biconic_chk.cget("state")) == "normal"
+    assert r2._biconic_var.get() is False
+    # a stored biconic reopens on the Biconic entry with fore/break enabled
+    bic = dataclasses.replace(og, biconic=True, fore_length_m=0.9,
+                              break_diameter_m=0.25)
+    r3 = thrusty.ROEditorDialog(root, ro=bic); r3.withdraw()
+    assert r3._shape_var.get() == r3._BICONIC_LABEL
+    assert r3._biconic_var.get() is True
+    assert str(r3._fore_len_entry.cget("state")) == "normal"
+
+
+def test_biconic_is_a_shape_dropdown_entry(root):
+    """The user-facing answer to 'where is biconic?': in the Shape list.
+    Selecting the Biconic entry sets the flag, enables the break-geometry
+    fields, and _build_ro stores biconic=True with shape normalized to
+    'cone'; selecting a plain profile clears it all."""
+    dlg = _editor(root, "axisymmetric")
+    assert dlg._BICONIC_LABEL in dlg._shape_combo.cget("values")
+    dlg._shape_var.set(dlg._BICONIC_LABEL)
+    dlg._update_body_form_state()
+    assert dlg._biconic_var.get() is True
+    assert str(dlg._fore_len_entry.cget("state")) == "normal"
+    dlg._fore_len_var.set("0.9"); dlg._break_dia_var.set("0.25")
+    ro = dlg._build_ro()
+    assert ro.biconic is True and ro.shape == "cone" \
+        and ro.body_form == "axisymmetric"
+    assert ro.fore_length_m == pytest.approx(0.9)
+    dlg._shape_var.set(thrusty.NOSE_SHAPE_LABELS["cone"])
+    dlg._update_body_form_state()
+    assert dlg._biconic_var.get() is False
+    assert str(dlg._fore_len_entry.cget("state")) == "disabled"
+    assert dlg._build_ro().biconic is False
 
 
 def test_span_and_wing_fields_gate_by_body_form(root):
