@@ -2536,7 +2536,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         canvas.create_image(0, 0, anchor="nw", image=v["photo"])
         canvas.configure(scrollregion=(0, 0, int(ow * z), int(oh * z)))
         if state["overlay"]:
-            for _f, (vw, p1, p2, lab) in state["annotations"].items():
+            for i, (_f, (vw, p1, p2, lab)) in enumerate(
+                    state["annotations"].items()):
                 if vw != state["cur"]:
                     continue
                 x0, y0, x1, y1 = p1[0] * z, p1[1] * z, p2[0] * z, p2[1] * z
@@ -2545,7 +2546,10 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                 for xx, yy in ((x0, y0), (x1, y1)):
                     canvas.create_oval(xx - 2, yy - 2, xx + 2, yy + 2,
                                        outline="#3c6", tags="ann")
-                canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 9, text=lab,
+                # stagger the label rows so co-located segments (a chord and a
+                # sweep measured at the same fin) stay readable
+                canvas.create_text((x0 + x1) / 2,
+                                   (y0 + y1) / 2 - 9 - 12 * (i % 3), text=lab,
                                    fill="#3c6", font=("TkDefaultFont", 8),
                                    tags="ann")
         for ix, iy in state["clicks"]:
@@ -2827,6 +2831,27 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                 clock_frame.pack_forget()
     prompt_combo.bind("<<ComboboxSelected>>", _on_prompt)
 
+    def _advance_prompt():
+        """Checklist behavior (the design's 'walked through a checklist'):
+        after a value is recorded, the selection ADVANCES to the next
+        unmeasured dimension instead of parking on the old one — a selection
+        left behind is how a fin chord ends up recorded as the vehicle length
+        (observed in use; the delta preview caught it, but the tool should
+        not set the trap)."""
+        labels = list(prompt_combo["values"] or ())
+        if not labels:
+            return
+        try:
+            start = labels.index(prompt_var.get()) + 1
+        except ValueError:
+            start = 0
+        for disp in labels[start:] + labels[:start]:
+            p = _label_by_field.get(disp)
+            if p and p["field"] not in state["accepted"]:
+                prompt_var.set(disp)
+                _on_prompt()
+                return
+
     def _begin_measure():
         p = _label_by_field.get(prompt_var.get())
         if not p:
@@ -2879,6 +2904,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                 state["_pending"] = None
                 _refresh_angle_checks()
                 _render()
+                _advance_prompt()
             acc_btn.config(command=_accept_angle, state="normal")
             return
         s = _cv()["scale"]
@@ -2913,6 +2939,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
             state["_pending"] = None
             _refresh_closure()
             _render()
+            _advance_prompt()
         acc_btn.config(command=_accept, state="normal")
     state["_finish_measure"] = _finish_measure
 
@@ -2942,6 +2969,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                                  if x.field != he.field] + [he]
         result_var.set(f"✓ entered {he.field} = {v:g} m (by hand, not measured)")
         _refresh_closure()
+        _advance_prompt()
 
     mrow = ttk.Frame(panel); mrow.pack(anchor=tk.W, fill=tk.X, pady=(6, 0))
     ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)

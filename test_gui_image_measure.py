@@ -522,3 +522,36 @@ def test_apply_shows_delta_preview_and_writes_only_on_confirm(root):
     [b for b in _all(pv2) if isinstance(b, tk.ttk.Button)
      and "Write" in b.cget("text")][0].invoke()
     assert float(dlg._len_var.get()) == pytest.approx(3.3)
+
+
+def test_accept_advances_the_checklist(root, tmp_path):
+    """Checklist behavior: after a value is recorded the prompt selection
+    ADVANCES to the next unmeasured dimension — a selection parked on the old
+    prompt is how a fin chord ends up recorded as the vehicle length
+    (observed in use).  Already-measured prompts are skipped."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    st = d._im_state
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
+    d._im_load_path(str(p))
+    d._im_views["side"]["scale"] = im.Scale((0, 0), (400, 0), 10.0)
+    prompts = im.ro_prompts("axisymmetric") + im.ro_angle_prompts("axisymmetric")
+    assert d._im_prompt_var.get().startswith("_len_var")   # starts at the top
+    st["prompt"] = prompts[0]                              # _len_var, side
+    st["clicks"] = [(0.0, 0.0), (200.0, 0.0)]
+    st["_finish_measure"]()
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    acc.invoke()
+    assert d._im_prompt_var.get().startswith("_dia_var")   # advanced
+    # Type value on the now-selected prompt advances too, skipping measured
+    import tkinter.simpledialog as sd
+    orig_ask = sd.askfloat
+    sd.askfloat = lambda *a, **k: 0.58
+    try:
+        d._im_type_value()
+    finally:
+        sd.askfloat = orig_ask
+    assert d._im_prompt_var.get().startswith("_nose_var")
+    d.destroy()
