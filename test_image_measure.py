@@ -447,3 +447,16 @@ def test_apply_deltas_zero_current_counts_as_new():
 
 def test_delta_warn_threshold_is_five_percent():
     assert im.DELTA_WARN_REL == pytest.approx(0.05)
+
+
+def test_angle_check_decodes_the_complement_mistake():
+    """Field case: sweep clicked with the third ray DOWN THE BODY AXIS
+    instead of spanwise reads the complement (12.7° when the planform says
+    77.2°; sum ≈ 90°).  The check names the mistake and states the complement
+    to use — but never writes it (offered, not inferred)."""
+    note = im.angle_check_note(12.7, 77.2, "wing sweep")
+    assert "DISAGREES" in note and "BODY AXIS" in note
+    assert "77.3" in note                     # 90 − 12.7, the value to use
+    # an ordinary disagreement (no 90° relationship) keeps the generic verdict
+    plain = im.angle_check_note(52.0, 45.0, "wing sweep")
+    assert "BODY AXIS" not in plain and "stretch" in plain
