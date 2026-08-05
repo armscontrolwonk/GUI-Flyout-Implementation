@@ -2536,14 +2536,24 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         canvas.create_image(0, 0, anchor="nw", image=v["photo"])
         canvas.configure(scrollregion=(0, 0, int(ow * z), int(oh * z)))
         if state["overlay"]:
-            for i, (_f, (vw, p1, p2, lab)) in enumerate(
-                    state["annotations"].items()):
+            for i, (_f, ann) in enumerate(state["annotations"].items()):
+                vw, p1, p2, lab = ann[0], ann[1], ann[2], ann[3]
+                vtx = ann[4] if len(ann) > 4 else None
                 if vw != state["cur"]:
                     continue
                 x0, y0, x1, y1 = p1[0] * z, p1[1] * z, p2[0] * z, p2[1] * z
-                canvas.create_line(x0, y0, x1, y1, fill="#3c6", width=1,
-                                   tags="ann")
-                for xx, yy in ((x0, y0), (x1, y1)):
+                if vtx is None:                      # linear: one segment
+                    canvas.create_line(x0, y0, x1, y1, fill="#3c6", width=1,
+                                       tags="ann")
+                    corners = ((x0, y0), (x1, y1))
+                else:                                # angle: two rays + vertex
+                    vx, vy = vtx[0] * z, vtx[1] * z
+                    canvas.create_line(vx, vy, x0, y0, fill="#3c6", width=1,
+                                       tags="ann")
+                    canvas.create_line(vx, vy, x1, y1, fill="#3c6", width=1,
+                                       tags="ann")
+                    corners = ((vx, vy), (x0, y0), (x1, y1))
+                for xx, yy in corners:
                     canvas.create_oval(xx - 2, yy - 2, xx + 2, yy + 2,
                                        outline="#3c6", tags="ann")
                 # stagger the label rows so co-located segments (a chord and a
@@ -2628,6 +2638,28 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     dlg.bind("<Command-v>", _paste)
     dlg.bind("<Control-v>", _paste)
 
+    # Per-click prompts so the user always knows a click landed and how many
+    # remain (an angle's THREE clicks were being confused with a 2-click line,
+    # and a stale result read as the current one).
+    _ANGLE_STEPS = ("click the vertex — the wing-root LE corner",
+                    "vertex set ✓ — now click a point ALONG the leading edge",
+                    "✓ — now click a point OUT spanwise (perpendicular to the "
+                    "body axis, NOT down the body)")
+    _LINE_STEPS = ("click the first point", "✓ — click the second point")
+    _SCALE_STEPS = ("SCALE: click the first point",
+                    "✓ — click the second point a known distance away")
+
+    def _click_progress():
+        n = len(state["clicks"])
+        if state["mode"] == "scale":
+            steps = _SCALE_STEPS
+        elif (state.get("prompt") or {}).get("angle"):
+            steps = _ANGLE_STEPS
+        else:
+            steps = _LINE_STEPS
+        if n < len(steps):
+            status.set(f"[{n}/{len(steps)}]  {steps[n]}")
+
     def _on_click(ev):
         v = _cv()
         if state["mode"] not in ("scale", "measure") or v["img"] is None:
@@ -2642,6 +2674,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         if len(state["clicks"]) == need:
             (state["_finish_scale"] if state["mode"] == "scale"
              else state["_finish_measure"])()
+        else:
+            _click_progress()
 
     canvas.bind("<Button-1>", _on_click)
 
@@ -2871,16 +2905,21 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         if v["scale"] is None and not p.get("angle"):
             status.set(f"Set the {p['view'].upper()} view's scale first.")
             return
-        state["prompt"] = p; _clear_marks(); state["mode"] = "measure"
-        status.set(("ANGLE — 3 clicks (vertex, then two rays): " if p.get("angle")
-                    else "MEASURE: ") + p['label'])
+        # A fresh measurement retires any un-accepted prior reading: clear the
+        # pending value, disarm Accept, and wipe the result line so a stale
+        # number can never be mistaken for — or accepted as — the new one.
+        state["prompt"] = p; state["_pending"] = None
+        acc_btn.config(state="disabled")
+        result_var.set("")
+        _clear_marks(); state["mode"] = "measure"
+        _click_progress()
 
     def _finish_measure():
         p = state["prompt"]
         if p.get("angle"):
             vertex, a1, a2 = state["clicks"]
             m = im.AngleMeasurement(p["field"], vertex, a1, a2)
-            state["_pending_pts"] = (vertex, a1, state["cur"])
+            state["_pending_pts"] = (vertex, a1, a2, state["cur"])
             _clear_marks(); state["mode"] = "idle"
             if m.refused:
                 result_var.set("✗ " + "; ".join(m.flags)
@@ -2897,9 +2936,9 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                 state["accepted"][mm.field] = mm.value_deg
                 state["measurements"] = [x for x in state["measurements"]
                                          if x.field != mm.field] + [mm]
-                pp1, pp2, pview = state["_pending_pts"]
+                vtx, r1, r2, pview = state["_pending_pts"]
                 state["annotations"][mm.field] = (
-                    pview, pp1, pp2, f"{mm.field} = {mm.value_deg:.1f}°")
+                    pview, r1, r2, f"{mm.field} = {mm.value_deg:.1f}°", vtx)
                 result_var.set(f"✓ recorded {mm.field} = {mm.value_deg:.1f}°")
                 state["_pending"] = None
                 _refresh_angle_checks()
@@ -2934,7 +2973,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                                      if x.field != mm.field] + [mm]
             pp1, pp2, pview = state["_pending_pts"]
             state["annotations"][mm.field] = (
-                pview, pp1, pp2, f"{mm.field} = {mm.value_m:.4g} m")
+                pview, pp1, pp2, f"{mm.field} = {mm.value_m:.4g} m", None)
             result_var.set(f"✓ recorded {mm.field} = {mm.value_m:.4g} m")
             state["_pending"] = None
             _refresh_closure()

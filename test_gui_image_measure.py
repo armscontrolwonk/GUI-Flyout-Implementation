@@ -385,9 +385,41 @@ def test_accept_records_overlay_annotation(root, tmp_path):
            and b.cget("text") == "Accept"][0]
     acc.invoke()
     assert st["accepted"]["_len_var"] == pytest.approx(5.0)
-    view, p1, p2, label = st["annotations"]["_len_var"]
+    view, p1, p2, label, vtx = st["annotations"]["_len_var"]
     assert view == "side" and p1 == (50.0, 40.0) and p2 == (250.0, 40.0)
+    assert vtx is None                                    # linear: no vertex
     assert "5" in label
+    d.destroy()
+
+
+def test_starting_a_measurement_clears_the_stale_reading(root, tmp_path):
+    """Field bug: a completed-but-unaccepted angle left its value and armed
+    Accept button in place, so a NEW measurement (still mid-clicks) showed —
+    and could Accept — the STALE number.  Clicking Measure must retire the
+    pending value and disarm Accept until a fresh reading completes."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
+    d._im_load_path(str(p))
+    st = d._im_state
+    ang = [q for q in im.ro_angle_prompts("axisymmetric")
+           if q["field"] == "_wing_sweep_var"][0]
+    # first measurement completes but is NOT accepted
+    st["prompt"] = ang
+    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]   # 45°
+    st["_finish_measure"]()
+    assert st["_pending"] is not None
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    assert str(acc.cget("state")) == "normal"
+    # now start a fresh measurement of the SAME prompt via the Measure button
+    d._im_prompt_var.set(f"{ang['field']}  —  {ang['label']}")
+    [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+     and b.cget("text") == "Measure"][0].invoke()
+    assert st["_pending"] is None                          # stale value gone
+    assert str(acc.cget("state")) == "disabled"            # can't accept it
+    assert "_wing_sweep_var" not in st["accepted"]         # nothing recorded
     d.destroy()
 
 
