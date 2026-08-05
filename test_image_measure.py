@@ -366,6 +366,20 @@ def test_angle_measurement_needs_no_scale_but_refuses_short_rays():
     assert short.refused is True
 
 
+def test_angle_complement_stores_sweep_from_the_le_root_opening():
+    """Wing sweep is measured between two REAL edges (LE and root chord) as a
+    small opening, and stored as Λ = 90° − it.  A 13° LE↔root opening → 77°
+    sweep; raw_deg keeps the clicked value for the read-out."""
+    import math
+    # a ~13° opening at the origin: root chord along +x, LE 13° off it
+    a1 = (math.cos(math.radians(13.0)) * 200, math.sin(math.radians(13.0)) * 200)
+    m = im.AngleMeasurement("_wing_sweep_var", (0, 0), a1, (200, 0),
+                            complement=True)
+    assert m.raw_deg == pytest.approx(13.0)
+    assert m.value_deg == pytest.approx(77.0)
+    assert any("→ sweep Λ" in f for f in m.flags)
+
+
 def test_sweep_from_planform_identity():
     """tan Λ = (c_r − c_t)/s_e; delta wing (c_t = 0) → tan Λ = c_r/s_e."""
     assert im.sweep_from_planform(1.0, 1.0) == pytest.approx(45.0)
@@ -449,14 +463,13 @@ def test_delta_warn_threshold_is_five_percent():
     assert im.DELTA_WARN_REL == pytest.approx(0.05)
 
 
-def test_angle_check_decodes_the_complement_mistake():
-    """Field case: sweep clicked with the third ray DOWN THE BODY AXIS
-    instead of spanwise reads the complement (12.7° when the planform says
-    77.2°; sum ≈ 90°).  The check names the mistake and states the complement
-    to use — but never writes it (offered, not inferred)."""
+def test_angle_check_decodes_the_swapped_reference_mistake():
+    """When measured + derived ≈ 90° (the reference edges were swapped), the
+    check names it and states the complement to use — but never writes it
+    (offered, not inferred)."""
     note = im.angle_check_note(12.7, 77.2, "wing sweep")
-    assert "DISAGREES" in note and "BODY AXIS" in note
+    assert "DISAGREES" in note and "ROOT CHORD" in note
     assert "77.3" in note                     # 90 − 12.7, the value to use
     # an ordinary disagreement (no 90° relationship) keeps the generic verdict
     plain = im.angle_check_note(52.0, 45.0, "wing sweep")
-    assert "BODY AXIS" not in plain and "stretch" in plain
+    assert "ROOT CHORD" not in plain and "stretch" in plain

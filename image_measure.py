@@ -259,24 +259,39 @@ def angle_between_deg(vertex, p1, p2):
 class AngleMeasurement:
     """One proposed ANGLE value (degrees).  Anchor-free: needs no scale and
     has no pixel quantum; the resolution guard is on RAY LENGTH instead — a
-    short ray makes the angle noisy, so rays under the floor are refused."""
+    short ray makes the angle noisy, so rays under the floor are refused.
 
-    def __init__(self, field, vertex, p1, p2):
+    `complement=True` stores 90° − (the clicked angle): used for wing/fin LE
+    sweep, which is measured between two REAL edges meeting at the root-LE
+    corner — the LE and the ROOT CHORD — and stored as Λ (from spanwise).
+    Measuring against a physical edge instead of an imagined 'spanwise' ray
+    removes the swap that reads a slender delta's 77° sweep as its 13°
+    complement.  `raw_deg` keeps the clicked value for a transparent read-out.
+    """
+
+    def __init__(self, field, vertex, p1, p2, complement=False):
         self.field = field
         self.hand_entered = False
         self.view = "angle"                    # not tied to a scale/view
+        self.complement = bool(complement)
         self.flags = ["angle — anchor-free (no scale involved)"]
         rays = [math.hypot(float(p[0]) - float(vertex[0]),
                            float(p[1]) - float(vertex[1])) for p in (p1, p2)]
         if min(rays) < 2.0 * RESOLUTION_FLOOR_PX:
             self.refused = True
-            self.value_deg = None
+            self.raw_deg = self.value_deg = None
             self.flags.append(
                 f"ray shorter than {2.0 * RESOLUTION_FLOOR_PX:.0f} px — angle "
                 "too noisy, refused")
         else:
             self.refused = False
-            self.value_deg = angle_between_deg(vertex, p1, p2)
+            self.raw_deg = angle_between_deg(vertex, p1, p2)
+            self.value_deg = (90.0 - self.raw_deg if complement
+                              else self.raw_deg)
+            if complement:
+                self.flags.append(
+                    f"LE↔root {self.raw_deg:.1f}° → sweep Λ = "
+                    f"{self.value_deg:.1f}° (90° − LE↔root)")
 
 
 def sweep_from_planform(root_chord_m, span_exposed_m, tip_chord_m=0.0):
@@ -316,10 +331,11 @@ def angle_check_note(measured_deg, derived_deg, what):
     if abs(rel) <= ANGLE_CHECK_REL:
         verdict = "agrees"
     elif abs((m + d) - 90.0) <= 3.0:
-        verdict = (f"DISAGREES, and measured + derived ≈ 90°: the angle was "
-                   f"likely taken from the BODY AXIS; the stored convention "
-                   f"is from SPANWISE — its complement {90.0 - m:.1f}° "
-                   f"matches the planform (re-measure, or Type value it)")
+        verdict = (f"DISAGREES, and measured + derived ≈ 90°: the two "
+                   f"reference edges were swapped (the second ray should run "
+                   f"along the ROOT CHORD, not spanwise) — the complement "
+                   f"{90.0 - m:.1f}° matches the planform (re-measure, or Type "
+                   f"value it)")
     else:
         verdict = "DISAGREES — image stretch/tilt or a mis-click?"
     return (f"{what}: measured {m:.1f}° vs derived-from-lengths {d:.1f}° "
@@ -357,11 +373,13 @@ def ro_angle_prompts(body_form="axisymmetric"):
     p = []
     if body_form != "wedge":
         p.append(dict(field="_wing_sweep_var", angle=True, unit="deg",
+                      complement=True,
                       label="ANGLE: click the wing-root LE corner (vertex), "
-                      "then a point along the LE, then a point OUT along the "
-                      "wing — spanwise, perpendicular to the body axis, NOT "
-                      "down the body — LE sweep Λ (a delta fin's Λ is LARGE, "
-                      "70–80°)", view="side"))
+                      "then a point along the LEADING EDGE, then a point along "
+                      "the ROOT CHORD toward the tail — both real edges; the "
+                      "tool stores sweep Λ = 90° − that opening (a slender "
+                      "delta reads a small 10–20° opening → large Λ)",
+                      view="side"))
     if body_form == "axisymmetric":
         p.append(dict(field=FLANK_UPPER_FIELD, angle=True, unit="deg",
                       label="ANGLE (check only): nose tip (vertex), then a "
@@ -378,10 +396,11 @@ def booster_angle_prompts(has_fins=False):
     """Angle checklist for the booster editor: the fin LE sweep (degrees)."""
     if not has_fins:
         return []
-    return [dict(field="fin_sweep", angle=True, unit="deg",
+    return [dict(field="fin_sweep", angle=True, unit="deg", complement=True,
                  label="ANGLE: click the fin-root LE corner (vertex), then a "
-                 "point along the fin LE, then a point OUT along the fin — "
-                 "spanwise, NOT down the body — fin LE sweep", view="side")]
+                 "point along the LEADING EDGE, then a point along the ROOT "
+                 "CHORD toward the tail — both real edges; stores sweep Λ = "
+                 "90° − that opening", view="side")]
 
 
 class HandEntry:
