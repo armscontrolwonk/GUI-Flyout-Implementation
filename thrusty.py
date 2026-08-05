@@ -4032,6 +4032,16 @@ class ROEditorDialog(tk.Toplevel):
                 var = getattr(self, field, None)
                 if var is not None:
                     var.set(f"{float(accepted[field]):.4g}")
+        # Measured wing geometry enables the Maneuvering section (wings are
+        # stored with the maneuvering model) — the same measured-it-so-show-it
+        # rule as the booster's fairing/fin sections.  The derived S/AR fire
+        # from the freshly written planform via _update_wing_state.
+        if any(f in accepted for f in ("_wing_root_var", "_wing_span_var",
+                                       "_wing_sweep_var")) \
+                and hasattr(self, "_glider_var") \
+                and not self._glider_var.get():
+            self._glider_var.set(True)
+            self._update_glider_state()
         if measurements and scale is not None:
             stamp = im.provenance_stamp(measurements, scale,
                                         datetime.date.today().isoformat())
@@ -4048,12 +4058,10 @@ class ROEditorDialog(tk.Toplevel):
         notes via _apply_image_measurements."""
         import image_measure as im
         form = self._body_form_key()
-        winged = bool(self._glider_var.get())
         _open_image_measure_dialog(
             self, "Measure from image — reentry object",
-            im.ro_prompts(form, biconic=bool(self._biconic_var.get()),
-                          winged=winged)
-            + im.ro_angle_prompts(form, winged=winged),
+            im.ro_prompts(form, biconic=bool(self._biconic_var.get()))
+            + im.ro_angle_prompts(form),
             self._apply_image_measurements,
             current_fn=self._current_image_values)
 

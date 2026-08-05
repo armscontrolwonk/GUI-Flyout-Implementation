@@ -194,7 +194,8 @@ def test_stamp_notes_multiple_views():
 # ── the prompt checklist by body form (R5 embedding) ────────────────────────
 def test_ro_prompts_by_body_form():
     ax = im.ro_prompts("axisymmetric")
-    assert [p["field"] for p in ax] == ["_len_var", "_dia_var", "_nose_var"]
+    assert [p["field"] for p in ax] == ["_len_var", "_dia_var", "_nose_var",
+                                        "_wing_root_var", "_wing_span_var"]
     assert all(p["view"] == "side" for p in ax)
 
     wed = im.ro_prompts("wedge")
@@ -220,28 +221,32 @@ def test_ro_prompts_biconic_adds_break_geometry_when_declared():
     assert "_fore_len_var" in bic and "_break_dia_var" in bic
 
 
-def test_ro_prompts_winged_adds_planform_not_area():
-    """Maneuvering (winged) is declared topology.  The tool measures the
-    PLANFORM (root chord + exposed span) — S and AR stay derived by the editor
-    (wing_geometry single source of truth), and LE sweep is an angle a
-    two-point distance tool cannot measure, so neither is ever prompted."""
-    ps = im.ro_prompts("axisymmetric", winged=True)
+def test_ro_prompts_always_offer_the_planform_not_area():
+    """Wing prompts are ALWAYS offered for forms that can carry a wing — the
+    wings are visible in the image whether or not Maneuvering is ticked yet
+    (apply enables the section when wing geometry lands; skip is structural).
+    The tool measures the PLANFORM (root chord + exposed span) — S and AR
+    stay derived by the editor (wing_geometry single source of truth)."""
+    ps = im.ro_prompts("axisymmetric")
     fields = [p["field"] for p in ps]
     assert "_wing_root_var" in fields and "_wing_span_var" in fields
     assert not any("area" in f or "sweep" in f or "_wing_ar" in f
                    for f in fields)
     # half-cone + delta wing (the Fetterman configuration) keeps its wing rows
-    hc = [p["field"] for p in im.ro_prompts("half_cone", winged=True)]
+    hc = [p["field"] for p in im.ro_prompts("half_cone")]
     assert "_wing_span_var" in hc
     # the wedge's body IS the lifting surface — wing rows are disabled in the
     # editor and must never be prompted (they'd be zeroed on save anyway)
-    wed = [p["field"] for p in im.ro_prompts("wedge", winged=True)]
+    wed = [p["field"] for p in im.ro_prompts("wedge")]
     assert not any(f.startswith("_wing") for f in wed)
 
 
-def test_ro_prompts_unwinged_has_no_wing_prompts():
+def test_wedge_never_gets_wing_prompts():
+    """The wedge's body IS its lifting surface — its wing rows are disabled
+    by design, so neither planform nor sweep prompts exist for it."""
     assert not any(f.startswith("_wing") for f in
-                   (p["field"] for p in im.ro_prompts("axisymmetric")))
+                   (p["field"] for p in im.ro_prompts("wedge")))
+    assert im.ro_angle_prompts("wedge") == []
 
 
 def test_booster_prompts_from_topology():
@@ -327,10 +332,10 @@ def test_only_exposed_spans_are_clocking_sensitive():
                             n_fins=4, n_strapons=2)
     sensitive = [p["field"] for p in ps if p.get("clocking_sensitive")]
     assert sensitive == ["fin_span"]
-    ro = im.ro_prompts("axisymmetric", biconic=True, winged=True)
+    ro = im.ro_prompts("axisymmetric", biconic=True)
     sensitive = [p["field"] for p in ro if p.get("clocking_sensitive")]
     assert sensitive == ["_wing_span_var"]
-    wed = im.ro_prompts("wedge", winged=True)
+    wed = im.ro_prompts("wedge")
     assert not any(p.get("clocking_sensitive") for p in wed)   # plan view = true span
 
 
@@ -391,16 +396,16 @@ def test_ro_angle_prompts_store_sweep_and_check_flanks():
     """The ONE stored angle target is the wing LE sweep (load-bearing since
     the 2b wing-body composite); the cone flank angles are check-only and
     absent from the RO apply map by design."""
-    ps = im.ro_angle_prompts("axisymmetric", winged=True)
+    ps = im.ro_angle_prompts("axisymmetric")
     fields = [p["field"] for p in ps]
     assert fields == ["_wing_sweep_var", im.FLANK_UPPER_FIELD,
                       im.FLANK_LOWER_FIELD]
     assert all(p["angle"] and p["unit"] == "deg" for p in ps)
     # wedge: no wing rows → no sweep target, and no flanks (not axisymmetric)
-    assert im.ro_angle_prompts("wedge", winged=True) == []
-    # unwinged axisymmetric: flank checks only
-    assert [p["field"] for p in im.ro_angle_prompts("axisymmetric")] == \
-        [im.FLANK_UPPER_FIELD, im.FLANK_LOWER_FIELD]
+    assert im.ro_angle_prompts("wedge") == []
+    # half-cone: sweep target, no flank checks (not axisymmetric)
+    assert [p["field"] for p in im.ro_angle_prompts("half_cone")] == \
+        ["_wing_sweep_var"]
 
 
 def test_booster_angle_prompts_gated_on_fins():
