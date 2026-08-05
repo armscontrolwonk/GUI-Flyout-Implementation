@@ -3282,7 +3282,9 @@ class ROEditorDialog(tk.Toplevel):
             else 'axisymmetric'
         _cur_shape = (ro.shape if ro else 'cone') or 'cone'
         self._shape_var = tk.StringVar(
-            value=self._shape_label_for(_cur_shape, _cur_form))
+            value=self._shape_label_for(
+                _cur_shape, _cur_form,
+                bool(getattr(ro, 'biconic', False)) if ro else False))
         self._shape_combo = ttk.Combobox(
             geo, textvariable=self._shape_var,
             values=[o[0] for o in self._shape_opts], state="readonly", width=30)
@@ -3316,14 +3318,12 @@ class ROEditorDialog(tk.Toplevel):
 
         # Biconic (two-cone) body — fore cone + aft frustum.  Only length and
         # break diameter are entered; the half-angles derive from these against
-        # the base diameter / length (feeds the two-cone β estimator).
-        _lbl(5, "Biconic body:", parent=geo)
+        # the base diameter / length (feeds the two-cone β estimator).  The
+        # SELECTION lives in the merged Shape dropdown (its own entry — the
+        # standalone checkbox failed discoverability twice); this var is the
+        # backing state, driven by _update_body_form_state.
         self._biconic_var = tk.BooleanVar(
             value=bool(getattr(ro, 'biconic', False)) if ro else False)
-        self._biconic_chk = ttk.Checkbutton(
-            geo, variable=self._biconic_var, text="two-cone (fore + aft)",
-            command=self._update_biconic_state)
-        self._biconic_chk.grid(row=5, column=1, sticky=tk.W, pady=3)
         _lbl(6, "Fore-cone length (m):", parent=geo)
         self._fore_len_var = tk.StringVar(
             value=f"{getattr(ro, 'fore_length_m', 0.0):.2f}" if ro else "0")
@@ -4317,23 +4317,36 @@ class ROEditorDialog(tk.Toplevel):
         else:
             self._trim_lbl.configure(text="")
 
+    # Biconic lives IN the Shape selector: to the user a two-cone IS a shape
+    # (the standalone checkbox failed discoverability twice), even though the
+    # model stores it as a flag on a body of revolution.
+    _BICONIC_LABEL = "Biconic — two-cone (fore + aft)"
+
     def _shape_form_options(self):
         """Ordered (display_label, shape_key, body_form_key) for the merged
-        Shape selector: the axisymmetric nose profiles first (each implying a
-        body of revolution), then the two lifting-body forms (nose profile moot
-        → 'cone').  The single source both the dropdown and _build_ro read."""
+        Shape selector: the axisymmetric nose profiles (each implying a body
+        of revolution) with the biconic entry right after the plain cone,
+        then the two lifting-body forms (nose profile moot → 'cone').  The
+        single source both the dropdown and _build_ro read."""
         opts = [(v, k, 'axisymmetric') for k, v in NOSE_SHAPE_LABELS.items()]
+        i = next((j for j, o in enumerate(opts) if o[1] == 'cone'), 0) + 1
+        opts.insert(i, (self._BICONIC_LABEL, 'cone', 'axisymmetric'))
         opts.append((self._BODY_FORM_LABELS['wedge'], 'cone', 'wedge'))
         opts.append((self._BODY_FORM_LABELS['half_cone'], 'cone', 'half_cone'))
         return opts
 
-    def _shape_label_for(self, shape_key, body_form_key):
-        """The merged-selector label for a stored (shape, body_form): a
-        lifting body_form wins (nose profile is moot for it); otherwise the
-        nose profile.  So an ogive-nosed round body shows 'Tangent Ogive', a
-        wedge shows 'Flattened wedge' regardless of its stored nose shape."""
+    def _shape_label_for(self, shape_key, body_form_key, biconic=False):
+        """The merged-selector label for a stored (shape, body_form, biconic):
+        a lifting body_form wins (nose profile is moot for it); then the
+        biconic flag (a two-cone reads as a shape); otherwise the nose
+        profile.  So an ogive-nosed round body shows 'Tangent Ogive', a wedge
+        shows 'Flattened wedge', and a biconic shows 'Biconic' regardless of
+        the stored nose shape (re-saving normalizes it to 'cone', as the
+        lifting forms already do)."""
         if body_form_key in ('wedge', 'half_cone'):
             return self._BODY_FORM_LABELS[body_form_key]
+        if biconic:
+            return self._BICONIC_LABEL
         return NOSE_SHAPE_LABELS.get(shape_key or 'cone', NOSE_SHAPE_LABELS['cone'])
 
     def _shape_key(self):
@@ -4348,18 +4361,19 @@ class ROEditorDialog(tk.Toplevel):
                     'axisymmetric')
 
     def _update_body_form_state(self):
-        """Per-form field gating.  Biconic is a body-of-revolution concept: a
-        lifting-body form unticks and disables it.  The planform-span field is
-        WEDGE-only (body geometry); the wing rows are disabled FOR the wedge
+        """Per-form field gating.  Biconic is its own Shape-dropdown entry
+        (a body-of-revolution concept, exclusive with the lifting forms by
+        construction); the selection drives the flag.  The planform-span
+        field is WEDGE-only (body geometry); the wing rows are disabled FOR the wedge
         (its body is the lifting surface — hidden-but-active wing physics
         would be dishonest).  A half-cone keeps its wing rows: half-cone +
         delta wing is a real configuration (Fetterman TN D-2942)."""
         form = self._body_form_key()
-        if form != "axisymmetric":
-            self._biconic_var.set(False)
-            self._biconic_chk.config(state="disabled")
-        else:
-            self._biconic_chk.config(state="normal")
+        # Biconic is a Shape-dropdown entry (body-of-revolution only, so a
+        # lifting selection is exclusive with it by construction): the
+        # selection drives the flag and the fore/break field gating.
+        self._biconic_var.set(form == "axisymmetric"
+                              and self._shape_var.get() == self._BICONIC_LABEL)
         self._update_biconic_state()
         if hasattr(self, '_body_span_entry'):
             self._body_span_entry.config(
