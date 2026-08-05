@@ -304,13 +304,24 @@ def angle_check_note(measured_deg, derived_deg, what):
     """Warn-only comparator between a measured angle and its derived-from-
     lengths twin.  Disagreement on a clean orthographic image is impossible,
     so it specifically diagnoses non-uniform stretch, perspective tilt, or a
-    mis-click — never auto-corrected."""
+    mis-click — never auto-corrected.  One failure mode is decoded by name:
+    measured + derived ≈ 90° means the angle was taken from the BODY AXIS
+    instead of spanwise (on a nose-up image, clicking down the root is the
+    natural wrong motion) — the note states the complement to use, but never
+    writes it."""
     if derived_deg is None:
         return ""
     m, d = float(measured_deg), float(derived_deg)
     rel = (m - d) / d if d else 0.0
-    verdict = ("agrees" if abs(rel) <= ANGLE_CHECK_REL
-               else "DISAGREES — image stretch/tilt or a mis-click?")
+    if abs(rel) <= ANGLE_CHECK_REL:
+        verdict = "agrees"
+    elif abs((m + d) - 90.0) <= 3.0:
+        verdict = (f"DISAGREES, and measured + derived ≈ 90°: the angle was "
+                   f"likely taken from the BODY AXIS; the stored convention "
+                   f"is from SPANWISE — its complement {90.0 - m:.1f}° "
+                   f"matches the planform (re-measure, or Type value it)")
+    else:
+        verdict = "DISAGREES — image stretch/tilt or a mis-click?"
     return (f"{what}: measured {m:.1f}° vs derived-from-lengths {d:.1f}° "
             f"({rel:+.1%}) — {verdict}")
 
@@ -347,9 +358,10 @@ def ro_angle_prompts(body_form="axisymmetric"):
     if body_form != "wedge":
         p.append(dict(field="_wing_sweep_var", angle=True, unit="deg",
                       label="ANGLE: click the wing-root LE corner (vertex), "
-                      "then a point along the LE, then a point spanwise "
-                      "(perpendicular to the body axis) — LE sweep Λ",
-                      view="side"))
+                      "then a point along the LE, then a point OUT along the "
+                      "wing — spanwise, perpendicular to the body axis, NOT "
+                      "down the body — LE sweep Λ (a delta fin's Λ is LARGE, "
+                      "70–80°)", view="side"))
     if body_form == "axisymmetric":
         p.append(dict(field=FLANK_UPPER_FIELD, angle=True, unit="deg",
                       label="ANGLE (check only): nose tip (vertex), then a "
@@ -368,8 +380,8 @@ def booster_angle_prompts(has_fins=False):
         return []
     return [dict(field="fin_sweep", angle=True, unit="deg",
                  label="ANGLE: click the fin-root LE corner (vertex), then a "
-                 "point along the fin LE, then a point spanwise — fin LE "
-                 "sweep", view="side")]
+                 "point along the fin LE, then a point OUT along the fin — "
+                 "spanwise, NOT down the body — fin LE sweep", view="side")]
 
 
 class HandEntry:
