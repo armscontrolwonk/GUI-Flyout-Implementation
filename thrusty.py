@@ -2918,15 +2918,18 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         p = state["prompt"]
         if p.get("angle"):
             vertex, a1, a2 = state["clicks"]
-            m = im.AngleMeasurement(p["field"], vertex, a1, a2)
+            m = im.AngleMeasurement(p["field"], vertex, a1, a2,
+                                    complement=bool(p.get("complement")))
             state["_pending_pts"] = (vertex, a1, a2, state["cur"])
             _clear_marks(); state["mode"] = "idle"
             if m.refused:
                 result_var.set("✗ " + "; ".join(m.flags)
                                + " — nothing recorded.")
                 return
-            result_var.set(f"{p['field']} = {m.value_deg:.1f}°  (anchor-free)"
-                           "\nAccept to record, or re-measure.")
+            conv = (f"  (LE↔root {m.raw_deg:.1f}° → Λ)"
+                    if getattr(m, "complement", False) else "")
+            result_var.set(f"{p['field']} = {m.value_deg:.1f}°{conv}  "
+                           "(anchor-free)\nAccept to record, or re-measure.")
             state["_pending"] = m
 
             def _accept_angle():
