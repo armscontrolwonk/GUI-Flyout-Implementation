@@ -108,6 +108,28 @@ def test_apply_maps_biconic_and_wing_planform(root):
     assert float(dlg._wing_area_var.get()) > 0.0     # S derived from planform
 
 
+def test_wing_prompts_offered_without_maneuvering_and_apply_enables_it(root):
+    """The wings are visible in the image whether or not Maneuvering is
+    ticked yet: the checklist offers the wing planform (and sweep angle)
+    regardless, and APPLYING wing geometry enables the Maneuvering section —
+    the same measured-it-so-show-it rule as the booster's fairing/fins.
+    Without it the measured values would sit in disabled fields and be
+    silently dropped on save."""
+    dlg = _editor(root)
+    dlg._glider_var.set(False); dlg._update_glider_state()
+    fields = [p["field"] for p in im.ro_prompts("axisymmetric")]
+    assert "_wing_root_var" in fields and "_wing_span_var" in fields
+    assert "_wing_sweep_var" in [p["field"]
+                                 for p in im.ro_angle_prompts("axisymmetric")]
+    dlg._apply_image_measurements(
+        {"_wing_root_var": 0.7, "_wing_span_var": 0.45}, [], None)
+    assert dlg._glider_var.get() is True              # auto-enabled
+    assert str(dlg._wing_root_ent.cget("state")) == "normal"
+    assert float(dlg._wing_area_var.get()) > 0.0      # S derived, visible
+    ro = dlg._build_ro()
+    assert ro.wing_root_chord_m == pytest.approx(0.7)  # stored, not dropped
+
+
 def test_apply_with_nothing_accepted_is_a_noop(root):
     dlg = _editor(root)
     before_len = dlg._len_var.get()
@@ -179,10 +201,12 @@ def test_clocking_control_present_for_fins(root):
     assert im.CLOCKING_OPTIONS[0][0] in clock[0].cget("values")
     opened[-1].destroy(); d.destroy()
 
-    # RO editor with NO wings declared (Maneuvering off): no clocking-sensitive
-    # prompt → the selector is not built at all.
+    # WEDGE editor: its body IS the lifting surface — no wing prompts, and
+    # its plan-view span is a true span (no foreshortening), so no
+    # clocking-sensitive prompt exists and the selector is not built at all.
     dlg = _editor(root)
-    dlg._glider_var.set(False)
+    dlg._shape_var.set(dlg._BODY_FORM_LABELS["wedge"])
+    dlg._update_body_form_state()
     opened2 = []
     tk.Toplevel = lambda *a, **k: (lambda w: (opened2.append(w), w)[1])(orig(*a, **k))
     try:
@@ -403,7 +427,7 @@ def test_angle_measure_accept_and_apply(root, tmp_path):
     p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
     d._im_load_path(str(p))
     assert d._im_views["side"]["scale"] is None            # no scale on purpose
-    ang = [q for q in im.ro_angle_prompts("axisymmetric", winged=True)
+    ang = [q for q in im.ro_angle_prompts("axisymmetric")
            if q["field"] == "_wing_sweep_var"][0]
     st["prompt"] = ang
     st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]   # 45°
@@ -433,7 +457,7 @@ def test_angle_check_line_flags_disagreement(root, tmp_path):
     p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
     d._im_load_path(str(p))
     st["accepted"].update({"_wing_root_var": 1.0, "_wing_span_var": 1.0})
-    ang = [q for q in im.ro_angle_prompts("axisymmetric", winged=True)
+    ang = [q for q in im.ro_angle_prompts("axisymmetric")
            if q["field"] == "_wing_sweep_var"][0]
     st["prompt"] = ang
     st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (100.0, 173.2)]   # 60° ≠ 45°

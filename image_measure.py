@@ -337,13 +337,14 @@ FLANK_UPPER_FIELD = "flank_upper_deg"
 FLANK_LOWER_FIELD = "flank_lower_deg"
 
 
-def ro_angle_prompts(body_form="axisymmetric", winged=False):
+def ro_angle_prompts(body_form="axisymmetric"):
     """Angle checklist for the RO editor.  The stored target is the wing LE
     sweep (degrees — load-bearing since the Phase-2b wing-body composite
     derives the exposed planform from it); the cone flank angles are
-    CHECK-ONLY audits (symmetry + identity vs the ⌀/L pair)."""
+    CHECK-ONLY audits (symmetry + identity vs the ⌀/L pair).  Wing sweep is
+    offered whenever the form can carry a wing, same rule as ro_prompts."""
     p = []
-    if winged and body_form != "wedge":
+    if body_form != "wedge":
         p.append(dict(field="_wing_sweep_var", angle=True, unit="deg",
                       label="ANGLE: click the wing-root LE corner (vertex), "
                       "then a point along the LE, then a point spanwise "
@@ -458,12 +459,15 @@ def provenance_stamp(measurements, scale, date_str, view_note=""):
 # The prompt checklist (R5 conventions embedded).  Generated from the declared
 # reentry-object topology; each prompt names the field var, the instruction,
 # the view it needs, and the convention that converts click→stored value.
-def ro_prompts(body_form="axisymmetric", biconic=False, winged=False):
+def ro_prompts(body_form="axisymmetric", biconic=False):
     """Ordered prompts for the reentry-object editor, generated from the
-    topology the editor ALREADY declares: body form (shape dropdown), biconic
-    (its checkbox — body-of-revolution only), and winged (the Maneuvering
-    section, whose wing fields are stored for every form except the wedge,
-    whose body IS the lifting surface)."""
+    declared topology: body form (shape dropdown) and biconic (its Shape
+    entry — body-of-revolution only).  Wing prompts are ALWAYS offered for
+    forms that can carry a wing (every form except the wedge, whose body IS
+    the lifting surface): the wings are visible in the image whether or not
+    Maneuvering is ticked yet, skip is structural, and APPLY enables the
+    Maneuvering section when wing geometry was measured (the same
+    measured-it-so-show-it rule as the booster's fairing/fin sections)."""
     p = []
     if body_form == "wedge":
         p.append(dict(field="_len_var", label="Click the two ends of the LENGTH "
@@ -501,11 +505,11 @@ def ro_prompts(body_form="axisymmetric", biconic=False, winged=False):
             p.append(dict(field="_break_dia_var", label="Click across the BREAK "
                           "diameter (where the fore cone meets the aft frustum)",
                           view="side", convention="break_diameter"))
-    if winged and body_form != "wedge":
-        # Declared: the Maneuvering section.  S and AR are DERIVED from this
-        # planform by the editor (single source of truth = wing_geometry), so
-        # the tool measures the planform, never the area.  LE sweep is an
-        # angle — outside a two-point distance tool, left to hand entry.
+    if body_form != "wedge":
+        # S and AR are DERIVED from this planform by the editor (single
+        # source of truth = wing_geometry), so the tool measures the
+        # planform, never the area.  LE sweep is an angle — the 3-click
+        # angle prompt covers it (ro_angle_prompts).
         p.append(dict(field="_wing_root_var", label="Click ONE wing/fin panel's "
                       "ROOT chord (leading to trailing edge at the body)",
                       view="side", convention="wing_root"))
