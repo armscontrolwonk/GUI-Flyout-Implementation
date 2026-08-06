@@ -308,6 +308,19 @@ Scope and plumbing:
     with everything untouched.  One field→var map per editor
     (`_img_field_var`) is shared by apply and the preview, so they can
     never disagree about what is writable.
+  - **Nose / fairing shapes (validated + closed, 2026-08-05)** — every RO
+    nose profile (cone, tangent ogive, von Kármán, Sears-Haack / LV-Haack,
+    parabola, blunt cylinder) is fully parameterized by the SAME three
+    measured dimensions (length, base ⌀, nose radius); the profile is a
+    DECLARED shape (the dropdown), not a measured quantity, so a Sears-Haack
+    RO presents the identical prompt list as a cone.  Two gaps closed:
+    (a) the fairing's NOSE-SEGMENT length (where the ogive/cone meets the
+    cylinder) is now its own prompt (`fairing_nose_len` → the editor's nose-
+    segment field; NOT a closure segment — it is part of the total, not
+    additional); (b) the RO nose DIAGRAM now follows the declared profile
+    (`ro_side_base(shape)`: straight cone, curved ogive/haack/karman/parabola,
+    domed blunt) so the picture matches the shape — passed to the dialog via
+    a `ctx`.  The measured dimensions are unchanged; only the art is honest.
   - **Interstage length (DONE, 2026-08-05)** — a stage whose interstage
     adapter is declared (its checkbox) gets an interstage-LENGTH prompt after
     that stage's len/dia.  Length is the only image-measurable interstage

@@ -1977,6 +1977,7 @@ class BoosterDialog(tk.Toplevel):
         return {
             "fairing_len": getattr(self, "_shroud_length_var", None),
             "fairing_dia": getattr(self, "_shroud_diameter_var", None),
+            "fairing_nose_len": getattr(self, "_shroud_nose_length_var", None),
             "fin_span": getattr(self, "_fin_span_var", None),
             "fin_root": getattr(self, "_fin_root_var", None),
             "fin_tip": getattr(self, "_fin_tip_var", None),
@@ -2491,7 +2492,7 @@ _FAMILY_LABELS = {'numerical': "numerical (EOM)",
 
 
 def _open_image_measure_dialog(parent, title, prompts, apply_fn,
-                               current_fn=None):
+                               current_fn=None, ctx=None):
     """Shared image-dimensioning dialog (Phase A) for the RO and booster
     editors.  `prompts` is a list of {field,label,view,convention} (from
     image_measure); `apply_fn(accepted, measurements, scale)` writes the
@@ -2872,7 +2873,15 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
             return
         def _S(q):
             return (q[0] * _DIAG_W, q[1] * _DIAG_H)
-        for poly in im.DIAGRAM_BASES[spec["base"]]:
+        # Shape-aware base art: the RO nose outline follows the DECLARED
+        # profile (cone / ogive / Sears-Haack / parabola / blunt) so the
+        # picture matches the shape; everything else uses the static art.
+        if spec["base"] == "ro_side" and ctx and ctx.get("nose_shape"):
+            base_polys = im.ro_side_base(ctx["nose_shape"],
+                                         bool(ctx.get("biconic")))
+        else:
+            base_polys = im.DIAGRAM_BASES[spec["base"]]
+        for poly in base_polys:
             diag_canvas.create_line(*[c for q in poly for c in _S(q)],
                                     fill="#aaa")
         pts = [_S(q) for q in spec["pts"]]
@@ -4230,7 +4239,9 @@ class ROEditorDialog(tk.Toplevel):
             im.ro_prompts(form, biconic=bool(self._biconic_var.get()))
             + im.ro_angle_prompts(form),
             self._apply_image_measurements,
-            current_fn=self._current_image_values)
+            current_fn=self._current_image_values,
+            ctx=dict(nose_shape=self._shape_key(),
+                     biconic=bool(self._biconic_var.get())))
 
     # ------------------------------------------------------------------
     def _current_wing_geometry(self):

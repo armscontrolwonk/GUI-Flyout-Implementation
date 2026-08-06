@@ -631,3 +631,49 @@ def test_interstage_length_measures_and_enables_the_section(root):
     assert fr._interstage_var.get() is True                  # section enabled
     assert str(fr._is_len_entry.cget("state")) == "normal"
     d.destroy()
+
+
+def test_fairing_nose_length_maps_to_the_editor_field(root):
+    """The fairing nose-segment length routes to _shroud_nose_length_var and
+    keeps the fairing section enabled (measured-it-so-show-it)."""
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._shroud_var.set(False); d._update_shroud_state()
+    assert d._img_field_var("fairing_nose_len") is d._shroud_nose_length_var
+    d._apply_image_measurements({"fairing_nose_len": 1.8}, [], None)
+    assert float(d._shroud_nose_length_var.get()) == pytest.approx(1.8)
+    assert d._shroud_var.get() is True                # section enabled
+    d.destroy()
+
+
+def test_ro_diagram_is_shape_aware(root):
+    """A Sears-Haack (lv_haack) RO's diagram draws the curved profile; a cone
+    draws the straight one — the base art follows the declared shape via the
+    ctx passed to the dialog."""
+    pytest.importorskip("PIL")
+    ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+
+    def open_for(shape_key):
+        dlg = thrusty.ROEditorDialog(root, ro=ro); dlg.withdraw()
+        dlg._shape_var.set(thrusty.NOSE_SHAPE_LABELS[shape_key])
+        dlg._update_body_form_state()
+        opened = []
+        orig = tk.Toplevel
+        tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
+        try:
+            dlg._measure_from_image()
+        finally:
+            tk.Toplevel = orig
+        d = opened[-1]
+        d._im_prompt_var.set(f"_len_var  —  "
+                             f"{im.ro_prompts('axisymmetric')[0]['label']}")
+        d._im_on_prompt()
+        # the body outline is the polyline with the most vertices; a curved
+        # profile has many, a straight cone few
+        max_verts = max((len(d._im_diag.coords(i)) for i in d._im_diag.find_all()
+                         if d._im_diag.type(i) == "line"), default=0)
+        d.destroy(); dlg.destroy()
+        return max_verts
+
+    # the curved Sears-Haack outline has more vertices than the straight cone
+    assert open_for("lv_haack") > open_for("cone")
