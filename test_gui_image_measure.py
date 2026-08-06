@@ -587,3 +587,22 @@ def test_accept_advances_the_checklist(root, tmp_path):
         sd.askfloat = orig_ask
     assert d._im_prompt_var.get().startswith("_nose_var")
     d.destroy()
+
+
+def test_prompt_diagram_draws_and_tracks_selection(root):
+    """The what-to-click diagram sits under the selector, drawn for the
+    FIRST prompt at open, and redraws when the selection changes — an angle
+    prompt shows its arc, a length prompt its arrowed segment."""
+    pytest.importorskip("PIL")
+    dlg = _editor(root)
+    d = _open_measure_dialog(dlg)
+    kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}
+    assert "line" in kinds and "oval" in kinds     # base art + click badges
+    assert "arc" not in kinds                      # _len_var is a length
+    ang = [q for q in im.ro_angle_prompts("axisymmetric")
+           if q["field"] == "_wing_sweep_var"][0]
+    d._im_prompt_var.set(f"{ang['field']}  —  {ang['label']}")
+    d._im_on_prompt()
+    kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}
+    assert "arc" in kinds                          # angle prompt shows the arc
+    d.destroy()
