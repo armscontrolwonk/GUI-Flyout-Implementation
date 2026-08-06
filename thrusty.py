@@ -2998,7 +2998,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     # clicks numbered, redrawn whenever the selected dimension changes
     # (including checklist auto-advance).  Data lives in image_measure
     # (diagram_spec / DIAGRAM_BASES); this only scales and draws.
-    _DIAG_W, _DIAG_H = 232, 140
+    _DIAG_W, _DIAG_H = 232, 160
     diag_canvas = tk.Canvas(panel, width=_DIAG_W, height=_DIAG_H, bg="white",
                             highlightthickness=1, highlightbackground="#ccc")
     diag_canvas.pack(anchor=tk.W, pady=(0, 4))
@@ -3021,12 +3021,18 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                                          bool(ctx.get("biconic")))
         else:
             base_polys = im.DIAGRAM_BASES[spec["base"]]
-        for poly in base_polys:
+        subject = spec.get("subject")
+        for item in base_polys:
+            poly = item["pts"]
             flat = [c for q in poly for c in _S(q)]
-            if im.closed_poly(poly):     # body art: filled + outlined
-                diag_canvas.create_polygon(*flat, fill=st["fill"],
-                                           outline=st["outline"],
-                                           width=st["outline_width"])
+            if im.closed_poly(poly):     # body art: filled + outlined —
+                # the SUBJECT element (what this prompt measures) fills
+                # white, the rest of the vehicle grey
+                diag_canvas.create_polygon(
+                    *flat,
+                    fill=(st["highlight"] if item["tag"] == subject
+                          else st["fill"]),
+                    outline=st["outline"], width=st["outline_width"])
             else:                        # detail stroke (break/joint line)
                 diag_canvas.create_line(*flat, fill=st["outline"],
                                         width=st["outline_width"])

@@ -386,6 +386,16 @@ Scope and plumbing:
     it opens the REAL dialogs headlessly, walks every prompt, screenshots
     the live diagram canvas (no parallel drawing path that could drift),
     and tiles all 27 into one PNG — run it after any style/art change.
+    Reference-art subtleties (same day, from the underlying art): (a) base
+    outlines are TAGGED elements (s1, inter1, fairing, fin_r, nose, …) and
+    each prompt declares its SUBJECT — the measured element fills WHITE
+    while the rest of the vehicle stays grey (the overall-length check
+    highlights nothing: it spans the whole vehicle); (b) the interstage
+    bands are drawn explicitly in the stack (inter2 flat, inter1 tapered
+    to the wider S1); (c) representative proportions — slender stack,
+    domed fairing, round-nosed strap-on, skirt fin, and the RV blunt tip
+    as its own small dome-above-a-tangency-line element ("nose"), which
+    gives the nose-radius prompt an honest subject to highlight.
   - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
     hatched stylization (R12) + live discrepancy highlighting.
 

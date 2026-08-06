@@ -734,7 +734,11 @@ def test_prompt_diagram_renders_through_style_tokens(root):
     c = d._im_diag
     polys = [i for i in c.find_all() if c.type(i) == "polygon"]
     assert polys                                       # filled body art
-    assert all(c.itemcget(i, "fill") == st["fill"] for i in polys)
+    fills = [c.itemcget(i, "fill") for i in polys]
+    assert set(fills) <= {st["fill"], st["highlight"]}
+    # _len_var (first prompt) measures the BODY: exactly one element is
+    # highlighted white — the subject — and the rest stay grey
+    assert fills.count(st["highlight"]) == 1
     assert all(c.itemcget(i, "outline") == st["outline"] for i in polys)
     arrows = [i for i in c.find_all() if c.type(i) == "line"
               and c.itemcget(i, "fill") == st["measure"]]
