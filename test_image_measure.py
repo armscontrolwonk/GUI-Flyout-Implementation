@@ -590,3 +590,29 @@ def test_cone_and_ogive_share_the_same_measured_dimensions():
     fields = lambda: [p["field"] for p in im.ro_prompts("axisymmetric")]
     assert fields() == ["_len_var", "_dia_var", "_nose_var",
                         "_wing_root_var", "_wing_span_var", "_wing_tip_derive"]
+
+
+def test_conical_stage_adds_a_top_diameter_prompt():
+    """A conical (tapered) stage is a frustum — its TOP diameter is a free
+    parameter distinct from the base.  Offered only for declared conical
+    stages; the stage's own dia prompt relabels to BASE.  Not a closure
+    segment (diameters don't tile length)."""
+    plain = [p["field"] for p in im.booster_prompts(n_stages=2)]
+    assert not any("_top_dia" in f for f in plain)
+    ps = im.booster_prompts(n_stages=2, conical_stages=(1,))
+    fields = [p["field"] for p in ps]
+    assert "stage1_top_dia" in fields and "stage2_top_dia" not in fields
+    top = next(p for p in ps if p["field"] == "stage1_top_dia")
+    assert top["convention"] == "stage_diameter"
+    base = next(p for p in ps if p["field"] == "stage1_dia")
+    assert "BASE" in base["label"]                # relabeled for the taper
+    # order: top ⌀ follows the base ⌀
+    assert fields.index("stage1_top_dia") == fields.index("stage1_dia") + 1
+    assert "stage1_top_dia" not in im.closure_segments(ps)
+
+
+def test_conical_top_diameter_has_its_own_diagram_at_the_stage_top():
+    spec = im.diagram_spec(dict(field="stage1_top_dia"))
+    assert spec["base"] == "booster" and spec["kind"] == "line"
+    base = im.diagram_spec(dict(field="stage1_dia"))["pts"]
+    assert spec["pts"] != base                    # top edge, not the base line

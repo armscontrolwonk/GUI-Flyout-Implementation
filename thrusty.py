@@ -1936,13 +1936,16 @@ class BoosterDialog(tk.Toplevel):
         inter = [i + 1 for i, fr in enumerate(self._stage_frames[:_nst])
                  if bool(getattr(fr, "_interstage_var", None)
                          and fr._interstage_var.get())]
+        conical = [i + 1 for i, fr in enumerate(self._stage_frames[:_nst])
+                   if bool(getattr(fr, "_conical_var", None)
+                           and fr._conical_var.get())]
         prompts = im.booster_prompts(
             n_stages=_nst,
             has_fairing=bool(self._shroud_var.get()),
             has_fins=bool(self._fins_var.get()),
             n_fins=_i(self._fin_n_var, 0),
             n_strapons=_i(self._n_boosters_var, 0),
-            interstage_stages=inter) \
+            interstage_stages=inter, conical_stages=conical) \
             + im.booster_angle_prompts(has_fins=bool(self._fins_var.get()))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
@@ -1973,6 +1976,8 @@ class BoosterDialog(tk.Toplevel):
             fr = frames[n - 1]
             if field.endswith("_interstage_len"):
                 return getattr(fr, "_is_len_var", None)
+            if field.endswith("_top_dia"):
+                return getattr(fr, "_top_dia_var", None)
             return fr._length if field.endswith("_len") else fr._dia
         return {
             "fairing_len": getattr(self, "_shroud_length_var", None),
@@ -2025,19 +2030,28 @@ class BoosterDialog(tk.Toplevel):
                     self._fin_sweep_var.set(f"{sw:.4g}")
             except (ValueError, tk.TclError, AttributeError):
                 pass
-        # A measured interstage length keeps its stage's interstage section on
-        # and enabled (the value would otherwise sit in a disabled entry).
+        # A measured interstage length / conical top ⌀ keeps its stage's
+        # section on and enabled (the value would otherwise sit in a disabled
+        # entry) — measured-it-so-show-it, per stage.
         for field in (accepted or {}):
-            if field.endswith("_interstage_len") and field.startswith("stage"):
-                try:
-                    fr = self._stage_frames[int(field[5]) - 1]
-                except (ValueError, IndexError):
-                    continue
-                if getattr(fr, "_interstage_var", None) is not None \
-                        and not fr._interstage_var.get():
-                    fr._interstage_var.set(True)
-                    if hasattr(fr, "_on_interstage"):
-                        fr._on_interstage()
+            if not field.startswith("stage"):
+                continue
+            try:
+                fr = self._stage_frames[int(field[5]) - 1]
+            except (ValueError, IndexError):
+                continue
+            if field.endswith("_interstage_len") \
+                    and getattr(fr, "_interstage_var", None) is not None \
+                    and not fr._interstage_var.get():
+                fr._interstage_var.set(True)
+                if hasattr(fr, "_on_interstage"):
+                    fr._on_interstage()
+            elif field.endswith("_top_dia") \
+                    and getattr(fr, "_conical_var", None) is not None \
+                    and not fr._conical_var.get():
+                fr._conical_var.set(True)
+                if hasattr(fr, "_on_conical"):
+                    fr._on_conical()
         # Turning on the fairing/fins sections if their geometry was measured
         # keeps what-you-measured visible (the editor owns the count/on flags).
         if any(f.startswith("fairing") for f in (accepted or {})) and \
