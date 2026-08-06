@@ -722,50 +722,43 @@ def test_accept_advances_the_checklist(root, tmp_path):
     d.destroy()
 
 
-def test_prompt_diagram_renders_through_style_tokens(root):
-    """The diagram art direction is DATA (im.DIAGRAM_STYLE): closed body
-    outlines render as filled polygons in the fill/outline tokens, and the
-    measurement is a single-headed red 1→2 arrow (direction = click order)
-    with numbered disc markers — so a restyle is a token edit, and art for
-    future features inherits the style with no drawing-code changes."""
+def test_prompt_diagram_renders_antialiased_image(root):
+    """The diagram is now an antialiased matplotlib/Agg render (the
+    schematic's architecture) displayed as ONE image on the canvas — the
+    style/subject contract itself is pixel-tested in test_diagram_render;
+    here we pin the GUI plumbing: an image item, a live photo ref, and the
+    render actually honouring the subject through the real dialog path."""
     pytest.importorskip("PIL")
+    from PIL import ImageTk
     st = im.DIAGRAM_STYLE
     d = _open_measure_dialog(_editor(root))
     c = d._im_diag
-    polys = [i for i in c.find_all() if c.type(i) == "polygon"]
-    assert polys                                       # filled body art
-    fills = [c.itemcget(i, "fill") for i in polys]
-    assert set(fills) <= {st["fill"], st["highlight"]}
-    # _len_var (first prompt) measures the BODY: exactly one element is
-    # highlighted white — the subject — and the rest stay grey
-    assert fills.count(st["highlight"]) == 1
-    assert all(c.itemcget(i, "outline") == st["outline"] for i in polys)
-    arrows = [i for i in c.find_all() if c.type(i) == "line"
-              and c.itemcget(i, "fill") == st["measure"]]
-    assert len(arrows) == 1                            # the measure arrow
-    assert c.itemcget(arrows[0], "arrow") == "last"    # 1→2, single-headed
-    discs = [i for i in c.find_all() if c.type(i) == "oval"]
-    assert len(discs) == 2                             # numbered click discs
-    assert all(c.itemcget(i, "fill") == st["measure"] for i in discs)
+    assert [c.type(i) for i in c.find_all()] == ["image"]
+    assert c._photo is not None
+    img = ImageTk.getimage(c._photo)
+    w, h = img.size
+    # _len_var (first prompt) measures the BODY: subject fills white while
+    # the fins stay grey (sample the right fin's interior)
+    fin_px = img.getpixel((round(0.70 * (w - 1)), round(0.82 * (h - 1))))
+    assert all(abs(v - 0xEC) <= 12 for v in fin_px[:3])   # grey fin
     d.destroy()
 
 
 def test_prompt_diagram_draws_and_tracks_selection(root):
     """The what-to-click diagram sits under the selector, drawn for the
-    FIRST prompt at open, and redraws when the selection changes — an angle
-    prompt shows its arc, a length prompt its arrowed segment."""
+    FIRST prompt at open, and redraws when the selection changes."""
     pytest.importorskip("PIL")
     dlg = _editor(root)
     d = _open_measure_dialog(dlg)
-    kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}
-    assert "line" in kinds and "oval" in kinds     # base art + click badges
-    assert "arc" not in kinds                      # _len_var is a length
+    first = d._im_diag._photo
+    assert first is not None
     ang = [q for q in im.ro_angle_prompts("axisymmetric")
            if q["field"] == im.FLANK_UPPER_FIELD][0]
     d._im_prompt_var.set(f"{ang['field']}  —  {ang['label']}")
     d._im_on_prompt()
-    kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}
-    assert "arc" in kinds                          # angle prompt shows the arc
+    assert d._im_diag._photo is not None
+    assert d._im_diag._photo is not first          # redrawn for the new prompt
+    assert [d._im_diag.type(i) for i in d._im_diag.find_all()] == ["image"]
     d.destroy()
 
 
@@ -824,16 +817,18 @@ def test_ro_diagram_is_shape_aware(root):
         d._im_prompt_var.set(f"_len_var  —  "
                              f"{im.ro_prompts('axisymmetric')[0]['label']}")
         d._im_on_prompt()
-        # the body outline is the (filled) polygon with the most vertices; a
-        # curved profile has many, a straight cone few
-        max_verts = max((len(d._im_diag.coords(i)) for i in d._im_diag.find_all()
-                         if d._im_diag.type(i) in ("line", "polygon")),
-                        default=0)
+        from PIL import ImageTk
+        # sample where the haack curve bulges past the straight cone flank
+        # (x≈0.399 at y=0.5): dark linework for the curve, background for
+        # the cone — proving the ctx-declared shape reached the render
+        img = ImageTk.getimage(d._im_diag._photo)
+        w, h = img.size
+        px = img.getpixel((round(0.399 * (w - 1)), round(0.50 * (h - 1))))
         d.destroy(); dlg.destroy()
-        return max_verts
+        return sum(px[:3]) / 3.0
 
-    # the curved Sears-Haack outline has more vertices than the straight cone
-    assert open_for("lv_haack") > open_for("cone")
+    assert open_for("cone") > 245          # background at the sample point
+    assert open_for("lv_haack") < 200      # the curve's linework crosses it
 
 
 def test_conical_top_diameter_maps_and_enables_the_section(root):

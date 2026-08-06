@@ -396,6 +396,20 @@ Scope and plumbing:
     domed fairing, round-nosed strap-on, skirt fin, and the RV blunt tip
     as its own small dome-above-a-tangency-line element ("nose"), which
     gives the nose-radius prompt an honest subject to highlight.
+    Antialiased renderer (same day): the raw-Tk-canvas drawing (no AA — the
+    "low resolution" look was pixel staircases, not a size budget) is
+    replaced by `diagram_render.py`: matplotlib/Agg — the Schematic tab's
+    architecture, already a dependency — rendered at 2× and LANCZOS-
+    downscaled, displayed as one image on the same canvas.  Same pure data
+    (spec/bases/style tokens); pure object API, no pyplot, no global
+    backend change (the app's TkAgg figures are untouched).  Tests sample
+    PIXELS of the rendered image (subject white / body grey / measure red;
+    the haack curve crossing a point the cone flank misses) — the same
+    output users see.  This also makes a future real-geometry diagram
+    (drawing the ACTUAL declared vehicle via booster_schematic) a small
+    step, deliberately deferred: during first measurement the geometry is
+    mostly unset, so the generic representative outline is the honest
+    guide.
   - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
     hatched stylization (R12) + live discrepancy highlighting.
 
