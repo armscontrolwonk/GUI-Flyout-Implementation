@@ -268,9 +268,21 @@ Scope and plumbing:
   inherit it (red beyond ±2%).  Measurements are view-tagged; the stamp
   notes "views: plan+side" when both contributed.  The missing-view rule is
   structural: skip the plan view and the span field stays unset + flagged.
-- **Angles (DONE, 2026-08-01)** — built with Phase 2b, the moment sweep
-  became load-bearing (the wing-body composite derives the exposed planform
-  from `wing_sweep_deg`).  Three-click measurement (vertex + two rays),
+- **Wing/fin sweep is DERIVED, not measured (2026-08-05).**  Measuring the
+  sweep as an ANGLE proved a recurring trap: on a nose-up image the LE↔root
+  opening (~13°) and the sweep Λ (~77°) are complements, and every attempt to
+  instruct the click order left the 90° flip easy to get backwards
+  (rectangles instead of triangles).  Retired.  Sweep now derives from the
+  planform LENGTHS the user clicks confidently: `tan Λ = (root − tip)/span`
+  (straight-TE, as `wing_geometry` assumes).  The RO checklist gains a
+  TIP-CHORD prompt (0 = pointed delta → Λ = atan(root/span), the 77° that
+  finally draws a triangle; a trapezoid measures its real tip chord and Λ
+  drops); the booster fin already measures root/span/tip so its sweep derives
+  the same way.  Apply writes the derived `_wing_sweep_var` / `fin_sweep`.  A
+  length RATIO → still anchor-free, and no angle to reverse.  No sweep angle
+  prompt remains on either editor.
+- **Cone flank angles (check-only, DONE 2026-08-01)** — the only measured
+  angles left.  Three-click measurement (vertex + two rays),
   ANCHOR-FREE: needs an image but NO scale (R2 — an angle survives a wrong
   anchor completely); the resolution guard is on RAY length (2× the R4
   floor).  Stored targets: RO wing LE sweep and booster fin LE sweep

@@ -119,8 +119,7 @@ def test_wing_prompts_offered_without_maneuvering_and_apply_enables_it(root):
     dlg._glider_var.set(False); dlg._update_glider_state()
     fields = [p["field"] for p in im.ro_prompts("axisymmetric")]
     assert "_wing_root_var" in fields and "_wing_span_var" in fields
-    assert "_wing_sweep_var" in [p["field"]
-                                 for p in im.ro_angle_prompts("axisymmetric")]
+    assert "_wing_tip_derive" in fields               # sweep derives from tip
     dlg._apply_image_measurements(
         {"_wing_root_var": 0.7, "_wing_span_var": 0.45}, [], None)
     assert dlg._glider_var.get() is True              # auto-enabled
@@ -128,6 +127,29 @@ def test_wing_prompts_offered_without_maneuvering_and_apply_enables_it(root):
     assert float(dlg._wing_area_var.get()) > 0.0      # S derived, visible
     ro = dlg._build_ro()
     assert ro.wing_root_chord_m == pytest.approx(0.7)  # stored, not dropped
+
+
+def test_wing_sweep_derives_from_planform_on_apply(root):
+    """The end of the sweep saga: applying root + span (+ optional tip) writes
+    the DERIVED sweep, no angle measured.  Delta (no tip): atan(root/span) —
+    the 77° that finally draws a triangle.  Tip > 0: a trapezoid, lower Λ."""
+    import math
+    dlg = _editor(root)
+    dlg._apply_image_measurements(
+        {"_wing_root_var": 0.5315, "_wing_span_var": 0.1204}, [], None)
+    delta = float(dlg._wing_sweep_var.get())
+    assert delta == pytest.approx(math.degrees(math.atan2(0.5315, 0.1204)),
+                                  abs=0.05)
+    assert delta == pytest.approx(77.2, abs=0.3)
+    # and the schematic tip height collapses to 0 → a triangle prints
+    import booster_models as bm
+    S, AR, src = bm.wing_geometry(dlg._build_ro())
+    assert src == "planform" and S > 0
+    # a measured tip chord makes it a trapezoid (smaller sweep)
+    dlg._apply_image_measurements(
+        {"_wing_root_var": 0.5315, "_wing_span_var": 0.1204,
+         "_wing_tip_derive": 0.20}, [], None)
+    assert float(dlg._wing_sweep_var.get()) < delta
 
 
 def test_apply_with_nothing_accepted_is_a_noop(root):
@@ -404,10 +426,10 @@ def test_starting_a_measurement_clears_the_stale_reading(root, tmp_path):
     d._im_load_path(str(p))
     st = d._im_state
     ang = [q for q in im.ro_angle_prompts("axisymmetric")
-           if q["field"] == "_wing_sweep_var"][0]
+           if q["field"] == im.FLANK_UPPER_FIELD][0]
     # first measurement completes but is NOT accepted
     st["prompt"] = ang
-    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]   # 45°
+    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]
     st["_finish_measure"]()
     assert st["_pending"] is not None
     acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
@@ -419,7 +441,7 @@ def test_starting_a_measurement_clears_the_stale_reading(root, tmp_path):
      and b.cget("text") == "Measure"][0].invoke()
     assert st["_pending"] is None                          # stale value gone
     assert str(acc.cget("state")) == "disabled"            # can't accept it
-    assert "_wing_sweep_var" not in st["accepted"]         # nothing recorded
+    assert im.FLANK_UPPER_FIELD not in st["accepted"]      # nothing recorded
     d.destroy()
 
 
@@ -445,73 +467,56 @@ def test_dialog_builds_without_error(root):
     opened[-1].destroy()
 
 
-def test_angle_measure_accept_and_apply(root, tmp_path):
-    """Angles end-to-end: a winged RO's checklist carries the sweep angle
-    prompt; the 3-click finish proposes degrees with NO scale set (anchor-
-    free); Accept records it; Apply writes the DEGREES field.  The flank
-    check fields are check-only and never reach the editor."""
+def test_flank_angle_measure_is_check_only(root, tmp_path):
+    """The only remaining measured angles are the check-only cone flanks:
+    a 3-click finish proposes degrees with NO scale (anchor-free), Accept
+    records it into `accepted`, but Apply never writes it — there is no
+    editor field for a flank half-angle (it audits ⌀/L, never stored)."""
     pytest.importorskip("PIL")
     from PIL import Image
     dlg = _editor(root)
-    dlg._glider_var.set(True)
     d = _open_measure_dialog(dlg)
     st = d._im_state
     p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
     d._im_load_path(str(p))
     assert d._im_views["side"]["scale"] is None            # no scale on purpose
     ang = [q for q in im.ro_angle_prompts("axisymmetric")
-           if q["field"] == "_wing_sweep_var"][0]
+           if q["field"] == im.FLANK_UPPER_FIELD][0]
     st["prompt"] = ang
     st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (140.0, 140.0)]   # 45°
     st["_finish_measure"]()
     acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
            and b.cget("text") == "Accept"][0]
     acc.invoke()
-    assert st["accepted"]["_wing_sweep_var"] == pytest.approx(45.0)
+    assert st["accepted"][im.FLANK_UPPER_FIELD] == pytest.approx(45.0)
     dlg._apply_image_measurements(
-        {"_wing_sweep_var": st["accepted"]["_wing_sweep_var"],
-         im.FLANK_UPPER_FIELD: 10.0}, st["measurements"], None)
-    assert float(dlg._wing_sweep_var.get()) == pytest.approx(45.0)
+        {im.FLANK_UPPER_FIELD: 45.0}, st["measurements"], None)
     assert not hasattr(dlg, im.FLANK_UPPER_FIELD)          # check-only: no var
     d.destroy()
 
 
-def test_angle_check_line_flags_disagreement(root, tmp_path):
-    """The identity twin fires once the lengths arrive: a measured sweep that
-    contradicts the accepted planform turns the check line red-worded
-    (DISAGREES) — warn-only, nothing is corrected."""
+def test_flank_symmetry_check_flags_a_tilted_image(root, tmp_path):
+    """Two asymmetric flank half-angles turn the angle-check line red-worded
+    (ASYMMETRIC → the image is tilted / perspective) — warn-only."""
     pytest.importorskip("PIL")
     from PIL import Image
     dlg = _editor(root)
-    dlg._glider_var.set(True)
     d = _open_measure_dialog(dlg)
     st = d._im_state
     p = tmp_path / "v.png"; Image.new("RGB", (400, 200), "gray").save(p)
     d._im_load_path(str(p))
-    st["accepted"].update({"_wing_root_var": 1.0, "_wing_span_var": 1.0})
-    ang = [q for q in im.ro_angle_prompts("axisymmetric")
-           if q["field"] == "_wing_sweep_var"][0]
-    st["prompt"] = ang
-    st["clicks"] = [(0.0, 0.0), (200.0, 0.0), (100.0, 173.2)]   # 60° ≠ 45°
-    st["_finish_measure"]()
-    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
-           and b.cget("text") == "Accept"][0]
-    acc.invoke()
-    texts = [str(w.cget("text")) for w in _all(d)
-             if isinstance(w, tk.ttk.Label)]
-    joined = " ".join(texts)
-    # the check line is a textvariable label; read it via the recorded vars
+    st["accepted"].update({im.FLANK_UPPER_FIELD: 10.0,
+                           im.FLANK_LOWER_FIELD: 20.0})     # 2× apart
     st["_refresh_closure"]()
-    lbls = [w for w in _all(d) if isinstance(w, tk.ttk.Label)]
     var_texts = []
-    for w in lbls:
+    for w in [w for w in _all(d) if isinstance(w, tk.ttk.Label)]:
         tv = str(w.cget("textvariable"))
         if tv:
             try:
                 var_texts.append(str(w.tk.globalgetvar(tv)))
             except Exception:
                 pass
-    assert any("DISAGREES" in t for t in var_texts + texts)
+    assert any("ASYMMETRIC" in t for t in var_texts)
     d.destroy()
 
 
@@ -600,7 +605,7 @@ def test_prompt_diagram_draws_and_tracks_selection(root):
     assert "line" in kinds and "oval" in kinds     # base art + click badges
     assert "arc" not in kinds                      # _len_var is a length
     ang = [q for q in im.ro_angle_prompts("axisymmetric")
-           if q["field"] == "_wing_sweep_var"][0]
+           if q["field"] == im.FLANK_UPPER_FIELD][0]
     d._im_prompt_var.set(f"{ang['field']}  —  {ang['label']}")
     d._im_on_prompt()
     kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}

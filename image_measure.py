@@ -105,6 +105,7 @@ CONVENTIONS = {
     "break_diameter": ("diameter at the fore/aft cone break (across)", _identity),
     "wing_root":    ("ONE wing/fin panel's root chord", _identity),
     "wing_span":    ("ONE wing/fin panel's exposed span (root to tip)", _identity),
+    "wing_tip":     ("ONE wing/fin panel's TIP chord (0 = pointed delta)", _identity),
     # booster
     "stage_diameter": ("stage body diameter (across)", _identity),
     "stage_length":   ("stage length (top to bottom of the stage)", _identity),
@@ -370,16 +371,10 @@ def ro_angle_prompts(body_form="axisymmetric"):
     derives the exposed planform from it); the cone flank angles are
     CHECK-ONLY audits (symmetry + identity vs the ⌀/L pair).  Wing sweep is
     offered whenever the form can carry a wing, same rule as ro_prompts."""
+    # Wing sweep is DERIVED from the planform lengths (ro_prompts' tip chord),
+    # not measured as an angle — no complement to get backwards.  Only the
+    # check-only cone flank angles remain here.
     p = []
-    if body_form != "wedge":
-        p.append(dict(field="_wing_sweep_var", angle=True, unit="deg",
-                      complement=True,
-                      label="ANGLE: click the wing-root LE corner (vertex), "
-                      "then a point along the LEADING EDGE, then a point along "
-                      "the ROOT CHORD toward the tail — both real edges; the "
-                      "tool stores sweep Λ = 90° − that opening (a slender "
-                      "delta reads a small 10–20° opening → large Λ)",
-                      view="side"))
     if body_form == "axisymmetric":
         p.append(dict(field=FLANK_UPPER_FIELD, angle=True, unit="deg",
                       label="ANGLE (check only): nose tip (vertex), then a "
@@ -393,14 +388,10 @@ def ro_angle_prompts(body_form="axisymmetric"):
 
 
 def booster_angle_prompts(has_fins=False):
-    """Angle checklist for the booster editor: the fin LE sweep (degrees)."""
-    if not has_fins:
-        return []
-    return [dict(field="fin_sweep", angle=True, unit="deg", complement=True,
-                 label="ANGLE: click the fin-root LE corner (vertex), then a "
-                 "point along the LEADING EDGE, then a point along the ROOT "
-                 "CHORD toward the tail — both real edges; stores sweep Λ = "
-                 "90° − that opening", view="side")]
+    """No angle prompts for the booster: fin sweep is DERIVED from the fin's
+    root/span/tip chords (already measured), tan Λ = (root − tip)/span — a
+    length ratio, no angle to get backwards."""
+    return []
 
 
 class HandEntry:
@@ -488,6 +479,7 @@ _DIAGRAM_LINES = {
     "_break_dia_var": ("ro_side", [(0.34, 0.46), (0.66, 0.46)]),
     "_wing_root_var": ("ro_side", [(0.66, 0.55), (0.68, 0.90)]),
     "_wing_span_var": ("ro_side", [(0.68, 0.87), (0.84, 0.87)]),
+    "_wing_tip_derive": ("ro_side", [(0.84, 0.90), (0.80, 0.86)]),
     "_body_span_var": ("ro_plan", [(0.18, 0.88), (0.82, 0.88)]),
     PLAN_LEN_CHECK_FIELD: ("ro_plan", [(0.50, 0.06), (0.50, 0.90)]),
     "fairing_len":    ("booster", [(0.50, 0.05), (0.50, 0.20)]),
@@ -501,10 +493,8 @@ _DIAGRAM_LINES = {
 }
 
 _DIAGRAM_ANGLES = {
-    # sweep: vertex at the fin-root LE corner; ray 1 along the LE to the tip;
-    # ray 2 along the root chord to the TE — the SAME corners as the base art.
-    "_wing_sweep_var": ("ro_side", [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90)]),
-    "fin_sweep":       ("booster", [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86)]),
+    # only the check-only cone flank half-angles remain as measured angles;
+    # wing/fin sweep is derived from the planform lengths.
     FLANK_UPPER_FIELD: ("ro_side", [(0.50, 0.04), (0.66, 0.46), (0.50, 0.52)]),
     FLANK_LOWER_FIELD: ("ro_side", [(0.50, 0.04), (0.34, 0.46), (0.50, 0.52)]),
 }
@@ -632,6 +622,14 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
         p.append(dict(field="_wing_span_var", label="Click ONE wing/fin panel's "
                       "exposed SPAN (root to tip)", view="side",
                       convention="wing_span", clocking_sensitive=True))
+        # Sweep is DERIVED from the planform (tan Λ = (root − tip)/span) — a
+        # length ratio, so no angle to get backwards.  Measure the TIP chord
+        # (a real edge); a pointed delta is tip = 0 (Type value 0).  Apply
+        # writes the derived _wing_sweep_var.
+        p.append(dict(field="_wing_tip_derive", label="Click ONE wing panel's "
+                      "TIP chord (the short edge at the tip) — 0 for a pointed "
+                      "delta (Type value 0); sweep Λ derives from root/span/tip",
+                      view="side", convention="wing_tip", derives="sweep"))
     return p
 
 

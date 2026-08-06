@@ -195,7 +195,8 @@ def test_stamp_notes_multiple_views():
 def test_ro_prompts_by_body_form():
     ax = im.ro_prompts("axisymmetric")
     assert [p["field"] for p in ax] == ["_len_var", "_dia_var", "_nose_var",
-                                        "_wing_root_var", "_wing_span_var"]
+                                        "_wing_root_var", "_wing_span_var",
+                                        "_wing_tip_derive"]
     assert all(p["view"] == "side" for p in ax)
 
     wed = im.ro_prompts("wedge")
@@ -406,36 +407,42 @@ def test_symmetry_note_is_a_tilt_detector():
     assert "ASYMMETRIC" in bad and "suspicion" in bad
 
 
-def test_ro_angle_prompts_store_sweep_and_check_flanks():
-    """The ONE stored angle target is the wing LE sweep (load-bearing since
-    the 2b wing-body composite); the cone flank angles are check-only and
-    absent from the RO apply map by design."""
-    ps = im.ro_angle_prompts("axisymmetric")
-    fields = [p["field"] for p in ps]
-    assert fields == ["_wing_sweep_var", im.FLANK_UPPER_FIELD,
-                      im.FLANK_LOWER_FIELD]
-    assert all(p["angle"] and p["unit"] == "deg" for p in ps)
-    # wedge: no wing rows → no sweep target, and no flanks (not axisymmetric)
+def test_wing_sweep_derives_from_the_tip_chord_length():
+    """Sweep is no longer a measured ANGLE — it derives from the planform:
+    the RO checklist offers a TIP-CHORD length (0 for a pointed delta), and
+    tan Λ = (root − tip)/span.  Delta (tip 0): atan(root/span).  Trapezoid
+    (tip > 0): the taper reduces Λ.  A length RATIO → still anchor-free."""
+    tip_prompt = next(p for p in im.ro_prompts("axisymmetric")
+                      if p["field"] == "_wing_tip_derive")
+    assert tip_prompt["convention"] == "wing_tip"
+    assert tip_prompt["derives"] == "sweep"
+    delta = im.sweep_from_planform(0.53, 0.12, 0.0)
+    assert delta == pytest.approx(math.degrees(math.atan2(0.53, 0.12)))
+    assert delta == pytest.approx(77.2, abs=0.3)          # the recurring value
+    trap = im.sweep_from_planform(0.53, 0.12, 0.20)
+    assert trap == pytest.approx(math.degrees(math.atan2(0.33, 0.12)))
+    assert trap < delta                                    # tip taper lowers Λ
+
+
+def test_no_angle_prompts_for_sweep_anywhere():
+    """Neither editor asks for a sweep ANGLE any more (the recurring
+    complement trap is gone); only the check-only cone flanks remain."""
+    ro = [p["field"] for p in im.ro_angle_prompts("axisymmetric")]
+    assert ro == [im.FLANK_UPPER_FIELD, im.FLANK_LOWER_FIELD]
+    assert "_wing_sweep_var" not in ro
+    assert im.ro_angle_prompts("half_cone") == []          # no flanks, no sweep
     assert im.ro_angle_prompts("wedge") == []
-    # half-cone: sweep target, no flank checks (not axisymmetric)
-    assert [p["field"] for p in im.ro_angle_prompts("half_cone")] == \
-        ["_wing_sweep_var"]
-
-
-def test_booster_angle_prompts_gated_on_fins():
-    assert im.booster_angle_prompts(has_fins=False) == []
-    ps = im.booster_angle_prompts(has_fins=True)
-    assert [p["field"] for p in ps] == ["fin_sweep"]
+    assert im.booster_angle_prompts(has_fins=True) == []
 
 
 def test_stamp_ignores_the_angle_pseudo_view():
     s = _scale()
     m = im.Measurement("_len_var", *s.measure((0, 0), (200, 0)), scale=s,
                        convention="ro_length", view="side")
-    a = im.AngleMeasurement("_wing_sweep_var", (0, 0), (200, 0), (140, 140))
+    a = im.AngleMeasurement(im.FLANK_UPPER_FIELD, (0, 0), (200, 0), (140, 140))
     stamp = im.provenance_stamp([m, a], s, "2026-08-01")
     assert "views:" not in stamp          # side + angle ≠ two real views
-    assert "_wing_sweep_var" in stamp
+    assert im.FLANK_UPPER_FIELD in stamp
 
 
 # ── R8: the apply delta view (never silently overwrite) ─────────────────────
@@ -502,15 +509,13 @@ def test_every_prompt_has_a_diagram():
             assert 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0, p["field"]
 
 
-def test_sweep_diagram_rays_trace_the_drawn_fin():
-    """The sweep diagram must SHOW the two-edge convention on the same fin
-    the base art draws: vertex at the fin-root LE corner, ray 1 to the tip
-    (the LE), ray 2 to the root TE (the root chord)."""
-    spec = im.diagram_spec(dict(field="_wing_sweep_var", angle=True))
-    fin = im.DIAGRAM_BASES["ro_side"][2]         # the right fin triangle
-    assert spec["pts"][0] == fin[0]              # vertex = root LE corner
-    assert spec["pts"][1] == fin[1]              # ray 1 endpoint = tip
-    assert spec["pts"][2] == fin[2]              # ray 2 endpoint = root TE
+def test_tip_chord_diagram_points_at_the_drawn_fin_tip():
+    """Sweep is derived, not measured; the tip-chord prompt (which drives the
+    derivation) shows a segment at the fin tip in the same base art."""
+    spec = im.diagram_spec(dict(field="_wing_tip_derive"))
+    assert spec["kind"] == "line" and spec["base"] == "ro_side"
+    fin_tip = im.DIAGRAM_BASES["ro_side"][2][1]   # the fin's tip vertex
+    assert spec["pts"][0] == fin_tip
 
 
 def test_unknown_field_has_no_diagram_rather_than_a_wrong_one():
