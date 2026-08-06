@@ -376,7 +376,11 @@ Scope and plumbing:
   - **Diagram art direction as data (DONE, 2026-08-06)** — restyled to the
     user-supplied reference art: filled light-grey bodies with dark-navy
     linework, measurements as a thick red single-headed 1→2 arrow
-    (direction = click order) with numbered disc markers.  The style is ONE
+    (direction = click order); clicks are marked by a SMALL red dot at the
+    exact point with the number set off to the side, radially beyond the
+    measured span (big numbered discs covered the very feature being
+    pointed at; labels that would leave the canvas fall back to the
+    interior-facing perpendicular).  The style is ONE
     data dict (`im.DIAGRAM_STYLE`) the renderer reads token-by-token —
     restyling is a data edit, and future features' art inherits it.
     `closed_poly` discriminates fill vs stroke: closed outlines (bodies,

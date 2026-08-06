@@ -400,8 +400,8 @@ def test_diagram_style_tokens_and_fillable_bodies():
     body to fill.  closed_poly is the fill/stroke discriminator: closed →
     filled body art, open → detail stroke (cone break, stage joint)."""
     for key in ("bg", "outline", "outline_width", "fill", "highlight",
-                "measure", "measure_width", "arrowshape", "marker_r",
-                "marker_text", "arc_r"):
+                "measure", "measure_width", "arrowshape", "dot_r",
+                "label_offset", "arc_r"):
         assert key in im.DIAGRAM_STYLE
     assert im.closed_poly([(0, 0), (1, 0), (1, 1), (0, 0)])
     assert not im.closed_poly([(0, 0), (1, 0)])           # detail stroke
