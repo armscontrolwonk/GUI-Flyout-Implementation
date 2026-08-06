@@ -1932,12 +1932,17 @@ class BoosterDialog(tk.Toplevel):
                 return int(float(var.get()))
             except (ValueError, tk.TclError, AttributeError):
                 return default
+        _nst = _i(self._n_stages_var, 1)
+        inter = [i + 1 for i, fr in enumerate(self._stage_frames[:_nst])
+                 if bool(getattr(fr, "_interstage_var", None)
+                         and fr._interstage_var.get())]
         prompts = im.booster_prompts(
-            n_stages=_i(self._n_stages_var, 1),
+            n_stages=_nst,
             has_fairing=bool(self._shroud_var.get()),
             has_fins=bool(self._fins_var.get()),
             n_fins=_i(self._fin_n_var, 0),
-            n_strapons=_i(self._n_boosters_var, 0)) \
+            n_strapons=_i(self._n_boosters_var, 0),
+            interstage_stages=inter) \
             + im.booster_angle_prompts(has_fins=bool(self._fins_var.get()))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
@@ -1956,7 +1961,8 @@ class BoosterDialog(tk.Toplevel):
         editor fields (masses kg, motor web mm, jettison km) must never be
         added without a conversion at the boundary."""
         if field.startswith("stage"):
-            # "stage2_len" / "stage3_dia" → the StringVar on that stage frame
+            # "stage2_len" / "stage3_dia" / "stage1_interstage_len" → the
+            # StringVar on that stage frame.
             try:
                 n = int(field[5])
             except (ValueError, IndexError):
@@ -1964,8 +1970,10 @@ class BoosterDialog(tk.Toplevel):
             frames = getattr(self, "_stage_frames", [])
             if not (1 <= n <= len(frames)):
                 return None
-            return (frames[n - 1]._length if field.endswith("_len")
-                    else frames[n - 1]._dia)
+            fr = frames[n - 1]
+            if field.endswith("_interstage_len"):
+                return getattr(fr, "_is_len_var", None)
+            return fr._length if field.endswith("_len") else fr._dia
         return {
             "fairing_len": getattr(self, "_shroud_length_var", None),
             "fairing_dia": getattr(self, "_shroud_diameter_var", None),
@@ -2016,6 +2024,19 @@ class BoosterDialog(tk.Toplevel):
                     self._fin_sweep_var.set(f"{sw:.4g}")
             except (ValueError, tk.TclError, AttributeError):
                 pass
+        # A measured interstage length keeps its stage's interstage section on
+        # and enabled (the value would otherwise sit in a disabled entry).
+        for field in (accepted or {}):
+            if field.endswith("_interstage_len") and field.startswith("stage"):
+                try:
+                    fr = self._stage_frames[int(field[5]) - 1]
+                except (ValueError, IndexError):
+                    continue
+                if getattr(fr, "_interstage_var", None) is not None \
+                        and not fr._interstage_var.get():
+                    fr._interstage_var.set(True)
+                    if hasattr(fr, "_on_interstage"):
+                        fr._on_interstage()
         # Turning on the fairing/fins sections if their geometry was measured
         # keeps what-you-measured visible (the editor owns the count/on flags).
         if any(f.startswith("fairing") for f in (accepted or {})) and \

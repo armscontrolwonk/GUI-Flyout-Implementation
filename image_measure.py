@@ -510,7 +510,10 @@ def diagram_spec(prompt):
         return (dict(base=hit[0], kind="angle", pts=hit[1]) if hit else None)
     if f.startswith("stage"):
         second = f.startswith("stage2")          # stages ≥3 reuse the S1 box
-        if f.endswith("_len"):
+        if f.endswith("_interstage_len"):        # the adapter atop the stage
+            pts = ([(0.50, 0.16), (0.50, 0.24)] if second
+                   else [(0.50, 0.40), (0.50, 0.48)])
+        elif f.endswith("_len"):
             pts = ([(0.50, 0.20), (0.50, 0.44)] if second
                    else [(0.50, 0.44), (0.50, 0.86)])
         else:
@@ -634,13 +637,14 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
 
 
 def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
-                    n_fins=0, n_strapons=0):
+                    n_fins=0, n_strapons=0, interstage_stages=()):
     """Ordered prompts for the booster editor, generated from the topology the
     editor ALREADY declares (stage count, fairing on/off, fins on/off + count,
     strap-on count).  Repeated features (fins, strap-ons) are measured ONCE and
     the model replicates them to the declared count — so a prompt asks for ONE
     instance and the label states the count assumption (R1/design 'measure one,
     declare count')."""
+    inter = set(int(s) for s in (interstage_stages or ()))
     p = []
     for i in range(1, max(1, int(n_stages)) + 1):
         p.append(dict(field=f"stage{i}_len",
@@ -649,6 +653,15 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
         p.append(dict(field=f"stage{i}_dia",
                       label=f"Click STAGE {i} diameter (across)",
                       view="side", convention="stage_diameter"))
+        if i in inter:
+            # Interstage: the adapter on top of stage i.  Only its LENGTH is
+            # image-measurable (mass, jettison time aren't dimensions; the ⌀
+            # is inherited from the adjacent stages, not stored).  Declared by
+            # the stage's interstage checkbox.
+            p.append(dict(field=f"stage{i}_interstage_len",
+                          label=f"Click STAGE {i}'s INTERSTAGE length (the "
+                          "adapter on top of the stage)",
+                          view="side", convention="stage_length"))
     if has_fairing:
         p.append(dict(field="fairing_len", label="Click FAIRING length "
                       "(base to nose tip)", view="side", convention="fairing_length"))
