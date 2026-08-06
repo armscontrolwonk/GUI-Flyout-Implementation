@@ -79,6 +79,38 @@ def test_apply_writes_fields_and_stamps_notes(root):
     assert "claimed L=10 m" in notes and "1 px = 1 cm" in notes
 
 
+def test_apply_corrects_nose_radius_for_cone_tangency(root):
+    """The blunt-tip click sees the sphere-cone TANGENCY circle (width
+    2·R_N·cos θ), not the full sphere — so on a cone, Apply divides the
+    half-width by cos(θ), θ derived from the same session's length/⌀.
+    Curved profiles keep the plain hemisphere convention (their blend slope
+    is not the L-⌀ cone angle), and a biconic uses the FORE cone's θ."""
+    import math
+    dlg = _editor(root)
+    dlg._shape_var.set(dlg._shape_label_for("cone", "axisymmetric"))
+    dlg._update_body_form_state()
+    dlg._apply_image_measurements(
+        {"_len_var": 3.0, "_dia_var": 1.0, "_nose_var": 0.05}, [], None)
+    th = math.atan2(0.5, 3.0)
+    assert float(dlg._nose_var.get()) \
+        == pytest.approx(0.05 / math.cos(th), rel=1e-3)
+    # a curved profile: half-width stored untouched
+    dlg._shape_var.set(dlg._shape_label_for("tangent_ogive", "axisymmetric"))
+    dlg._update_body_form_state()
+    dlg._apply_image_measurements(
+        {"_len_var": 3.0, "_dia_var": 1.0, "_nose_var": 0.05}, [], None)
+    assert float(dlg._nose_var.get()) == pytest.approx(0.05)
+    # biconic: the fore cone carries the tip → θ from fore-length/break-⌀
+    dlg._shape_var.set(dlg._BICONIC_LABEL)
+    dlg._update_body_form_state()
+    dlg._apply_image_measurements(
+        {"_fore_len_var": 1.0, "_break_dia_var": 0.8, "_nose_var": 0.05},
+        [], None)
+    th_fore = math.atan2(0.4, 1.0)
+    assert float(dlg._nose_var.get()) \
+        == pytest.approx(0.05 / math.cos(th_fore), rel=1e-3)
+
+
 def test_apply_maps_body_span_for_wedge(root):
     dlg = _editor(root)
     dlg._shape_var.set(dlg._BODY_FORM_LABELS["wedge"])

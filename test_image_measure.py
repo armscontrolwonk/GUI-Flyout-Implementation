@@ -393,6 +393,22 @@ def test_cone_half_angle_identity():
     assert im.cone_half_angle_from_lengths(1.0, 0.0) is None
 
 
+def test_nose_radius_tangency_identity():
+    """Forward: a blunted cone with sphere R_N and half-angle θ shows a tip
+    of width 2·R_N·cos(θ) (the tangency circle).  The inverse must recover
+    the R_N the geometry started from — an identity round-trip, not a fit."""
+    for r_n, th in ((0.05, 15.0), (0.30, 45.0), (0.10, 8.2)):
+        visible_half = r_n * math.cos(math.radians(th))
+        assert im.nose_radius_from_tip_width(visible_half, th) \
+            == pytest.approx(r_n)
+    # θ = 0 (blunt cylinder) and θ = None (no cone declared) are the plain
+    # hemisphere convention — the half-width IS the radius, untouched.
+    assert im.nose_radius_from_tip_width(0.05, 0.0) == pytest.approx(0.05)
+    assert im.nose_radius_from_tip_width(0.05, None) == pytest.approx(0.05)
+    # a near-flat "cone" (θ ≥ 85°) refuses the divide-by-~0 blow-up
+    assert im.nose_radius_from_tip_width(0.05, 89.0) == pytest.approx(0.05)
+
+
 def test_angle_check_note_diagnoses_disagreement():
     ok = im.angle_check_note(45.5, 45.0, "wing sweep")
     assert "agrees" in ok and "DISAGREES" not in ok

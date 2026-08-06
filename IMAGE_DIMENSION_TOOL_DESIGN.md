@@ -131,6 +131,13 @@ Silent data corrupters:
   pixels in any photo.  → resolution floor: the tool REFUSES to populate a
   feature smaller than ~5 px; every proposed value displays its pixel
   quantum ("1 px = 3.4 cm").
+  Tangency correction (2026-08-06): on a blunted CONE the visible tip is
+  the sphere-cone tangency circle, width 2·RN·cos θ — not the full sphere —
+  so half-the-width under-reads RN by cos θ (~3% at θ=15°, ~29% at θ=45°).
+  Apply divides by cos θ, with θ derived from the same session's length/⌀
+  (biconic: the fore cone's).  Curved profiles keep the hemisphere
+  convention (their blend slope is not the L-⌀ cone angle); blunt cylinder
+  is the θ=0 identity.  `nose_radius_from_tip_width`, identity-tested.
 - **R5 Convention mismatches.**  Half-cone side-view depth = stored ⌀/2;
   wedge ⌀ field IS the depth; fin span is per-panel exposed; stowed grid
   fins swap apparent chord/height.  → each prompt embeds its conversion
