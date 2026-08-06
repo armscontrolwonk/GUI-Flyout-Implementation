@@ -105,10 +105,10 @@ def build_sheet(out_path="diagram_contact_sheet.png"):
                                     interstage_stages=(1,),
                                     conical_stages=(1,)), shots, seen)
 
-    cols, cw, cap, pad = 5, 214, 56, 9
-    # cell height preserves the live canvas aspect (no distortion)
-    w0, h0 = shots[0][2].size
-    ch = round(cw * h0 / w0)
+    cols, cap, pad = 5, 56, 9
+    # cells at the live canvas's NATIVE size — no resampling, so the sheet
+    # shows exactly the pixels the dialog shows
+    cw, ch = shots[0][2].size
     rows = (len(shots) + cols - 1) // cols
     W = cols * (cw + pad) + pad
     H = rows * (ch + cap + pad) + pad + 28
@@ -120,7 +120,7 @@ def build_sheet(out_path="diagram_contact_sheet.png"):
     for i, (field, label, img) in enumerate(shots):
         cx = pad + (i % cols) * (cw + pad)
         cy = 26 + (i // cols) * (ch + cap + pad)
-        sheet.paste(img.resize((cw, ch)), (cx, cy))
+        sheet.paste(img, (cx, cy))
         dr.rectangle((cx, cy, cx + cw, cy + ch), outline="#bbb")
         text = f"{field}\n" + "\n".join(
             textwrap.wrap(label.split(" — ")[0], 34)[:2])
