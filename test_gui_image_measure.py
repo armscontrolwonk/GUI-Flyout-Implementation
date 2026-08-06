@@ -478,6 +478,40 @@ def test_wheel_routing_pans_plain_and_zooms_modified(root, tmp_path):
     d.destroy()
 
 
+def test_arrow_keys_pan_and_toplevel_wheel_fallback(root, tmp_path):
+    """Pan must not depend on wheel delivery either: arrow keys pan through
+    the same _pan_by as the wheel (guaranteed on any device), and a toplevel
+    wheel fallback re-routes events that Aqua delivered to the FOCUSED
+    widget instead of the canvas — but only when the pointer is actually
+    over the canvas (hit-test), so scrolling elsewhere in the dialog never
+    drags the image around."""
+    pytest.importorskip("PIL")
+    import types as _t
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    d._im_zoom_at(4.0)                    # scrollregion now exceeds the window
+    cv = d._im_canvas
+    x0, y0 = cv.xview()[0], cv.yview()[0]
+    d._im_key_pan(40, 0)
+    assert cv.xview()[0] > x0             # → panned right
+    d._im_key_pan(0, 40)
+    assert cv.yview()[0] > y0             # ↓ panned down
+    d._im_key_pan(-40, -40)
+    assert cv.xview()[0] == pytest.approx(x0)
+    assert cv.yview()[0] == pytest.approx(y0)
+    # fallback hit-test: pointer not over the canvas (here: nowhere — the
+    # dialog is withdrawn) → the event is ignored, nothing moves or zooms
+    z0 = d._im_views["side"]["zoom"]
+    ev = _t.SimpleNamespace(delta=120, x=5, y=5, x_root=0, y_root=0)
+    assert d._im_route_wheel(ev, "zoom") is None
+    assert d._im_route_wheel(ev, "pan") is None
+    assert d._im_views["side"]["zoom"] == pytest.approx(z0)
+    assert cv.xview()[0] == pytest.approx(x0)
+    d.destroy()
+
+
 def test_accept_records_overlay_annotation(root, tmp_path):
     """The overlay audits what was clicked: accepting a measurement stores its
     clicked segment (view-tagged, original-image px) for drawing."""
