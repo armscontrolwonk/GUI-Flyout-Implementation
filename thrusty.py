@@ -2002,6 +2002,20 @@ class BoosterDialog(tk.Toplevel):
             var = self._img_field_var(field)
             if var is not None:
                 var.set(f"{float(value):.4g}")
+        # Fin sweep is DERIVED from the fin's root/span/tip (already measured):
+        # tan Λ = (root − tip)/span — a length ratio, no angle to get backwards.
+        if any(f in (accepted or {}) for f in ("fin_root", "fin_span",
+                                               "fin_tip")):
+            import image_measure as _im
+            try:
+                root = float(self._fin_root_var.get() or 0.0)
+                span = float(self._fin_span_var.get() or 0.0)
+                tip = float(self._fin_tip_var.get() or 0.0)
+                sw = _im.sweep_from_planform(root, span, tip)
+                if sw is not None:
+                    self._fin_sweep_var.set(f"{sw:.4g}")
+            except (ValueError, tk.TclError, AttributeError):
+                pass
         # Turning on the fairing/fins sections if their geometry was measured
         # keeps what-you-measured visible (the editor owns the count/on flags).
         if any(f.startswith("fairing") for f in (accepted or {})) and \
@@ -4148,12 +4162,28 @@ class ROEditorDialog(tk.Toplevel):
                 var = getattr(self, field, None)
                 if var is not None:
                     var.set(f"{float(accepted[field]):.4g}")
+        # Wing sweep is DERIVED from the planform, not measured as an angle:
+        # tan Λ = (root − tip)/span (a length ratio — anchor-free, no
+        # complement).  Fires whenever any planform length was measured; a
+        # pointed delta (no tip measured) uses tip = 0.  Straight-TE
+        # assumption (the same wing_geometry uses).
+        if any(f in accepted for f in ("_wing_root_var", "_wing_span_var",
+                                       "_wing_tip_derive")):
+            try:
+                root = float(self._wing_root_var.get() or 0.0)
+                span = float(self._wing_span_var.get() or 0.0)
+                tip = float(accepted.get("_wing_tip_derive", 0.0) or 0.0)
+                sw = im.sweep_from_planform(root, span, tip)
+                if sw is not None:
+                    self._wing_sweep_var.set(f"{sw:.4g}")
+            except (ValueError, tk.TclError):
+                pass
         # Measured wing geometry enables the Maneuvering section (wings are
         # stored with the maneuvering model) — the same measured-it-so-show-it
         # rule as the booster's fairing/fin sections.  The derived S/AR fire
         # from the freshly written planform via _update_wing_state.
         if any(f in accepted for f in ("_wing_root_var", "_wing_span_var",
-                                       "_wing_sweep_var")) \
+                                       "_wing_tip_derive", "_wing_sweep_var")) \
                 and hasattr(self, "_glider_var") \
                 and not self._glider_var.get():
             self._glider_var.set(True)
