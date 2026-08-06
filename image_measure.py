@@ -447,6 +447,90 @@ def apply_deltas(accepted, current):
                                          else 0.0)))
 
 
+# ── the little "what to click" diagrams ─────────────────────────────────────
+# Every checklist prompt gets a tiny schematic beside the selector: a
+# stylized base outline plus the exact clicks, NUMBERED in order.  Pure DATA
+# in the unit square (y down) — the GUI only scales and draws — so tests can
+# pin that every prompt has a diagram and that click counts match the prompt
+# kind (2 for a length, 3 for an angle: vertex, ray, ray).
+
+DIAGRAM_BASES = {
+    # nose-up biconic RV with a delta fin pair (side elevation)
+    "ro_side": [
+        [(0.50, 0.04), (0.34, 0.46), (0.27, 0.90), (0.73, 0.90),
+         (0.66, 0.46), (0.50, 0.04)],
+        [(0.34, 0.46), (0.66, 0.46)],                     # cone break
+        [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90)],       # right fin (delta)
+        [(0.34, 0.55), (0.16, 0.90), (0.32, 0.90)],       # left fin
+    ],
+    # top-down planform (the wedge / any plan-view quantity)
+    "ro_plan": [
+        [(0.50, 0.06), (0.18, 0.90), (0.82, 0.90), (0.50, 0.06)],
+    ],
+    # two-stage stack: fairing, S2, S1, base fin (right), strap-on (left)
+    "booster": [
+        [(0.44, 0.20), (0.50, 0.05), (0.56, 0.20)],
+        [(0.44, 0.20), (0.56, 0.20), (0.56, 0.44), (0.44, 0.44), (0.44, 0.20)],
+        [(0.42, 0.44), (0.58, 0.44), (0.58, 0.86), (0.42, 0.86), (0.42, 0.44)],
+        [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86)],       # fin
+        [(0.30, 0.50), (0.38, 0.50), (0.38, 0.86), (0.30, 0.86), (0.30, 0.50)],
+    ],
+}
+
+# field → (base, kind, click points).  Angle pts are (vertex, ray1, ray2) —
+# for sweep the rays run along the two REAL edges (LE, then root chord),
+# matching the fin triangle drawn in the base art.
+_DIAGRAM_LINES = {
+    "_len_var":       ("ro_side", [(0.50, 0.04), (0.50, 0.90)]),
+    "_dia_var":       ("ro_side", [(0.27, 0.90), (0.73, 0.90)]),
+    "_nose_var":      ("ro_side", [(0.46, 0.06), (0.54, 0.06)]),
+    "_fore_len_var":  ("ro_side", [(0.50, 0.04), (0.50, 0.46)]),
+    "_break_dia_var": ("ro_side", [(0.34, 0.46), (0.66, 0.46)]),
+    "_wing_root_var": ("ro_side", [(0.66, 0.55), (0.68, 0.90)]),
+    "_wing_span_var": ("ro_side", [(0.68, 0.87), (0.84, 0.87)]),
+    "_body_span_var": ("ro_plan", [(0.18, 0.88), (0.82, 0.88)]),
+    PLAN_LEN_CHECK_FIELD: ("ro_plan", [(0.50, 0.06), (0.50, 0.90)]),
+    "fairing_len":    ("booster", [(0.50, 0.05), (0.50, 0.20)]),
+    "fairing_dia":    ("booster", [(0.44, 0.20), (0.56, 0.20)]),
+    "fin_span":       ("booster", [(0.58, 0.84), (0.70, 0.84)]),
+    "fin_root":       ("booster", [(0.58, 0.62), (0.58, 0.86)]),
+    "fin_tip":        ("booster", [(0.70, 0.78), (0.70, 0.86)]),
+    "strapon_dia":    ("booster", [(0.30, 0.68), (0.38, 0.68)]),
+    "strapon_len":    ("booster", [(0.34, 0.50), (0.34, 0.86)]),
+    OVERALL_LEN_CHECK_FIELD: ("booster", [(0.50, 0.05), (0.50, 0.86)]),
+}
+
+_DIAGRAM_ANGLES = {
+    # sweep: vertex at the fin-root LE corner; ray 1 along the LE to the tip;
+    # ray 2 along the root chord to the TE — the SAME corners as the base art.
+    "_wing_sweep_var": ("ro_side", [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90)]),
+    "fin_sweep":       ("booster", [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86)]),
+    FLANK_UPPER_FIELD: ("ro_side", [(0.50, 0.04), (0.66, 0.46), (0.50, 0.52)]),
+    FLANK_LOWER_FIELD: ("ro_side", [(0.50, 0.04), (0.34, 0.46), (0.50, 0.52)]),
+}
+
+
+def diagram_spec(prompt):
+    """The drawing spec for a prompt's little diagram, or None if the field
+    has no art (the GUI then shows a blank strip, never a wrong picture).
+    Stage prompts share the stack art: any stageN maps to the S1/S2 boxes."""
+    f = (prompt or {}).get("field", "")
+    if (prompt or {}).get("angle"):
+        hit = _DIAGRAM_ANGLES.get(f)
+        return (dict(base=hit[0], kind="angle", pts=hit[1]) if hit else None)
+    if f.startswith("stage"):
+        second = f.startswith("stage2")          # stages ≥3 reuse the S1 box
+        if f.endswith("_len"):
+            pts = ([(0.50, 0.20), (0.50, 0.44)] if second
+                   else [(0.50, 0.44), (0.50, 0.86)])
+        else:
+            pts = ([(0.44, 0.32), (0.56, 0.32)] if second
+                   else [(0.42, 0.65), (0.58, 0.65)])
+        return dict(base="booster", kind="line", pts=pts)
+    hit = _DIAGRAM_LINES.get(f)
+    return (dict(base=hit[0], kind="line", pts=hit[1]) if hit else None)
+
+
 # Anchor-free quantities (R2): what survives a WRONG scale anchor.  Absolute
 # lengths inherit the anchor's error 1:1; ratios and angles cancel it.
 ANCHOR_FREE = (

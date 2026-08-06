@@ -2820,6 +2820,49 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                             wraplength=250, justify=tk.LEFT)
     prompt_hint.pack(anchor=tk.W, pady=(2, 4))
 
+    # The little "what to click" diagram: a stylized outline with the exact
+    # clicks numbered, redrawn whenever the selected dimension changes
+    # (including checklist auto-advance).  Data lives in image_measure
+    # (diagram_spec / DIAGRAM_BASES); this only scales and draws.
+    _DIAG_W, _DIAG_H = 232, 140
+    diag_canvas = tk.Canvas(panel, width=_DIAG_W, height=_DIAG_H, bg="white",
+                            highlightthickness=1, highlightbackground="#ccc")
+    diag_canvas.pack(anchor=tk.W, pady=(0, 4))
+
+    def _draw_prompt_diagram(p):
+        import math as _math
+        diag_canvas.delete("all")
+        spec = im.diagram_spec(p) if p else None
+        if not spec:
+            return
+        def _S(q):
+            return (q[0] * _DIAG_W, q[1] * _DIAG_H)
+        for poly in im.DIAGRAM_BASES[spec["base"]]:
+            diag_canvas.create_line(*[c for q in poly for c in _S(q)],
+                                    fill="#aaa")
+        pts = [_S(q) for q in spec["pts"]]
+        if spec["kind"] == "angle":
+            (vx, vy), (ax, ay), (bx, by) = pts
+            diag_canvas.create_line(vx, vy, ax, ay, fill="#c33", width=2)
+            diag_canvas.create_line(vx, vy, bx, by, fill="#c33", width=2)
+            a1 = -_math.degrees(_math.atan2(ay - vy, ax - vx))
+            a2 = -_math.degrees(_math.atan2(by - vy, bx - vx))
+            ext = (a2 - a1) % 360.0
+            if ext > 180.0:
+                a1, ext = a2, 360.0 - ext
+            diag_canvas.create_arc(vx - 16, vy - 16, vx + 16, vy + 16,
+                                   start=a1, extent=ext, style=tk.ARC,
+                                   outline="#c33")
+        else:
+            (ax, ay), (bx, by) = pts
+            diag_canvas.create_line(ax, ay, bx, by, fill="#c33", width=2,
+                                    arrow=tk.BOTH)
+        for n, (x, y) in enumerate(pts, start=1):
+            diag_canvas.create_oval(x - 7, y - 7, x + 7, y + 7,
+                                    fill="#c33", outline="")
+            diag_canvas.create_text(x, y, text=str(n), fill="white",
+                                    font=("TkDefaultFont", 8, "bold"))
+
     # R1 clocking (only shown for spans a ×-roll can foreshorten, e.g. fins).
     # Default in-plane → no silent inflation; the correction is offered here.
     # The control is built only when the declared topology HAS such a dimension,
@@ -2857,6 +2900,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     def _on_prompt(*_):
         p = _label_by_field.get(prompt_var.get())
         prompt_hint.config(text=(p["label"] + f"   [{p['view']} view]") if p else "")
+        _draw_prompt_diagram(p)
         if clock_frame is not None:
             if p and p.get("clocking_sensitive"):
                 clock_frame.pack(anchor=tk.W, fill=tk.X, pady=(0, 4),
@@ -3231,6 +3275,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     dlg._im_zoom_at = _zoom_at
     dlg._im_fit = _fit
     dlg._im_prompt_var = prompt_var
+    dlg._im_diag = diag_canvas
+    dlg._im_on_prompt = _on_prompt
     return dlg
 
 

@@ -296,6 +296,17 @@ Scope and plumbing:
     with everything untouched.  One field→var map per editor
     (`_img_field_var`) is shared by apply and the preview, so they can
     never disagree about what is writable.
+  - **What-to-click diagrams (DONE, 2026-08-05)** — every checklist prompt
+    shows a tiny schematic under the selector: a stylized base outline
+    (nose-up RV with delta fins / plan-view planform / two-stage stack) with
+    the exact clicks NUMBERED in order — lengths as an arrowed segment,
+    angles as vertex + two rays + arc.  Redraws on selection change,
+    including checklist auto-advance.  Pure DATA in image_measure
+    (`DIAGRAM_BASES`, `diagram_spec` — unit square, y down); the GUI only
+    scales and draws, and tests pin that EVERY prompt has a diagram, click
+    counts match the prompt kind, and the sweep diagram's rays trace the
+    same fin corners the base art draws (the picture can't contradict the
+    convention).  Unknown fields get a blank strip, never a wrong picture.
   - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
     hatched stylization (R12) + live discrepancy highlighting.
 

@@ -473,3 +473,46 @@ def test_angle_check_decodes_the_swapped_reference_mistake():
     # an ordinary disagreement (no 90° relationship) keeps the generic verdict
     plain = im.angle_check_note(52.0, 45.0, "wing sweep")
     assert "ROOT CHORD" not in plain and "stretch" in plain
+
+
+# ── the "what to click" diagrams ────────────────────────────────────────────
+def _all_prompts():
+    ps = []
+    for form in ("axisymmetric", "wedge", "half_cone"):
+        ps += im.ro_prompts(form, biconic=(form == "axisymmetric"))
+        ps += im.ro_angle_prompts(form)
+    ps += im.booster_prompts(n_stages=3, has_fairing=True, has_fins=True,
+                             n_fins=4, n_strapons=2)
+    ps += im.booster_angle_prompts(has_fins=True)
+    return ps
+
+
+def test_every_prompt_has_a_diagram():
+    """No prompt without its picture: every checklist entry maps to a spec
+    with a known base, unit-square coordinates, and a click count matching
+    its kind (2 for a length, 3 for an angle)."""
+    for p in _all_prompts():
+        spec = im.diagram_spec(p)
+        assert spec is not None, p["field"]
+        assert spec["base"] in im.DIAGRAM_BASES, p["field"]
+        want = 3 if p.get("angle") else 2
+        assert len(spec["pts"]) == want, p["field"]
+        assert spec["kind"] == ("angle" if p.get("angle") else "line")
+        for x, y in spec["pts"]:
+            assert 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0, p["field"]
+
+
+def test_sweep_diagram_rays_trace_the_drawn_fin():
+    """The sweep diagram must SHOW the two-edge convention on the same fin
+    the base art draws: vertex at the fin-root LE corner, ray 1 to the tip
+    (the LE), ray 2 to the root TE (the root chord)."""
+    spec = im.diagram_spec(dict(field="_wing_sweep_var", angle=True))
+    fin = im.DIAGRAM_BASES["ro_side"][2]         # the right fin triangle
+    assert spec["pts"][0] == fin[0]              # vertex = root LE corner
+    assert spec["pts"][1] == fin[1]              # ray 1 endpoint = tip
+    assert spec["pts"][2] == fin[2]              # ray 2 endpoint = root TE
+
+
+def test_unknown_field_has_no_diagram_rather_than_a_wrong_one():
+    assert im.diagram_spec(dict(field="no_such_field")) is None
+    assert im.diagram_spec(None) is None
