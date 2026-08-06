@@ -3004,15 +3004,16 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     diag_canvas.pack(anchor=tk.W, pady=(0, 4))
 
     def _draw_prompt_diagram(p):
-        import math as _math
-        st = im.DIAGRAM_STYLE          # art direction lives with the data
-        diag_canvas.configure(bg=st["bg"])
+        # Rendered through matplotlib/Agg (diagram_render, the schematic's
+        # architecture) for antialiased, resolution-independent art — the
+        # canvas just displays the resulting image.  Same pure data
+        # (diagram_spec / DIAGRAM_BASES / DIAGRAM_STYLE) as before.
+        diag_canvas.configure(bg=im.DIAGRAM_STYLE["bg"])
         diag_canvas.delete("all")
+        diag_canvas._photo = None        # ref for the GC; None = blank strip
         spec = im.diagram_spec(p) if p else None
         if not spec:
             return
-        def _S(q):
-            return (q[0] * _DIAG_W, q[1] * _DIAG_H)
         # Shape-aware base art: the RO nose outline follows the DECLARED
         # profile (cone / ogive / Sears-Haack / parabola / blunt) so the
         # picture matches the shape; everything else uses the static art.
@@ -3021,49 +3022,15 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                                          bool(ctx.get("biconic")))
         else:
             base_polys = im.DIAGRAM_BASES[spec["base"]]
-        subject = spec.get("subject")
-        for item in base_polys:
-            poly = item["pts"]
-            flat = [c for q in poly for c in _S(q)]
-            if im.closed_poly(poly):     # body art: filled + outlined —
-                # the SUBJECT element (what this prompt measures) fills
-                # white, the rest of the vehicle grey
-                diag_canvas.create_polygon(
-                    *flat,
-                    fill=(st["highlight"] if item["tag"] == subject
-                          else st["fill"]),
-                    outline=st["outline"], width=st["outline_width"])
-            else:                        # detail stroke (break/joint line)
-                diag_canvas.create_line(*flat, fill=st["outline"],
-                                        width=st["outline_width"])
-        pts = [_S(q) for q in spec["pts"]]
-        if spec["kind"] == "angle":
-            (vx, vy), (ax, ay), (bx, by) = pts
-            for x2, y2 in ((ax, ay), (bx, by)):
-                diag_canvas.create_line(vx, vy, x2, y2, fill=st["measure"],
-                                        width=st["measure_width"] - 1)
-            a1 = -_math.degrees(_math.atan2(ay - vy, ax - vx))
-            a2 = -_math.degrees(_math.atan2(by - vy, bx - vx))
-            ext = (a2 - a1) % 360.0
-            if ext > 180.0:
-                a1, ext = a2, 360.0 - ext
-            r = st["arc_r"]
-            diag_canvas.create_arc(vx - r, vy - r, vx + r, vy + r,
-                                   start=a1, extent=ext, style=tk.ARC,
-                                   outline=st["measure"], width=2)
-        else:
-            (ax, ay), (bx, by) = pts
-            # single-headed 1→2 arrow: the direction IS the click order
-            diag_canvas.create_line(ax, ay, bx, by, fill=st["measure"],
-                                    width=st["measure_width"], arrow=tk.LAST,
-                                    arrowshape=st["arrowshape"])
-        r = st["marker_r"]
-        for n, (x, y) in enumerate(pts, start=1):
-            diag_canvas.create_oval(x - r, y - r, x + r, y + r,
-                                    fill=st["measure"], outline="")
-            diag_canvas.create_text(x, y, text=str(n),
-                                    fill=st["marker_text"],
-                                    font=("TkDefaultFont", 8, "bold"))
+        try:
+            import diagram_render
+            from PIL import ImageTk
+        except ImportError:              # no PIL: blank strip, never crash
+            return
+        img = diagram_render.render_prompt_diagram(spec, base_polys,
+                                                   _DIAG_W, _DIAG_H)
+        diag_canvas._photo = ImageTk.PhotoImage(img)
+        diag_canvas.create_image(0, 0, anchor="nw", image=diag_canvas._photo)
 
     # R1 clocking (only shown for spans a ×-roll can foreshorten, e.g. fins).
     # Default in-plane → no silent inflation; the correction is offered here.
