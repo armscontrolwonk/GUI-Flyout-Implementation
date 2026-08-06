@@ -722,6 +722,30 @@ def test_accept_advances_the_checklist(root, tmp_path):
     d.destroy()
 
 
+def test_prompt_diagram_renders_through_style_tokens(root):
+    """The diagram art direction is DATA (im.DIAGRAM_STYLE): closed body
+    outlines render as filled polygons in the fill/outline tokens, and the
+    measurement is a single-headed red 1→2 arrow (direction = click order)
+    with numbered disc markers — so a restyle is a token edit, and art for
+    future features inherits the style with no drawing-code changes."""
+    pytest.importorskip("PIL")
+    st = im.DIAGRAM_STYLE
+    d = _open_measure_dialog(_editor(root))
+    c = d._im_diag
+    polys = [i for i in c.find_all() if c.type(i) == "polygon"]
+    assert polys                                       # filled body art
+    assert all(c.itemcget(i, "fill") == st["fill"] for i in polys)
+    assert all(c.itemcget(i, "outline") == st["outline"] for i in polys)
+    arrows = [i for i in c.find_all() if c.type(i) == "line"
+              and c.itemcget(i, "fill") == st["measure"]]
+    assert len(arrows) == 1                            # the measure arrow
+    assert c.itemcget(arrows[0], "arrow") == "last"    # 1→2, single-headed
+    discs = [i for i in c.find_all() if c.type(i) == "oval"]
+    assert len(discs) == 2                             # numbered click discs
+    assert all(c.itemcget(i, "fill") == st["measure"] for i in discs)
+    d.destroy()
+
+
 def test_prompt_diagram_draws_and_tracks_selection(root):
     """The what-to-click diagram sits under the selector, drawn for the
     FIRST prompt at open, and redraws when the selection changes — an angle
@@ -796,10 +820,11 @@ def test_ro_diagram_is_shape_aware(root):
         d._im_prompt_var.set(f"_len_var  —  "
                              f"{im.ro_prompts('axisymmetric')[0]['label']}")
         d._im_on_prompt()
-        # the body outline is the polyline with the most vertices; a curved
-        # profile has many, a straight cone few
+        # the body outline is the (filled) polygon with the most vertices; a
+        # curved profile has many, a straight cone few
         max_verts = max((len(d._im_diag.coords(i)) for i in d._im_diag.find_all()
-                         if d._im_diag.type(i) == "line"), default=0)
+                         if d._im_diag.type(i) in ("line", "polygon")),
+                        default=0)
         d.destroy(); dlg.destroy()
         return max_verts
 

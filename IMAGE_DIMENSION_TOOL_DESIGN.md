@@ -373,6 +373,19 @@ Scope and plumbing:
     counts match the prompt kind, and the sweep diagram's rays trace the
     same fin corners the base art draws (the picture can't contradict the
     convention).  Unknown fields get a blank strip, never a wrong picture.
+  - **Diagram art direction as data (DONE, 2026-08-06)** — restyled to the
+    user-supplied reference art: filled light-grey bodies with dark-navy
+    linework, measurements as a thick red single-headed 1→2 arrow
+    (direction = click order) with numbered disc markers.  The style is ONE
+    data dict (`im.DIAGRAM_STYLE`) the renderer reads token-by-token —
+    restyling is a data edit, and future features' art inherits it.
+    `closed_poly` discriminates fill vs stroke: closed outlines (bodies,
+    fins, fairing — now all explicitly closed in the base data) render as
+    filled polygons; open polylines (cone break, stage joints) stay detail
+    strokes.  The review workflow is `diagram_contact_sheet.py` (committed):
+    it opens the REAL dialogs headlessly, walks every prompt, screenshots
+    the live diagram canvas (no parallel drawing path that could drift),
+    and tiles all 27 into one PNG — run it after any style/art change.
   - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
     hatched stylization (R12) + live discrepancy highlighting.
 

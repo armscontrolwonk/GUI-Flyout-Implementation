@@ -3005,6 +3005,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
 
     def _draw_prompt_diagram(p):
         import math as _math
+        st = im.DIAGRAM_STYLE          # art direction lives with the data
+        diag_canvas.configure(bg=st["bg"])
         diag_canvas.delete("all")
         spec = im.diagram_spec(p) if p else None
         if not spec:
@@ -3020,29 +3022,41 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         else:
             base_polys = im.DIAGRAM_BASES[spec["base"]]
         for poly in base_polys:
-            diag_canvas.create_line(*[c for q in poly for c in _S(q)],
-                                    fill="#aaa")
+            flat = [c for q in poly for c in _S(q)]
+            if im.closed_poly(poly):     # body art: filled + outlined
+                diag_canvas.create_polygon(*flat, fill=st["fill"],
+                                           outline=st["outline"],
+                                           width=st["outline_width"])
+            else:                        # detail stroke (break/joint line)
+                diag_canvas.create_line(*flat, fill=st["outline"],
+                                        width=st["outline_width"])
         pts = [_S(q) for q in spec["pts"]]
         if spec["kind"] == "angle":
             (vx, vy), (ax, ay), (bx, by) = pts
-            diag_canvas.create_line(vx, vy, ax, ay, fill="#c33", width=2)
-            diag_canvas.create_line(vx, vy, bx, by, fill="#c33", width=2)
+            for x2, y2 in ((ax, ay), (bx, by)):
+                diag_canvas.create_line(vx, vy, x2, y2, fill=st["measure"],
+                                        width=st["measure_width"] - 1)
             a1 = -_math.degrees(_math.atan2(ay - vy, ax - vx))
             a2 = -_math.degrees(_math.atan2(by - vy, bx - vx))
             ext = (a2 - a1) % 360.0
             if ext > 180.0:
                 a1, ext = a2, 360.0 - ext
-            diag_canvas.create_arc(vx - 16, vy - 16, vx + 16, vy + 16,
+            r = st["arc_r"]
+            diag_canvas.create_arc(vx - r, vy - r, vx + r, vy + r,
                                    start=a1, extent=ext, style=tk.ARC,
-                                   outline="#c33")
+                                   outline=st["measure"], width=2)
         else:
             (ax, ay), (bx, by) = pts
-            diag_canvas.create_line(ax, ay, bx, by, fill="#c33", width=2,
-                                    arrow=tk.BOTH)
+            # single-headed 1→2 arrow: the direction IS the click order
+            diag_canvas.create_line(ax, ay, bx, by, fill=st["measure"],
+                                    width=st["measure_width"], arrow=tk.LAST,
+                                    arrowshape=st["arrowshape"])
+        r = st["marker_r"]
         for n, (x, y) in enumerate(pts, start=1):
-            diag_canvas.create_oval(x - 7, y - 7, x + 7, y + 7,
-                                    fill="#c33", outline="")
-            diag_canvas.create_text(x, y, text=str(n), fill="white",
+            diag_canvas.create_oval(x - r, y - r, x + r, y + r,
+                                    fill=st["measure"], outline="")
+            diag_canvas.create_text(x, y, text=str(n),
+                                    fill=st["marker_text"],
                                     font=("TkDefaultFont", 8, "bold"))
 
     # R1 clocking (only shown for spans a ×-roll can foreshorten, e.g. fins).

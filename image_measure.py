@@ -474,8 +474,8 @@ DIAGRAM_BASES = {
         [(0.50, 0.04), (0.34, 0.46), (0.27, 0.90), (0.73, 0.90),
          (0.66, 0.46), (0.50, 0.04)],
         [(0.34, 0.46), (0.66, 0.46)],                     # cone break
-        [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90)],       # right fin (delta)
-        [(0.34, 0.55), (0.16, 0.90), (0.32, 0.90)],       # left fin
+        [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90), (0.66, 0.55)],  # right fin
+        [(0.34, 0.55), (0.16, 0.90), (0.32, 0.90), (0.34, 0.55)],  # left fin
     ],
     # top-down planform (the wedge / any plan-view quantity)
     "ro_plan": [
@@ -483,13 +483,40 @@ DIAGRAM_BASES = {
     ],
     # two-stage stack: fairing, S2, S1, base fin (right), strap-on (left)
     "booster": [
-        [(0.44, 0.20), (0.50, 0.05), (0.56, 0.20)],
+        [(0.44, 0.20), (0.50, 0.05), (0.56, 0.20), (0.44, 0.20)],
         [(0.44, 0.20), (0.56, 0.20), (0.56, 0.44), (0.44, 0.44), (0.44, 0.20)],
         [(0.42, 0.44), (0.58, 0.44), (0.58, 0.86), (0.42, 0.86), (0.42, 0.44)],
-        [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86)],       # fin
+        [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86), (0.58, 0.62)],  # fin
         [(0.30, 0.50), (0.38, 0.50), (0.38, 0.86), (0.30, 0.86), (0.30, 0.50)],
     ],
 }
+
+# ── Diagram art direction (single source of truth) ──────────────────────────
+# Every prompt diagram (and the contact sheet) renders through THESE tokens,
+# so a restyle is a data edit here, never a hunt through drawing code — and
+# art added for future features inherits the style automatically.  Style set
+# to match the user-supplied reference art (2026-08-06): filled light-grey
+# bodies with dark-navy linework; measurements in red — a thick 1→2 arrow
+# (direction = click order) with numbered disc markers.
+DIAGRAM_STYLE = {
+    "bg": "#ffffff",            # canvas background
+    "outline": "#1d3245",       # body linework (dark navy)
+    "outline_width": 2,
+    "fill": "#ececec",          # body fill (light grey)
+    "measure": "#d9251d",       # click/measure art (red)
+    "measure_width": 4,         # the 1→2 arrow stroke
+    "arrowshape": (11, 13, 5),  # solid arrowhead at click 2
+    "marker_r": 8,              # numbered disc radius, px
+    "marker_text": "#ffffff",   # numeral on the disc
+    "arc_r": 16,                # angle-prompt arc radius, px
+}
+
+
+def closed_poly(poly):
+    """A closed outline (first point repeated last) is FILLABLE body art; an
+    open polyline is a detail stroke (a cone break, a stage joint) drawn in
+    the outline colour with no fill."""
+    return len(poly) >= 4 and poly[0] == poly[-1]
 
 # field → (base, kind, click points).  Angle pts are (vertex, ray1, ray2) —
 # for sweep the rays run along the two REAL edges (LE, then root chord),
@@ -546,8 +573,8 @@ def ro_side_base(shape="cone", biconic=False):
         left = [(0.50 - R, baseY), (0.50, tipY)]
     right = [(1.0 - x, y) for (x, y) in reversed(left)]
     body = left + right + [left[0]]         # close along the base
-    fins = [[(0.66, 0.55), (0.84, baseY), (0.68, baseY)],
-            [(0.34, 0.55), (0.16, baseY), (0.32, baseY)]]
+    fins = [[(0.66, 0.55), (0.84, baseY), (0.68, baseY), (0.66, 0.55)],
+            [(0.34, 0.55), (0.16, baseY), (0.32, baseY), (0.34, 0.55)]]
     return [body] + fins
 
 
