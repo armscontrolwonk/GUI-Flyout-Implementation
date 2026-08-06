@@ -406,7 +406,9 @@ def ro_angle_prompts(body_form="axisymmetric"):
         p.append(dict(field=FLANK_LOWER_FIELD, angle=True, unit="deg",
                       label="ANGLE (check only): nose tip (vertex), then a "
                       "point along the LOWER flank, then a point along the "
-                      "body axis — lower half-angle", view="side"))
+                      "body axis — lower half-angle.  SAME quantity as the "
+                      "upper on an axisymmetric body: a difference impeaches "
+                      "the IMAGE (tilt / perspective)", view="side"))
     return p
 
 
@@ -486,10 +488,15 @@ DIAGRAM_BASES = {
         dict(tag="nose", pts=[(0.47, 0.10), (0.475, 0.062), (0.50, 0.048),
                               (0.525, 0.062), (0.53, 0.10), (0.47, 0.10)]),
         dict(tag="break", pts=[(0.40, 0.46), (0.60, 0.46)]),   # cone break
-        dict(tag="fin_r", pts=[(0.61, 0.58), (0.76, 0.90), (0.63, 0.90),
-                               (0.61, 0.58)]),
-        dict(tag="fin_l", pts=[(0.39, 0.58), (0.24, 0.90), (0.37, 0.90),
-                               (0.39, 0.58)]),
+        # fins drawn as CLIPPED deltas (a real tip-chord edge): the tip
+        # chord is only visible as an edge when it exists, so the art shows
+        # the general trapezoid; a pointed delta is the degenerate tip = 0,
+        # handled by the prompt text (Skip / Type value 0), never by
+        # clicking at a point.
+        dict(tag="fin_r", pts=[(0.61, 0.58), (0.75, 0.80), (0.75, 0.90),
+                               (0.63, 0.90), (0.61, 0.58)]),
+        dict(tag="fin_l", pts=[(0.39, 0.58), (0.25, 0.80), (0.25, 0.90),
+                               (0.37, 0.90), (0.39, 0.58)]),
     ],
     # top-down planform (the wedge / any plan-view quantity)
     "ro_plan": [
@@ -559,8 +566,8 @@ _DIAGRAM_LINES = {
     "_fore_len_var":  ("ro_side", [(0.50, 0.04), (0.50, 0.46)]),
     "_break_dia_var": ("ro_side", [(0.40, 0.46), (0.60, 0.46)]),
     "_wing_root_var": ("ro_side", [(0.61, 0.58), (0.63, 0.90)]),
-    "_wing_span_var": ("ro_side", [(0.63, 0.87), (0.76, 0.87)]),
-    "_wing_tip_derive": ("ro_side", [(0.76, 0.90), (0.72, 0.86)]),
+    "_wing_span_var": ("ro_side", [(0.63, 0.87), (0.75, 0.87)]),
+    "_wing_tip_derive": ("ro_side", [(0.75, 0.80), (0.75, 0.90)]),
     "_body_span_var": ("ro_plan", [(0.24, 0.88), (0.76, 0.88)]),
     PLAN_LEN_CHECK_FIELD: ("ro_plan", [(0.50, 0.06), (0.50, 0.90)]),
     "fairing_len":    ("booster", [(0.50, 0.04), (0.50, 0.14)]),
@@ -627,10 +634,12 @@ def ro_side_base(shape="cone", biconic=False):
            (0.50 + r_t, tipY), (0.50 - r_t, tipY)]
     return [dict(tag="body", pts=body),
             dict(tag="nose", pts=cap),
-            dict(tag="fin_r", pts=[(0.61, 0.58), (0.76, baseY),
-                                   (0.63, baseY), (0.61, 0.58)]),
-            dict(tag="fin_l", pts=[(0.39, 0.58), (0.24, baseY),
-                                   (0.37, baseY), (0.39, 0.58)])]
+            dict(tag="fin_r", pts=[(0.61, 0.58), (0.75, 0.80),
+                                   (0.75, baseY), (0.63, baseY),
+                                   (0.61, 0.58)]),
+            dict(tag="fin_l", pts=[(0.39, 0.58), (0.25, 0.80),
+                                   (0.25, baseY), (0.37, baseY),
+                                   (0.39, 0.58)])]
 
 
 def diagram_spec(prompt):
@@ -773,8 +782,9 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
         # (a real edge); a pointed delta is tip = 0 (Type value 0).  Apply
         # writes the derived _wing_sweep_var.
         p.append(dict(field="_wing_tip_derive", label="Click ONE wing panel's "
-                      "TIP chord (the short edge at the tip) — 0 for a pointed "
-                      "delta (Type value 0); sweep Λ derives from root/span/tip",
+                      "TIP chord (the outboard edge — drawn clipped).  Wing "
+                      "comes to a POINT?  Nothing to click: Skip, or Type "
+                      "value 0; sweep Λ derives from root/span/tip",
                       view="side", convention="wing_tip", derives="sweep"))
     return p
 

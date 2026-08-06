@@ -400,6 +400,14 @@ Scope and plumbing:
     domed fairing, round-nosed strap-on, skirt fin, and the RV blunt tip
     as its own small dome-above-a-tangency-line element ("nose"), which
     gives the nose-radius prompt an honest subject to highlight.
+    Clipped-delta fins (2026-08-06): the RO fin art is a TRAPEZOID with a
+    real tip-chord edge, and the tip-chord prompt measures that edge — the
+    art shows the general case (a tip chord is only visible as an edge
+    when it exists); the pointed delta is the degenerate tip = 0, handled
+    by the prompt text ("comes to a POINT?  Nothing to click: Skip, or
+    Type value 0"), never by clicking at a point (which would record a
+    tiny false chord and skew the derived sweep).  The booster's skirt
+    fin already had a real tip edge.
     Antialiased renderer (same day): the raw-Tk-canvas drawing (no AA — the
     "low resolution" look was pixel staircases, not a size budget) is
     replaced by `diagram_render.py`: matplotlib/Agg — the Schematic tab's
