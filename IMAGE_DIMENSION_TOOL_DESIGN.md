@@ -329,6 +329,13 @@ Scope and plumbing:
     convention, so it tiles the overall-length closure sum; apply routes it to
     that stage frame's `_is_len_var` and keeps the interstage section enabled
     (measured-it-so-show-it).  Its diagram is a short segment at the stage top.
+  - **Conical stage top ⌀ (DONE, 2026-08-05)** — a conical (tapered) stage is
+    a frustum whose TOP diameter is a free parameter distinct from the base
+    (the interstage's ⌀ is inherited between two known stages; a stage's own
+    body taper is not).  Declared by the stage's conical checkbox → a
+    `stage{i}_top_dia` prompt (its base-⌀ prompt relabels to "BASE diameter");
+    routes to the frame's `_top_dia_var`, enables the conical section on
+    apply.  Not a closure segment (diameters don't tile length).
   - **What-to-click diagrams (DONE, 2026-08-05)** — every checklist prompt
     shows a tiny schematic under the selector: a stylized base outline
     (nose-up RV with delta fins / plan-view planform / two-stage stack) with

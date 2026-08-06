@@ -677,3 +677,20 @@ def test_ro_diagram_is_shape_aware(root):
 
     # the curved Sears-Haack outline has more vertices than the straight cone
     assert open_for("lv_haack") > open_for("cone")
+
+
+def test_conical_top_diameter_maps_and_enables_the_section(root):
+    """The conical top ⌀ routes to _top_dia_var (distinct from the base _dia),
+    and applying it enables that stage's conical section."""
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._n_stages_var.set("2"); d._update_stage_frames()
+    fr = d._stage_frames[0]
+    assert d._img_field_var("stage1_top_dia") is fr._top_dia_var
+    assert d._img_field_var("stage1_dia") is fr._dia          # not confused
+    fr._conical_var.set(False); fr._on_conical()
+    d._apply_image_measurements({"stage1_top_dia": 2.4}, [], None)
+    assert float(fr._top_dia_var.get()) == pytest.approx(2.4)
+    assert fr._conical_var.get() is True                     # section enabled
+    assert str(fr._top_dia_entry.cget("state")) == "normal"
+    d.destroy()

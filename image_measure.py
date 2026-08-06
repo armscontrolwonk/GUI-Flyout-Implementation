@@ -544,6 +544,9 @@ def diagram_spec(prompt):
         if f.endswith("_interstage_len"):        # the adapter atop the stage
             pts = ([(0.50, 0.16), (0.50, 0.24)] if second
                    else [(0.50, 0.40), (0.50, 0.48)])
+        elif f.endswith("_top_dia"):             # tapered stage: top of frustum
+            pts = ([(0.44, 0.20), (0.56, 0.20)] if second
+                   else [(0.42, 0.44), (0.58, 0.44)])
         elif f.endswith("_len"):
             pts = ([(0.50, 0.20), (0.50, 0.44)] if second
                    else [(0.50, 0.44), (0.50, 0.86)])
@@ -668,7 +671,8 @@ def ro_prompts(body_form="axisymmetric", biconic=False):
 
 
 def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
-                    n_fins=0, n_strapons=0, interstage_stages=()):
+                    n_fins=0, n_strapons=0, interstage_stages=(),
+                    conical_stages=()):
     """Ordered prompts for the booster editor, generated from the topology the
     editor ALREADY declares (stage count, fairing on/off, fins on/off + count,
     strap-on count).  Repeated features (fins, strap-ons) are measured ONCE and
@@ -676,14 +680,26 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
     instance and the label states the count assumption (R1/design 'measure one,
     declare count')."""
     inter = set(int(s) for s in (interstage_stages or ()))
+    conical = set(int(s) for s in (conical_stages or ()))
     p = []
     for i in range(1, max(1, int(n_stages)) + 1):
         p.append(dict(field=f"stage{i}_len",
                       label=f"Click STAGE {i} length (top to bottom)",
                       view="side", convention="stage_length"))
         p.append(dict(field=f"stage{i}_dia",
-                      label=f"Click STAGE {i} diameter (across)",
+                      label=f"Click STAGE {i} "
+                      + ("BASE diameter (across)" if i in conical
+                         else "diameter (across)"),
                       view="side", convention="stage_diameter"))
+        if i in conical:
+            # A conical (tapered) stage is a frustum: its TOP diameter is a
+            # free parameter distinct from the base (the interstage's ⌀ is
+            # inherited, but the stage body's own taper is not).  Declared by
+            # the stage's conical checkbox.
+            p.append(dict(field=f"stage{i}_top_dia",
+                          label=f"Click STAGE {i} TOP diameter (across the top "
+                          "of the tapered stage)", view="side",
+                          convention="stage_diameter"))
         if i in inter:
             # Interstage: the adapter on top of stage i.  Only its LENGTH is
             # image-measurable (mass, jettison time aren't dimensions; the ⌀
