@@ -111,6 +111,9 @@ CONVENTIONS = {
     "stage_length":   ("stage length (top to bottom of the stage)", _identity),
     "fairing_diameter": ("fairing base diameter (across)", _identity),
     "fairing_length": ("fairing length (base to nose tip)", _identity),
+    "fairing_nose_length": ("fairing NOSE-segment length (tip down to where "
+                            "the cylinder starts) — part of the total, not a "
+                            "separate closure segment", _identity),
     "fin_span":     ("ONE fin's exposed span (root to tip)", _identity),
     "fin_root":     ("ONE fin's root chord (leading to trailing edge at root)", _identity),
     "fin_tip":      ("ONE fin's tip chord", _identity),
@@ -484,6 +487,7 @@ _DIAGRAM_LINES = {
     PLAN_LEN_CHECK_FIELD: ("ro_plan", [(0.50, 0.06), (0.50, 0.90)]),
     "fairing_len":    ("booster", [(0.50, 0.05), (0.50, 0.20)]),
     "fairing_dia":    ("booster", [(0.44, 0.20), (0.56, 0.20)]),
+    "fairing_nose_len": ("booster", [(0.50, 0.05), (0.50, 0.13)]),
     "fin_span":       ("booster", [(0.58, 0.84), (0.70, 0.84)]),
     "fin_root":       ("booster", [(0.58, 0.62), (0.58, 0.86)]),
     "fin_tip":        ("booster", [(0.70, 0.78), (0.70, 0.86)]),
@@ -498,6 +502,33 @@ _DIAGRAM_ANGLES = {
     FLANK_UPPER_FIELD: ("ro_side", [(0.50, 0.04), (0.66, 0.46), (0.50, 0.52)]),
     FLANK_LOWER_FIELD: ("ro_side", [(0.50, 0.04), (0.34, 0.46), (0.50, 0.52)]),
 }
+
+
+def ro_side_base(shape="cone", biconic=False):
+    """The RO side-elevation outline for the little diagrams, drawn with the
+    DECLARED nose PROFILE so a Sears-Haack / ogive / parabola RO shows its own
+    curve, not a cone.  The measured dimensions (length, base ⌀, nose radius)
+    are the same for every profile — this only makes the PICTURE honest.
+    `biconic` keeps the two-cone outline (it has its own break-⌀ prompt).
+    Same unit square (y down) as DIAGRAM_BASES; fins unchanged."""
+    if biconic:
+        return DIAGRAM_BASES["ro_side"]
+    s = (shape or "").lower()
+    R, tipY, baseY, n = 0.23, 0.06, 0.90, 16
+    if any(k in s for k in ("ogive", "haack", "karman", "parabola")):
+        left = [(0.50 - R * math.cos(math.pi / 2 * i / n),
+                 baseY - (baseY - tipY) * i / n) for i in range(n + 1)]
+    elif "blunt" in s:
+        left = [(0.50 - R * math.cos(math.pi / 2 * i / n),
+                 baseY - (baseY - tipY) * math.sin(math.pi / 2 * i / n))
+                for i in range(n + 1)]
+    else:                                   # straight cone
+        left = [(0.50 - R, baseY), (0.50, tipY)]
+    right = [(1.0 - x, y) for (x, y) in reversed(left)]
+    body = left + right + [left[0]]         # close along the base
+    fins = [[(0.66, 0.55), (0.84, baseY), (0.68, baseY)],
+            [(0.34, 0.55), (0.16, baseY), (0.32, baseY)]]
+    return [body] + fins
 
 
 def diagram_spec(prompt):
@@ -667,6 +698,13 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
                       "(base to nose tip)", view="side", convention="fairing_length"))
         p.append(dict(field="fairing_dia", label="Click FAIRING base diameter",
                       view="side", convention="fairing_diameter"))
+        # The nose-segment length (ogive/cone portion; the rest is a cylinder)
+        # is its own field — the fairing SHAPE is declared, but where the curve
+        # ends IS measurable and shape-independent.  Not a closure segment: it
+        # is part of the total fairing length, not additional to it.
+        p.append(dict(field="fairing_nose_len", label="Click the FAIRING "
+                      "NOSE-segment length (tip down to where the cylindrical "
+                      "part starts)", view="side", convention="fairing_nose_length"))
     if has_fins:
         note = (f" — measure ONE; the model replicates to the {int(n_fins)} "
                 "declared fins, assumed identical") if n_fins else ""

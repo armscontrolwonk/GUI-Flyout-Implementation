@@ -549,3 +549,44 @@ def test_interstage_has_its_own_diagram_at_the_stage_top():
     assert spec["pts"] != im.diagram_spec(dict(field="stage1_len"))["pts"]
     s2 = im.diagram_spec(dict(field="stage2_interstage_len"))
     assert s2["pts"] != spec["pts"]                   # different stage, own spot
+
+
+# ── nose/fairing shapes: measurements are shape-agnostic; art is shape-aware ─
+def test_fairing_nose_segment_length_is_measurable_and_not_double_counted():
+    """The fairing's nose-segment length (where the ogive/cone meets the
+    cylinder) is its own prompt — the SHAPE is declared, but where the curve
+    ends is measurable and shape-independent.  It is part of the total
+    fairing length, so it must NOT be a separate closure segment."""
+    ps = im.booster_prompts(n_stages=1, has_fairing=True)
+    fields = [p["field"] for p in ps]
+    assert "fairing_nose_len" in fields
+    nose = next(p for p in ps if p["field"] == "fairing_nose_len")
+    assert nose["convention"] == "fairing_nose_length"
+    assert "fairing_nose_len" not in im.closure_segments(ps)   # not additive
+    assert "fairing_len" in im.closure_segments(ps)            # the total is
+    assert "fairing_nose_len" not in [p["field"]
+                                      for p in im.booster_prompts(n_stages=1)]
+
+
+@pytest.mark.parametrize("shape", ["tangent_ogive", "von_karman", "lv_haack",
+                                   "parabola", "blunt_cylinder"])
+def test_ro_side_base_follows_the_declared_profile(shape):
+    """Every non-cone profile (incl. Sears-Haack = lv_haack) draws a CURVED
+    nose outline — more vertices than the straight cone — so the diagram is
+    honest about the shape.  The measured dimensions are unchanged; only the
+    picture differs."""
+    cone = im.ro_side_base("cone")[0]
+    curved = im.ro_side_base(shape)[0]
+    assert len(curved) > len(cone) + 4         # a real curve, not two edges
+    assert curved != cone
+    # a biconic keeps its own two-cone outline (its break-⌀ prompt owns that)
+    assert im.ro_side_base(shape, biconic=True) is im.DIAGRAM_BASES["ro_side"]
+
+
+def test_cone_and_ogive_share_the_same_measured_dimensions():
+    """The validation point: nothing shape-specific is MEASURED — a cone and
+    a Sears-Haack RO present the identical prompt list (length, ⌀, nose r,
+    wings); the profile is the declared shape dropdown, not a click."""
+    fields = lambda: [p["field"] for p in im.ro_prompts("axisymmetric")]
+    assert fields() == ["_len_var", "_dia_var", "_nose_var",
+                        "_wing_root_var", "_wing_span_var", "_wing_tip_derive"]
