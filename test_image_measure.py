@@ -399,19 +399,43 @@ def test_diagram_style_tokens_and_fillable_bodies():
     has at least one CLOSED outline, so the filled-body style always has a
     body to fill.  closed_poly is the fill/stroke discriminator: closed →
     filled body art, open → detail stroke (cone break, stage joint)."""
-    for key in ("bg", "outline", "outline_width", "fill", "measure",
-                "measure_width", "arrowshape", "marker_r", "marker_text",
-                "arc_r"):
+    for key in ("bg", "outline", "outline_width", "fill", "highlight",
+                "measure", "measure_width", "arrowshape", "marker_r",
+                "marker_text", "arc_r"):
         assert key in im.DIAGRAM_STYLE
     assert im.closed_poly([(0, 0), (1, 0), (1, 1), (0, 0)])
     assert not im.closed_poly([(0, 0), (1, 0)])           # detail stroke
     assert not im.closed_poly([(0, 0), (1, 0), (1, 1)])   # unclosed triangle
-    for name, polys in im.DIAGRAM_BASES.items():
-        assert any(im.closed_poly(p) for p in polys), name
+    for name, items in im.DIAGRAM_BASES.items():
+        assert any(im.closed_poly(it["pts"]) for it in items), name
     for shape in ("cone", "tangent_ogive", "lv_haack", "parabola",
                   "blunt_cylinder"):
-        polys = im.ro_side_base(shape)
-        assert all(im.closed_poly(p) for p in polys), shape
+        items = im.ro_side_base(shape)
+        assert all(im.closed_poly(it["pts"]) for it in items), shape
+
+
+def test_diagram_subject_names_a_drawn_element():
+    """Every prompt's diagram declares WHICH vehicle element it measures
+    (the renderer fills that one white, the rest grey) — and the subject is
+    always a tag the base art actually draws, so the highlight can never
+    silently miss.  The overall-length cross-check spans the whole vehicle:
+    no subject, nothing singled out."""
+    tags = {name: {it["tag"] for it in items}
+            for name, items in im.DIAGRAM_BASES.items()}
+    checks = [("stage1_len", "s1"), ("stage1_dia", "s1"),
+              ("stage1_top_dia", "s1"), ("stage1_interstage_len", "inter1"),
+              ("stage2_len", "s2"), ("stage2_interstage_len", "inter2"),
+              ("fairing_len", "fairing"), ("fin_root", "fin"),
+              ("strapon_len", "strapon"), ("_len_var", "body"),
+              ("_nose_var", "nose"), ("_wing_root_var", "fin_r")]
+    for field, want in checks:
+        spec = im.diagram_spec(dict(field=field))
+        assert spec["subject"] == want, field
+        assert want in tags[spec["base"]], field
+    assert im.diagram_spec(
+        dict(field=im.OVERALL_LEN_CHECK_FIELD))["subject"] is None
+    # the shape-aware RO bases draw the same tags the RO subjects use
+    assert {"body", "fin_r"} <= {it["tag"] for it in im.ro_side_base("cone")}
 
 
 def test_nose_radius_tangency_identity():
@@ -551,8 +575,9 @@ def test_tip_chord_diagram_points_at_the_drawn_fin_tip():
     derivation) shows a segment at the fin tip in the same base art."""
     spec = im.diagram_spec(dict(field="_wing_tip_derive"))
     assert spec["kind"] == "line" and spec["base"] == "ro_side"
-    fin_tip = im.DIAGRAM_BASES["ro_side"][2][1]   # the fin's tip vertex
-    assert spec["pts"][0] == fin_tip
+    fin_r = next(it for it in im.DIAGRAM_BASES["ro_side"]
+                 if it["tag"] == "fin_r")
+    assert spec["pts"][0] == fin_r["pts"][1]             # fin's tip vertex
 
 
 def test_unknown_field_has_no_diagram_rather_than_a_wrong_one():
@@ -612,8 +637,8 @@ def test_ro_side_base_follows_the_declared_profile(shape):
     nose outline — more vertices than the straight cone — so the diagram is
     honest about the shape.  The measured dimensions are unchanged; only the
     picture differs."""
-    cone = im.ro_side_base("cone")[0]
-    curved = im.ro_side_base(shape)[0]
+    cone = im.ro_side_base("cone")[0]["pts"]
+    curved = im.ro_side_base(shape)[0]["pts"]
     assert len(curved) > len(cone) + 4         # a real curve, not two edges
     assert curved != cone
     # a biconic keeps its own two-cone outline (its break-⌀ prompt owns that)

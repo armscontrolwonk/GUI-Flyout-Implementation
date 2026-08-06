@@ -105,7 +105,10 @@ def build_sheet(out_path="diagram_contact_sheet.png"):
                                     interstage_stages=(1,),
                                     conical_stages=(1,)), shots, seen)
 
-    cols, cw, ch, cap, pad = 5, 214, 130, 56, 9
+    cols, cw, cap, pad = 5, 214, 56, 9
+    # cell height preserves the live canvas aspect (no distortion)
+    w0, h0 = shots[0][2].size
+    ch = round(cw * h0 / w0)
     rows = (len(shots) + cols - 1) // cols
     W = cols * (cw + pad) + pad
     H = rows * (ch + cap + pad) + pad + 28

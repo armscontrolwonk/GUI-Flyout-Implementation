@@ -468,26 +468,55 @@ def apply_deltas(accepted, current):
 # pin that every prompt has a diagram and that click counts match the prompt
 # kind (2 for a length, 3 for an angle: vertex, ray, ray).
 
+# Each base is a list of TAGGED outlines: the tag names the vehicle element
+# (s1, inter1, fairing, fin_r, …) so a prompt can declare which element it
+# measures (its "subject") and the renderer can highlight exactly that one
+# (white) while the rest of the vehicle stays grey — reference art,
+# 2026-08-06.  Proportions are representative (slender stack, tapered
+# interstage bands drawn explicitly), not to any one vehicle's scale.
 DIAGRAM_BASES = {
-    # nose-up biconic RV with a delta fin pair (side elevation)
+    # nose-up biconic RV with a delta fin pair (side elevation).  The blunt
+    # nose tip is its OWN element ("nose": a small dome above a tangency
+    # line, per the reference art) so the nose-radius prompt has an honest
+    # subject to highlight.
     "ro_side": [
-        [(0.50, 0.04), (0.34, 0.46), (0.27, 0.90), (0.73, 0.90),
-         (0.66, 0.46), (0.50, 0.04)],
-        [(0.34, 0.46), (0.66, 0.46)],                     # cone break
-        [(0.66, 0.55), (0.84, 0.90), (0.68, 0.90), (0.66, 0.55)],  # right fin
-        [(0.34, 0.55), (0.16, 0.90), (0.32, 0.90), (0.34, 0.55)],  # left fin
+        dict(tag="body", pts=[(0.47, 0.10), (0.40, 0.46), (0.37, 0.90),
+                              (0.63, 0.90), (0.60, 0.46), (0.53, 0.10),
+                              (0.47, 0.10)]),
+        dict(tag="nose", pts=[(0.47, 0.10), (0.475, 0.062), (0.50, 0.048),
+                              (0.525, 0.062), (0.53, 0.10), (0.47, 0.10)]),
+        dict(tag="break", pts=[(0.40, 0.46), (0.60, 0.46)]),   # cone break
+        dict(tag="fin_r", pts=[(0.61, 0.58), (0.76, 0.90), (0.63, 0.90),
+                               (0.61, 0.58)]),
+        dict(tag="fin_l", pts=[(0.39, 0.58), (0.24, 0.90), (0.37, 0.90),
+                               (0.39, 0.58)]),
     ],
     # top-down planform (the wedge / any plan-view quantity)
     "ro_plan": [
-        [(0.50, 0.06), (0.18, 0.90), (0.82, 0.90), (0.50, 0.06)],
+        dict(tag="body", pts=[(0.50, 0.06), (0.24, 0.90), (0.76, 0.90),
+                              (0.50, 0.06)]),
     ],
-    # two-stage stack: fairing, S2, S1, base fin (right), strap-on (left)
+    # two-stage stack, top to bottom: domed fairing, interstage band atop
+    # S2, S2, tapered interstage band atop S1, S1; skirt fin (right) and a
+    # round-nosed strap-on (left).
     "booster": [
-        [(0.44, 0.20), (0.50, 0.05), (0.56, 0.20), (0.44, 0.20)],
-        [(0.44, 0.20), (0.56, 0.20), (0.56, 0.44), (0.44, 0.44), (0.44, 0.20)],
-        [(0.42, 0.44), (0.58, 0.44), (0.58, 0.86), (0.42, 0.86), (0.42, 0.44)],
-        [(0.58, 0.62), (0.70, 0.86), (0.58, 0.86), (0.58, 0.62)],  # fin
-        [(0.30, 0.50), (0.38, 0.50), (0.38, 0.86), (0.30, 0.86), (0.30, 0.50)],
+        dict(tag="fairing", pts=[(0.44, 0.14), (0.445, 0.075),
+                                 (0.465, 0.048), (0.50, 0.04),
+                                 (0.535, 0.048), (0.555, 0.075),
+                                 (0.56, 0.14), (0.44, 0.14)]),
+        dict(tag="inter2", pts=[(0.44, 0.14), (0.56, 0.14), (0.56, 0.20),
+                                (0.44, 0.20), (0.44, 0.14)]),
+        dict(tag="s2", pts=[(0.44, 0.20), (0.56, 0.20), (0.56, 0.38),
+                            (0.44, 0.38), (0.44, 0.20)]),
+        dict(tag="inter1", pts=[(0.44, 0.38), (0.56, 0.38), (0.57, 0.46),
+                                (0.43, 0.46), (0.44, 0.38)]),
+        dict(tag="s1", pts=[(0.43, 0.46), (0.57, 0.46), (0.57, 0.86),
+                            (0.43, 0.86), (0.43, 0.46)]),
+        dict(tag="fin", pts=[(0.57, 0.70), (0.68, 0.82), (0.68, 0.86),
+                             (0.57, 0.86), (0.57, 0.70)]),
+        dict(tag="strapon", pts=[(0.31, 0.86), (0.31, 0.54), (0.318, 0.495),
+                                 (0.345, 0.475), (0.372, 0.495),
+                                 (0.38, 0.54), (0.38, 0.86), (0.31, 0.86)]),
     ],
 }
 
@@ -503,6 +532,7 @@ DIAGRAM_STYLE = {
     "outline": "#1d3245",       # body linework (dark navy)
     "outline_width": 2,
     "fill": "#ececec",          # body fill (light grey)
+    "highlight": "#ffffff",     # the SUBJECT element (what's being measured)
     "measure": "#d9251d",       # click/measure art (red)
     "measure_width": 4,         # the 1→2 arrow stroke
     "arrowshape": (11, 13, 5),  # solid arrowhead at click 2
@@ -523,31 +553,46 @@ def closed_poly(poly):
 # matching the fin triangle drawn in the base art.
 _DIAGRAM_LINES = {
     "_len_var":       ("ro_side", [(0.50, 0.04), (0.50, 0.90)]),
-    "_dia_var":       ("ro_side", [(0.27, 0.90), (0.73, 0.90)]),
-    "_nose_var":      ("ro_side", [(0.46, 0.06), (0.54, 0.06)]),
+    "_dia_var":       ("ro_side", [(0.37, 0.90), (0.63, 0.90)]),
+    "_nose_var":      ("ro_side", [(0.46, 0.10), (0.54, 0.10)]),
     "_fore_len_var":  ("ro_side", [(0.50, 0.04), (0.50, 0.46)]),
-    "_break_dia_var": ("ro_side", [(0.34, 0.46), (0.66, 0.46)]),
-    "_wing_root_var": ("ro_side", [(0.66, 0.55), (0.68, 0.90)]),
-    "_wing_span_var": ("ro_side", [(0.68, 0.87), (0.84, 0.87)]),
-    "_wing_tip_derive": ("ro_side", [(0.84, 0.90), (0.80, 0.86)]),
-    "_body_span_var": ("ro_plan", [(0.18, 0.88), (0.82, 0.88)]),
+    "_break_dia_var": ("ro_side", [(0.40, 0.46), (0.60, 0.46)]),
+    "_wing_root_var": ("ro_side", [(0.61, 0.58), (0.63, 0.90)]),
+    "_wing_span_var": ("ro_side", [(0.63, 0.87), (0.76, 0.87)]),
+    "_wing_tip_derive": ("ro_side", [(0.76, 0.90), (0.72, 0.86)]),
+    "_body_span_var": ("ro_plan", [(0.24, 0.88), (0.76, 0.88)]),
     PLAN_LEN_CHECK_FIELD: ("ro_plan", [(0.50, 0.06), (0.50, 0.90)]),
-    "fairing_len":    ("booster", [(0.50, 0.05), (0.50, 0.20)]),
-    "fairing_dia":    ("booster", [(0.44, 0.20), (0.56, 0.20)]),
-    "fairing_nose_len": ("booster", [(0.50, 0.05), (0.50, 0.13)]),
-    "fin_span":       ("booster", [(0.58, 0.84), (0.70, 0.84)]),
-    "fin_root":       ("booster", [(0.58, 0.62), (0.58, 0.86)]),
-    "fin_tip":        ("booster", [(0.70, 0.78), (0.70, 0.86)]),
-    "strapon_dia":    ("booster", [(0.30, 0.68), (0.38, 0.68)]),
-    "strapon_len":    ("booster", [(0.34, 0.50), (0.34, 0.86)]),
-    OVERALL_LEN_CHECK_FIELD: ("booster", [(0.50, 0.05), (0.50, 0.86)]),
+    "fairing_len":    ("booster", [(0.50, 0.04), (0.50, 0.14)]),
+    "fairing_dia":    ("booster", [(0.44, 0.14), (0.56, 0.14)]),
+    "fairing_nose_len": ("booster", [(0.50, 0.04), (0.50, 0.10)]),
+    "fin_span":       ("booster", [(0.57, 0.845), (0.68, 0.845)]),
+    "fin_root":       ("booster", [(0.57, 0.70), (0.57, 0.86)]),
+    "fin_tip":        ("booster", [(0.68, 0.82), (0.68, 0.86)]),
+    "strapon_dia":    ("booster", [(0.31, 0.68), (0.38, 0.68)]),
+    "strapon_len":    ("booster", [(0.345, 0.475), (0.345, 0.86)]),
+    OVERALL_LEN_CHECK_FIELD: ("booster", [(0.50, 0.04), (0.50, 0.86)]),
 }
 
 _DIAGRAM_ANGLES = {
     # only the check-only cone flank half-angles remain as measured angles;
     # wing/fin sweep is derived from the planform lengths.
-    FLANK_UPPER_FIELD: ("ro_side", [(0.50, 0.04), (0.66, 0.46), (0.50, 0.52)]),
-    FLANK_LOWER_FIELD: ("ro_side", [(0.50, 0.04), (0.34, 0.46), (0.50, 0.52)]),
+    FLANK_UPPER_FIELD: ("ro_side", [(0.50, 0.04), (0.60, 0.46), (0.50, 0.52)]),
+    FLANK_LOWER_FIELD: ("ro_side", [(0.50, 0.04), (0.40, 0.46), (0.50, 0.52)]),
+}
+
+# field → the tagged base element it measures (the diagram highlights it
+# white; everything else stays grey).  Fields absent here default to "body";
+# the overall-length cross-check spans the whole vehicle, so nothing is
+# singled out.  Stage fields resolve in diagram_spec (s1/s2/inter1/inter2).
+_DIAGRAM_SUBJECTS = {
+    "_nose_var": "nose",
+    "_wing_root_var": "fin_r", "_wing_span_var": "fin_r",
+    "_wing_tip_derive": "fin_r",
+    "fairing_len": "fairing", "fairing_dia": "fairing",
+    "fairing_nose_len": "fairing",
+    "fin_span": "fin", "fin_root": "fin", "fin_tip": "fin",
+    "strapon_dia": "strapon", "strapon_len": "strapon",
+    OVERALL_LEN_CHECK_FIELD: None,
 }
 
 
@@ -561,21 +606,30 @@ def ro_side_base(shape="cone", biconic=False):
     if biconic:
         return DIAGRAM_BASES["ro_side"]
     s = (shape or "").lower()
-    R, tipY, baseY, n = 0.23, 0.06, 0.90, 16
+    # Truncated at the tip (half-width r_t at tipY) with a small dome cap
+    # above — the blunt nose tip is its own tagged element ("nose"), per
+    # the reference art, so the nose-radius prompt can highlight it.
+    R, r_t, tipY, baseY, n = 0.13, 0.03, 0.10, 0.90, 16
     if any(k in s for k in ("ogive", "haack", "karman", "parabola")):
-        left = [(0.50 - R * math.cos(math.pi / 2 * i / n),
+        left = [(0.50 - r_t - (R - r_t) * math.cos(math.pi / 2 * i / n),
                  baseY - (baseY - tipY) * i / n) for i in range(n + 1)]
     elif "blunt" in s:
-        left = [(0.50 - R * math.cos(math.pi / 2 * i / n),
+        left = [(0.50 - r_t - (R - r_t) * math.cos(math.pi / 2 * i / n),
                  baseY - (baseY - tipY) * math.sin(math.pi / 2 * i / n))
                 for i in range(n + 1)]
     else:                                   # straight cone
-        left = [(0.50 - R, baseY), (0.50, tipY)]
+        left = [(0.50 - R, baseY), (0.50 - r_t, tipY)]
     right = [(1.0 - x, y) for (x, y) in reversed(left)]
     body = left + right + [left[0]]         # close along the base
-    fins = [[(0.66, 0.55), (0.84, baseY), (0.68, baseY), (0.66, 0.55)],
-            [(0.34, 0.55), (0.16, baseY), (0.32, baseY), (0.34, 0.55)]]
-    return [body] + fins
+    cap = [(0.50 - r_t, tipY), (0.50 - r_t + 0.005, 0.062),
+           (0.50, 0.048), (0.50 + r_t - 0.005, 0.062),
+           (0.50 + r_t, tipY), (0.50 - r_t, tipY)]
+    return [dict(tag="body", pts=body),
+            dict(tag="nose", pts=cap),
+            dict(tag="fin_r", pts=[(0.61, 0.58), (0.76, baseY),
+                                   (0.63, baseY), (0.61, 0.58)]),
+            dict(tag="fin_l", pts=[(0.39, 0.58), (0.24, baseY),
+                                   (0.37, baseY), (0.39, 0.58)])]
 
 
 def diagram_spec(prompt):
@@ -585,24 +639,31 @@ def diagram_spec(prompt):
     f = (prompt or {}).get("field", "")
     if (prompt or {}).get("angle"):
         hit = _DIAGRAM_ANGLES.get(f)
-        return (dict(base=hit[0], kind="angle", pts=hit[1]) if hit else None)
+        return (dict(base=hit[0], kind="angle", pts=hit[1], subject="body")
+                if hit else None)
     if f.startswith("stage"):
         second = f.startswith("stage2")          # stages ≥3 reuse the S1 box
         if f.endswith("_interstage_len"):        # the adapter atop the stage
-            pts = ([(0.50, 0.16), (0.50, 0.24)] if second
-                   else [(0.50, 0.40), (0.50, 0.48)])
+            pts = ([(0.50, 0.14), (0.50, 0.20)] if second
+                   else [(0.50, 0.38), (0.50, 0.46)])
+            subj = "inter2" if second else "inter1"
         elif f.endswith("_top_dia"):             # tapered stage: top of frustum
             pts = ([(0.44, 0.20), (0.56, 0.20)] if second
-                   else [(0.42, 0.44), (0.58, 0.44)])
+                   else [(0.43, 0.46), (0.57, 0.46)])
+            subj = "s2" if second else "s1"
         elif f.endswith("_len"):
-            pts = ([(0.50, 0.20), (0.50, 0.44)] if second
-                   else [(0.50, 0.44), (0.50, 0.86)])
+            pts = ([(0.50, 0.20), (0.50, 0.38)] if second
+                   else [(0.50, 0.46), (0.50, 0.86)])
+            subj = "s2" if second else "s1"
         else:
-            pts = ([(0.44, 0.32), (0.56, 0.32)] if second
-                   else [(0.42, 0.65), (0.58, 0.65)])
-        return dict(base="booster", kind="line", pts=pts)
+            pts = ([(0.44, 0.29), (0.56, 0.29)] if second
+                   else [(0.43, 0.66), (0.57, 0.66)])
+            subj = "s2" if second else "s1"
+        return dict(base="booster", kind="line", pts=pts, subject=subj)
     hit = _DIAGRAM_LINES.get(f)
-    return (dict(base=hit[0], kind="line", pts=hit[1]) if hit else None)
+    return (dict(base=hit[0], kind="line", pts=hit[1],
+                 subject=_DIAGRAM_SUBJECTS.get(f, "body"))
+            if hit else None)
 
 
 # Anchor-free quantities (R2): what survives a WRONG scale anchor.  Absolute
