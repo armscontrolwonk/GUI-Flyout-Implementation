@@ -308,6 +308,14 @@ Scope and plumbing:
     with everything untouched.  One field→var map per editor
     (`_img_field_var`) is shared by apply and the preview, so they can
     never disagree about what is writable.
+  - **Interstage length (DONE, 2026-08-05)** — a stage whose interstage
+    adapter is declared (its checkbox) gets an interstage-LENGTH prompt after
+    that stage's len/dia.  Length is the only image-measurable interstage
+    dimension: its ⌀ is inherited from the adjacent stages (not stored), and
+    mass / jettison time aren't dimensions.  It carries the stage_length
+    convention, so it tiles the overall-length closure sum; apply routes it to
+    that stage frame's `_is_len_var` and keeps the interstage section enabled
+    (measured-it-so-show-it).  Its diagram is a short segment at the stage top.
   - **What-to-click diagrams (DONE, 2026-08-05)** — every checklist prompt
     shows a tiny schematic under the selector: a stylized base outline
     (nose-up RV with delta fins / plan-view planform / two-stage stack) with

@@ -521,3 +521,31 @@ def test_tip_chord_diagram_points_at_the_drawn_fin_tip():
 def test_unknown_field_has_no_diagram_rather_than_a_wrong_one():
     assert im.diagram_spec(dict(field="no_such_field")) is None
     assert im.diagram_spec(None) is None
+
+
+# ── interstage: length is the one image-measurable dimension ────────────────
+def test_interstage_prompt_only_for_declared_stages():
+    """The interstage adapter's LENGTH is offered only for stages whose
+    interstage is declared (its ⌀ is inherited, its mass/jettison aren't
+    dimensions).  It carries the stage_length convention so it tiles the
+    closure sum."""
+    none = [p["field"] for p in im.booster_prompts(n_stages=2)]
+    assert not any("interstage" in f for f in none)
+    ps = im.booster_prompts(n_stages=2, interstage_stages=(1,))
+    fields = [p["field"] for p in ps]
+    assert "stage1_interstage_len" in fields
+    assert "stage2_interstage_len" not in fields
+    inter = next(p for p in ps if p["field"] == "stage1_interstage_len")
+    assert inter["convention"] == "stage_length"      # counts toward closure
+    # order: the interstage follows its stage's len/dia
+    assert fields.index("stage1_interstage_len") == fields.index("stage1_dia") + 1
+
+
+def test_interstage_has_its_own_diagram_at_the_stage_top():
+    spec = im.diagram_spec(dict(field="stage1_interstage_len"))
+    assert spec is not None and spec["base"] == "booster" and spec["kind"] == "line"
+    # a short segment straddling the S1/S2 junction (y≈0.44), distinct from
+    # the stage-1 length segment (which spans the whole S1 box)
+    assert spec["pts"] != im.diagram_spec(dict(field="stage1_len"))["pts"]
+    s2 = im.diagram_spec(dict(field="stage2_interstage_len"))
+    assert s2["pts"] != spec["pts"]                   # different stage, own spot

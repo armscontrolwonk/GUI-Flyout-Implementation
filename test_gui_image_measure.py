@@ -611,3 +611,23 @@ def test_prompt_diagram_draws_and_tracks_selection(root):
     kinds = {d._im_diag.type(i) for i in d._im_diag.find_all()}
     assert "arc" in kinds                          # angle prompt shows the arc
     d.destroy()
+
+
+def test_interstage_length_measures_and_enables_the_section(root):
+    """A declared interstage's LENGTH flows to the right stage frame's
+    _is_len_var, and applying it enables that stage's interstage section
+    (measured-it-so-show-it), so the value isn't stranded in a disabled
+    entry."""
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._n_stages_var.set("2"); d._update_stage_frames()
+    fr = d._stage_frames[0]
+    # the field map routes the interstage length to the frame's _is_len_var
+    assert d._img_field_var("stage1_interstage_len") is fr._is_len_var
+    assert d._img_field_var("stage1_len") is fr._length      # not confused
+    fr._interstage_var.set(False); fr._on_interstage()
+    d._apply_image_measurements({"stage1_interstage_len": 1.4}, [], None)
+    assert float(fr._is_len_var.get()) == pytest.approx(1.4)
+    assert fr._interstage_var.get() is True                  # section enabled
+    assert str(fr._is_len_entry.cget("state")) == "normal"
+    d.destroy()
