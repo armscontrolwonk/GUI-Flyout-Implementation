@@ -501,6 +501,12 @@ def test_arrow_keys_pan_and_toplevel_wheel_fallback(root, tmp_path):
     d._im_key_pan(-40, -40)
     assert cv.xview()[0] == pytest.approx(x0)
     assert cv.yview()[0] == pytest.approx(y0)
+    # plain arrows can be eaten by whichever widget has focus (Tk traversal
+    # / combobox bindings), so the modified spellings are bound explicitly —
+    # ⌘-arrows on a Mac, Ctrl-arrows elsewhere — as the always-works path
+    for arrow in ("Left", "Right", "Up", "Down"):
+        assert d.bind(f"<Key-{arrow}>")
+        assert d.bind(f"<Control-Key-{arrow}>")
     # fallback hit-test: pointer not over the canvas (here: nowhere — the
     # dialog is withdrawn) → the event is ignored, nothing moves or zooms
     z0 = d._im_views["side"]["zoom"]
