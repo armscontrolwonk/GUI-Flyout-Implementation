@@ -2772,10 +2772,20 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         s = d / 120.0 if abs(d) >= 120.0 else d
         return max(-2.0, min(2.0, s))
 
-    def _wheel_zoom(ev):
+    def _pan_by(dx_px, dy_px):
+        if _cv()["img"] is None:
+            return
+        if dx_px:
+            canvas.xview_scroll(int(dx_px), "units")
+        if dy_px:
+            canvas.yview_scroll(int(dy_px), "units")
+
+    def _wheel_zoom(ev, cx=None, cy=None):
         s = _wheel_steps(getattr(ev, "delta", 0))
         if s:
-            _zoom_at(1.15 ** s, ev.x, ev.y)
+            _zoom_at(1.15 ** s,
+                     ev.x if cx is None else cx,
+                     ev.y if cy is None else cy)
         return "break"
 
     def _wheel_pan(ev, horizontal=False):
@@ -2783,27 +2793,50 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         if not d:
             return "break"
         px = int(d if abs(d) >= 40 else d * 30)      # notches → pixels
-        (canvas.xview_scroll if horizontal
-         else canvas.yview_scroll)(-px, "units")
+        _pan_by(-px if horizontal else 0, 0 if horizontal else -px)
         return "break"
+
+    # Aqua quirk: some macOS Tk builds deliver wheel events to the FOCUSED
+    # widget, not the one under the pointer — and a canvas never takes
+    # keyboard focus, so its wheel bindings simply never fire ("scroll does
+    # nothing" on a Mac trackpad).  The canvas bindings below return "break"
+    # when they DO fire, which stops the bindtag chain before this toplevel
+    # fallback — so each event is handled exactly once: the fallback catches
+    # only events that landed on some other widget, hit-tests the POINTER
+    # against the canvas, and re-routes with canvas-relative coordinates.
+    def _route_wheel(ev, kind):
+        try:
+            under = dlg.winfo_containing(ev.x_root, ev.y_root)
+        except (KeyError, tk.TclError):
+            under = None
+        if under is not canvas:
+            return None
+        if kind == "zoom":
+            return _wheel_zoom(ev, ev.x_root - canvas.winfo_rootx(),
+                               ev.y_root - canvas.winfo_rooty())
+        return _wheel_pan(ev, horizontal=(kind == "panx"))
 
     canvas.configure(xscrollincrement=1, yscrollincrement=1)
     canvas.bind("<MouseWheel>", _wheel_pan)
     canvas.bind("<Shift-MouseWheel>", lambda e: _wheel_pan(e, True))
     canvas.bind("<Control-MouseWheel>", _wheel_zoom)
+    dlg.bind("<MouseWheel>", lambda e: _route_wheel(e, "pan"))
+    dlg.bind("<Shift-MouseWheel>", lambda e: _route_wheel(e, "panx"))
+    dlg.bind("<Control-MouseWheel>", lambda e: _route_wheel(e, "zoom"))
     try:
         canvas.bind("<Command-MouseWheel>", _wheel_zoom)   # Aqua only
+        dlg.bind("<Command-MouseWheel>", lambda e: _route_wheel(e, "zoom"))
     except tk.TclError:
         pass
     # X11 reports the wheel as buttons 4/5 (no delta): same routing.
     canvas.bind("<Button-4>",
-                lambda e: (canvas.yview_scroll(-30, "units"), "break")[1])
+                lambda e: (_pan_by(0, -30), "break")[1])
     canvas.bind("<Button-5>",
-                lambda e: (canvas.yview_scroll(30, "units"), "break")[1])
+                lambda e: (_pan_by(0, 30), "break")[1])
     canvas.bind("<Shift-Button-4>",
-                lambda e: (canvas.xview_scroll(-30, "units"), "break")[1])
+                lambda e: (_pan_by(-30, 0), "break")[1])
     canvas.bind("<Shift-Button-5>",
-                lambda e: (canvas.xview_scroll(30, "units"), "break")[1])
+                lambda e: (_pan_by(30, 0), "break")[1])
     canvas.bind("<Control-Button-4>",
                 lambda e: (_zoom_at(1.15, e.x, e.y), "break")[1])
     canvas.bind("<Control-Button-5>",
@@ -2813,21 +2846,32 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         canvas.bind(press, lambda e: canvas.scan_mark(e.x, e.y))
         canvas.bind(drag, lambda e: canvas.scan_dragto(e.x, e.y, gain=1))
 
-    # Keyboard zoom — the device-independent guarantee (trackpad pinch never
-    # reaches Tk; wheel events vary by platform): +/= in, − out, 0 = fit.
-    # Skipped while a text widget has focus so typing never zooms.
-    def _key_zoom(factor):
+    # Keyboard zoom + pan — the device-independent guarantee (trackpad
+    # pinch never reaches Tk; wheel DELIVERY varies by platform and Tk
+    # build): +/= in, − out, 0 = fit, arrow keys pan.  Skipped while a text
+    # widget has focus so typing never zooms or pans.
+    def _typing():
         try:
             w = dlg.focus_get()
         except (KeyError, tk.TclError):
             w = None
-        if isinstance(w, (tk.Entry, ttk.Entry, tk.Text,
-                          tk.Spinbox, ttk.Spinbox)):
+        return isinstance(w, (tk.Entry, ttk.Entry, tk.Text,
+                              tk.Spinbox, ttk.Spinbox))
+
+    def _key_zoom(factor):
+        if _typing():
             return
         _fit() if factor is None else _zoom_at(factor)
+
+    def _key_pan(dx, dy):
+        if not _typing():
+            _pan_by(dx, dy)
     for _seq, _f in (("<Key-plus>", 1.25), ("<Key-equal>", 1.25),
                      ("<Key-minus>", 1 / 1.25), ("<Key-0>", None)):
         dlg.bind(_seq, lambda _e, f=_f: _key_zoom(f))
+    for _seq, _d in (("<Key-Left>", (-40, 0)), ("<Key-Right>", (40, 0)),
+                     ("<Key-Up>", (0, -40)), ("<Key-Down>", (0, 40))):
+        dlg.bind(_seq, lambda _e, d=_d: _key_pan(*d))
 
     def _clear_marks():
         state["clicks"] = []
@@ -2926,8 +2970,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         _render()
     ttk.Checkbutton(zrow, text="Overlay accepted", variable=overlay_var,
                     command=_toggle_overlay).pack(side=tk.LEFT, padx=(8, 0))
-    ttk.Label(panel, text="scroll pans · ⌘/Ctrl-scroll or +/− zooms · "
-                          "0 fits · right-drag pans",
+    ttk.Label(panel, text="scroll or arrows pan · ⌘/Ctrl-scroll or +/− "
+                          "zooms · 0 fits · right-drag pans",
               foreground="#999").pack(anchor=tk.W)
     ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
         anchor=tk.W, pady=(2, 8))
@@ -3407,6 +3451,10 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     dlg._im_wheel_zoom = _wheel_zoom
     dlg._im_wheel_pan = _wheel_pan
     dlg._im_key_zoom = _key_zoom
+    dlg._im_key_pan = _key_pan
+    dlg._im_pan_by = _pan_by
+    dlg._im_route_wheel = _route_wheel
+    dlg._im_canvas = canvas
     dlg._im_prompt_var = prompt_var
     dlg._im_diag = diag_canvas
     dlg._im_on_prompt = _on_prompt

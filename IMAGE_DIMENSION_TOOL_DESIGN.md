@@ -268,8 +268,15 @@ Scope and plumbing:
     (two-finger drag), ⌘/Ctrl-scroll zooms about the cursor, steps
     normalized (±120/notch vs ±1-ish) + clamped, delta-0 dropped — plus
     device-independent guarantees: +/− buttons beside Fit and +/=/−/0 keys
-    (0 = fit; suppressed while a text widget has focus).  Zoom-to-box
-    deferred (C-adjacent nice-to-have).
+    (0 = fit; suppressed while a text widget has focus).  Second field
+    report (scroll/pan still dead): some Aqua Tk builds deliver wheel
+    events to the FOCUSED widget, and a canvas never takes keyboard focus
+    — so a toplevel fallback now catches strays, hit-tests the pointer
+    against the canvas, and re-routes (canvas handlers "break" first, so
+    each event is handled exactly once); arrow keys pan through the same
+    _pan_by, the wheel-free guarantee.  Note pan is a NO-OP at fit zoom
+    (nothing to pan) — zoom in first.  Zoom-to-box deferred (C-adjacent
+    nice-to-have).
 - **B — multiple named views: DONE (2026-08-01).**  Views are generated
   from the checklist ({p["view"]}): single-view checklists (booster,
   axisymmetric RO) are unchanged — one slot, no selector.  The wedge gets
