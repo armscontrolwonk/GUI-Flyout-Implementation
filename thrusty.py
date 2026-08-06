@@ -4206,6 +4206,29 @@ class ROEditorDialog(tk.Toplevel):
                 var = getattr(self, field, None)
                 if var is not None:
                     var.set(f"{float(accepted[field]):.4g}")
+        # The nose-tip click sees the sphere-cone TANGENCY circle, whose
+        # width is 2·R_N·cos(θ), not the full sphere diameter — so on a CONE
+        # the half-width convention under-reads R_N by cos(θ).  Corrected
+        # here with θ derived from the just-written length/diameter (biconic:
+        # the FORE cone carries the tip, so its length/break-⌀ set θ).
+        # Curved profiles (ogive/Haack/…) keep the plain hemisphere
+        # convention — their blend slope is not the L-⌀ cone angle — and a
+        # blunt cylinder is the θ=0 identity case.
+        if "_nose_var" in accepted and self._shape_key() == "cone":
+            try:
+                if self._biconic_var.get():
+                    th = im.cone_half_angle_from_lengths(
+                        float(self._break_dia_var.get() or 0.0),
+                        float(self._fore_len_var.get() or 0.0))
+                else:
+                    th = im.cone_half_angle_from_lengths(
+                        float(self._dia_var.get() or 0.0),
+                        float(self._len_var.get() or 0.0))
+                r_n = im.nose_radius_from_tip_width(
+                    float(accepted["_nose_var"]), th)
+                self._nose_var.set(f"{r_n:.4g}")
+            except (ValueError, tk.TclError):
+                pass
         # Wing sweep is DERIVED from the planform, not measured as an angle:
         # tan Λ = (root − tip)/span (a length ratio — anchor-free, no
         # complement).  Fires whenever any planform length was measured; a

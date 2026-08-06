@@ -97,7 +97,9 @@ def _half(x):
 CONVENTIONS = {
     "ro_diameter":  ("base diameter (tip-to-tip across the base)", _identity),
     "ro_length":    ("length (nose tip to base)", _identity),
-    "ro_nose_r":    ("nose-tip RADIUS = half the clicked blunt-tip width", _half),
+    "ro_nose_r":    ("nose-tip RADIUS = half the clicked blunt-tip width "
+                     "(cone: ÷cos θ tangency correction applied on Apply)",
+                     _half),
     "wedge_depth":  ("side-view base DEPTH (stored as ⌀ = the depth)", _identity),
     "half_cone_depth": ("side-view depth = ⌀/2 → stored ⌀ = 2×", _twice),
     "wedge_span":   ("plan-view span (tip to tip) — needs a PLAN view", _identity),
@@ -314,6 +316,24 @@ def cone_half_angle_from_lengths(diameter_m, length_m):
     if L <= 0.0:
         return None
     return math.degrees(math.atan2(0.5 * float(diameter_m), L))
+
+
+def nose_radius_from_tip_width(half_width_m, half_angle_deg):
+    """True sphere radius R_N of a spherically-blunted cone from HALF the
+    visible tip width.  On a cone the spherical cap does not show its full
+    diameter: it blends into the flanks at the sphere-cone tangency circle,
+    whose visible width is 2·R_N·cos(θ) — so half-the-width alone under-reads
+    R_N by cos(θ) (~3% at θ=15°, ~29% at θ=45°, and q ∝ 1/√R_N makes that a
+    heating error).  Inverse: R_N = half_width / cos(θ).  θ = None or 0 keeps
+    the hemisphere convention (a blunt cylinder's cap DOES show its full
+    diameter — the correction degenerates to identity, cos 0 = 1)."""
+    w = float(half_width_m)
+    if half_angle_deg is None:
+        return w
+    th = float(half_angle_deg)
+    if not 0.0 <= th < 85.0:      # a near-flat "cone" would divide by ~0
+        return w
+    return w / math.cos(math.radians(th))
 
 
 ANGLE_CHECK_REL = 0.05          # warn beyond ±5% — stretch/tilt/mis-click
