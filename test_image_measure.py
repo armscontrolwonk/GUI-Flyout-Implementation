@@ -393,6 +393,27 @@ def test_cone_half_angle_identity():
     assert im.cone_half_angle_from_lengths(1.0, 0.0) is None
 
 
+def test_diagram_style_tokens_and_fillable_bodies():
+    """The art direction is a single data dict — every key the renderer
+    reads must exist — and every base (plus every shape-aware RO variant)
+    has at least one CLOSED outline, so the filled-body style always has a
+    body to fill.  closed_poly is the fill/stroke discriminator: closed →
+    filled body art, open → detail stroke (cone break, stage joint)."""
+    for key in ("bg", "outline", "outline_width", "fill", "measure",
+                "measure_width", "arrowshape", "marker_r", "marker_text",
+                "arc_r"):
+        assert key in im.DIAGRAM_STYLE
+    assert im.closed_poly([(0, 0), (1, 0), (1, 1), (0, 0)])
+    assert not im.closed_poly([(0, 0), (1, 0)])           # detail stroke
+    assert not im.closed_poly([(0, 0), (1, 0), (1, 1)])   # unclosed triangle
+    for name, polys in im.DIAGRAM_BASES.items():
+        assert any(im.closed_poly(p) for p in polys), name
+    for shape in ("cone", "tangent_ogive", "lv_haack", "parabola",
+                  "blunt_cylinder"):
+        polys = im.ro_side_base(shape)
+        assert all(im.closed_poly(p) for p in polys), shape
+
+
 def test_nose_radius_tangency_identity():
     """Forward: a blunted cone with sphere R_N and half-angle θ shows a tip
     of width 2·R_N·cos(θ) (the tangency circle).  The inverse must recover
