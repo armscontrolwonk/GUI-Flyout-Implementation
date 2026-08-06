@@ -2869,9 +2869,18 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     for _seq, _f in (("<Key-plus>", 1.25), ("<Key-equal>", 1.25),
                      ("<Key-minus>", 1 / 1.25), ("<Key-0>", None)):
         dlg.bind(_seq, lambda _e, f=_f: _key_zoom(f))
+    # Plain arrows can be captured by whichever widget has focus (Tk's own
+    # focus-traversal / combobox bindings run first) — a modifier bypasses
+    # those, so ⌘-arrows (Mac) / Ctrl-arrows are bound explicitly as the
+    # always-works spelling; plain arrows still pan when nothing eats them.
     for _seq, _d in (("<Key-Left>", (-40, 0)), ("<Key-Right>", (40, 0)),
                      ("<Key-Up>", (0, -40)), ("<Key-Down>", (0, 40))):
         dlg.bind(_seq, lambda _e, d=_d: _key_pan(*d))
+        dlg.bind("<Control-" + _seq[1:], lambda _e, d=_d: _key_pan(*d))
+        try:
+            dlg.bind("<Command-" + _seq[1:], lambda _e, d=_d: _key_pan(*d))
+        except tk.TclError:
+            pass
 
     def _clear_marks():
         state["clicks"] = []
@@ -2970,9 +2979,9 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         _render()
     ttk.Checkbutton(zrow, text="Overlay accepted", variable=overlay_var,
                     command=_toggle_overlay).pack(side=tk.LEFT, padx=(8, 0))
-    ttk.Label(panel, text="scroll or arrows pan · ⌘/Ctrl-scroll or +/− "
-                          "zooms · 0 fits · right-drag pans",
-              foreground="#999").pack(anchor=tk.W)
+    ttk.Label(panel, text="pan: scroll · ⌘-arrows (Mac) or arrows · "
+                          "right-drag\nzoom: ⌘/Ctrl-scroll · + / − · 0 = fit",
+              foreground="#999", justify=tk.LEFT).pack(anchor=tk.W)
     ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
         anchor=tk.W, pady=(2, 8))
 

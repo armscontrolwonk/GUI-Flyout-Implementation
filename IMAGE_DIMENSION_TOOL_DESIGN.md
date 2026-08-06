@@ -274,8 +274,11 @@ Scope and plumbing:
     — so a toplevel fallback now catches strays, hit-tests the pointer
     against the canvas, and re-routes (canvas handlers "break" first, so
     each event is handled exactly once); arrow keys pan through the same
-    _pan_by, the wheel-free guarantee.  Note pan is a NO-OP at fit zoom
-    (nothing to pan) — zoom in first.  Zoom-to-box deferred (C-adjacent
+    _pan_by, the wheel-free guarantee — bound plain AND with ⌘/Ctrl held
+    (field report: plain arrows can be eaten by the focused widget's own
+    traversal/combobox bindings; a modifier bypasses them, and ⌘-arrows is
+    what works on a Mac — the hint says so).  Note pan is a NO-OP at fit
+    zoom (nothing to pan) — zoom in first.  Zoom-to-box deferred (C-adjacent
     nice-to-have).
 - **B — multiple named views: DONE (2026-08-01).**  Views are generated
   from the checklist ({p["view"]}): single-view checklists (booster,
