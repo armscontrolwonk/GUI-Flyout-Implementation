@@ -261,6 +261,15 @@ Scope and plumbing:
     comparison originally sketched for the overlay needs renderer
     integration + alignment UX and stays in Phase C; the accepted-
     measurement overlay is the first-order audit of the tool's own outputs.
+    Trackpad rework (2026-08-06, field report: zoom dead on a Mac
+    trackpad): pinch never generates a Tk event, and plain-scroll zoom was
+    hostile to trackpads (event streams + momentum tails, delta-0 events
+    read as zoom-OUT).  Now Mac-convention routing — plain scroll PANS
+    (two-finger drag), ⌘/Ctrl-scroll zooms about the cursor, steps
+    normalized (±120/notch vs ±1-ish) + clamped, delta-0 dropped — plus
+    device-independent guarantees: +/− buttons beside Fit and +/=/−/0 keys
+    (0 = fit; suppressed while a text widget has focus).  Zoom-to-box
+    deferred (C-adjacent nice-to-have).
 - **B — multiple named views: DONE (2026-08-01).**  Views are generated
   from the checklist ({p["view"]}): single-view checklists (booster,
   axisymmetric RO) are unchanged — one slot, no selector.  The wedge gets

@@ -2756,14 +2756,78 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         _render()
         canvas.xview_moveto(0); canvas.yview_moveto(0)
 
-    canvas.bind("<MouseWheel>", lambda e: (_zoom_at(
-        1.15 if getattr(e, "delta", 0) > 0 else 1 / 1.15, e.x, e.y), "break")[1])
-    canvas.bind("<Button-4>", lambda e: (_zoom_at(1.15, e.x, e.y), "break")[1])
-    canvas.bind("<Button-5>", lambda e: (_zoom_at(1 / 1.15, e.x, e.y), "break")[1])
+    # Wheel routing (Mac convention): plain scroll PANS — that's a trackpad's
+    # two-finger drag — and ⌘/Ctrl-scroll ZOOMS about the cursor, the
+    # Preview/maps idiom.  A trackpad delivers a rapid stream of small-delta
+    # events plus a momentum tail after the fingers lift (some events with
+    # delta 0, which the old ">0 else out" test read as ZOOM OUT), so a
+    # per-event 1.15× slammed the zoom limits on one swipe; steps are now
+    # normalized (Windows ±120/notch, Mac trackpad ±1-ish) and clamped, and
+    # delta-0 events are dropped.  Pinch never reaches Tk at all — the
+    # buttons/keys below are the guaranteed path.
+    def _wheel_steps(delta):
+        d = float(delta)
+        if d == 0.0:
+            return 0.0                       # momentum tail / stray event
+        s = d / 120.0 if abs(d) >= 120.0 else d
+        return max(-2.0, min(2.0, s))
+
+    def _wheel_zoom(ev):
+        s = _wheel_steps(getattr(ev, "delta", 0))
+        if s:
+            _zoom_at(1.15 ** s, ev.x, ev.y)
+        return "break"
+
+    def _wheel_pan(ev, horizontal=False):
+        d = getattr(ev, "delta", 0)
+        if not d:
+            return "break"
+        px = int(d if abs(d) >= 40 else d * 30)      # notches → pixels
+        (canvas.xview_scroll if horizontal
+         else canvas.yview_scroll)(-px, "units")
+        return "break"
+
+    canvas.configure(xscrollincrement=1, yscrollincrement=1)
+    canvas.bind("<MouseWheel>", _wheel_pan)
+    canvas.bind("<Shift-MouseWheel>", lambda e: _wheel_pan(e, True))
+    canvas.bind("<Control-MouseWheel>", _wheel_zoom)
+    try:
+        canvas.bind("<Command-MouseWheel>", _wheel_zoom)   # Aqua only
+    except tk.TclError:
+        pass
+    # X11 reports the wheel as buttons 4/5 (no delta): same routing.
+    canvas.bind("<Button-4>",
+                lambda e: (canvas.yview_scroll(-30, "units"), "break")[1])
+    canvas.bind("<Button-5>",
+                lambda e: (canvas.yview_scroll(30, "units"), "break")[1])
+    canvas.bind("<Shift-Button-4>",
+                lambda e: (canvas.xview_scroll(-30, "units"), "break")[1])
+    canvas.bind("<Shift-Button-5>",
+                lambda e: (canvas.xview_scroll(30, "units"), "break")[1])
+    canvas.bind("<Control-Button-4>",
+                lambda e: (_zoom_at(1.15, e.x, e.y), "break")[1])
+    canvas.bind("<Control-Button-5>",
+                lambda e: (_zoom_at(1 / 1.15, e.x, e.y), "break")[1])
     for press, drag in (("<ButtonPress-2>", "<B2-Motion>"),
                         ("<ButtonPress-3>", "<B3-Motion>")):
         canvas.bind(press, lambda e: canvas.scan_mark(e.x, e.y))
         canvas.bind(drag, lambda e: canvas.scan_dragto(e.x, e.y, gain=1))
+
+    # Keyboard zoom — the device-independent guarantee (trackpad pinch never
+    # reaches Tk; wheel events vary by platform): +/= in, − out, 0 = fit.
+    # Skipped while a text widget has focus so typing never zooms.
+    def _key_zoom(factor):
+        try:
+            w = dlg.focus_get()
+        except (KeyError, tk.TclError):
+            w = None
+        if isinstance(w, (tk.Entry, ttk.Entry, tk.Text,
+                          tk.Spinbox, ttk.Spinbox)):
+            return
+        _fit() if factor is None else _zoom_at(factor)
+    for _seq, _f in (("<Key-plus>", 1.25), ("<Key-equal>", 1.25),
+                     ("<Key-minus>", 1 / 1.25), ("<Key-0>", None)):
+        dlg.bind(_seq, lambda _e, f=_f: _key_zoom(f))
 
     def _clear_marks():
         state["clicks"] = []
@@ -2848,7 +2912,13 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         anchor=tk.W, fill=tk.X, pady=(4, 0))
 
     zrow = ttk.Frame(panel); zrow.pack(anchor=tk.W, fill=tk.X, pady=(4, 0))
-    ttk.Button(zrow, text="Fit", width=4, command=_fit).pack(side=tk.LEFT)
+    ttk.Button(zrow, text="+", width=3,
+               command=lambda: _zoom_at(1.25)).pack(side=tk.LEFT)
+    ttk.Button(zrow, text="−", width=3,
+               command=lambda: _zoom_at(1 / 1.25)).pack(side=tk.LEFT,
+                                                        padx=(2, 0))
+    ttk.Button(zrow, text="Fit", width=4, command=_fit).pack(side=tk.LEFT,
+                                                             padx=(2, 0))
     overlay_var = tk.BooleanVar(value=True)
 
     def _toggle_overlay():
@@ -2856,7 +2926,8 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         _render()
     ttk.Checkbutton(zrow, text="Overlay accepted", variable=overlay_var,
                     command=_toggle_overlay).pack(side=tk.LEFT, padx=(8, 0))
-    ttk.Label(panel, text="wheel zooms · right-drag pans",
+    ttk.Label(panel, text="scroll pans · ⌘/Ctrl-scroll or +/− zooms · "
+                          "0 fits · right-drag pans",
               foreground="#999").pack(anchor=tk.W)
     ttk.Label(panel, textvariable=quantum, foreground="#555").pack(
         anchor=tk.W, pady=(2, 8))
@@ -3332,6 +3403,10 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
     dlg._im_begin_measure = _begin_measure
     dlg._im_zoom_at = _zoom_at
     dlg._im_fit = _fit
+    dlg._im_wheel_steps = _wheel_steps
+    dlg._im_wheel_zoom = _wheel_zoom
+    dlg._im_wheel_pan = _wheel_pan
+    dlg._im_key_zoom = _key_zoom
     dlg._im_prompt_var = prompt_var
     dlg._im_diag = diag_canvas
     dlg._im_on_prompt = _on_prompt

@@ -422,6 +422,62 @@ def test_zoom_never_touches_measurements(root, tmp_path):
     d.destroy()
 
 
+def test_zoom_buttons_and_keys_are_device_independent(root, tmp_path):
+    """A Mac trackpad has no wheel and its pinch never reaches Tk, so zoom
+    must not depend on wheel events: the +/− buttons and the +/−/0 keys are
+    the guaranteed path (they call the same _zoom_at/_fit as the wheel)."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    side = d._im_views["side"]
+    z0 = side["zoom"]
+    btns = {b.cget("text"): b for b in _all(d) if isinstance(b, tk.ttk.Button)}
+    assert "+" in btns and "−" in btns and "Fit" in btns
+    btns["+"].invoke()
+    assert side["zoom"] == pytest.approx(z0 * 1.25)
+    btns["−"].invoke()
+    assert side["zoom"] == pytest.approx(z0)
+    d._im_key_zoom(1.25)
+    d._im_key_zoom(1.25)
+    assert side["zoom"] == pytest.approx(z0 * 1.25 ** 2)
+    d._im_key_zoom(None)                              # 0 = fit
+    assert side["zoom"] == pytest.approx(z0)
+    d.destroy()
+
+
+def test_wheel_routing_pans_plain_and_zooms_modified(root, tmp_path):
+    """Mac-convention wheel routing: a plain scroll (trackpad two-finger
+    drag) PANS and never changes zoom; only ⌘/Ctrl-scroll zooms.  Momentum
+    events with delta 0 — which the old handler read as zoom-OUT — are
+    dropped, and per-event steps are normalized (Windows ±120/notch vs Mac
+    ±1-ish) and clamped so a fling cannot slam the zoom limit."""
+    pytest.importorskip("PIL")
+    import types as _t
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    side = d._im_views["side"]
+    # step normalization: 0 dropped, ±120 = 1 notch, small Mac deltas as-is,
+    # everything clamped to ±2 per event
+    assert d._im_wheel_steps(0) == 0.0
+    assert d._im_wheel_steps(120) == pytest.approx(1.0)
+    assert d._im_wheel_steps(-120) == pytest.approx(-1.0)
+    assert d._im_wheel_steps(1) == pytest.approx(1.0)
+    assert d._im_wheel_steps(600) == pytest.approx(2.0)     # clamped
+    assert d._im_wheel_steps(-7) == pytest.approx(-2.0)     # clamped
+    z0 = side["zoom"]
+    d._im_wheel_pan(_t.SimpleNamespace(delta=3, x=10, y=10))
+    assert side["zoom"] == pytest.approx(z0)          # pan never zooms
+    d._im_wheel_zoom(_t.SimpleNamespace(delta=0, x=10, y=10))
+    assert side["zoom"] == pytest.approx(z0)          # momentum tail dropped
+    d._im_wheel_zoom(_t.SimpleNamespace(delta=120, x=10, y=10))
+    assert side["zoom"] == pytest.approx(z0 * 1.15)
+    d.destroy()
+
+
 def test_accept_records_overlay_annotation(root, tmp_path):
     """The overlay audits what was clicked: accepting a measurement stores its
     clicked segment (view-tagged, original-image px) for drawing."""
