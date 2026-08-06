@@ -536,8 +536,9 @@ DIAGRAM_STYLE = {
     "measure": "#d9251d",       # click/measure art (red)
     "measure_width": 4,         # the 1→2 arrow stroke
     "arrowshape": (11, 13, 5),  # solid arrowhead at click 2
-    "marker_r": 8,              # numbered disc radius, px
-    "marker_text": "#ffffff",   # numeral on the disc
+    "dot_r": 3,                 # click-point dot radius, px (small — the
+                                # dot marks the point, the number sits aside)
+    "label_offset": 12,         # px from the dot to its number
     "arc_r": 16,                # angle-prompt arc radius, px
 }
 

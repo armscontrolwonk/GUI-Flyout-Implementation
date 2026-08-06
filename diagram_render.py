@@ -93,13 +93,33 @@ def render_prompt_diagram(spec, base_polys, w_px, h_px, supersample=2):
             color=st["measure"], linewidth=_pt(st["measure_width"]),
             shrinkA=0.0, shrinkB=0.0, capstyle="round"))
 
-    r = st["marker_r"]
+    # Click markers: a SMALL dot at the exact point, with the number set
+    # off to the side (radially outward from the click cluster, so it sits
+    # beyond the measured span, not on it) — big numbered discs covered
+    # the very feature being pointed at.  A label that would leave the
+    # canvas falls back to the perpendicular side toward the interior.
+    r = st["dot_r"]
+    off = st["label_offset"]
+    cx = sum(x for x, _ in pts) / len(pts)
+    cy = sum(y for _, y in pts) / len(pts)
+    mx, my = 8.0 / w_px, 8.0 / h_px          # keep labels fully on-canvas
     for n, (x, y) in enumerate(pts, start=1):
         ax.add_patch(Ellipse((x, y), width=2 * r / w_px,
                              height=2 * r / h_px,
                              facecolor=st["measure"], edgecolor="none",
                              zorder=5))
-        ax.text(x, y, str(n), color=st["marker_text"], fontsize=8,
+        ux, uy = (x - cx) * w_px, (y - cy) * h_px
+        norm = math.hypot(ux, uy)
+        ux, uy = (ux / norm, uy / norm) if norm > 1e-9 else (1.0, 0.0)
+        lx, ly = x + ux * off / w_px, y + uy * off / h_px
+        if not (mx <= lx <= 1 - mx and my <= ly <= 1 - my):
+            px_, py_ = -uy, ux               # perpendicular, toward interior
+            if px_ * (0.5 - x) * w_px + py_ * (0.5 - y) * h_px < 0:
+                px_, py_ = -px_, -py_
+            lx, ly = x + px_ * off / w_px, y + py_ * off / h_px
+        lx = min(max(lx, mx), 1 - mx)
+        ly = min(max(ly, my), 1 - my)
+        ax.text(lx, ly, str(n), color=st["measure"], fontsize=8,
                 fontweight="bold", ha="center", va="center", zorder=6)
 
     fig.canvas.draw()

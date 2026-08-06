@@ -40,8 +40,8 @@ def test_subject_fills_white_rest_grey_arrow_red():
     limg = dr.render_prompt_diagram(lspec, im.DIAGRAM_BASES["ro_side"],
                                     232, 160)
     assert _near(_px(limg, 0.50, 0.50), st["measure"], tol=60)
-    # disc 2: sample inside the disc but OFF the white numeral glyph
-    assert _near(_px(limg, 0.523, 0.90), st["measure"], tol=60)
+    # click 2's small dot sits exactly on the click point
+    assert _near(_px(limg, 0.50, 0.90), st["measure"], tol=60)
 
 
 def test_angle_prompt_renders_and_differs_from_length():
