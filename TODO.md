@@ -88,6 +88,29 @@ Improve the sources behind launch/target locations and the map layers.
 - First step when picked up: inventory current sources in the code and note
   provenance for each (some may be as unattributed as the Ref-(4) chart was).
 
+### 4. Satellite / orbital payload type (payload is not always a reentry object)
+Today every payload is modeled as an `ROParams` reentry object; the payload
+concept is implicitly "an RV/HGB that comes back down".  A **satellite** is
+the natural second payload type: it separates, enters orbit, and does NOT
+reenter — so it has no reentry shape, no β/L-D, no survivability analysis.
+The fairing-vs-nose distinction is exactly this seam (recognised 2026-08-05):
+- **bare nose shape ↔ reentry object** — the payload IS its own aerodynamic
+  forebody and flies through reentry (Thrusty's whole current domain);
+- **fairing ↔ enclosed payload** — a satellite/bus that can't fly bare, rides
+  under a jettisonable shroud, revealed after jettison.  A fairing already
+  implies "enclosed payload"; it just has no satellite object to enclose yet.
+What already exists to build on: the `orbital_insertion` guidance mode and
+the "Plan Orbit" solver — the trajectory half is done; the gap is a payload
+TYPE that is orbital, not a reentry object.  Scope when picked up:
+- a payload-type switch (reentry object | orbital payload) on the booster;
+- an orbital payload carries mass + (optionally) a target orbit, pairs with
+  the fairing, and its natural trajectory is orbital insertion;
+- it SKIPS the reentry-survivability tab and the RO editor's β/L-D/TPS fields
+  (nothing to survive) — derive-don't-invent: don't ask for reentry data a
+  satellite doesn't have.
+- Deferred question: deployment/station-keeping (out of scope — Thrusty ends
+  at orbit insertion, as it ends at impact for an RV).
+
 ## Phase 2b — lifting-body estimator completion: DONE (2026-08-01)
 All four items shipped (details in PHASE2_LIFTING_BODY_PLAN.md §6):
 cone/biconic α-sweep (α=0 continuity with the zero-AoA build-ups EXACT),
