@@ -2616,7 +2616,17 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         canvas.create_image(0, 0, anchor="nw", image=v["photo"])
         canvas.configure(scrollregion=(0, 0, int(ow * z), int(oh * z)))
         if state["overlay"]:
+            # A field being RE-measured hides its old accepted mark, so the
+            # fresh clicks can't be confused with the mark they're replacing
+            # (field report: Measure "doesn't kill the older measure" — the
+            # VALUE stays recorded until the new reading is Accepted, but
+            # the old overlay must get out of the way while re-clicking).
+            redo = ((state.get("prompt") or {}).get("field")
+                    if (state["mode"] == "measure"
+                        or state.get("_pending") is not None) else None)
             for i, (_f, ann) in enumerate(state["annotations"].items()):
+                if _f == redo:
+                    continue
                 vw, p1, p2, lab = ann[0], ann[1], ann[2], ann[3]
                 vtx = ann[4] if len(ann) > 4 else None
                 if vw != state["cur"]:
@@ -3168,8 +3178,15 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         # number can never be mistaken for — or accepted as — the new one.
         state["prompt"] = p; state["_pending"] = None
         acc_btn.config(state="disabled")
-        result_var.set("")
-        _clear_marks(); state["mode"] = "measure"
+        # Re-measuring an already-recorded field: say so (the old value
+        # survives until the new reading is Accepted), and set mode BEFORE
+        # rendering so the old overlay mark hides for the redo.
+        prev = state["accepted"].get(p["field"])
+        result_var.set("" if prev is None else
+                       f"re-measuring {p['field']} — recorded {prev:.4g} "
+                       "stays until you Accept the new reading")
+        state["mode"] = "measure"
+        _clear_marks()
         _click_progress()
 
     def _finish_measure():
@@ -3205,6 +3222,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                 _refresh_angle_checks()
                 _render()
                 _advance_prompt()
+                _note_advance(mm.field)
             acc_btn.config(command=_accept_angle, state="normal")
             return
         s = _cv()["scale"]
@@ -3240,8 +3258,20 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
             _refresh_closure()
             _render()
             _advance_prompt()
+            _note_advance(mm.field)
         acc_btn.config(command=_accept, state="normal")
     state["_finish_measure"] = _finish_measure
+
+    def _note_advance(done_field):
+        """After Accept the checklist AUTO-ADVANCES — pressing Measure again
+        now measures the NEXT field.  Say so, or a redo silently lands on
+        the wrong dimension (field report: the redo 'didn't kill the older
+        measure' — it had recorded a fresh value under the next field)."""
+        nxt = _label_by_field.get(prompt_var.get())
+        if nxt and nxt["field"] != done_field:
+            result_var.set(result_var.get()
+                           + f"\n→ selection advanced to {nxt['field']} — "
+                             f"re-select {done_field} to redo it")
 
     def _type_value():
         """Manual entry for a dimension the user already knows precisely (a
