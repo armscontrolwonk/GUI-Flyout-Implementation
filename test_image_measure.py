@@ -438,6 +438,80 @@ def test_diagram_subject_names_a_drawn_element():
     assert {"body", "fin_r"} <= {it["tag"] for it in im.ro_side_base("cone")}
 
 
+def test_ro_side_layout_draws_loaded_proportions():
+    """When dimensions are loaded, the art IS those proportions: uniform
+    px-per-metre, so a 10:1 body draws 10:1.  Core gate: no length or no
+    diameter → None (the caller keeps the representative default art).
+    The measurement points follow the reshaped geometry — the diameter
+    arrow lands exactly on the drawn base corners."""
+    assert im.ro_side_layout(dict(length_m=0, diameter_m=1)) is None
+    assert im.ro_side_layout(dict(diameter_m=1)) is None
+    lay = im.ro_side_layout(dict(length_m=10.0, diameter_m=1.0), 232, 160)
+    body = next(p for p in lay["polys"] if p["tag"] == "body")
+    xs = [x * 232 for x, _ in body["pts"]]
+    ys = [y * 160 for _, y in body["pts"]]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    assert w / h == pytest.approx(0.1, rel=0.15)      # slenderness literal
+    def _on_body(pt):
+        return any(abs(pt[0] - x) < 1e-9 and abs(pt[1] - y) < 1e-9
+                   for x, y in body["pts"])
+    p1, p2 = lay["pts"]["_dia_var"]
+    assert _on_body(p1) and _on_body(p2)
+    # biconic: the break line sits at the fore-length fraction
+    lay = im.ro_side_layout(dict(length_m=2.0, diameter_m=1.0, biconic=True,
+                                 fore_length_m=1.0, break_diameter_m=0.5))
+    y_break = lay["pts"]["_break_dia_var"][0][1]
+    assert y_break == pytest.approx(0.06 + 0.5 * 0.84, abs=0.02)
+    # wings: tip chord derives from sweep, drawn with a visible tip edge
+    lay = im.ro_side_layout(dict(length_m=2.0, diameter_m=1.0,
+                                 wing_root_m=0.6, wing_span_m=0.3,
+                                 wing_sweep_deg=45.0))
+    assert "_wing_tip_derive" in lay["pts"]
+    assert any(p["tag"] == "fin_r" for p in lay["polys"])
+    assert lay["subjects"]["_wing_root_var"] == "fin_r"
+    # shape-aware in the layout too: a curved profile has many vertices
+    cone = im.ro_side_layout(dict(length_m=2.0, diameter_m=1.0))
+    haack = im.ro_side_layout(dict(length_m=2.0, diameter_m=1.0,
+                                   shape="lv_haack"))
+    n_of = lambda l: len(next(p for p in l["polys"]
+                              if p["tag"] == "body")["pts"])
+    assert n_of(haack) > n_of(cone) + 4
+
+
+def test_booster_side_layout_stacks_loaded_stages():
+    """Stage boxes tile the stack in proportion to their loaded lengths;
+    a third stage gets its OWN box/points (the static art folds it into
+    S1); interstage bands appear only when declared.  Core gate: stage 1
+    length + diameter required."""
+    assert im.booster_side_layout(dict(stages=[])) is None
+    assert im.booster_side_layout(dict(stages=[dict(length_m=0,
+                                                    diameter_m=1)])) is None
+    lay = im.booster_side_layout(dict(stages=[
+        dict(length_m=8.0, diameter_m=1.0),
+        dict(length_m=4.0, diameter_m=1.0, interstage=True,
+             interstage_len_m=0.5),
+        dict(length_m=2.0, diameter_m=0.8)]))
+    (_, t1), (_, b1) = lay["pts"]["stage1_len"]
+    (_, t2), (_, b2) = lay["pts"]["stage2_len"]
+    assert (b1 - t1) / (b2 - t2) == pytest.approx(2.0, rel=0.01)
+    assert "stage3_len" in lay["pts"]                  # own box, not S1's
+    assert lay["subjects"]["stage3_len"] == "s3"
+    assert any(p["tag"] == "s3" for p in lay["polys"])
+    assert any(p["tag"] == "inter2" for p in lay["polys"])   # declared
+    assert not any(p["tag"] == "inter1" for p in lay["polys"])  # not declared
+    assert "stage2_interstage_len" in lay["pts"]
+    # optional elements draw from their dims when present
+    lay = im.booster_side_layout(dict(
+        stages=[dict(length_m=8.0, diameter_m=1.0)],
+        fairing=dict(length_m=2.0, diameter_m=1.2, nose_len_m=1.0),
+        fins=dict(root_m=2.0, span_m=1.0, tip_m=0.5),
+        strapon=dict(length_m=5.0, diameter_m=0.6)))
+    for f in ("fairing_len", "fairing_nose_len", "fin_tip", "strapon_len",
+              im.OVERALL_LEN_CHECK_FIELD):
+        assert f in lay["pts"], f
+    assert lay["subjects"][im.OVERALL_LEN_CHECK_FIELD] is None
+
+
 def test_nose_radius_tangency_identity():
     """Forward: a blunted cone with sphere R_N and half-angle θ shows a tip
     of width 2·R_N·cos(θ) (the tangency circle).  The inverse must recover

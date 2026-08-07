@@ -642,6 +642,225 @@ def ro_side_base(shape="cone", biconic=False):
                                    (0.39, 0.58)])]
 
 
+# ── Proportion-aware layouts: draw from LOADED dimensions ───────────────────
+# When the editor already holds real dimensions, the diagram draws THOSE
+# proportions — a UNIFORM px-per-metre scale on both axes, so the declared
+# slenderness is literally what you see.  A straight-"new" object (core dims
+# unset) returns None and the caller keeps the representative default art.
+# Optional elements degrade per-element: a declared fairing with no length
+# yet still draws, at a representative fraction.  Each layout returns
+# {"polys": tagged outlines, "pts": {field: click points},
+#  "subjects": {field: tag}} — the measurement art follows the reshaped
+# geometry because both come from the same numbers.
+
+def _posf(v):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return v if v > 0.0 else 0.0
+
+
+def ro_side_layout(dims, w_px=232, h_px=160):
+    """RO side elevation from loaded geometry.  dims keys: length_m,
+    diameter_m (both REQUIRED — else None), nose_radius_m, shape, biconic,
+    fore_length_m, break_diameter_m, wing_root_m, wing_span_m,
+    wing_sweep_deg (tip chord derives via the straight-TE identity)."""
+    L, D = _posf(dims.get("length_m")), _posf(dims.get("diameter_m"))
+    if not L or not D:
+        return None
+    y0, base = 0.06 * h_px, 0.90 * h_px
+    ppm = (base - y0) / L                    # uniform px per metre
+    cx = 0.5 * w_px
+    R = min(0.45 * w_px, max(3.0, 0.5 * D * ppm))
+    nose_r = _posf(dims.get("nose_radius_m"))
+    r_t = min(0.8 * R, max(2.0, nose_r * ppm)) if nose_r else 0.23 * R
+    cap_h = min(0.12 * (base - y0), 1.2 * r_t)
+    y_t = y0 + cap_h                         # sphere-cone tangency line
+
+    def U(x, y):
+        return (x / w_px, y / h_px)
+
+    def mirror(poly):
+        return [(1.0 - x, y) for (x, y) in reversed(poly)]
+
+    shape = (dims.get("shape") or "cone").lower()
+    biconic = bool(dims.get("biconic"))
+    polys, pts, subj = [], {}, {}
+    if biconic:
+        fore = _posf(dims.get("fore_length_m")) or 0.5 * L
+        Rb = min(0.95 * R,
+                 0.5 * (_posf(dims.get("break_diameter_m")) or 0.6 * D) * ppm)
+        y_br = min(base - 4.0, y0 + fore * ppm)
+        left = [U(cx - R, base), U(cx - Rb, y_br), U(cx - r_t, y_t)]
+        polys.append(dict(tag="break",
+                          pts=[U(cx - Rb, y_br), U(cx + Rb, y_br)]))
+        pts["_fore_len_var"] = [U(cx, y0), U(cx, y_br)]
+        pts["_break_dia_var"] = [U(cx - Rb, y_br), U(cx + Rb, y_br)]
+        flank_r, flank_l = U(cx + Rb, y_br), U(cx - Rb, y_br)
+        y_axis_pt = min(base - 2.0, y_br + 10.0)
+    else:
+        n = 16
+        if any(k in shape for k in ("ogive", "haack", "karman", "parabola")):
+            left = [U(cx - r_t - (R - r_t) * math.cos(math.pi / 2 * i / n),
+                      base - (base - y_t) * i / n) for i in range(n + 1)]
+        elif "blunt" in shape:
+            left = [U(cx - r_t - (R - r_t) * math.cos(math.pi / 2 * i / n),
+                      base - (base - y_t) * math.sin(math.pi / 2 * i / n))
+                    for i in range(n + 1)]
+        else:                                # straight cone
+            left = [U(cx - R, base), U(cx - r_t, y_t)]
+        y_mid = 0.5 * (y_t + base)
+        x_mid = cx + r_t + (R - r_t) * (y_mid - y_t) / (base - y_t)
+        flank_r, flank_l = U(x_mid, y_mid), U(2 * cx - x_mid, y_mid)
+        y_axis_pt = min(base - 2.0, y_mid + 10.0)
+    body = left + mirror(left) + [left[0]]   # close along the base
+    polys.insert(0, dict(tag="body", pts=body))
+    polys.insert(1, dict(tag="nose", pts=[
+        U(cx - r_t, y_t), U(cx - 0.6 * r_t, y0 + 0.25 * cap_h), U(cx, y0),
+        U(cx + 0.6 * r_t, y0 + 0.25 * cap_h), U(cx + r_t, y_t),
+        U(cx - r_t, y_t)]))
+    root, span = _posf(dims.get("wing_root_m")), _posf(dims.get("wing_span_m"))
+    if root and span:
+        sw = _posf(dims.get("wing_sweep_deg"))
+        tip = max(0.0, root - span * math.tan(math.radians(min(sw, 85.0))))
+        tip_d = max(tip, 0.15 * root) * ppm  # tip edge stays visible (art
+        x_te = cx + R                        # shows the general case)
+        y_le = max(y_t + 2.0, base - root * ppm)
+        x_le = cx + r_t + (R - r_t) * (y_le - y_t) / (base - y_t)
+        x_tip = min(0.98 * w_px, x_te + span * ppm)
+        fin_r = [U(x_le, y_le), U(x_tip, base - tip_d), U(x_tip, base),
+                 U(x_te, base), U(x_le, y_le)]
+        polys.append(dict(tag="fin_r", pts=fin_r))
+        polys.append(dict(tag="fin_l", pts=[(1.0 - x, y) for x, y in fin_r]))
+        pts["_wing_root_var"] = [U(x_le, y_le), U(x_te, base)]
+        pts["_wing_span_var"] = [U(x_te, base - 4.0), U(x_tip, base - 4.0)]
+        pts["_wing_tip_derive"] = [U(x_tip, base - tip_d), U(x_tip, base)]
+    pts["_len_var"] = [U(cx, y0), U(cx, base)]
+    pts["_dia_var"] = [U(cx - R, base), U(cx + R, base)]
+    pts["_nose_var"] = [U(cx - r_t, y_t), U(cx + r_t, y_t)]
+    pts[FLANK_UPPER_FIELD] = [U(cx, y0), flank_r, U(cx, y_axis_pt)]
+    pts[FLANK_LOWER_FIELD] = [U(cx, y0), flank_l, U(cx, y_axis_pt)]
+    for f in pts:
+        subj[f] = _DIAGRAM_SUBJECTS.get(f, "body")
+    return dict(polys=polys, pts=pts, subjects=subj)
+
+
+def booster_side_layout(dims, w_px=232, h_px=160):
+    """Booster stack from loaded geometry.  dims: stages=[{length_m,
+    diameter_m, top_diameter_m, interstage, interstage_len_m}, …] (stage 1
+    first — its length AND diameter are REQUIRED, else None), fairing=
+    {length_m, diameter_m, nose_len_m} | None, fins={root_m, span_m,
+    tip_m} | None, strapon={length_m, diameter_m} | None."""
+    stages = [dict(s) for s in (dims.get("stages") or [])]
+    if not stages:
+        return None
+    L1 = _posf(stages[0].get("length_m"))
+    D1 = _posf(stages[0].get("diameter_m"))
+    if not L1 or not D1:
+        return None
+    for s in stages:                          # per-element fallbacks
+        s["_len"] = _posf(s.get("length_m")) or 0.6 * L1
+        s["_dia"] = _posf(s.get("diameter_m")) or D1
+        s["_top"] = _posf(s.get("top_diameter_m")) or s["_dia"]
+        s["_isl"] = ((_posf(s.get("interstage_len_m")) or 0.08 * s["_len"])
+                     if s.get("interstage") else 0.0)
+    fair = dims.get("fairing")
+    f_dia = f_len = 0.0
+    if fair:
+        f_dia = _posf(fair.get("diameter_m")) or stages[-1]["_dia"]
+        f_len = _posf(fair.get("length_m")) or 2.0 * f_dia
+    total = f_len + sum(s["_len"] + s["_isl"] for s in stages)
+    y0, base = 0.05 * h_px, 0.90 * h_px
+    ppm = (base - y0) / total
+    cx = 0.55 * w_px if dims.get("strapon") else 0.5 * w_px
+
+    def U(x, y):
+        return (x / w_px, y / h_px)
+
+    polys, pts, subj = [], {}, {}
+    y = y0
+    if fair:
+        Rf, Hf = max(2.0, 0.5 * f_dia * ppm), f_len * ppm
+        yb = y + Hf
+        polys.append(dict(tag="fairing", pts=[
+            U(cx - Rf, yb), U(cx - 0.92 * Rf, y + 0.35 * Hf),
+            U(cx - 0.58 * Rf, y + 0.08 * Hf), U(cx, y),
+            U(cx + 0.58 * Rf, y + 0.08 * Hf), U(cx + 0.92 * Rf, y + 0.35 * Hf),
+            U(cx + Rf, yb), U(cx - Rf, yb)]))
+        pts["fairing_len"] = [U(cx, y), U(cx, yb)]
+        pts["fairing_dia"] = [U(cx - Rf, yb), U(cx + Rf, yb)]
+        nl = _posf(fair.get("nose_len_m"))
+        pts["fairing_nose_len"] = [U(cx, y),
+                                   U(cx, y + (min(nl * ppm, Hf) if nl
+                                              else 0.6 * Hf))]
+        y, R_above = yb, Rf
+    else:
+        R_above = max(2.0, 0.5 * stages[-1]["_top"] * ppm)
+    # top → bottom: stage n … stage 1; interstage_i is the adapter ATOP
+    # stage i, so it renders just above its stage's box.
+    for i in range(len(stages), 0, -1):
+        s = stages[i - 1]
+        Rb = max(2.0, 0.5 * s["_dia"] * ppm)
+        Rt = max(2.0, 0.5 * s["_top"] * ppm)
+        if s["_isl"]:
+            hi = s["_isl"] * ppm
+            polys.append(dict(tag=f"inter{i}", pts=[
+                U(cx - R_above, y), U(cx + R_above, y), U(cx + Rt, y + hi),
+                U(cx - Rt, y + hi), U(cx - R_above, y)]))
+            pts[f"stage{i}_interstage_len"] = [U(cx, y), U(cx, y + hi)]
+            subj[f"stage{i}_interstage_len"] = f"inter{i}"
+            y += hi
+        yt, yb = y, y + s["_len"] * ppm
+        polys.append(dict(tag=f"s{i}", pts=[
+            U(cx - Rt, yt), U(cx + Rt, yt), U(cx + Rb, yb), U(cx - Rb, yb),
+            U(cx - Rt, yt)]))
+        pts[f"stage{i}_len"] = [U(cx, yt), U(cx, yb)]
+        y_d = yb - 0.2 * (yb - yt)
+        Rd = Rt + 0.8 * (Rb - Rt)
+        pts[f"stage{i}_dia"] = [U(cx - Rd, y_d), U(cx + Rd, y_d)]
+        pts[f"stage{i}_top_dia"] = [U(cx - Rt, yt), U(cx + Rt, yt)]
+        for f in (f"stage{i}_len", f"stage{i}_dia", f"stage{i}_top_dia"):
+            subj[f] = f"s{i}"
+        y, R_above = yb, Rb
+    R1 = max(2.0, 0.5 * stages[0]["_dia"] * ppm)
+    fins = dims.get("fins")
+    if fins:
+        root = _posf(fins.get("root_m")) or 0.25 * L1
+        span = _posf(fins.get("span_m")) or 0.5 * stages[0]["_dia"]
+        tip_d = max(_posf(fins.get("tip_m")), 0.15 * root) * ppm
+        x_side = cx + R1
+        x_tip = min(0.98 * w_px, x_side + span * ppm)
+        y_le = max(y0, base - root * ppm)
+        polys.append(dict(tag="fin", pts=[
+            U(x_side, y_le), U(x_tip, base - tip_d), U(x_tip, base),
+            U(x_side, base), U(x_side, y_le)]))
+        pts["fin_root"] = [U(x_side, y_le), U(x_side, base)]
+        pts["fin_span"] = [U(x_side, base - 4.0), U(x_tip, base - 4.0)]
+        pts["fin_tip"] = [U(x_tip, base - tip_d), U(x_tip, base)]
+    strap = dims.get("strapon")
+    if strap:
+        Ls = _posf(strap.get("length_m")) or 0.5 * L1
+        Rs = max(2.0, 0.5 * (_posf(strap.get("diameter_m"))
+                             or 0.4 * stages[0]["_dia"]) * ppm)
+        xs = max(Rs + 2.0, cx - R1 - Rs - 4.0)
+        ys = max(y0, base - Ls * ppm)
+        dh = 0.18 * (base - ys)
+        polys.append(dict(tag="strapon", pts=[
+            U(xs - Rs, base), U(xs - Rs, ys + dh),
+            U(xs - 0.77 * Rs, ys + 0.28 * dh), U(xs, ys),
+            U(xs + 0.77 * Rs, ys + 0.28 * dh), U(xs + Rs, ys + dh),
+            U(xs + Rs, base), U(xs - Rs, base)]))
+        pts["strapon_len"] = [U(xs, ys), U(xs, base)]
+        y_sd = 0.5 * (ys + base)
+        pts["strapon_dia"] = [U(xs - Rs, y_sd), U(xs + Rs, y_sd)]
+    pts[OVERALL_LEN_CHECK_FIELD] = [U(cx, y0), U(cx, base)]
+    for f in pts:
+        subj.setdefault(f, _DIAGRAM_SUBJECTS.get(f, "body"))
+    subj[OVERALL_LEN_CHECK_FIELD] = None
+    return dict(polys=polys, pts=pts, subjects=subj)
+
+
 def diagram_spec(prompt):
     """The drawing spec for a prompt's little diagram, or None if the field
     has no art (the GUI then shows a blank strip, never a wrong picture).

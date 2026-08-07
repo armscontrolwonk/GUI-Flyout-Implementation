@@ -1947,10 +1947,40 @@ class BoosterDialog(tk.Toplevel):
             n_strapons=_i(self._n_boosters_var, 0),
             interstage_stages=inter, conical_stages=conical) \
             + im.booster_angle_prompts(has_fins=bool(self._fins_var.get()))
+
+        # The editor's LOADED geometry rides along so the diagrams draw
+        # THIS vehicle's proportions (empty stage 1 → representative art).
+        def _fv(var):
+            try:
+                return float(var.get())
+            except (ValueError, tk.TclError, AttributeError):
+                return 0.0
+        stages = []
+        for i, fr in enumerate(self._stage_frames[:_nst], start=1):
+            stages.append(dict(
+                length_m=_fv(fr._length), diameter_m=_fv(fr._dia),
+                top_diameter_m=(_fv(getattr(fr, "_top_dia_var", None))
+                                if i in conical else 0.0),
+                interstage=(i in inter),
+                interstage_len_m=_fv(getattr(fr, "_is_len_var", None))))
+        dims = dict(
+            stages=stages,
+            fairing=(dict(length_m=_fv(self._shroud_length_var),
+                          diameter_m=_fv(self._shroud_diameter_var),
+                          nose_len_m=_fv(self._shroud_nose_length_var))
+                     if self._shroud_var.get() else None),
+            fins=(dict(root_m=_fv(self._fin_root_var),
+                       span_m=_fv(self._fin_span_var),
+                       tip_m=_fv(self._fin_tip_var))
+                  if self._fins_var.get() else None),
+            strapon=(dict(length_m=_fv(self._b_length_var),
+                          diameter_m=_fv(self._b_diam_var))
+                     if _i(self._n_boosters_var, 0) > 0 else None))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
             self._apply_image_measurements,
-            current_fn=self._current_image_values)
+            current_fn=self._current_image_values,
+            ctx=dict(dims=dims))
 
     def _img_field_var(self, field):
         """The editor StringVar an image-tool field writes to, or None for a
@@ -3014,10 +3044,25 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         spec = im.diagram_spec(p) if p else None
         if not spec:
             return
+        # Proportion-aware art: when the editor already holds real
+        # dimensions (ctx["dims"]), the diagram draws THOSE proportions —
+        # uniform scale, measurement points follow the reshaped geometry.
+        # A straight-"new" object (core dims unset → layout None) keeps
+        # the representative default art below.
+        layout = None
+        if ctx and ctx.get("dims"):
+            if spec["base"] == "ro_side":
+                layout = im.ro_side_layout(ctx["dims"], _DIAG_W, _DIAG_H)
+            elif spec["base"] == "booster":
+                layout = im.booster_side_layout(ctx["dims"], _DIAG_W, _DIAG_H)
+        if layout and p["field"] in layout["pts"]:
+            base_polys = layout["polys"]
+            spec = dict(spec, pts=layout["pts"][p["field"]],
+                        subject=layout["subjects"].get(p["field"]))
         # Shape-aware base art: the RO nose outline follows the DECLARED
         # profile (cone / ogive / Sears-Haack / parabola / blunt) so the
         # picture matches the shape; everything else uses the static art.
-        if spec["base"] == "ro_side" and ctx and ctx.get("nose_shape"):
+        elif spec["base"] == "ro_side" and ctx and ctx.get("nose_shape"):
             base_polys = im.ro_side_base(ctx["nose_shape"],
                                          bool(ctx.get("biconic")))
         else:
@@ -4387,9 +4432,26 @@ class ROEditorDialog(tk.Toplevel):
     def _measure_from_image(self):
         """Open the shared image-measure dialog for the reentry object: prompts
         come from the declared body_form, and Apply writes fields + stamps
-        notes via _apply_image_measurements."""
+        notes via _apply_image_measurements.  The editor's LOADED dimensions
+        ride along in ctx so the diagrams draw this vehicle's proportions
+        (a new/empty object falls back to the representative art)."""
         import image_measure as im
         form = self._body_form_key()
+
+        def _fv(name):
+            try:
+                return float(getattr(self, name).get())
+            except (ValueError, tk.TclError, AttributeError):
+                return 0.0
+        dims = dict(length_m=_fv("_len_var"), diameter_m=_fv("_dia_var"),
+                    nose_radius_m=_fv("_nose_var"),
+                    shape=self._shape_key(),
+                    biconic=bool(self._biconic_var.get()),
+                    fore_length_m=_fv("_fore_len_var"),
+                    break_diameter_m=_fv("_break_dia_var"),
+                    wing_root_m=_fv("_wing_root_var"),
+                    wing_span_m=_fv("_wing_span_var"),
+                    wing_sweep_deg=_fv("_wing_sweep_var"))
         _open_image_measure_dialog(
             self, "Measure from image — reentry object",
             im.ro_prompts(form, biconic=bool(self._biconic_var.get()))
@@ -4397,7 +4459,8 @@ class ROEditorDialog(tk.Toplevel):
             self._apply_image_measurements,
             current_fn=self._current_image_values,
             ctx=dict(nose_shape=self._shape_key(),
-                     biconic=bool(self._biconic_var.get())))
+                     biconic=bool(self._biconic_var.get()),
+                     dims=dims))
 
     # ------------------------------------------------------------------
     def _current_wing_geometry(self):

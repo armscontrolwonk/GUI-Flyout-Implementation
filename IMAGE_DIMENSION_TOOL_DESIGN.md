@@ -422,6 +422,21 @@ Scope and plumbing:
     step, deliberately deferred: during first measurement the geometry is
     mostly unset, so the generic representative outline is the honest
     guide.
+  - **Proportion-aware diagrams (DONE, 2026-08-07)** — the deferred step,
+    taken: when the editor already holds real dimensions, the diagram
+    draws THIS vehicle's proportions (`ro_side_layout` /
+    `booster_side_layout` in image_measure — pure, testable).  Uniform
+    px-per-metre on BOTH axes, so the declared slenderness is literal;
+    measurement points and subjects come from the same numbers as the
+    outlines, so the arrows follow the reshaped geometry (and a stage-3
+    field gets its OWN box — the static art folds it into S1).  Core
+    gate: RO needs length+⌀, booster needs stage-1 length+⌀ — a
+    straight-"new" object falls back to the representative default art
+    (including the shape-aware nose variant).  Optional elements degrade
+    per-element (declared fairing with no length yet → representative
+    fraction; wing tip chord derives from sweep via the straight-TE
+    identity, drawn with the visible-tip floor).  Editors pass dims in
+    ctx at dialog-open time; the wedge's plan view stays representative.
   - REMAINING: schematic-at-scale overlay with opacity/drag alignment +
     hatched stylization (R12) + live discrepancy highlighting.
 
