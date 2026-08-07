@@ -542,6 +542,57 @@ def test_accept_records_overlay_annotation(root, tmp_path):
     d.destroy()
 
 
+def test_redo_flow_hides_old_mark_and_flags_the_advance(root, tmp_path):
+    """Field report: redoing a measurement 'didn't kill the older one'.
+    Two traps, both closed: (a) after Accept the checklist auto-advances,
+    so pressing Measure again would record under the NEXT field — the
+    result line now says the selection moved and how to redo; (b) while
+    re-measuring a recorded field, its old green overlay mark hides (the
+    value survives until the new reading is Accepted), so fresh clicks
+    can't be confused with the mark they replace — and a redo's Accept
+    REPLACES the value, never duplicates it."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+    d = _open_measure_dialog(_editor(root))
+    p = tmp_path / "v.png"; Image.new("RGB", (400, 150), "gray").save(p)
+    d._im_load_path(str(p))
+    d._im_views["side"]["scale"] = im.Scale((0, 0), (400, 0), 10.0)
+    st = d._im_state
+    st["prompt"] = im.ro_prompts("axisymmetric")[0]        # _len_var
+    st["clicks"] = [(50.0, 40.0), (250.0, 40.0)]
+    st["_finish_measure"]()                                # proposes 5.0 m
+    acc = [b for b in _all(d) if isinstance(b, tk.ttk.Button)
+           and b.cget("text") == "Accept"][0]
+    acc.invoke()
+    res = [w for w in _all(d) if isinstance(w, tk.ttk.Label)
+           and "advanced" in str(w.cget("text"))]
+    assert res                                             # trap (a) flagged
+    assert "re-select _len_var" in str(res[0].cget("text"))
+    # (b) re-select the measured field and start a redo: notice + hidden mark
+    first = f"_len_var  —  {im.ro_prompts('axisymmetric')[0]['label']}"
+    d._im_prompt_var.set(first); d._im_on_prompt()
+    d._im_begin_measure()
+    assert st["mode"] == "measure"
+    notice = [w for w in _all(d) if isinstance(w, tk.ttk.Label)
+              and "re-measuring _len_var" in str(w.cget("text"))]
+    assert notice and "5" in str(notice[0].cget("text"))   # old value named
+    c = d._im_canvas
+    texts = [c.itemcget(i, "text") for i in c.find_all()
+             if c.type(i) == "text"]
+    assert not any("_len_var" in t for t in texts)         # old mark hidden
+    # completing the redo REPLACES the value — one measurement, not two
+    st["clicks"] = [(50.0, 80.0), (170.0, 80.0)]
+    st["_finish_measure"]()                                # proposes 3.0 m
+    acc.invoke()
+    assert st["accepted"]["_len_var"] == pytest.approx(3.0)
+    assert len([m for m in st["measurements"]
+                if m.field == "_len_var"]) == 1
+    texts = [c.itemcget(i, "text") for i in c.find_all()
+             if c.type(i) == "text"]
+    assert any("3" in t and "_len_var" in t for t in texts)  # new mark shown
+    d.destroy()
+
+
 def test_starting_a_measurement_clears_the_stale_reading(root, tmp_path):
     """Field bug: a completed-but-unaccepted angle left its value and armed
     Accept button in place, so a NEW measurement (still mid-clicks) showed —
