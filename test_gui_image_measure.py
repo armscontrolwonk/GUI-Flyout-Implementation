@@ -731,7 +731,9 @@ def test_prompt_diagram_renders_antialiased_image(root):
     pytest.importorskip("PIL")
     from PIL import ImageTk
     st = im.DIAGRAM_STYLE
-    d = _open_measure_dialog(_editor(root))
+    dlg = _editor(root)
+    dlg._len_var.set("")           # core dim blank → representative art
+    d = _open_measure_dialog(dlg)
     c = d._im_diag
     assert [c.type(i) for i in c.find_all()] == ["image"]
     assert c._photo is not None
@@ -742,6 +744,28 @@ def test_prompt_diagram_renders_antialiased_image(root):
     fin_px = img.getpixel((round(0.70 * (w - 1)), round(0.82 * (h - 1))))
     assert all(abs(v - 0xEC) <= 12 for v in fin_px[:3])   # grey fin
     d.destroy()
+
+
+def test_prompt_diagram_draws_loaded_proportions(root):
+    """With dimensions loaded in the editor, the diagram draws THIS
+    vehicle's proportions: a 10:1 body renders slender, so a pixel that
+    the default representative art covers is background here.  Blanking
+    the length (a 'new'-object core dim) falls back to the default art —
+    same pixel is body again."""
+    pytest.importorskip("PIL")
+    from PIL import ImageTk
+
+    def open_with_len(length):
+        dlg = _editor(root)
+        dlg._len_var.set(length)          # C-HGB ⌀ 0.58 stays loaded
+        d = _open_measure_dialog(dlg)
+        img = ImageTk.getimage(d._im_diag._photo)
+        w, h = img.size
+        px = img.getpixel((round(0.42 * (w - 1)), round(0.50 * (h - 1))))
+        d.destroy(); dlg.destroy()
+        return sum(px[:3]) / 3.0
+    assert open_with_len("6.0") > 245     # slender: sample is background
+    assert open_with_len("") < 245        # fallback default art: body/edge
 
 
 def test_prompt_diagram_draws_and_tracks_selection(root):
@@ -806,6 +830,8 @@ def test_ro_diagram_is_shape_aware(root):
         dlg = thrusty.ROEditorDialog(root, ro=ro); dlg.withdraw()
         dlg._shape_var.set(thrusty.NOSE_SHAPE_LABELS[shape_key])
         dlg._update_body_form_state()
+        dlg._len_var.set("")       # default-art path (the layout path's
+        # shape-awareness is pinned in test_ro_side_layout_...)
         opened = []
         orig = tk.Toplevel
         tk.Toplevel = lambda *a, **k: (lambda w: (opened.append(w), w)[1])(orig(*a, **k))
