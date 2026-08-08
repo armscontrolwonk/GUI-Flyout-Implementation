@@ -542,6 +542,29 @@ def test_accept_records_overlay_annotation(root, tmp_path):
     d.destroy()
 
 
+def test_booster_provenance_stamps_notes_and_round_trips(root):
+    """Parity with the RO editor: the booster now has a Notes box — the
+    provenance stamp appends there on Apply, _collect stores it on
+    BoosterParams.notes, and booster_to_dict/from_dict round-trip it (the
+    model fields already existed; only the GUI never exposed them)."""
+    pytest.importorskip("PIL")
+    from booster_models import booster_to_dict, booster_from_dict
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    s = im.Scale((0, 0), (1000, 0), 10.0, anchor_note="claimed L=10 m")
+    m = im.Measurement("stage1_len", *s.measure((0, 0), (200, 0)), scale=s,
+                       convention="stage_length")
+    d._apply_image_measurements({"stage1_len": m.value_m}, [m], s)
+    notes = d._notes_text.get("1.0", "end-1c")
+    assert "dimensional draft from image" in notes
+    assert "claimed L=10 m" in notes
+    p = d._collect()
+    assert "claimed L=10 m" in p.notes
+    rt = booster_from_dict(booster_to_dict(p))
+    assert rt.notes == p.notes
+    d.destroy()
+
+
 def test_typing_zero_tip_updates_the_diagram(root):
     """Field bug: typing 0 for the C-HGB's pointed wing tip never updated
     the diagram — the layout dims were frozen at dialog-open, and no
