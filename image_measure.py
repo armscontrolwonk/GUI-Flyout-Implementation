@@ -661,11 +661,15 @@ def _posf(v):
     return v if v > 0.0 else 0.0
 
 
-def ro_side_layout(dims, w_px=232, h_px=160):
+def ro_side_layout(dims, w_px=232, h_px=160, tip_floor=False):
     """RO side elevation from loaded geometry.  dims keys: length_m,
     diameter_m (both REQUIRED — else None), nose_radius_m, shape, biconic,
     fore_length_m, break_diameter_m, wing_root_m, wing_span_m,
-    wing_sweep_deg (tip chord derives via the straight-TE identity)."""
+    wing_sweep_deg (tip chord derives via the straight-TE identity), and
+    optionally wing_tip_m — a MEASURED tip chord, where 0 means a genuine
+    pointed delta and the fin draws as a triangle.  tip_floor=True keeps a
+    visible tip edge regardless (the tip-chord prompt's own diagram must
+    show the edge it asks for)."""
     L, D = _posf(dims.get("length_m")), _posf(dims.get("diameter_m"))
     if not L or not D:
         return None
@@ -722,20 +726,29 @@ def ro_side_layout(dims, w_px=232, h_px=160):
         U(cx - r_t, y_t)]))
     root, span = _posf(dims.get("wing_root_m")), _posf(dims.get("wing_span_m"))
     if root and span:
-        sw = _posf(dims.get("wing_sweep_deg"))
-        tip = max(0.0, root - span * math.tan(math.radians(min(sw, 85.0))))
-        tip_d = max(tip, 0.15 * root) * ppm  # tip edge stays visible (art
-        x_te = cx + R                        # shows the general case)
+        tip_m = dims.get("wing_tip_m")
+        if tip_m is None:                    # derive via straight-TE identity
+            sw = _posf(dims.get("wing_sweep_deg"))
+            tip = max(0.0, root - span * math.tan(math.radians(min(sw, 85.0))))
+        else:                                # measured: 0 IS a pointed delta
+            tip = _posf(tip_m)
+        tip_d = (max(tip, 0.15 * root) if tip_floor else tip) * ppm
+        x_te = cx + R
         y_le = max(y_t + 2.0, base - root * ppm)
         x_le = cx + r_t + (R - r_t) * (y_le - y_t) / (base - y_t)
         x_tip = min(0.98 * w_px, x_te + span * ppm)
-        fin_r = [U(x_le, y_le), U(x_tip, base - tip_d), U(x_tip, base),
-                 U(x_te, base), U(x_le, y_le)]
+        if tip_d >= 1.0:                     # trapezoid: real tip edge
+            fin_r = [U(x_le, y_le), U(x_tip, base - tip_d), U(x_tip, base),
+                     U(x_te, base), U(x_le, y_le)]
+        else:                                # pointed delta: triangle
+            fin_r = [U(x_le, y_le), U(x_tip, base), U(x_te, base),
+                     U(x_le, y_le)]
         polys.append(dict(tag="fin_r", pts=fin_r))
         polys.append(dict(tag="fin_l", pts=[(1.0 - x, y) for x, y in fin_r]))
         pts["_wing_root_var"] = [U(x_le, y_le), U(x_te, base)]
         pts["_wing_span_var"] = [U(x_te, base - 4.0), U(x_tip, base - 4.0)]
-        pts["_wing_tip_derive"] = [U(x_tip, base - tip_d), U(x_tip, base)]
+        pts["_wing_tip_derive"] = [U(x_tip, base - max(tip_d, 1.0)),
+                                   U(x_tip, base)]
     pts["_len_var"] = [U(cx, y0), U(cx, base)]
     pts["_dia_var"] = [U(cx - R, base), U(cx + R, base)]
     pts["_nose_var"] = [U(cx - r_t, y_t), U(cx + r_t, y_t)]
@@ -746,12 +759,14 @@ def ro_side_layout(dims, w_px=232, h_px=160):
     return dict(polys=polys, pts=pts, subjects=subj)
 
 
-def booster_side_layout(dims, w_px=232, h_px=160):
+def booster_side_layout(dims, w_px=232, h_px=160, tip_floor=False):
     """Booster stack from loaded geometry.  dims: stages=[{length_m,
     diameter_m, top_diameter_m, interstage, interstage_len_m}, …] (stage 1
     first — its length AND diameter are REQUIRED, else None), fairing=
     {length_m, diameter_m, nose_len_m} | None, fins={root_m, span_m,
-    tip_m} | None, strapon={length_m, diameter_m} | None."""
+    tip_m} | None, strapon={length_m, diameter_m} | None.  A fin tip of 0
+    draws pointed; tip_floor=True keeps a visible tip edge (the fin-tip
+    prompt's own diagram)."""
     stages = [dict(s) for s in (dims.get("stages") or [])]
     if not stages:
         return None
@@ -828,16 +843,22 @@ def booster_side_layout(dims, w_px=232, h_px=160):
     if fins:
         root = _posf(fins.get("root_m")) or 0.25 * L1
         span = _posf(fins.get("span_m")) or 0.5 * stages[0]["_dia"]
-        tip_d = max(_posf(fins.get("tip_m")), 0.15 * root) * ppm
+        tip = _posf(fins.get("tip_m"))    # 0 is a genuinely pointed fin
+        tip_d = (max(tip, 0.15 * root) if tip_floor else tip) * ppm
         x_side = cx + R1
         x_tip = min(0.98 * w_px, x_side + span * ppm)
         y_le = max(y0, base - root * ppm)
-        polys.append(dict(tag="fin", pts=[
-            U(x_side, y_le), U(x_tip, base - tip_d), U(x_tip, base),
-            U(x_side, base), U(x_side, y_le)]))
+        if tip_d >= 1.0:
+            polys.append(dict(tag="fin", pts=[
+                U(x_side, y_le), U(x_tip, base - tip_d), U(x_tip, base),
+                U(x_side, base), U(x_side, y_le)]))
+        else:
+            polys.append(dict(tag="fin", pts=[
+                U(x_side, y_le), U(x_tip, base), U(x_side, base),
+                U(x_side, y_le)]))
         pts["fin_root"] = [U(x_side, y_le), U(x_side, base)]
         pts["fin_span"] = [U(x_side, base - 4.0), U(x_tip, base - 4.0)]
-        pts["fin_tip"] = [U(x_tip, base - tip_d), U(x_tip, base)]
+        pts["fin_tip"] = [U(x_tip, base - max(tip_d, 1.0)), U(x_tip, base)]
     strap = dims.get("strapon")
     if strap:
         Ls = _posf(strap.get("length_m")) or 0.5 * L1
@@ -859,6 +880,63 @@ def booster_side_layout(dims, w_px=232, h_px=160):
         subj.setdefault(f, _DIAGRAM_SUBJECTS.get(f, "body"))
     subj[OVERALL_LEN_CHECK_FIELD] = None
     return dict(polys=polys, pts=pts, subjects=subj)
+
+
+# Live diagrams: overlay this session's ACCEPTED values onto the dims
+# captured at dialog-open, so the art tracks the measurements as they are
+# recorded (typing 0 for a pointed tip redraws the fin pointed; a measured
+# length reshapes the body).  Pure merges — the GUI calls one per redraw.
+_RO_DIMS_BY_FIELD = {
+    "_len_var": "length_m", "_dia_var": "diameter_m",
+    "_nose_var": "nose_radius_m", "_fore_len_var": "fore_length_m",
+    "_break_dia_var": "break_diameter_m", "_wing_root_var": "wing_root_m",
+    "_wing_span_var": "wing_span_m", "_wing_tip_derive": "wing_tip_m",
+}
+
+
+def ro_dims_with_accepted(dims, accepted):
+    out = dict(dims or {})
+    for f, k in _RO_DIMS_BY_FIELD.items():
+        if f in (accepted or {}):
+            out[k] = accepted[f]
+    return out
+
+
+def booster_dims_with_accepted(dims, accepted):
+    out = dict(dims or {})
+    stages = [dict(s) for s in (out.get("stages") or [])]
+    for f, v in (accepted or {}).items():
+        if f.startswith("stage"):
+            try:
+                i = int(f[5:].split("_", 1)[0])
+            except (ValueError, IndexError):
+                continue
+            if not 1 <= i <= len(stages):
+                continue
+            key = ("interstage_len_m" if f.endswith("_interstage_len")
+                   else "top_diameter_m" if f.endswith("_top_dia")
+                   else "length_m" if f.endswith("_len")
+                   else "diameter_m")
+            stages[i - 1][key] = v
+            if key == "interstage_len_m":
+                stages[i - 1]["interstage"] = True
+        elif f.startswith("fairing_") and out.get("fairing") is not None:
+            key = dict(fairing_len="length_m", fairing_dia="diameter_m",
+                       fairing_nose_len="nose_len_m").get(f)
+            if key:
+                out["fairing"] = dict(out["fairing"], **{key: v})
+        elif f.startswith("fin_") and out.get("fins") is not None:
+            key = dict(fin_root="root_m", fin_span="span_m",
+                       fin_tip="tip_m").get(f)
+            if key:
+                out["fins"] = dict(out["fins"], **{key: v})
+        elif f.startswith("strapon_") and out.get("strapon") is not None:
+            key = dict(strapon_len="length_m",
+                       strapon_dia="diameter_m").get(f)
+            if key:
+                out["strapon"] = dict(out["strapon"], **{key: v})
+    out["stages"] = stages
+    return out
 
 
 def diagram_spec(prompt):

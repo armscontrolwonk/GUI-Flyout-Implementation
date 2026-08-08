@@ -478,6 +478,38 @@ def test_ro_side_layout_draws_loaded_proportions():
     assert n_of(haack) > n_of(cone) + 4
 
 
+def test_dims_merge_and_measured_zero_tip_draws_pointed():
+    """Live diagrams: accepted values overlay the open-time dims, and a
+    MEASURED tip chord of 0 is a real datum — the fin draws as a triangle
+    (the sweep-derived path can never say 'pointed' as firmly).  The
+    tip-chord prompt's own diagram keeps the visible edge (tip_floor)."""
+    dims = dict(length_m=2.0, diameter_m=1.0, wing_root_m=0.6,
+                wing_span_m=0.3, wing_sweep_deg=45.0)
+    merged = im.ro_dims_with_accepted(dims, {"_wing_tip_derive": 0.0,
+                                             "_len_var": 4.0})
+    assert merged["wing_tip_m"] == 0.0 and merged["length_m"] == 4.0
+    assert merged is not dims and dims.get("wing_tip_m") is None  # no mutate
+    fin = next(p for p in im.ro_side_layout(merged)["polys"]
+               if p["tag"] == "fin_r")
+    assert len(fin["pts"]) == 4                      # pointed: triangle
+    fin_f = next(p for p in im.ro_side_layout(merged, tip_floor=True)["polys"]
+                 if p["tag"] == "fin_r")
+    assert len(fin_f["pts"]) == 5                    # tip prompt: real edge
+    # booster merge routes stage / fin / fairing fields into the structure
+    bdims = dict(stages=[dict(length_m=8.0, diameter_m=1.0)],
+                 fins=dict(root_m=2.0, span_m=1.0, tip_m=0.5),
+                 fairing=dict(length_m=2.0, diameter_m=1.0))
+    bm = im.booster_dims_with_accepted(
+        bdims, {"stage1_len": 9.0, "fin_tip": 0.0, "fairing_len": 2.5})
+    assert bm["stages"][0]["length_m"] == 9.0
+    assert bm["fins"]["tip_m"] == 0.0
+    assert bm["fairing"]["length_m"] == 2.5
+    assert bdims["stages"][0]["length_m"] == 8.0     # original untouched
+    fin = next(p for p in im.booster_side_layout(bm)["polys"]
+               if p["tag"] == "fin")
+    assert len(fin["pts"]) == 4                      # measured-0 fin: pointed
+
+
 def test_booster_side_layout_stacks_loaded_stages():
     """Stage boxes tile the stack in proportion to their loaded lengths;
     a third stage gets its OWN box/points (the static art folds it into

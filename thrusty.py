@@ -3061,10 +3061,22 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         # the representative default art below.
         layout = None
         if ctx and ctx.get("dims"):
+            # LIVE dims: this session's accepted values overlay the ones
+            # captured at open, so the art tracks what you measure (typing
+            # 0 for a pointed tip redraws the fin pointed).  The tip-chord
+            # prompts keep the visible-tip floor — their diagram must show
+            # the edge they ask for.
             if spec["base"] == "ro_side":
-                layout = im.ro_side_layout(ctx["dims"], _DIAG_W, _DIAG_H)
+                layout = im.ro_side_layout(
+                    im.ro_dims_with_accepted(ctx["dims"], state["accepted"]),
+                    _DIAG_W, _DIAG_H,
+                    tip_floor=(p["field"] == "_wing_tip_derive"))
             elif spec["base"] == "booster":
-                layout = im.booster_side_layout(ctx["dims"], _DIAG_W, _DIAG_H)
+                layout = im.booster_side_layout(
+                    im.booster_dims_with_accepted(ctx["dims"],
+                                                  state["accepted"]),
+                    _DIAG_W, _DIAG_H,
+                    tip_floor=(p["field"] == "fin_tip"))
         if layout and p["field"] in layout["pts"]:
             base_polys = layout["polys"]
             spec = dict(spec, pts=layout["pts"][p["field"]],
@@ -3266,7 +3278,12 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         """After Accept the checklist AUTO-ADVANCES — pressing Measure again
         now measures the NEXT field.  Say so, or a redo silently lands on
         the wrong dimension (field report: the redo 'didn't kill the older
-        measure' — it had recorded a fresh value under the next field)."""
+        measure' — it had recorded a fresh value under the next field).
+        Also ALWAYS redraw the diagram: the live dims just changed, and
+        when the checklist has nowhere left to advance no redraw would
+        otherwise fire (field report: typing 0 for the pointed tip never
+        updated the picture)."""
+        _draw_prompt_diagram(_label_by_field.get(prompt_var.get()))
         nxt = _label_by_field.get(prompt_var.get())
         if nxt and nxt["field"] != done_field:
             result_var.set(result_var.get()
@@ -3300,6 +3317,7 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         result_var.set(f"✓ entered {he.field} = {v:g} m (by hand, not measured)")
         _refresh_closure()
         _advance_prompt()
+        _note_advance(he.field)
 
     mrow = ttk.Frame(panel); mrow.pack(anchor=tk.W, fill=tk.X, pady=(6, 0))
     ttk.Button(mrow, text="Measure", command=_begin_measure).pack(side=tk.LEFT)

@@ -542,6 +542,35 @@ def test_accept_records_overlay_annotation(root, tmp_path):
     d.destroy()
 
 
+def test_typing_zero_tip_updates_the_diagram(root):
+    """Field bug: typing 0 for the C-HGB's pointed wing tip never updated
+    the diagram — the layout dims were frozen at dialog-open, and no
+    redraw fired when the checklist had nowhere to advance.  Accepted
+    values now merge into live dims and every record redraws."""
+    pytest.importorskip("PIL")
+    dlg = _editor(root)
+    dlg._glider_var.set(True); dlg._update_glider_state()
+    dlg._wing_root_var.set("0.6"); dlg._wing_span_var.set("0.3")
+    dlg._wing_sweep_var.set("60")
+    d = _open_measure_dialog(dlg)
+    tipp = [q for q in im.ro_prompts("axisymmetric")
+            if q["field"] == "_wing_tip_derive"][0]
+    d._im_prompt_var.set(f"{tipp['field']}  —  {tipp['label']}")
+    d._im_on_prompt()
+    before = d._im_diag._photo
+    from tkinter import simpledialog
+    orig = simpledialog.askfloat
+    simpledialog.askfloat = lambda *a, **k: 0.0
+    try:
+        d._im_type_value()
+    finally:
+        simpledialog.askfloat = orig
+    assert d._im_state["accepted"]["_wing_tip_derive"] == 0.0
+    assert d._im_diag._photo is not None
+    assert d._im_diag._photo is not before          # the diagram DID update
+    d.destroy(); dlg.destroy()
+
+
 def test_redo_flow_hides_old_mark_and_flags_the_advance(root, tmp_path):
     """Field report: redoing a measurement 'didn't kill the older one'.
     Two traps, both closed: (a) after Accept the checklist auto-advances,
