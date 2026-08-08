@@ -1738,6 +1738,14 @@ class BoosterDialog(tk.Toplevel):
                                for i in range(4)]
         self._stage_frames[0].pack(fill=tk.X, **pad)  # Stage 1 always shown
 
+        # Notes / provenance — free text saved with the booster (parity with
+        # the RO editor's box): the image tool's provenance stamp appends
+        # here, and BoosterParams.notes already round-trips through the JSON.
+        notes_frm = ttk.LabelFrame(body, text="Notes / provenance")
+        notes_frm.pack(fill=tk.X, **pad)
+        self._notes_text = tk.Text(notes_frm, width=44, height=3, wrap=tk.WORD)
+        self._notes_text.pack(fill=tk.X, padx=4, pady=4)
+
         # Buttons — outside the scroll area so always visible
         bf = ttk.Frame(self)
         bf.pack(fill=tk.X, padx=8, pady=(4, 8))
@@ -1791,6 +1799,7 @@ class BoosterDialog(tk.Toplevel):
                                 _c.config(state="disabled")
                             except tk.TclError:
                                 pass
+        self._notes_text.config(state="disabled")
         self._save_btn.pack_forget()
         self._save_as_btn.pack_forget()
 
@@ -2040,8 +2049,9 @@ class BoosterDialog(tk.Toplevel):
         image tool measures ONE of a repeated feature (a fin, a strap-on); the
         model already stores count + one geometry, so the declared count is
         untouched and the single geometry is filled — measure-one-declare-count
-        (design).  No booster notes field, so the provenance stamp is dropped
-        into the (transient) status; the values are the durable output."""
+        (design).  The provenance stamp is appended to the Notes box and
+        saved with the booster (BoosterParams.notes) — parity with the RO
+        editor."""
         for field, value in (accepted or {}).items():
             var = self._img_field_var(field)
             if var is not None:
@@ -2090,6 +2100,19 @@ class BoosterDialog(tk.Toplevel):
         if any(f.startswith("fin_") for f in (accepted or {})) and \
                 hasattr(self, "_fins_var"):
             self._fins_var.set(True); self._update_fins_state()
+        # Provenance stamp → the Notes box (durable, saved with the booster
+        # via BoosterParams.notes) — parity with the RO editor.
+        if measurements and scale is not None:
+            import datetime
+            import image_measure as _im
+            stamp = _im.provenance_stamp(measurements, scale,
+                                         datetime.date.today().isoformat())
+            try:
+                cur = self._notes_text.get("1.0", "end-1c")
+                self._notes_text.insert(
+                    "end", ("\n" if cur.strip() else "") + stamp)
+            except (AttributeError, tk.TclError):
+                pass
 
     # ------------------------------------------------------------------
     def _update_stage_frames(self):
@@ -2109,6 +2132,10 @@ class BoosterDialog(tk.Toplevel):
         # real deployment timing, which lives in the flight plan; otherwise a
         # re-edit would display defaults and clobber the saved timing on save.
         p = get_booster(name)
+
+        if getattr(p, "notes", ""):
+            self._notes_text.delete("1.0", "end")
+            self._notes_text.insert("1.0", p.notes)
 
         payload      = p.payload_kg
         shroud_mass  = p.shroud_mass_kg
@@ -2448,6 +2475,7 @@ class BoosterDialog(tk.Toplevel):
         node.grid_fin_edge_factor   = gfin_edge_factor
         # grid_fin_deploy_schedule is flight-plan data (owned by the Flight Plan
         # editor); left at its default here so a booster save never clobbers it.
+        node.notes = self._notes_text.get("1.0", "end-1c").strip()
 
         # Strap-on boosters
         try:
