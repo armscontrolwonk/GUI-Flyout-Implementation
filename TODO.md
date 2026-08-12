@@ -60,23 +60,28 @@ dimensional-draft status, photogrammetry excluded, …) in
 (largest single GUI feature yet); Phase B = multi-view for wedge/half-cone
 (requires the ROParams span field, Phase-3 hook); Phase C = audit polish.
 
-### 2. Blender export of the schematic (rough-draft 3D for modelers)
-Export the vehicle as a simple 3D file to hand a modeler a dimensionally
-correct starting point.  The schematic's geometry is mostly bodies of
-revolution (stages = cylinders/frustums, noses/fairings = cones/ogives, RO =
-cone/biconic) plus a few known non-revolved parts (planar fins, grid-fin
-boxes, wedge/half-cone lifting bodies) — all revolve/extrude cleanly from
-the same stored fields the 2-D schematic already draws.
-- Format: a true .blend can only be written by Blender itself, so either
-  (a) export a **bpy Python script** the modeler runs in Blender's scripting
-  tab — builds named, editable primitives (S1, S2, fairing, fin_1…) at true
-  dimensions, organized in a collection (most useful as a "rough draft"), or
-  (b) export **OBJ/glTF** meshes we generate ourselves (zero dependencies,
-  imports anywhere, but frozen geometry).  Doing (a) with (b) as fallback
-  covers both kinds of modeler.
-- Derive-don't-invent carries over: only specified geometry is exported;
-  flagged/unset items (e.g. wedge span) are omitted or stubbed with a
-  clearly-named placeholder, never silently guessed.
+### 2. Blender export of the schematic — SHIPPED (2026-08-07), option (a)
+File → "Export Schematic to Blender…" writes a self-contained **bpy
+script** (blender_export.py generates it from the composed as-it-will-fly
+stack — exactly what the Schematic tab shows, cached at redraw).  Run in
+Blender's Scripting tab → each element lands as a DISCRETE named editable
+mesh (S1, Interstage_1, Fairing, Fin_1…, Strapon_n, RO_Body/RO_Wing_n) in
+a collection, true metres, +Z up.  Real 3-D shapes: stages/interstages are
+closed solids of revolution (cylinders/true frustums with the schematic's
+derived adapter diameters); noses/fairings revolve their REAL analytic
+profiles (tangent ogive, Haack series C=0/1/3, parabolic, blunt dome,
+cone); an RO cone with a stored nose radius exports the true
+tangent-sphere sphere-cone; biconic is piecewise; wedge extrudes across
+its span; half-cone is a half-revolve closed by its flat deck; fins/grid
+fins are plates placed at true angular spacing.  Derive-don't-invent:
+same fallbacks as the 2-D schematic, every one listed in the script
+header + the export dialog; unstored thicknesses (fins, aerospike stalk)
+get thin nominals, each flagged.  Tests: dimension/stacking identities,
+sphere-cone apex identity, compile() of the emitted script, and a full
+exec under a bpy stub validating every mesh's face indices.
+- REMAINING (small): option (b) OBJ/glTF mesh fallback for non-Blender
+  tools, if ever wanted — the element plan (vehicle_elements) is already
+  format-agnostic.
 
 ### 3. Better geospatial data sources
 Improve the sources behind launch/target locations and the map layers.

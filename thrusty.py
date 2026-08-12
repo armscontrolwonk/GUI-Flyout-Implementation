@@ -7361,6 +7361,8 @@ class BoosterFlyoutApp(tk.Tk):
         file_menu.add_command(label="Load Booster from XLSX…",  command=self._import_booster_xlsx)
         file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_booster_xlsx)
         file_menu.add_command(label="New Booster XLSX Template…", command=self._new_booster_template)
+        file_menu.add_command(label="Export Schematic to Blender…",
+                              command=self._export_blender)
         file_menu.add_separator()
         file_menu.add_command(label="Load Reentry Object…",                 command=self._load_ro)
         file_menu.add_command(label="Save Reentry Object…",                 command=self._export_ro)
@@ -8639,6 +8641,9 @@ class BoosterFlyoutApp(tk.Tk):
         self._schem_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def _update_schematic(self, p, name):
+        # Cache the composed as-it-will-fly stack for the Blender export —
+        # the export ships exactly what the Schematic tab shows.
+        self._schem_params, self._schem_name = p, name
         if not hasattr(self, '_schem_ax'):
             return          # sidebar init may fire before the tab exists
         import booster_schematic as bsch
@@ -8647,6 +8652,43 @@ class BoosterFlyoutApp(tk.Tk):
             f"{name}   —   {info['total_height_m']:.1f} m",
             fontsize=11, weight="bold")
         self._schem_canvas.draw_idle()
+
+    def _export_blender(self):
+        """File → Export Schematic to Blender…: write a bpy script that
+        rebuilds the composed as-it-will-fly stack (exactly what the
+        Schematic tab shows) as discrete, named 3-D objects — true
+        cylinders/frustums for stages and interstages, real revolved nose
+        and fairing profiles, plates for fins, the RO beside the stack.
+        The modeler runs it in Blender's Scripting tab."""
+        p = getattr(self, "_schem_params", None)
+        name = getattr(self, "_schem_name", "") or "vehicle"
+        if p is None:
+            messagebox.showwarning(
+                "Export Schematic to Blender",
+                "No vehicle composed yet — select a booster first.",
+                parent=self)
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export Schematic to Blender (bpy script)",
+            defaultextension=".py",
+            initialfile=f"{name.replace(' ', '_')}_blender.py",
+            filetypes=[("Blender Python script", "*.py"),
+                       ("All files", "*.*")], parent=self)
+        if not path:
+            return
+        import blender_export as bx
+        script, info = bx.bpy_script(p, title=name)
+        with open(path, "w") as f:
+            f.write(script)
+        msg = (f"Wrote {info['n_objects']} objects "
+               f"({info['total_height_m']:.1f} m stack) to:\n{path}\n\n"
+               "In Blender: Scripting tab → Open → Run Script.\n"
+               "Units are metres, +Z up; every element is a separate "
+               "named object.")
+        if info["flags"]:
+            msg += ("\n\nFallbacks for unset data (also listed in the "
+                    "script header):\n• " + "\n• ".join(info["flags"]))
+        messagebox.showinfo("Export Schematic to Blender", msg, parent=self)
 
     # ------------------------------------------------------------------
     # Booster selection
