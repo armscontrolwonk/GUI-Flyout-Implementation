@@ -99,9 +99,21 @@ Upgrade path, in effort order:
       format, ~few MB) — instant plot-quality win;
   (b) rebuild `launch_sites.json` with per-site provenance (citation
       field) + site elevation + expanded coverage;
-  (c) terrain (ETOPO/GEBCO coarse grid) so impact and low-altitude glide
-      terminate on real ground height — the physics-relevant step, and
-      the only one that touches trajectory code.
+  (c) DEM (agreed 2026-08-16 — ETOPO/GEBCO coarse grid, or SRTM where
+      finer matters): trajectories START at the launch site's real
+      altitude and TERMINATE on real ground height (impact and the
+      low-altitude glide floor) — the physics-relevant step, and the
+      only one that touches trajectory code.  Launch-site altitude also
+      slots into the rebuilt site database of (b);
+  (d) air-launched missiles (agreed 2026-08-16, follows from (c)'s
+      launch-state generalization): initial state = carrier release
+      altitude + speed + flight-path angle instead of a ground pad —
+      no vertical liftoff, the kick/loft schedule starts from release
+      conditions (the existing launch_elevation_deg / guidance modes
+      are the hooks).  DEM ground is then the floor, not the start.
+      Scope when picked up: release-condition fields on the flight
+      plan, launch-transient handling, and what "range" means measured
+      from a moving release point.
 
 ### 5. Move the paper library from GitHub to an organized Drive
 Agreed 2026-08-16.  The ~100 PDFs under `data/` (grid fins, TPS/ablation,
