@@ -240,8 +240,20 @@ def vehicle_elements(p):
         Rb = bd / 2.0
         c_dist = cR + Rb + 0.05
         profile = [(0.0, 0.0), (Rb, 0.0), (Rb, bL), (0.0, bL + 1.4 * bd)]
+        # Simple anti-collision rule: when the same stack carries FINS,
+        # clock the strap-on ring by half a fin spacing so the boosters
+        # sit in the GAPS between fins instead of overlapping them
+        # (Strypi: 4 fins at 0/90/180/270 + 2 boosters would land at
+        # 0/180 without this → boosters at 45/225 instead).  A modeler
+        # can still move them; this just avoids the default clash.
+        phase = 0.0
+        if finned is not None:
+            n_f = max(1, int(getattr(finned[0], "n_fins", 0) or 4))
+            phase = math.pi / n_f
+            flags.append("strap-ons clocked between fins (half a fin "
+                         "spacing) to avoid overlap")
         for k in range(n_b):
-            a = 2.0 * math.pi * k / n_b
+            a = phase + 2.0 * math.pi * k / n_b
             revolves.append((f"Strapon_{k+1}", profile,
                              (c_dist * math.cos(a), c_dist * math.sin(a),
                               zb), "full"))
@@ -331,8 +343,13 @@ def _ro_elements(ro, x_off, revolves, plates, flags):
         flags.append("RO wing thickness not stored — 0.02×span nominal")
         poly = [(r_local(0.0), 0.0), (r_local(w_rc), w_rc),
                 (r_local(0.0) + w_ss, y_tip), (r_local(0.0) + w_ss, 0.0)]
-        plates.append(("RO_Wing_1", poly, t, pos, 0.0))
-        plates.append(("RO_Wing_2", poly, t, pos, 180.0))
+        # Panel count from the RO's stored n_fins (default 4) — a C-HGB
+        # carries 4 flaps, not a 2-panel wing; distribute them evenly
+        # around the body like the booster fins (was hardcoded to 2).
+        n_w = max(2, int(getattr(ro, "n_fins", 4) or 4))
+        flags.append(f"RO wings: {n_w} panels from n_fins")
+        for k in range(n_w):
+            plates.append((f"RO_Wing_{k+1}", poly, t, pos, 360.0 * k / n_w))
 
 
 _SEG = 48                    # revolve segments (matches the emitted script)

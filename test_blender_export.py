@@ -312,6 +312,56 @@ def test_gui_export_handler_runs_end_to_end(tmp_path, monkeypatch):
     assert shown
 
 
+def test_ro_wings_honor_the_fin_count():
+    """Field bug: only 2 of a 4-fin C-HGB's wings exported (the count was
+    hardcoded to a port/starboard pair).  The panels now come from the
+    RO's stored n_fins — 4 flaps -> 4 wings, evenly clocked; n_fins=2
+    stays a delta pair."""
+    veh = _demo_vehicle()
+    ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    ro.wing_root_chord_m = 0.4
+    ro.wing_span_exposed_m = 0.2
+    ro.wing_sweep_deg = 70.0
+    ro.n_fins = 4
+    veh.ro = ro
+    wings = [(n, rot) for n, _poly, _t, _pos, rot
+             in bx.vehicle_elements(veh)["plates"] if n.startswith("RO_Wing")]
+    assert len(wings) == 4
+    assert sorted(r for _n, r in wings) == pytest.approx([0.0, 90.0, 180.0,
+                                                          270.0])
+    ro.n_fins = 2
+    wings2 = [n for n, *_ in bx.vehicle_elements(veh)["plates"]
+              if n.startswith("RO_Wing")]
+    assert len(wings2) == 2
+
+
+def test_strapons_clock_into_the_gaps_between_fins():
+    """Field bug (Strypi): strap-ons and booster fins both sat at k·(360/n),
+    so 2 boosters landed on 2 of the 4 fins.  With fins present the strap-on
+    ring is offset by half a fin spacing → boosters in the gaps.  No fins:
+    no offset."""
+    veh = _demo_vehicle()                        # 4 fins + 2 strap-ons
+    els = bx.vehicle_elements(veh)
+    fin_ang = sorted(rot for n, _p, _t, _pos, rot in els["plates"]
+                     if n.startswith("Fin_"))
+    strap_ang = sorted(
+        (math.degrees(math.atan2(pos[1], pos[0])) % 360.0)
+        for n, _pr, pos, _s in els["revolves"] if n.startswith("Strapon"))
+    assert fin_ang == pytest.approx([0.0, 90.0, 180.0, 270.0])
+    assert strap_ang == pytest.approx([45.0, 225.0])   # in the gaps
+    # every strap-on is a half-gap (>= 45°/... ) clear of every fin
+    for sa in strap_ang:
+        assert min(min(abs(sa - fa), 360 - abs(sa - fa))
+                   for fa in fin_ang) > 30.0
+    # a stack with strap-ons but NO fins keeps the un-offset ring
+    veh2 = _demo_vehicle()
+    veh2.has_fins = False
+    s2 = sorted((math.degrees(math.atan2(pos[1], pos[0])) % 360.0)
+                for n, _pr, pos, _s in bx.vehicle_elements(veh2)["revolves"]
+                if n.startswith("Strapon"))
+    assert s2 == pytest.approx([0.0, 180.0])
+
+
 def test_bpy_script_compiles_and_names_everything():
     """The emitted script is plain Python (bpy resolves inside Blender):
     it must compile, carry every object name and the collection, and list
