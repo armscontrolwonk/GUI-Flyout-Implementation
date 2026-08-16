@@ -195,10 +195,15 @@ The one phase that touches trajectory physics, gated to lifting forms
   discretization, not physics).  Full suite green with NO deselects.
 
 ## Housekeeping
-- References manifest: when the paper library moves to Drive, add
-  data/REFERENCES.md mapping each citation key (R-127, AEDC-TDR-64-25,
-  Fetterman D-2942/D-2956, Corda 1988, Candler S&GS 30, Lobanovskii 1983,
-  Grant & Braun 2010, Heybey) → full citation, what the code uses it for,
-  and the external location.  Policy: new papers go to Drive, not the repo.
+- References manifest: DONE (2026-08-16) — data/REFERENCES.md maps every
+  core citation key → full citation → code use → repo file → Drive link
+  (the core papers were uploaded to the Drive "Thrusty" folder
+  2026-07-29).  Residual gaps, listed in the manifest: (a) Fetterman TN
+  D-2942 / D-2956 have NO PDF anywhere (anchors were worked from
+  scratchpad-extracted text; both are public NTRS docs — download into
+  Drive to close); (b) TR R-127 and Sutton-Graves TR R-376 are repo-only,
+  not yet mirrored to Drive; (c) the wider ~100-PDF data/ corpus
+  (grid fins, TPS, flight test) is repo-only pending the deliberate
+  move-and-history-rewrite.  Policy stands: new papers go to Drive.
 - Note: deleting data/*.pdf later will NOT shrink clones (blobs stay in
   history); an actual shrink needs a deliberate history rewrite.
