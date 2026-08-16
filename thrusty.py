@@ -7361,7 +7361,7 @@ class BoosterFlyoutApp(tk.Tk):
         file_menu.add_command(label="Load Booster from XLSX…",  command=self._import_booster_xlsx)
         file_menu.add_command(label="Save Booster to XLSX…",    command=self._export_booster_xlsx)
         file_menu.add_command(label="New Booster XLSX Template…", command=self._new_booster_template)
-        file_menu.add_command(label="Export Schematic to Blender…",
+        file_menu.add_command(label="Export 3-D Model (Blender/OBJ)…",
                               command=self._export_blender)
         file_menu.add_separator()
         file_menu.add_command(label="Load Reentry Object…",                 command=self._load_ro)
@@ -8654,12 +8654,14 @@ class BoosterFlyoutApp(tk.Tk):
         self._schem_canvas.draw_idle()
 
     def _export_blender(self):
-        """File → Export Schematic to Blender…: write a bpy script that
-        rebuilds the composed as-it-will-fly stack (exactly what the
-        Schematic tab shows) as discrete, named 3-D objects — true
-        cylinders/frustums for stages and interstages, real revolved nose
-        and fairing profiles, plates for fins, the RO beside the stack.
-        The modeler runs it in Blender's Scripting tab."""
+        """File → Export Schematic to Blender…: write the composed
+        as-it-will-fly stack (exactly what the Schematic tab shows) as
+        discrete, named 3-D objects — true cylinders/frustums for stages
+        and interstages, real revolved nose and fairing profiles, plates
+        for fins, the RO beside the stack.  Default is a Wavefront .obj
+        that Blender IMPORTS directly (File → Import → Wavefront); a .py
+        Blender script is offered as the alternative extension (run it in
+        the Scripting tab), for anyone who wants editable primitives."""
         from tkinter import filedialog
         p = getattr(self, "_schem_params", None)
         name = getattr(self, "_schem_name", "") or "vehicle"
@@ -8670,26 +8672,33 @@ class BoosterFlyoutApp(tk.Tk):
                 parent=self)
             return
         path = filedialog.asksaveasfilename(
-            title="Export Schematic to Blender (bpy script)",
-            defaultextension=".py",
-            initialfile=f"{name.replace(' ', '_')}_blender.py",
-            filetypes=[("Blender Python script", "*.py"),
+            title="Export 3-D model for Blender",
+            defaultextension=".obj",
+            initialfile=f"{name.replace(' ', '_')}.obj",
+            filetypes=[("Wavefront OBJ (File → Import in Blender)", "*.obj"),
+                       ("Blender Python script (run in Scripting tab)",
+                        "*.py"),
                        ("All files", "*.*")], parent=self)
         if not path:
             return
         import blender_export as bx
-        script, info = bx.bpy_script(p, title=name)
+        if path.lower().endswith(".py"):
+            text, info = bx.bpy_script(p, title=name)
+            how = "In Blender: Scripting tab → Open → Run Script."
+        else:
+            text, info = bx.obj_export(p, title=name)
+            how = ("In Blender: File → Import → Wavefront (.obj).\n"
+                   "Import at scale 1.0; the model is already in metres.")
         with open(path, "w") as f:
-            f.write(script)
+            f.write(text)
         msg = (f"Wrote {info['n_objects']} objects "
                f"({info['total_height_m']:.1f} m stack) to:\n{path}\n\n"
-               "In Blender: Scripting tab → Open → Run Script.\n"
-               "Units are metres, +Z up; every element is a separate "
-               "named object.")
+               f"{how}\nUnits are metres, +Z up; every element is a "
+               "separate named object.")
         if info["flags"]:
-            msg += ("\n\nFallbacks for unset data (also listed in the "
-                    "script header):\n• " + "\n• ".join(info["flags"]))
-        messagebox.showinfo("Export Schematic to Blender", msg, parent=self)
+            msg += ("\n\nFallbacks for unset data (also in the file "
+                    "header):\n• " + "\n• ".join(info["flags"]))
+        messagebox.showinfo("Export 3-D model for Blender", msg, parent=self)
 
     # ------------------------------------------------------------------
     # Booster selection

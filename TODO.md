@@ -79,9 +79,13 @@ header + the export dialog; unstored thicknesses (fins, aerospike stalk)
 get thin nominals, each flagged.  Tests: dimension/stacking identities,
 sphere-cone apex identity, compile() of the emitted script, and a full
 exec under a bpy stub validating every mesh's face indices.
-- REMAINING (small): option (b) OBJ/glTF mesh fallback for non-Blender
-  tools, if ever wanted — the element plan (vehicle_elements) is already
-  format-agnostic.
+- OBJ export ADDED (2026-08-07): a .py isn't a model file (Blender only
+  runs it from the Scripting tab), so the export now defaults to a
+  Wavefront .obj Blender IMPORTS directly (File → Import → Wavefront),
+  one named `o` group per element; the .py bpy script stays as the
+  alternative extension.  Both paths share one tessellation
+  (revolve_mesh / plate_mesh), pinned equal by test.  REMAINING (small):
+  glTF, if a workflow ever wants materials/hierarchy in one file.
 
 ### 3. Better geospatial data sources — INVENTORIED (2026-08-16)
 Current sources, from the code:

@@ -335,6 +335,112 @@ def _ro_elements(ro, x_off, revolves, plates, flags):
         plates.append(("RO_Wing_2", poly, t, pos, 180.0))
 
 
+_SEG = 48                    # revolve segments (matches the emitted script)
+
+
+def revolve_mesh(profile, pos, sweep_rad, seg=_SEG):
+    """Tessellate an (r, z) profile revolved about local +Z at pos into
+    (verts, faces) — 0-indexed.  The Python twin of the emitted script's
+    _revolve, so the OBJ file and the in-Blender build are the same solid.
+    r≈0 points become single apex vertices; a partial sweep (half-cone) is
+    closed with a flat deck n-gon."""
+    full = abs(sweep_rad - 2 * math.pi) < 1e-9
+    S = seg if full else seg // 2
+    cols = S if full else S + 1
+    verts, rings = [], []
+    for r, z in profile:
+        if r < 1e-9:
+            rings.append((len(verts),))
+            verts.append((pos[0], pos[1], pos[2] + z))
+        else:
+            idx = []
+            for k in range(cols):
+                a = sweep_rad * k / S
+                idx.append(len(verts))
+                verts.append((pos[0] + r * math.cos(a),
+                              pos[1] + r * math.sin(a), pos[2] + z))
+            rings.append(tuple(idx))
+    faces = []
+    for j in range(len(rings) - 1):
+        a, b = rings[j], rings[j + 1]
+        if len(a) == 1 and len(b) == 1:
+            continue
+        for k in range(S):
+            k2 = (k + 1) % S if full else k + 1
+            if len(a) == 1:
+                faces.append((a[0], b[k2], b[k]))
+            elif len(b) == 1:
+                faces.append((a[k], a[k2], b[0]))
+            else:
+                faces.append((a[k], a[k2], b[k2], b[k]))
+    if not full:
+        edge = [rr[0] for rr in rings] + [rr[-1] for rr in reversed(rings)]
+        deck, seen = [], set()
+        for i in edge:
+            if i not in seen:
+                seen.add(i)
+                deck.append(i)
+        if len(deck) >= 3:
+            faces.append(tuple(deck))
+    return verts, faces
+
+
+def plate_mesh(poly, thickness, pos, rot_z_deg):
+    """Tessellate a flat plate — 2-D polygon (u, z) extruded ±thickness/2 in
+    v, rotated about +Z, placed at pos — into (verts, faces).  Twin of the
+    emitted _plate."""
+    t = thickness / 2.0
+    a = math.radians(rot_z_deg)
+    ca, sa = math.cos(a), math.sin(a)
+    n = len(poly)
+    verts = []
+    for v in (-t, +t):
+        for (u, z) in poly:
+            verts.append((pos[0] + u * ca - v * sa,
+                          pos[1] + u * sa + v * ca, pos[2] + z))
+    faces = [tuple(range(n - 1, -1, -1)), tuple(range(n, 2 * n))]
+    for k in range(n):
+        k2 = (k + 1) % n
+        faces.append((k, k2, n + k2, n + k))
+    return verts, faces
+
+
+def obj_export(p, title="vehicle"):
+    """A Wavefront OBJ of the vehicle — the format Blender opens DIRECTLY
+    (File → Import → Wavefront .obj), unlike the bpy script.  Each element
+    is its own named `o` group, so stages/fairing/fins stay discrete and
+    editable.  Metres, +Z up.  Returns (obj_text, info)."""
+    els = vehicle_elements(p)
+    lines = [f"# Thrusty rough-draft 3-D export — {title}",
+             "# Wavefront OBJ.  Blender: File -> Import -> Wavefront (.obj).",
+             "# Units: metres.  +Z up (vehicle axis).  One object per "
+             "element."]
+    for fl in els["flags"]:
+        lines.append(f"# fallback: {fl}")
+    base = 1                                   # OBJ vertices are 1-indexed
+    for name, prof, pos, sweep in els["revolves"]:
+        verts, faces = revolve_mesh(
+            prof, pos, math.pi if sweep == "half" else 2 * math.pi)
+        lines.append(f"o {name}")
+        for x, y, z in verts:
+            lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
+        for f in faces:
+            lines.append("f " + " ".join(str(i + base) for i in f))
+        base += len(verts)
+    for name, poly, t, pos, rot in els["plates"]:
+        verts, faces = plate_mesh(poly, t, pos, rot)
+        lines.append(f"o {name}")
+        for x, y, z in verts:
+            lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
+        for f in faces:
+            lines.append("f " + " ".join(str(i + base) for i in f))
+        base += len(verts)
+    n = len(els["revolves"]) + len(els["plates"])
+    return "\n".join(lines) + "\n", dict(
+        n_objects=n, flags=list(els["flags"]),
+        total_height_m=els["total_height_m"])
+
+
 def _fmt_pts(pts):
     return "[" + ", ".join(f"({r:.6g}, {zz:.6g})" for r, zz in pts) + "]"
 
@@ -371,7 +477,7 @@ def bpy_script(p, title="vehicle"):
 import bpy
 import math
 
-SEG = 48                     # revolve segments
+SEG = 48                     # revolve segments (mirror of blender_export._SEG)
 
 
 def _mesh_obj(name, verts, faces, coll):

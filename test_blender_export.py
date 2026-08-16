@@ -188,6 +188,96 @@ def test_emitted_script_builds_valid_meshes_under_a_bpy_stub():
     assert all(nf > 0 for _n, _nv, nf in made)
 
 
+def _parse_obj(text):
+    """Minimal OBJ reader → {name: (verts, faces)}; faces as 0-indexed
+    tuples resolved against the global vertex list (OBJ is 1-indexed)."""
+    objs, verts, cur = {}, [], None
+    for ln in text.splitlines():
+        if ln.startswith("o "):
+            cur = ln[2:].strip()
+            objs[cur] = []
+        elif ln.startswith("v "):
+            verts.append(tuple(float(x) for x in ln.split()[1:4]))
+        elif ln.startswith("f "):
+            idx = [int(tok.split("/")[0]) - 1 for tok in ln.split()[1:]]
+            objs[cur].append(idx)
+    return objs, verts
+
+
+def test_obj_export_is_valid_and_keeps_objects_discrete():
+    """The direct-import path: a Wavefront OBJ Blender opens via File →
+    Import.  Every element is its own `o` group, face indices are all in
+    range (1-indexed, global), and the dimensions match the stored fields —
+    S1 base ring radius = ⌀/2."""
+    veh = _demo_vehicle()
+    veh.ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    text, info = bx.obj_export(veh, title="Demo")
+    objs, verts = _parse_obj(text)
+    assert len(objs) == info["n_objects"]
+    assert {"S1", "Interstage_1", "S2", "Fairing", "Fin_1", "Strapon_2",
+            "RO_Body"} <= set(objs)
+    for name, faces in objs.items():
+        assert faces, name                          # every object has faces
+        for f in faces:
+            assert len(f) >= 3
+            for i in f:
+                assert 0 <= i < len(verts), name     # in range, no dangling
+    # S1 base ring: max radius in XY equals the stored ⌀/2 = 0.6
+    s1_faces = objs["S1"]
+    s1_idx = {i for f in s1_faces for i in f}
+    rmax = max(math.hypot(verts[i][0], verts[i][1]) for i in s1_idx)
+    assert rmax == pytest.approx(0.6, abs=1e-3)
+
+
+def test_obj_and_bpy_build_the_same_meshes():
+    """The two export paths share one tessellation (revolve_mesh /
+    plate_mesh), so the OBJ file and the in-Blender script produce the
+    IDENTICAL solid — vertex counts per element match between the OBJ and
+    a run of the emitted bpy script under the mesh-capturing stub."""
+    import sys
+    import types
+
+    veh = _demo_vehicle()
+    made = {}
+
+    class _Mesh:
+        def __init__(self, name):
+            self.name = name
+
+        def from_pydata(self, v, e, f):
+            made[self.name] = (len(v), len(f))
+
+        def update(self):
+            pass
+
+    stub = types.ModuleType("bpy")
+    stub.data = types.SimpleNamespace(
+        meshes=types.SimpleNamespace(new=_Mesh),
+        objects=types.SimpleNamespace(new=lambda n, m: types.SimpleNamespace()),
+        collections=types.SimpleNamespace(new=lambda n: types.SimpleNamespace(
+            name=n, objects=types.SimpleNamespace(link=lambda o: None))))
+    stub.context = types.SimpleNamespace(scene=types.SimpleNamespace(
+        collection=types.SimpleNamespace(
+            children=types.SimpleNamespace(link=lambda c: None))))
+    script, _ = bx.bpy_script(veh, title="X")
+    sys.modules["bpy"] = stub
+    try:
+        exec(compile(script, "<cmp>", "exec"), {})
+    finally:
+        del sys.modules["bpy"]
+    obj_text, _ = bx.obj_export(veh, title="X")
+    # per-object vertex counts straight from the OBJ text
+    per_obj_v, cur = {}, None
+    for ln in obj_text.splitlines():
+        if ln.startswith("o "):
+            cur = ln[2:].strip(); per_obj_v[cur] = 0
+        elif ln.startswith("v "):
+            per_obj_v[cur] += 1
+    assert set(per_obj_v) == set(made)
+    for name, (nv, _nf) in made.items():
+        assert per_obj_v[name] == nv, name          # same vertex count
+
+
 def test_gui_export_handler_runs_end_to_end(tmp_path, monkeypatch):
     """Field bug: the menu handler crashed with NameError (filedialog not
     imported in thrusty's module scope — the codebase imports it locally
@@ -198,18 +288,27 @@ def test_gui_export_handler_runs_end_to_end(tmp_path, monkeypatch):
     import tkinter.messagebox as mb
     import thrusty
 
-    out = tmp_path / "veh_blender.py"
-    monkeypatch.setattr(fd, "asksaveasfilename",
-                        lambda **kw: str(out), raising=True)
     shown = []
     monkeypatch.setattr(mb, "showinfo",
                         lambda *a, **k: shown.append(a), raising=True)
     dummy = types.SimpleNamespace(_schem_params=_demo_vehicle(),
                                   _schem_name="Test Vehicle")
+    # default path: OBJ (the file Blender opens directly)
+    obj_out = tmp_path / "veh.obj"
+    monkeypatch.setattr(fd, "asksaveasfilename",
+                        lambda **kw: str(obj_out), raising=True)
     thrusty.BoosterFlyoutApp._export_blender(dummy)
-    text = out.read_text()
-    compile(text, str(out), "exec")
-    assert "'S1'" in text and "Test Vehicle" in text
+    otext = obj_out.read_text()
+    assert otext.startswith("# Thrusty") and "\no S1\n" in otext
+    assert "\nf " in otext                          # real faces, a mesh
+    # .py path still available: emits the bpy script
+    py_out = tmp_path / "veh.py"
+    monkeypatch.setattr(fd, "asksaveasfilename",
+                        lambda **kw: str(py_out), raising=True)
+    thrusty.BoosterFlyoutApp._export_blender(dummy)
+    ptext = py_out.read_text()
+    compile(ptext, str(py_out), "exec")
+    assert "import bpy" in ptext
     assert shown
 
 
