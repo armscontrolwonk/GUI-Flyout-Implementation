@@ -188,6 +188,31 @@ def test_emitted_script_builds_valid_meshes_under_a_bpy_stub():
     assert all(nf > 0 for _n, _nv, nf in made)
 
 
+def test_gui_export_handler_runs_end_to_end(tmp_path, monkeypatch):
+    """Field bug: the menu handler crashed with NameError (filedialog not
+    imported in thrusty's module scope — the codebase imports it locally
+    per handler).  Drive the REAL handler with a dummy self and stubbed
+    dialogs: it must write a compilable script to the chosen path."""
+    import types
+    import tkinter.filedialog as fd
+    import tkinter.messagebox as mb
+    import thrusty
+
+    out = tmp_path / "veh_blender.py"
+    monkeypatch.setattr(fd, "asksaveasfilename",
+                        lambda **kw: str(out), raising=True)
+    shown = []
+    monkeypatch.setattr(mb, "showinfo",
+                        lambda *a, **k: shown.append(a), raising=True)
+    dummy = types.SimpleNamespace(_schem_params=_demo_vehicle(),
+                                  _schem_name="Test Vehicle")
+    thrusty.BoosterFlyoutApp._export_blender(dummy)
+    text = out.read_text()
+    compile(text, str(out), "exec")
+    assert "'S1'" in text and "Test Vehicle" in text
+    assert shown
+
+
 def test_bpy_script_compiles_and_names_everything():
     """The emitted script is plain Python (bpy resolves inside Blender):
     it must compile, carry every object name and the collection, and list

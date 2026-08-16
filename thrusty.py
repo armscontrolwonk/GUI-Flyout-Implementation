@@ -8660,6 +8660,7 @@ class BoosterFlyoutApp(tk.Tk):
         cylinders/frustums for stages and interstages, real revolved nose
         and fairing profiles, plates for fins, the RO beside the stack.
         The modeler runs it in Blender's Scripting tab."""
+        from tkinter import filedialog
         p = getattr(self, "_schem_params", None)
         name = getattr(self, "_schem_name", "") or "vehicle"
         if p is None:
