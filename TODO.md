@@ -99,12 +99,19 @@ Upgrade path, in effort order:
       format, ~few MB) — instant plot-quality win;
   (b) rebuild `launch_sites.json` with per-site provenance (citation
       field) + site elevation + expanded coverage;
-  (c) DEM (agreed 2026-08-16 — ETOPO/GEBCO coarse grid, or SRTM where
-      finer matters): trajectories START at the launch site's real
-      altitude and TERMINATE on real ground height (impact and the
-      low-altitude glide floor) — the physics-relevant step, and the
-      only one that touches trajectory code.  Launch-site altitude also
-      slots into the rebuilt site database of (b);
+  (c) DEM (agreed 2026-08-16; source chosen 2026-08-16: **Copernicus
+      GLO-30**, not SRTM — ~2–4 m vs ~6–9 m vertical accuracy, and
+      SRTM's 60°N cutoff misses Plesetsk/high-latitude Russia entirely;
+      both are surface models, canopy-biased over forest — FABDEM is
+      the bare-earth variant if that ever matters, license caveat):
+      trajectories START at the launch site's real altitude and
+      TERMINATE on real ground height (impact and the low-altitude
+      glide floor) — the physics-relevant step, and the only one that
+      touches trajectory code.  Architecture: bake one-time GLO-30
+      lookups into the site database of (b) as elev_m + provenance (no
+      runtime DEM needed for launch altitude); fetch GLO-30 tiles
+      on demand along the ground track for impact/glide, cached, with
+      a bundled coarse ETOPO-2022 fallback (~tens of MB) for offline;
   (d) air-launched missiles (agreed 2026-08-16, follows from (c)'s
       launch-state generalization): initial state = carrier release
       altitude + speed + flight-path angle instead of a ground pad —
