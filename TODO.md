@@ -83,15 +83,40 @@ exec under a bpy stub validating every mesh's face indices.
   tools, if ever wanted — the element plan (vehicle_elements) is already
   format-agnostic.
 
-### 3. Better geospatial data sources
-Improve the sources behind launch/target locations and the map layers.
-- Open questions to scope first: which layer hurts today — the built-in
-  locations database (coverage/accuracy of sites), basemap/coastline detail
-  on trajectory plots, or terrain/elevation (impact-point and low-altitude
-  glide realism)?  Candidate sources: Natural Earth (coastlines/borders),
-  ETOPO/SRTM (elevation), curated site lists with citations.
-- First step when picked up: inventory current sources in the code and note
-  provenance for each (some may be as unattributed as the Ref-(4) chart was).
+### 3. Better geospatial data sources — INVENTORIED (2026-08-16)
+Current sources, from the code:
+- **Launch sites**: `launch_sites.json` — 34 hand-curated sites (name,
+  country, lat, lon).  NO provenance, NO site elevation.  The weakest
+  layer for the modeling use case.
+- **Borders/coastlines**: bundled Natural Earth **110m** countries GeoJSON
+  (`data/ne_110m_countries.geojson`) — NE's coarsest tier; coastlines are
+  visibly polygonal at trajectory-plot zoom.
+- **Interactive maps**: folium with CartoDB positron tiles (online; fine).
+- **Terrain/elevation**: NONE — trajectories end at h = 0 (sea level)
+  everywhere; launch altitude unmodeled.
+Upgrade path, in effort order:
+  (a) swap the bundled GeoJSON to Natural Earth **50m** (drop-in, same
+      format, ~few MB) — instant plot-quality win;
+  (b) rebuild `launch_sites.json` with per-site provenance (citation
+      field) + site elevation + expanded coverage;
+  (c) terrain (ETOPO/GEBCO coarse grid) so impact and low-altitude glide
+      terminate on real ground height — the physics-relevant step, and
+      the only one that touches trajectory code.
+
+### 5. Move the paper library from GitHub to an organized Drive
+Agreed 2026-08-16.  The ~100 PDFs under `data/` (grid fins, TPS/ablation,
+flight test, waveriders, lifting bodies) move to the Drive "Thrusty"
+folder, organized into subfolders mirroring how the code cites them
+(e.g. Aero — lifting bodies / Grid fins / Heating & TPS / Flight test &
+programs / Trajectory & guidance), so data/REFERENCES.md and
+HEATING_TPS_REFERENCES.md can link every entry.  Steps: (1) upload in
+topic batches to Drive subfolders (needs an interactive Drive session —
+bulk upload exceeds what the MCP connector can do); (2) extend
+data/REFERENCES.md with the moved locations; (3) THEN the deliberate
+repo slim — deleting data/*.pdf plus the history rewrite (separate,
+careful step; deleting alone does not shrink clones).  Close the two
+small gaps first: Fetterman D-2942/D-2956 PDFs into Drive (public NTRS),
+TR R-127 + Sutton-Graves mirrored.
 
 ### 4. Satellite / orbital payload type (payload is not always a reentry object)
 Today every payload is modeled as an `ROParams` reentry object; the payload
