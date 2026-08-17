@@ -8818,9 +8818,10 @@ class BoosterFlyoutApp(tk.Tk):
         else:
             info = bx.write_obj_bundle(path, p, title=name)
             sidecars = info["files"][1:]
-            how = ("In Blender: File → Import → Wavefront (.obj), and set "
-                   "Up: Z in the import options\nso the scene arrives as "
-                   "composed (missile lying, Thrusty standing behind).\n"
+            how = ("In Blender: File → Import → Wavefront (.obj) — the "
+                   "DEFAULT import settings work;\nthe scene arrives as "
+                   "composed (missile lying, Thrusty standing behind, "
+                   "RO lying beyond the nose).\n"
                    "Import at scale 1.0; the model is already in metres.")
         msg = (f"Wrote {info['n_objects']} objects "
                f"({info['total_height_m']:.1f} m stack) to:\n{path}\n\n"

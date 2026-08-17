@@ -192,14 +192,19 @@ def test_emitted_script_builds_valid_meshes_under_a_bpy_stub():
 
 def _parse_obj(text):
     """Minimal OBJ reader → {name: (verts, faces)}; faces as 0-indexed
-    tuples resolved against the global vertex list (OBJ is 1-indexed)."""
+    tuples resolved against the global vertex list (OBJ is 1-indexed).
+    The file is authored Y-up (the OBJ convention, so Blender's DEFAULT
+    import lands it right); verts are converted BACK to +Z-up scene
+    coordinates — file (x,y,z) → scene (x, -z, y) — so every assertion
+    below reasons in scene space."""
     objs, verts, cur = {}, [], None
     for ln in text.splitlines():
         if ln.startswith("o "):
             cur = ln[2:].strip()
             objs[cur] = []
         elif ln.startswith("v "):
-            verts.append(tuple(float(x) for x in ln.split()[1:4]))
+            xf, yf, zf = (float(x) for x in ln.split()[1:4])
+            verts.append((xf, -zf, yf))
         elif ln.startswith("f "):
             idx = [int(tok.split("/")[0]) - 1 for tok in ln.split()[1:]]
             objs[cur].append(idx)
@@ -260,6 +265,51 @@ def test_thrusty_sculpted_figure_stands_beside_the_stack():
     assert "mtllib" in text
     assert "usemtl Thrusty_skin" in text
     assert any(ln.startswith("vt ") for ln in text.splitlines())
+
+
+def test_ro_lies_flat_beyond_the_nose():
+    """V-2 rearrangement (user screenshots 2026-08-17): the RO no longer
+    stands upright — it lies flat like the missile, nose to +X, starting
+    1 m beyond the stack nose, resting on the ground at its own body
+    radius (long axis along X, height = its diameter, base at z ≈ 0)."""
+    veh = _demo_vehicle()
+    veh.ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    els = bx.vehicle_elements(veh)
+    sc, zc = els["scene"], els["cg_z"]
+    text, _info = bx.obj_export(veh, title="Demo")
+    objs, verts = _parse_obj(text)
+    body = {i for f in objs["RO_Body"] for i in f}
+    xs = [verts[i][0] for i in body]
+    zs = [verts[i][2] for i in body]
+    dia = 2.0 * sc["ro_r"]
+    assert min(zs) == pytest.approx(0.0, abs=1e-3)        # on the ground
+    assert max(zs) - min(zs) == pytest.approx(dia, abs=1e-3)
+    assert max(xs) - min(xs) > max(zs) - min(zs)          # lying, not upright
+    # base starts 1 m beyond the stack nose (scene x of the nose tip)
+    assert min(xs) == pytest.approx(sc["total"] + 1.0 - zc, abs=1e-3)
+
+
+def test_obj_is_authored_for_blenders_default_import():
+    """The file itself is Y-up (the OBJ convention): Blender's DEFAULT
+    importer maps file (x,y,z) → world (x,-z,y), so in RAW file coords
+    the standing Thrusty extends 1.8 m along +Y (file up) and the lying
+    missile along +X — no import options needed."""
+    veh = _demo_vehicle()
+    text, _info = bx.obj_export(veh, title="Demo")
+    raw, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("o "):
+            cur = ln[2:].strip()
+            raw[cur] = []
+        elif ln.startswith("v "):
+            raw[cur].append(tuple(float(x) for x in ln.split()[1:4]))
+    assert "set Up: Z" not in text                # the old instruction
+    assert "DEFAULT" in text
+    fy = [v[1] for v in raw["Thrusty"]]
+    assert max(fy) - min(fy) == pytest.approx(bx._FIGURE_M, rel=0.01)
+    s1x = [v[0] for v in raw["S1"]]
+    s1y = [v[1] for v in raw["S1"]]
+    assert max(s1x) - min(s1x) > max(s1y) - min(s1y)   # missile along file X
 
 
 def test_procedural_figure_is_the_fallback(monkeypatch):

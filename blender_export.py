@@ -448,11 +448,12 @@ def vehicle_elements(p):
 
     # V-2 scene parameters, applied by _scene_place in the writers:
     # stack rotated nose-to-+X lying on its widest point, Thrusty
-    # upright behind it, the RO standing beyond the nose.
+    # upright behind it, the RO lying flat beyond the nose (same
+    # nose-to-+X lay-down, resting on its own body radius).
     scene = dict(total=total, lift=ext_body,
                  fig_y=ext + 0.7 - fig_min_y,
-                 ro_dx=(total + 1.0 + 0.5 * ro_dia - ro_x_off
-                        if ro_x_off else 0.0))
+                 ro_x_off=ro_x_off, ro_r=0.5 * ro_dia,
+                 ro_x0=total + 1.0)
     return dict(revolves=revolves, plates=plates, flags=flags,
                 meshes=meshes, figures=figures, tex_figure=tex_figure,
                 cg_z=cg_z, total_height_m=total, scene=scene)
@@ -764,14 +765,18 @@ def _scene_place(name, verts, sc, zc):
     writers share: the STACK (built nose-up along +Z) is laid down nose
     to +X, resting on its widest point at z=0, balance station (zc) at
     x=0; Thrusty stands UPRIGHT behind it (+Y side, facing -Y = the
-    missile and the viewer) at mid-length; the RO stands upright beyond
-    the nose.  Everything stays +Z-up world space — import the OBJ with
-    'Up: Z' so the scene arrives as composed."""
+    missile and the viewer) at mid-length; the RO is laid down the same
+    way, flat beyond the nose, resting on its own body radius.  Scene
+    coordinates are +Z-up; the OBJ writer re-axes them so Blender's
+    DEFAULT import reproduces this scene."""
     if name == "Thrusty" or name.startswith("Thrusty_"):
         dx = sc["total"] / 2.0 - zc
         return [(x + dx, y + sc["fig_y"], z) for x, y, z in verts]
     if name.startswith("RO_"):
-        return [(x + sc["ro_dx"] - zc, y, z) for x, y, z in verts]
+        # Built nose-up at x = ro_x_off; laid nose-to-+X starting 1 m
+        # beyond the stack nose, on the ground at its body radius.
+        return [(z + sc["ro_x0"] - zc, y,
+                 sc["ro_r"] - (x - sc["ro_x_off"])) for x, y, z in verts]
     return [(z - zc, y, sc["lift"] - x) for x, y, z in verts]
 
 
@@ -803,21 +808,26 @@ def scene_meshes(els, zc):
 def obj_export(p, title="vehicle", center=True,
                mtl_name="thrusty_figure.mtl"):
     """A Wavefront OBJ of the vehicle — the format Blender opens DIRECTLY
-    (File -> Import -> Wavefront .obj; choose Up: Z so the scene arrives
-    as composed).  Each element is its own named `o` group.  Metres,
-    +Z up.  The scene is the V-2 cutaway composition: missile lying nose
-    to +X on the ground plane, Thrusty standing behind it, the RO
-    standing beyond the nose.  center=True puts the fuelled CG at x=0;
+    (File -> Import -> Wavefront .obj, DEFAULT settings).  The file is
+    authored in the OBJ convention (Y up, -Z forward): scene (x,y,z)
+    with +Z up is written as (x, z, -y), so Blender's default importer —
+    which maps file (x,y,z) to world (x,-z,y) — reproduces the composed
+    scene exactly.  Each element is its own named `o` group.  Metres.
+    The scene is the V-2 cutaway composition: missile lying nose to +X
+    on the ground plane, Thrusty standing behind it, the RO lying flat
+    beyond the nose.  center=True puts the fuelled CG at x=0;
     center=False keeps the base at x=0.  Returns (obj_text, info)."""
     els = vehicle_elements(p)
     zc = _center_shift(els) if center else 0.0
     lines = [f"# Thrusty rough-draft 3-D export — {title}",
              "# Wavefront OBJ.  Blender: File -> Import -> Wavefront "
-             "(.obj), set Up: Z.",
-             "# Units: metres, +Z up.  V-2 composition: missile lying "
-             "nose to +X,",
-             "# Thrusty standing behind it, RO beyond the nose.  One "
-             "object per element.",
+             "(.obj) — DEFAULT settings.",
+             "# Authored Y-up per the OBJ convention; the default import "
+             "lands it +Z up.",
+             "# Units: metres.  V-2 composition: missile lying nose "
+             "to +X,",
+             "# Thrusty standing behind it, RO lying beyond the nose.  "
+             "One object per element.",
              f"# Balance station (fuelled CG) at "
              f"{'x=0' if center else 'x = +CG station (base at x=0)'}."]
     for fl in els["flags"]:
@@ -829,8 +839,8 @@ def obj_export(p, title="vehicle", center=True,
     for name, verts, faces, (kind, extra) in scene_meshes(els, zc):
         n += 1
         lines.append(f"o {name}")
-        for x, y, z in verts:
-            lines.append(f"v {x:.5f} {y:.5f} {z:.5f}")
+        for x, y, z in verts:                  # scene +Z-up -> file Y-up
+            lines.append(f"v {x:.5f} {z:.5f} {-y:.5f}")
         if kind == "textured":
             for u, v in extra:
                 lines.append(f"vt {u:.5f} {v:.5f}")
@@ -959,7 +969,8 @@ def bpy_script(p, title="vehicle", center=True):
         f"# Generated {datetime.date.today().isoformat()}.  Run inside "
         "Blender: Scripting tab -> Open -> Run Script.\n"
         "# Units: metres, +Z up.  V-2 composition: missile lying nose to "
-        "+X,\n# Thrusty standing behind it, the RO beyond the nose.  Each "
+        "+X,\n# Thrusty standing behind it, the RO lying beyond the nose."
+        "  Each "
         "element is a\n"
         f"# separate named, editable object in the {coll!r} collection.\n"
         "# Derive-don't-invent: only stored geometry is exported.\n"
