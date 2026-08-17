@@ -10989,12 +10989,13 @@ class BoosterFlyoutApp(tk.Tk):
             if results:
                 status_var.set(
                     f"{len(results)} result(s) — select one and click Apply")
-                online_btn.config(state=tk.DISABLED)
-            else:
-                if q.strip() and _gc_cities:
-                    status_var.set("No offline match — try Search online…")
-                online_btn.config(
-                    state=tk.NORMAL if q.strip() else tk.DISABLED)
+            elif q.strip() and (_gaz_db[0] is not None or _gc_cities):
+                status_var.set("No offline match — try Search online…")
+            # Online stays available whenever there is a query: the
+            # bundled gazetteer nearly always finds SOMETHING offline,
+            # and the old only-when-empty gating would leave the button
+            # permanently grey (observed 2026-08-17).
+            online_btn.config(state=tk.NORMAL if q.strip() else tk.DISABLED)
 
         def _run_online():
             q = search_var.get().strip()
