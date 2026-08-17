@@ -369,11 +369,13 @@ def vehicle_elements(p):
 
     total = z
     ro = getattr(p, "ro", None)
+    ro_x_off = ro_dia = 0.0
     if ro is not None and _f(getattr(ro, "diameter_m", 0.0)) > 0:
         max_r = max((max(r for r, _ in prof) for _n, prof, _p, _s
                      in revolves), default=1.0)
-        _ro_elements(ro, max_r + 1.0 + _f(ro.diameter_m),
-                     revolves, plates, flags)
+        ro_dia = _f(ro.diameter_m)
+        ro_x_off = max_r + 1.0 + ro_dia
+        _ro_elements(ro, ro_x_off, revolves, plates, flags)
         # Same containment check the schematic shows — the export header
         # must not ship a stack whose payload cannot fit without saying so.
         from fairing_fit import fairing_fit, fairing_fit_note
@@ -405,38 +407,55 @@ def vehicle_elements(p):
     # overlaps — standing beside the stack, V-2-cutaway style.  Primary:
     # the sculpted UV-textured mesh asset; fallback: the procedural
     # palette figure.
-    ext = 0.0
+    # Stack radial extents (RO excluded — it stands apart) for the V-2
+    # scene.  Two numbers on purpose: the missile RESTS on its BODY
+    # radius (ext_body — fins dip below the ground plane, exactly like
+    # the classic V-2 cutaway, keeping the body low enough that Thrusty
+    # shows over it), while Thrusty's standoff behind it must clear the
+    # FIN span too (ext_all).
+    ext_body = 0.0
     for _n, prof, pos, _s in revolves:
-        ext = max(ext, math.hypot(pos[0], pos[1])
-                  + max(r for r, _z in prof))
+        if not _n.startswith("RO_"):
+            ext_body = max(ext_body, math.hypot(pos[0], pos[1])
+                           + max(r for r, _z in prof))
+    ext = ext_body
     for _n, poly, _t, pos, _r in plates:
-        ext = max(ext, math.hypot(pos[0], pos[1])
-                  + max(abs(u) for u, _z in poly))
-    figures, tex_figure = [], None
+        if not _n.startswith("RO_"):
+            ext = max(ext, math.hypot(pos[0], pos[1])
+                      + max(abs(u) for u, _z in poly))
+    # The figure stays CENTRED at the origin here; the writers' scene
+    # transform places him (V-2 composition: standing behind the lying
+    # missile at mid-length, facing -Y = the missile and the viewer).
+    figures, tex_figure, fig_min_y = [], None, -0.3
     mesh = _load_figure_mesh()
     if mesh is not None:
         mverts, muvs, mfaces = mesh
-        dx = ext + 0.7 - min(v[0] for v in mverts)
-        tex_figure = ("Thrusty",
-                      [(x + dx, y, z) for x, y, z in mverts],
-                      muvs, mfaces)
+        fig_min_y = min(v[1] for v in mverts)
+        tex_figure = ("Thrusty", mverts, muvs, mfaces)
     else:
         try:
             from thrusty_figure3d import build as _fig_build, \
                 bounds as _fig_bounds
             fparts = _fig_build(_FIGURE_M)
-            (fx0, _fy0, fz0), _hi = _fig_bounds(fparts)
-            dx = ext + 0.7 - fx0        # nearest part 0.7 m clear
-            figures = [(nm, [(x + dx, y, z - fz0) for x, y, z in vs],
+            (_fx0, fmy, fz0), _hi = _fig_bounds(fparts)
+            fig_min_y = fmy
+            figures = [(nm, [(x, y, z - fz0) for x, y, z in vs],
                         fs, col) for nm, vs, fs, col in fparts]
             flags.append("Thrusty mesh asset absent — procedural figure "
                          "shipped instead")
         except Exception:
             flags.append("Thrusty figure skipped — thrusty_figure3d failed")
 
+    # V-2 scene parameters, applied by _scene_place in the writers:
+    # stack rotated nose-to-+X lying on its widest point, Thrusty
+    # upright behind it, the RO standing beyond the nose.
+    scene = dict(total=total, lift=ext_body,
+                 fig_y=ext + 0.7 - fig_min_y,
+                 ro_dx=(total + 1.0 + 0.5 * ro_dia - ro_x_off
+                        if ro_x_off else 0.0))
     return dict(revolves=revolves, plates=plates, flags=flags,
                 meshes=meshes, figures=figures, tex_figure=tex_figure,
-                cg_z=cg_z, total_height_m=total)
+                cg_z=cg_z, total_height_m=total, scene=scene)
 
 
 def _grid_fin_frame(a, R):
@@ -550,28 +569,29 @@ def _grid_fin_lattice(a, R, gh, gw, gc, z0, pitch, web):
 
 def cg_marker_meshes(z_cg, r_body, name="CG_fuelled", n=24):
     """The classic CG symbol as a SMALL badge on the body surface: a thin
-    ring plus two OPPOSITE filled quadrant wedges in the Y-Z plane (facing
-    +X), centred just proud of the surface at (r_body, 0, z_cg).  Returns
-    [(name, verts, faces), ...]."""
+    ring plus two OPPOSITE filled quadrant wedges in the X-Z plane,
+    centred just proud of the skin at (0, -(r_body+0.01), z_cg) — the
+    -Y side, which the V-2-style scene rotation keeps facing the viewer.
+    Returns [(name, verts, faces), ...]."""
     r = max(0.05, 0.35 * r_body)                      # small, ~⅓ body radius
-    x0 = r_body + 0.01                                # a hair proud of skin
+    y0 = -(r_body + 0.01)                             # a hair proud of skin
     ri = 0.86 * r
     out = []
     outer, inner, rf = [], [], []
     for i in range(n):
         a = 2.0 * math.pi * i / n
-        outer.append((x0, r * math.cos(a), z_cg + r * math.sin(a)))
-        inner.append((x0, ri * math.cos(a), z_cg + ri * math.sin(a)))
+        outer.append((r * math.cos(a), y0, z_cg + r * math.sin(a)))
+        inner.append((ri * math.cos(a), y0, z_cg + ri * math.sin(a)))
     for i in range(n):
         j = (i + 1) % n
         rf.append((i, j, n + j, n + i))
     out.append((f"{name}_ring", outer + inner, rf))
     for qi, a0 in ((1, 0.0), (3, math.pi)):           # opposite quadrants
-        verts = [(x0, 0.0, z_cg)]
+        verts = [(0.0, y0, z_cg)]
         m = 6
         for k in range(m + 1):
             a = a0 + (math.pi / 2.0) * k / m
-            verts.append((x0, r * math.cos(a), z_cg + r * math.sin(a)))
+            verts.append((r * math.cos(a), y0, z_cg + r * math.sin(a)))
         faces = [(0, k, k + 1) for k in range(1, m + 1)]
         out.append((f"{name}_fill{qi}", verts, faces))
     return out
@@ -733,82 +753,97 @@ def plate_mesh(poly, thickness, pos, rot_z_deg):
 
 
 def _center_shift(els):
-    """The z shift that puts the fuelled CG on the origin — cg_z when it was
-    computed, else the geometric midpoint as a fallback."""
+    """The along-axis shift that puts the fuelled CG on the origin — cg_z
+    when it was computed, else the geometric midpoint as a fallback."""
     cg = els.get("cg_z")
     return cg if cg is not None else 0.5 * els["total_height_m"]
+
+
+def _scene_place(name, verts, sc, zc):
+    """The V-2 composition (user decision 2026-08-17), ONE transform both
+    writers share: the STACK (built nose-up along +Z) is laid down nose
+    to +X, resting on its widest point at z=0, balance station (zc) at
+    x=0; Thrusty stands UPRIGHT behind it (+Y side, facing -Y = the
+    missile and the viewer) at mid-length; the RO stands upright beyond
+    the nose.  Everything stays +Z-up world space — import the OBJ with
+    'Up: Z' so the scene arrives as composed."""
+    if name == "Thrusty" or name.startswith("Thrusty_"):
+        dx = sc["total"] / 2.0 - zc
+        return [(x + dx, y + sc["fig_y"], z) for x, y, z in verts]
+    if name.startswith("RO_"):
+        return [(x + sc["ro_dx"] - zc, y, z) for x, y, z in verts]
+    return [(z - zc, y, sc["lift"] - x) for x, y, z in verts]
+
+
+def scene_meshes(els, zc):
+    """Every export object, tessellated AND placed in the final V-2
+    scene — ONE generator both writers consume, so OBJ and bpy can never
+    disagree.  Yields (name, verts, faces, (kind, extra)): kind 'plain'
+    (extra None), 'palette' (extra colour name), or 'textured' (extra =
+    uv list; faces are then per-corner (v_idx, vt_idx) triples)."""
+    sc = els["scene"]
+    for name, prof, pos, sweep in els["revolves"]:
+        verts, faces = revolve_mesh(
+            prof, pos, math.pi if sweep == "half" else 2 * math.pi)
+        yield name, _scene_place(name, verts, sc, zc), faces, ("plain", None)
+    for name, poly, t, pos, rot in els["plates"]:
+        verts, faces = plate_mesh(poly, t, pos, rot)
+        yield name, _scene_place(name, verts, sc, zc), faces, ("plain", None)
+    for name, verts, faces in els.get("meshes", []):
+        yield name, _scene_place(name, verts, sc, zc), faces, ("plain", None)
+    for name, verts, faces, colour in els.get("figures", []):
+        yield (name, _scene_place(name, verts, sc, zc), faces,
+               ("palette", colour))
+    if els.get("tex_figure"):
+        name, verts, uvs, faces = els["tex_figure"]
+        yield (name, _scene_place(name, verts, sc, zc), faces,
+               ("textured", uvs))
 
 
 def obj_export(p, title="vehicle", center=True,
                mtl_name="thrusty_figure.mtl"):
     """A Wavefront OBJ of the vehicle — the format Blender opens DIRECTLY
-    (File -> Import -> Wavefront .obj), unlike the bpy script.  Each element
-    is its own named `o` group, so stages/fairing/fins stay discrete and
-    editable.  Metres, +Z up.  center=True puts the fuelled CENTRE OF GRAVITY
-    at the ORIGIN (z <- z - cg_z; X=Y=0 on the axis) so the model balances
-    about the Blender origin; center=False keeps the base on z=0.  When the
-    3-D Thrusty figure is present the OBJ references `mtl_name` for its
-    flat palette colours (write_obj_bundle ships the sidecar).  Returns
-    (obj_text, info)."""
+    (File -> Import -> Wavefront .obj; choose Up: Z so the scene arrives
+    as composed).  Each element is its own named `o` group.  Metres,
+    +Z up.  The scene is the V-2 cutaway composition: missile lying nose
+    to +X on the ground plane, Thrusty standing behind it, the RO
+    standing beyond the nose.  center=True puts the fuelled CG at x=0;
+    center=False keeps the base at x=0.  Returns (obj_text, info)."""
     els = vehicle_elements(p)
     zc = _center_shift(els) if center else 0.0
     lines = [f"# Thrusty rough-draft 3-D export — {title}",
-             "# Wavefront OBJ.  Blender: File -> Import -> Wavefront (.obj).",
-             "# Units: metres.  +Z up (vehicle axis).  One object per "
-             "element.",
-             f"# Origin: {'fuelled centre of gravity' if center else 'base'}."]
+             "# Wavefront OBJ.  Blender: File -> Import -> Wavefront "
+             "(.obj), set Up: Z.",
+             "# Units: metres, +Z up.  V-2 composition: missile lying "
+             "nose to +X,",
+             "# Thrusty standing behind it, RO beyond the nose.  One "
+             "object per element.",
+             f"# Balance station (fuelled CG) at "
+             f"{'x=0' if center else 'x = +CG station (base at x=0)'}."]
     for fl in els["flags"]:
         lines.append(f"# fallback: {fl}")
     if els.get("figures") or els.get("tex_figure"):
         lines.append(f"mtllib {mtl_name}")
     base = 1                                   # OBJ vertices are 1-indexed
-    for name, prof, pos, sweep in els["revolves"]:
-        verts, faces = revolve_mesh(
-            prof, pos, math.pi if sweep == "half" else 2 * math.pi)
+    n = 0
+    for name, verts, faces, (kind, extra) in scene_meshes(els, zc):
+        n += 1
         lines.append(f"o {name}")
         for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
-        for f in faces:
-            lines.append("f " + " ".join(str(i + base) for i in f))
+            lines.append(f"v {x:.5f} {y:.5f} {z:.5f}")
+        if kind == "textured":
+            for u, v in extra:
+                lines.append(f"vt {u:.5f} {v:.5f}")
+            lines.append("usemtl Thrusty_skin")
+            for tri in faces:
+                lines.append("f " + " ".join(f"{vi + base}/{ti + 1}"
+                                             for vi, ti in tri))
+        else:
+            if kind == "palette":
+                lines.append(f"usemtl Thrusty_{extra}")
+            for f in faces:
+                lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
-    for name, poly, t, pos, rot in els["plates"]:
-        verts, faces = plate_mesh(poly, t, pos, rot)
-        lines.append(f"o {name}")
-        for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
-        for f in faces:
-            lines.append("f " + " ".join(str(i + base) for i in f))
-        base += len(verts)
-    for name, verts, faces in els.get("meshes", []):
-        lines.append(f"o {name}")
-        for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
-        for f in faces:
-            lines.append("f " + " ".join(str(i + base) for i in f))
-        base += len(verts)
-    for name, verts, faces, colour in els.get("figures", []):
-        lines.append(f"o {name}")
-        for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
-        lines.append(f"usemtl Thrusty_{colour}")
-        for f in faces:
-            lines.append("f " + " ".join(str(i + base) for i in f))
-        base += len(verts)
-    if els.get("tex_figure"):
-        name, verts, uvs, faces = els["tex_figure"]
-        lines.append(f"o {name}")
-        for x, y, z in verts:
-            lines.append(f"v {x:.5f} {y:.5f} {z - zc:.5f}")
-        for u, v in uvs:
-            lines.append(f"vt {u:.5f} {v:.5f}")
-        lines.append("usemtl Thrusty_skin")
-        for tri in faces:
-            lines.append("f " + " ".join(f"{vi + base}/{ti + 1}"
-                                         for vi, ti in tri))
-        base += len(verts)
-    n = (len(els["revolves"]) + len(els["plates"])
-         + len(els.get("meshes", [])) + len(els.get("figures", []))
-         + (1 if els.get("tex_figure") else 0))
     return "\n".join(lines) + "\n", dict(
         n_objects=n, flags=list(els["flags"]),
         total_height_m=els["total_height_m"])
@@ -894,45 +929,38 @@ def bpy_script(p, title="vehicle", center=True):
     coll = title.strip() or "vehicle"
     flag_lines = ("".join(f"#   - {fl}\n" for fl in els["flags"])
                   or "#   (none — every dimension came from stored data)\n")
-    rev_lines = "".join(
-        f"    ({name!r}, {_fmt_pts(prof)}, {_fmt_pos(pos, zc)}, {sweep!r}),\n"
-        for name, prof, pos, sweep in els["revolves"])
-    plate_lines = "".join(
-        f"    ({name!r}, {_fmt_pts(poly)}, {t:.6g}, {_fmt_pos(pos, zc)}, "
-        f"{rot:.6g}),\n"
-        for name, poly, t, pos, rot in els["plates"])
 
     def _fmt_verts(vs):
-        return "[" + ", ".join(f"({x:.6g}, {y:.6g}, {z - zc:.6g})"
+        return "[" + ", ".join(f"({x:.5f}, {y:.5f}, {z:.5f})"
                                for x, y, z in vs) + "]"
 
     def _fmt_faces(fs):
         return "[" + ", ".join("(" + ", ".join(str(i) for i in f) + ")"
                                for f in fs) + "]"
-    mesh_lines = "".join(
-        f"    ({name!r}, {_fmt_verts(verts)}, {_fmt_faces(faces)}),\n"
-        for name, verts, faces in els.get("meshes", []))
-    fig_lines = "".join(
-        f"    ({name!r}, {_fmt_verts(verts)}, {_fmt_faces(faces)}, "
-        f"{colour!r}),\n"
-        for name, verts, faces, colour in els.get("figures", []))
-    if els.get("tex_figure"):
-        _tn, _tv, _tu, _tf = els["tex_figure"]
-        tex_fig_literal = (
-            f"({_tn!r}, {_fmt_verts(_tv)}, ["
-            + ", ".join(f"({u:.5f}, {v:.5f})" for u, v in _tu) + "], ["
-            + ", ".join("(" + ", ".join(f"({vi}, {ti})" for vi, ti in tri)
-                        + ")" for tri in _tf) + "])")
-    else:
-        tex_fig_literal = "None"
-    n = (len(els["revolves"]) + len(els["plates"])
-         + len(els.get("meshes", [])) + len(els.get("figures", []))
-         + (1 if els.get("tex_figure") else 0))
+    mesh_lines, fig_lines, tex_fig_literal, n = "", "", "None", 0
+    for name, verts, faces, (kind, extra) in scene_meshes(els, zc):
+        n += 1
+        if kind == "plain":
+            mesh_lines += (f"    ({name!r}, {_fmt_verts(verts)}, "
+                           f"{_fmt_faces(faces)}),\n")
+        elif kind == "palette":
+            fig_lines += (f"    ({name!r}, {_fmt_verts(verts)}, "
+                          f"{_fmt_faces(faces)}, {extra!r}),\n")
+        else:
+            tex_fig_literal = (
+                f"({name!r}, {_fmt_verts(verts)}, ["
+                + ", ".join(f"({u:.5f}, {v:.5f})" for u, v in extra)
+                + "], ["
+                + ", ".join("(" + ", ".join(f"({vi}, {ti})"
+                                            for vi, ti in tri)
+                            + ")" for tri in faces) + "])")
     header = (
         f"# Thrusty rough-draft 3-D export — {coll}\n"
         f"# Generated {datetime.date.today().isoformat()}.  Run inside "
         "Blender: Scripting tab -> Open -> Run Script.\n"
-        "# Units: metres.  +Z is up (the vehicle axis).  Each element is a\n"
+        "# Units: metres, +Z up.  V-2 composition: missile lying nose to "
+        "+X,\n# Thrusty standing behind it, the RO beyond the nose.  Each "
+        "element is a\n"
         f"# separate named, editable object in the {coll!r} collection.\n"
         "# Derive-don't-invent: only stored geometry is exported.\n"
         "# Fallbacks that stood in for unset data:\n" + flag_lines)
@@ -950,70 +978,6 @@ def _mesh_obj(name, verts, faces, coll):
     obj = bpy.data.objects.new(name, mesh)
     coll.objects.link(obj)
     return obj
-
-
-def _revolve(name, profile, pos, coll, sweep):
-    """Solid of revolution of an (r, z) profile about local +Z at pos.
-    Points with r ~ 0 become single apex vertices (caps close for free);
-    a partial sweep (the half-cone) is closed with a flat deck n-gon."""
-    full = abs(sweep - 2 * math.pi) < 1e-9
-    S = SEG if full else SEG // 2
-    cols = S if full else S + 1
-    verts, rings = [], []
-    for r, z in profile:
-        if r < 1e-9:
-            rings.append((len(verts),))
-            verts.append((pos[0], pos[1], pos[2] + z))
-        else:
-            idx = []
-            for k in range(cols):
-                a = sweep * k / S
-                idx.append(len(verts))
-                verts.append((pos[0] + r * math.cos(a),
-                              pos[1] + r * math.sin(a), pos[2] + z))
-            rings.append(tuple(idx))
-    faces = []
-    for j in range(len(rings) - 1):
-        a, b = rings[j], rings[j + 1]
-        if len(a) == 1 and len(b) == 1:
-            continue
-        for k in range(S):
-            k2 = (k + 1) % S if full else k + 1
-            if len(a) == 1:
-                faces.append((a[0], b[k2], b[k]))
-            elif len(b) == 1:
-                faces.append((a[k], a[k2], b[0]))
-            else:
-                faces.append((a[k], a[k2], b[k2], b[k]))
-    if not full:                          # flat deck closes the half body
-        edge = [rr[0] for rr in rings] + [rr[-1] for rr in reversed(rings)]
-        deck, seen = [], set()
-        for i in edge:
-            if i not in seen:
-                seen.add(i)
-                deck.append(i)
-        if len(deck) >= 3:
-            faces.append(tuple(deck))
-    return _mesh_obj(name, verts, faces, coll)
-
-
-def _plate(name, poly, thickness, pos, rot_z_deg, coll):
-    """A flat plate: 2-D polygon (u, z) extruded +-thickness/2 in v, then
-    rotated about +Z and placed at pos.  u = outboard, z = up."""
-    t = thickness / 2.0
-    a = math.radians(rot_z_deg)
-    ca, sa = math.cos(a), math.sin(a)
-    n = len(poly)
-    verts = []
-    for v in (-t, +t):
-        for (u, z) in poly:
-            verts.append((pos[0] + u * ca - v * sa,
-                          pos[1] + u * sa + v * ca, pos[2] + z))
-    faces = [tuple(range(n - 1, -1, -1)), tuple(range(n, 2 * n))]
-    for k in range(n):
-        k2 = (k + 1) % n
-        faces.append((k, k2, n + k2, n + k))
-    return _mesh_obj(name, verts, faces, coll)
 
 
 _fig_mats = {}
@@ -1070,26 +1034,19 @@ def _tex_figure(name, verts, uvs, faces, coll):
 
 coll = bpy.data.collections.new(COLLECTION)
 bpy.context.scene.collection.children.link(coll)
-for _name, _profile, _pos, _sweep in REVOLVES:
-    _revolve(_name, _profile, _pos, coll,
-             sweep=(math.pi if _sweep == "half" else 2 * math.pi))
-for _name, _poly, _t, _pos, _rot in PLATES:
-    _plate(_name, _poly, _t, _pos, _rot, coll)
-for _name, _verts, _faces in MESHES:      # raw meshes (e.g. the CG marker)
+for _name, _verts, _faces in MESHES:      # every stack element, placed
     _mesh_obj(_name, _verts, _faces, coll)
 for _name, _verts, _faces, _col in FIGURES:   # procedural fallback figure
     _figure_mesh(_name, _verts, _faces, _col, coll)
 if TEXFIG is not None:                    # the sculpted Thrusty mascot
     _tex_figure(TEXFIG[0], TEXFIG[1], TEXFIG[2], TEXFIG[3], coll)
 print("Thrusty export: %d objects in %r"
-      % (len(REVOLVES) + len(PLATES) + len(MESHES) + len(FIGURES)
-         + (1 if TEXFIG is not None else 0), COLLECTION))
+      % (len(MESHES) + len(FIGURES) + (1 if TEXFIG is not None else 0),
+         COLLECTION))
 '''
     data = (f"\nCOLLECTION = {coll!r}\n"
             f"PALETTE = {_PALETTE!r}\n"
             f"FIGURE_JPG = {_FIGURE_TEX!r}\n\n"
-            f"REVOLVES = [\n{rev_lines}]\n\n"
-            f"PLATES = [\n{plate_lines}]\n\n"
             f"MESHES = [\n{mesh_lines}]\n\n"
             f"FIGURES = [\n{fig_lines}]\n\n"
             f"TEXFIG = {tex_fig_literal}\n")

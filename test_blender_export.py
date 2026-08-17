@@ -224,10 +224,13 @@ def test_obj_export_is_valid_and_keeps_objects_discrete():
             assert len(f) >= 3
             for i in f:
                 assert 0 <= i < len(verts), name     # in range, no dangling
-    # S1 base ring: max radius in XY equals the stored ⌀/2 = 0.6
+    # S1 rings: the missile lies nose-to-+X resting at z = lift, so a
+    # station ring is a circle in (y, z-lift); max radius = ⌀/2 = 0.6
+    lift = bx.vehicle_elements(veh)["scene"]["lift"]
     s1_faces = objs["S1"]
     s1_idx = {i for f in s1_faces for i in f}
-    rmax = max(math.hypot(verts[i][0], verts[i][1]) for i in s1_idx)
+    rmax = max(math.hypot(verts[i][1], verts[i][2] - lift)
+               for i in s1_idx)
     assert rmax == pytest.approx(0.6, abs=1e-3)
 
 
@@ -245,15 +248,15 @@ def test_thrusty_sculpted_figure_stands_beside_the_stack():
     assert len(objs["Thrusty"]) == 40000            # the decimated mesh
     idx = {i for f in objs["Thrusty"] for i in f}
     zs = [verts[i][2] for i in idx]
-    xs = [verts[i][0] for i in idx]
-    els = bx.vehicle_elements(veh)
-    ground = -bx._center_shift(els)
-    assert min(zs) == pytest.approx(ground, abs=1e-4)
+    ys = [verts[i][1] for i in idx]
+    # V-2 composition: he stands UPRIGHT on the ground plane (feet z=0,
+    # 1.8 m tall) BEHIND the lying missile — beyond its +Y extent —
+    # facing -Y at the missile and the viewer
+    assert min(zs) == pytest.approx(0.0, abs=1e-4)
     assert max(zs) - min(zs) == pytest.approx(bx._FIGURE_M, rel=0.01)
-    other = {i for nm, fs in objs.items() if nm != "Thrusty"
-             for f in fs for i in f}
-    ext = max(math.hypot(verts[i][0], verts[i][1]) for i in other)
-    assert min(xs) > ext
+    other_y = max(verts[i][1] for nm, fs in objs.items()
+                  if nm != "Thrusty" for f in fs for i in f)
+    assert min(ys) > other_y
     assert "mtllib" in text
     assert "usemtl Thrusty_skin" in text
     assert any(ln.startswith("vt ") for ln in text.splitlines())
@@ -429,36 +432,33 @@ def test_strapons_clock_into_the_gaps_between_fins():
 
 
 def test_export_centers_booster_on_the_origin():
-    """center=True (default) puts the booster's axis midpoint at z=0 — the
-    stack spans −total/2 … +total/2 — so it drops into Blender centered.
-    center=False keeps the base on z=0.  X=Y stay on the axis for the
-    core."""
+    """center=True (default) puts the fuelled CG at x=0 along the LYING
+    missile's axis; center=False keeps the base at x=0.  The stack
+    shifts uniformly in x; Thrusty and the RO ride along."""
     veh = _demo_vehicle()
     total = bx.vehicle_elements(veh)["total_height_m"]
-
     cg_z = bx.vehicle_elements(veh)["cg_z"]
     assert 0.0 < cg_z < total
 
-    def s1_base_z(**kw):
-        """z of the S1 base ring — the stack's bottom reference, at z=0
-        before centering.  Parse the OBJ, take S1's lowest vertex."""
+    def s1_base_x(**kw):
+        """x of the S1 base plane — the tail reference, at x=0 before
+        centering."""
         text, _ = bx.obj_export(veh, title="C", **kw)
         objs, verts = _parse_obj(text)
         s1 = {i for f in objs["S1"] for i in f}
-        return min(verts[i][2] for i in s1)
-    # S1 base sits at z=0 uncentered, and at −cg_z when centered on the CG
-    assert s1_base_z(center=False) == pytest.approx(0.0, abs=1e-4)
-    assert s1_base_z() == pytest.approx(-cg_z, abs=1e-4)
-    # centering shifts EVERY vertex down by exactly cg_z (uniform), so the
-    # CG lands on the origin
-    zc = [v[2] for v in _parse_obj(bx.obj_export(veh, title="C")[0])[1]]
-    z0 = [v[2] for v in _parse_obj(
+        return min(verts[i][0] for i in s1)
+    assert s1_base_x(center=False) == pytest.approx(0.0, abs=1e-4)
+    assert s1_base_x() == pytest.approx(-cg_z, abs=1e-4)
+    # centering shifts EVERY vertex by exactly cg_z in x (uniform)
+    xc = [v[0] for v in _parse_obj(bx.obj_export(veh, title="C")[0])[1]]
+    x0 = [v[0] for v in _parse_obj(
         bx.obj_export(veh, title="C", center=False)[0])[1]]
-    for a, b in zip(sorted(zc), sorted(z0)):
+    for a, b in zip(sorted(xc), sorted(x0)):
         assert a == pytest.approx(b - cg_z, abs=1e-4)
-    assert "fuelled centre of gravity" in bx.obj_export(veh)[0]
-    # the bpy script carries the same shift in its position literals
-    assert f", {-cg_z:.6g})" in bx.bpy_script(veh, title="C")[0]
+    assert "fuelled CG" in bx.obj_export(veh)[0]
+    # the bpy script carries the same shift baked into its vertex
+    # literals: the S1 tail plane sits at x = -cg_z
+    assert f"({-cg_z:.5f}," in bx.bpy_script(veh, title="C")[0]
 
 
 def test_ro_wing_thickness_from_stored_field():
@@ -633,26 +633,26 @@ def test_grid_fins_face_the_flow_and_reflect_solidity():
 def test_cg_marker_is_a_small_badge_on_the_surface():
     """The full-stack fuelled CG marker (classic symbol) is emitted as raw
     meshes — a small badge on the body SURFACE at the balance station,
-    facing +X: all verts share x ≈ R_local (on the skin), lie in the Y-Z
-    plane, straddle the CG station, and are small vs the body."""
+    facing -Y (the viewer side once the scene lies the missile down):
+    all verts share y ≈ -(R_local+0.01), lie in the X-Z plane, straddle
+    the CG station, and are small vs the body."""
     veh = _demo_vehicle()
     els = bx.vehicle_elements(veh)
     meshes = {n: (v, f) for n, v, f in els["meshes"]}
     assert {"CG_fuelled_ring", "CG_fuelled_fill1", "CG_fuelled_fill3"} \
         <= set(meshes)
     cg_z = els["cg_z"]
-    # the badge is planar in Y-Z (all verts share one x = the surface station)
-    xs = [x for _n, verts, _f in els["meshes"] for x, _y, _z in verts]
-    assert max(xs) - min(xs) < 1e-6              # a flat badge, not a disk
-    x0 = xs[0]
-    # x0 sits on some stage's skin: within the stack's radii, not a giant disk
+    # the badge is planar in X-Z (all verts share one y = the skin)
+    ys = [y for _n, verts, _f in els["meshes"] for _x, y, _z in verts]
+    assert max(ys) - min(ys) < 1e-6              # a flat badge, not a disk
+    y0 = ys[0]
     R_max = max(0.5 * s.diameter_m for s in (veh, veh.stage2))
-    assert 0.0 < x0 <= R_max + 0.05
+    assert -(R_max + 0.05) <= y0 < 0.0           # on the -Y (viewer) skin
     ring_z = [z for _x, _y, z in meshes["CG_fuelled_ring"][0]]
     assert min(ring_z) < cg_z < max(ring_z)      # straddles the station
     # small: the marker spans well under a body diameter
-    ys = [y for _n, verts, _f in els["meshes"] for _x, y, _z in verts]
-    assert max(ys) - min(ys) < R_max
+    xs = [x for _n, verts, _f in els["meshes"] for x, _y, _z in verts]
+    assert max(xs) - min(xs) < R_max
     # it appears as OBJ objects and survives the bpy script
     obj = bx.obj_export(veh)[0]
     assert "\no CG_fuelled_ring\n" in obj
@@ -681,7 +681,7 @@ def test_bpy_script_compiles_and_names_everything():
                  "'Strapon_2'", "'Test Vehicle'"):
         assert name in script
     assert "import bpy" in script
-    assert "def _revolve" in script and "def _plate" in script
+    assert "def _mesh_obj" in script and "def _tex_figure" in script
     # a nominal fallback is declared, not silent (none in this vehicle's
     # dims except when we unset something):
     veh2 = _demo_vehicle()
