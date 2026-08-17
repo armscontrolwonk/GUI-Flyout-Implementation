@@ -336,6 +336,12 @@ def vehicle_elements(p):
                      in revolves), default=1.0)
         _ro_elements(ro, max_r + 1.0 + _f(ro.diameter_m),
                      revolves, plates, flags)
+        # Same containment check the schematic shows — the export header
+        # must not ship a stack whose payload cannot fit without saying so.
+        from fairing_fit import fairing_fit, fairing_fit_note
+        fit = fairing_fit(p)
+        if fit is not None and not fit["fits"]:
+            flags.append(fairing_fit_note(fit))
 
     # Full-stack fuelled CG — a SMALL classic symbol (ring + two opposite
     # filled quadrants) sitting on the body SURFACE at the balance station,

@@ -538,6 +538,17 @@ def draw_booster(ax, p, title=None):
     _ro = getattr(p, "ro", None)
     if _ro is not None and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0:
         _draw_reentry_object(ax, _ro, _view_right, yl, veh_right=xl[1])
+        # Containment check: does this RO actually fit inside the drawn
+        # front end (fairing / nose region)?  The SWERVE-on-STARS-1 case —
+        # a 2.6 m RV over a 1.1 m nose — drew fine and said nothing.
+        from fairing_fit import fairing_fit, fairing_fit_note, \
+            fairing_fit_short
+        _fit = fairing_fit(p)
+        if _fit is not None and not _fit["fits"]:
+            flags.append(fairing_fit_note(_fit))   # full sentence: flags,
+            ax.text(0.5, 0.998, fairing_fit_short(_fit),   # short: canvas
+                    transform=ax.transAxes, ha="center", va="top",
+                    fontsize=9, color="#b0201f", weight="bold", zorder=6)
     # Full-stack fuelled CG — the classic center-of-gravity symbol (a circle
     # with two opposite quadrants filled) on the axis at the balance station.
     _draw_cg_marker(ax, p, y)
