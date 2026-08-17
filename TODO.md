@@ -118,7 +118,24 @@ Upgrade path, in effort order:
   (a) swap the bundled GeoJSON to Natural Earth **50m** (drop-in, same
       format, ~few MB) — instant plot-quality win;
   (b) rebuild `launch_sites.json` with per-site provenance (citation
-      field) + site elevation + expanded coverage.  VARIANTS ARE A
+      field) + site elevation + expanded coverage.
+      GAZETTEER PHASE 1 SHIPPED (2026-08-17): bundled offline gazetteer
+      — gazetteer_build.py (reproducible bake, provenance in
+      data/gazetteer/MANIFEST.md) + gazetteer.py (SQLite index cached
+      in ~/.gui_missile_flyout, diacritic-folded variant-aware search,
+      nearest()) + data/gazetteer/ packs: FULL GNIS domestic (974,023
+      features, every class) + BGN Antarctic (14,353 + variants),
+      16.7 MB total.  The Find Location picker now searches it first
+      (always-present offline path; geonamescache demoted to legacy
+      fallback, Nominatim still the online catch-all).  PHASE 2
+      REMAINING: the NGA GNS worldwide packs — the raw zips are in the
+      Drive "Thrusty NGA" folder but Drive/NGA are egress-blocked from
+      sessions; transfer via throwaway git branch (split -b 90m → push
+      parts to `gns-staging` → session reassembles, bakes with the
+      already-tested build_gns hook, commits packs only, deletes the
+      branch).  Then: the launch_sites.json rebuild proper (anchor the
+      34 sites to GNS/GNIS IDs) and the nearest-place impact
+      annotation (b2) on top of gazetteer.nearest().  VARIANTS ARE A
       HARD REQUIREMENT (user, 2026-08-17): romanized names differ
       across systems (Sŏhae/Sohae, Tongch'ang-ri/Dongchang-ri), so the
       baked extract KEEPS every GNS variant name and native-script

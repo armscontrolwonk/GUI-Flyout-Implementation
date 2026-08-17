@@ -10906,23 +10906,52 @@ class BoosterFlyoutApp(tk.Tk):
         # ── Data ──────────────────────────────────────────────────────
         _rows = []   # [(display_name, lat_dd, lon_dd), …]
 
+        # Offline search order: the BUNDLED gazetteer (data/gazetteer/
+        # packs — official BGN-lineage sources, always present, variants
+        # searchable) → geonamescache if installed (legacy) → online
+        # Nominatim.  The gazetteer's SQLite index builds in a thread on
+        # first ever use (~10 s for a million features), then is instant.
+        _gaz_db = [None]
         _gc_cities = None
-        try:
-            import geonamescache as _gnc
-            _gc_cities = list(_gnc.GeonamesCache().get_cities().values())
-        except ImportError:
-            status_var.set(
-                "Tip: pip install geonamescache  for instant offline city search")
+        import gazetteer as _gz
+        if _gz.available():
+            def _bg_index():
+                try:
+                    db = _gz.ensure_index()
+                    dlg.after(0, lambda: (_gaz_db.__setitem__(0, db),
+                                          _run_offline()))
+                except Exception as _ex:
+                    dlg.after(0, lambda: status_var.set(
+                        f"Gazetteer index failed: {_ex}"))
+            status_var.set("Preparing offline gazetteer…")
+            threading.Thread(target=_bg_index, daemon=True).start()
+        else:
+            try:
+                import geonamescache as _gnc
+                _gc_cities = list(_gnc.GeonamesCache().get_cities().values())
+            except ImportError:
+                status_var.set("No offline gazetteer packs found — "
+                               "use Search online…")
 
         def _do_offline(query):
-            if not _gc_cities:
-                return []
-            q = query.strip().lower()
+            q = query.strip()
             if not q:
                 return []
+            if _gaz_db[0] is not None:
+                hits = []
+                for r in _gz.search(q, limit=50, db=_gaz_db[0]):
+                    name = r["primary"]
+                    if r["matched"] != r["primary"]:
+                        name += f"  (= {r['matched']})"
+                    hits.append((name, r["lat"], r["lon"],
+                                 (r["admin"] or "")[:14], 0))
+                return hits
+            if not _gc_cities:
+                return []
+            ql = q.lower()
             hits = []
             for c in _gc_cities:
-                if q in c['name'].lower():
+                if ql in c['name'].lower():
                     hits.append((
                         c['name'],
                         float(c['latitude']),
