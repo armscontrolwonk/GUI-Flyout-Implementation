@@ -1,4 +1,14 @@
+# Thrusty — core requirements (the app will not start without these).
+# Install:  pip3 install -r requirements.txt
+#
+# tkinter is also required but ships with Python itself (not pip-installable);
+# on macOS use the python.org installer or `brew install python-tk`.
+#
+# Optional, feature-by-feature dependencies live in requirements-optional.txt
+# — each one unlocks a single feature and the app degrades gracefully (with an
+# on-screen hint) when it is absent.
+
 numpy>=1.24
 scipy>=1.10
 matplotlib>=3.7
-folium>=0.14
+Pillow>=9.0        # image-measure tool + prompt diagrams (measure from image)

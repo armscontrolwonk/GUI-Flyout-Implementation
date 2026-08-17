@@ -142,9 +142,16 @@ citations, Acton comparison).
 ## Quick start
 
 ```
-pip install -r requirements.txt   # numpy, scipy, matplotlib, folium
+pip install -r requirements.txt            # core: numpy, scipy, matplotlib, Pillow
+pip install -r requirements-optional.txt   # optional features (see that file)
 python thrusty.py
 ```
+
+The core set is all the app needs to run trajectories, plots, and the
+schematic.  Each optional package unlocks one feature and the app degrades
+gracefully without it (online place search → geopy, map picker → cartopy,
+HTML maps → folium, spreadsheet I/O → openpyxl, image drag-and-drop →
+tkinterdnd2).  The offline place gazetteer needs no extra package.
 
 User data is stored in `~/.gui_missile_flyout/` (the app config folder name is
 kept for back-compatibility):
@@ -841,15 +848,28 @@ picker).
 
 ## Dependencies
 
+Core (`requirements.txt` — the app will not start without these):
+
 ```
 numpy  >= 1.24
 scipy  >= 1.10
 matplotlib >= 3.7
-folium >= 0.14
+Pillow >= 9.0
 ```
 
-Optional: `openpyxl` (only for XLSX import/export); `Pillow` (only for the
-"Measure from image…" tool — PNG/JPEG/WebP/TIFF and clipboard paste);
-`tkinterdnd2` (only to drag-and-drop image files onto that tool's canvas —
-detected at runtime, everything else works without it).  Standard library
-otherwise (tkinter, json, pathlib, threading, concurrent.futures, math).
+Optional (`requirements-optional.txt` — one feature per package, graceful
+degradation with an on-screen hint when absent):
+
+| Package | Feature |
+|---|---|
+| `geopy` | Find Location → "Search online…" (OSM Nominatim) |
+| `cartopy` | Find Location → "Pick on map…" |
+| `folium` | interactive HTML trajectory map export |
+| `openpyxl` | booster / RO spreadsheet import-export |
+| `tkinterdnd2` | drag-and-drop / ⌘V images onto the measure tool |
+
+The offline place gazetteer (10.4 M named places, Analysis ▸ Reference
+Data ▸ Offline Gazetteer) is bundled in `data/gazetteer/` and indexed with
+the standard library — no package needed; it replaces the old
+`geonamescache` dependency.  Standard library otherwise (tkinter, json,
+pathlib, threading, math).

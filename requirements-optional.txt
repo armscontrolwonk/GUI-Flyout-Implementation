@@ -1,0 +1,28 @@
+# Thrusty — OPTIONAL requirements.  Each package unlocks one feature; the app
+# runs fine without any of them and shows an on-screen hint where a missing
+# package would be used.  Install all with:
+#     pip3 install -r requirements-optional.txt
+# or cherry-pick the lines for the features you want.
+#
+#  Feature                        │ Package(s)          │ Where it shows up
+#  ───────────────────────────────┼─────────────────────┼──────────────────────
+#  Online place search            │ geopy               │ Find Location →
+#                                  │                     │   "Search online…"
+#                                  │                     │   (OSM Nominatim)
+#  Map location picker            │ cartopy (+ shapely, │ Find Location →
+#                                  │   pyproj, pulled in) │   "Pick on map…"
+#  Interactive HTML trajectory map│ folium              │ map export
+#  Booster / RO spreadsheet I/O   │ openpyxl            │ XLSX import/export
+#  Drag-and-drop & clipboard paste│ tkinterdnd2         │ measure-from-image:
+#                                  │                     │   drop / ⌘V an image
+#
+# NOTE: the offline place gazetteer (Analysis ▸ Reference Data ▸ Offline
+# Gazetteer) needs NO third-party package — it is baked into the repo under
+# data/gazetteer/ and indexed with the standard library.  It replaces the old
+# `geonamescache` dependency, which is no longer used.
+
+geopy>=2.3
+cartopy>=0.21
+folium>=0.14
+openpyxl>=3.1
+tkinterdnd2>=0.3
