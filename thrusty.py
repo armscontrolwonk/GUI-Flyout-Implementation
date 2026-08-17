@@ -8805,8 +8805,7 @@ class BoosterFlyoutApp(tk.Tk):
             text, info = bx.bpy_script(p, title=name)
             with open(path, "w") as f:
                 f.write(text)
-            tex = bx.copy_figure_texture(_os.path.dirname(path))
-            sidecars = [tex] if tex else []
+            sidecars = []          # figure colours are embedded in the script
             how = "In Blender: Scripting tab → Open → Run Script."
         else:
             info = bx.write_obj_bundle(path, p, title=name)
@@ -8818,8 +8817,8 @@ class BoosterFlyoutApp(tk.Tk):
                f"{how}\nUnits are metres, +Z up; every element is a "
                "separate named object.")
         if sidecars:
-            msg += ("\n\nSidecar files written beside it (keep them "
-                    "together — they texture the Thrusty scale figure):\n• "
+            msg += ("\n\nSidecar written beside it (keep them together — "
+                    "it colours the 3-D Thrusty figure):\n• "
                     + "\n• ".join(_os.path.basename(s) for s in sidecars))
         if info["flags"]:
             msg += ("\n\nFallbacks for unset data (also in the file "

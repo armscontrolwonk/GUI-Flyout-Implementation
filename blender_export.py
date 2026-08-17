@@ -38,30 +38,15 @@ from booster_schematic import stage_chain, _stage_top_diameter, fin_polygon
 
 _PROFILE_N = 24        # points per curved nose profile
 
-# The Thrusty mascot as a 3-D scale figure — a textured "cardboard standee"
-# quad beside the stack, like the engineer in the classic V-2 cutaway.  The
-# character art (not the silhouette) rides along as a PNG sidecar; the quad
-# is 1.8 m tall (the schematic's scale-figure height), width from the art's
-# aspect.  A missing asset skips the figure with a flag, never crashes.
-_FIGURE_PATH = os.path.join(os.path.dirname(__file__),
-                            "assets", "thrusty_figure.png")
-_FIGURE_M = 1.8                        # standee height (matches schematic)
-_FIGURE_TEXTURE = "thrusty_figure.png"  # sidecar name next to the export
-_figure_aspect_cache = None
-
-
-def _figure_aspect():
-    """width/height of the mascot art, or None when the asset (or PIL)
-    is unavailable — the export then skips the figure, flagged."""
-    global _figure_aspect_cache
-    if _figure_aspect_cache is None:
-        try:
-            from PIL import Image
-            with Image.open(_FIGURE_PATH) as im:
-                _figure_aspect_cache = im.width / im.height
-        except Exception:
-            _figure_aspect_cache = 0.0
-    return _figure_aspect_cache or None
+# The Thrusty mascot as a FULL 3-D scale figure beside the stack, like the
+# engineer in the classic V-2 cutaway — real geometry (curved ruler-slab
+# body, googly eyes, tube arms, sneakers) built by thrusty_figure3d to the
+# turnaround sheet, 1.8 m tall (the schematic's scale-figure height).
+# Three flat palette colours (white/black/red) ride in the .mtl sidecar /
+# emitted materials — no textures, no image files to lose.
+_FIGURE_M = 1.8
+_PALETTE = {"white": (0.96, 0.96, 0.94), "black": (0.08, 0.08, 0.08),
+            "red": (0.72, 0.18, 0.15)}
 
 
 def _nose_profile(shape, R, L):
@@ -371,14 +356,14 @@ def vehicle_elements(p):
     except Exception:
         flags.append("CG marker skipped — could not estimate CG")
 
-    # Thrusty standee: a textured quad on the ground line (stack base),
-    # parked beyond everything already placed (fins, strap-ons, the RO) so
-    # nothing overlaps — gazing up at the stack, V-2-cutaway style.  The
-    # art looks up and to its left, so the +X side puts the vehicle in his
-    # eyeline.
-    billboards = []
-    asp = _figure_aspect()
-    if asp:
+    # The full-3-D Thrusty on the ground line (stack base), parked beyond
+    # everything already placed (fins, strap-ons, the RO) so nothing
+    # overlaps — standing beside the stack, V-2-cutaway style.
+    figures = []
+    try:
+        from thrusty_figure3d import build as _fig_build, \
+            bounds as _fig_bounds
+        fparts = _fig_build(_FIGURE_M)
         ext = 0.0
         for _n, prof, pos, _s in revolves:
             ext = max(ext, math.hypot(pos[0], pos[1])
@@ -386,20 +371,15 @@ def vehicle_elements(p):
         for _n, poly, _t, pos, _r in plates:
             ext = max(ext, math.hypot(pos[0], pos[1])
                       + max(abs(u) for u, _z in poly))
-        w_fig = _FIGURE_M * asp
-        xc = ext + 0.7 + 0.5 * w_fig
-        billboards.append((
-            "Thrusty",
-            [(xc - 0.5 * w_fig, 0.0, 0.0), (xc + 0.5 * w_fig, 0.0, 0.0),
-             (xc + 0.5 * w_fig, 0.0, _FIGURE_M),
-             (xc - 0.5 * w_fig, 0.0, _FIGURE_M)],
-            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]))
-    else:
-        flags.append("Thrusty scale figure skipped — "
-                     "assets/thrusty_figure.png unavailable")
+        (fx0, _fy0, fz0), _hi = _fig_bounds(fparts)
+        dx = ext + 0.7 - fx0            # nearest part 0.7 m clear
+        figures = [(nm, [(x + dx, y, z - fz0) for x, y, z in vs], fs, col)
+                   for nm, vs, fs, col in fparts]
+    except Exception:
+        flags.append("Thrusty figure skipped — thrusty_figure3d failed")
 
     return dict(revolves=revolves, plates=plates, flags=flags,
-                meshes=meshes, billboards=billboards, cg_z=cg_z,
+                meshes=meshes, figures=figures, cg_z=cg_z,
                 total_height_m=total)
 
 
@@ -711,8 +691,8 @@ def obj_export(p, title="vehicle", center=True,
     editable.  Metres, +Z up.  center=True puts the fuelled CENTRE OF GRAVITY
     at the ORIGIN (z <- z - cg_z; X=Y=0 on the axis) so the model balances
     about the Blender origin; center=False keeps the base on z=0.  When the
-    Thrusty standee is present the OBJ references `mtl_name` for its
-    textured material (write_obj_bundle ships the sidecars).  Returns
+    3-D Thrusty figure is present the OBJ references `mtl_name` for its
+    flat palette colours (write_obj_bundle ships the sidecar).  Returns
     (obj_text, info)."""
     els = vehicle_elements(p)
     zc = _center_shift(els) if center else 0.0
@@ -723,7 +703,7 @@ def obj_export(p, title="vehicle", center=True,
              f"# Origin: {'fuelled centre of gravity' if center else 'base'}."]
     for fl in els["flags"]:
         lines.append(f"# fallback: {fl}")
-    if els.get("billboards"):
+    if els.get("figures"):
         lines.append(f"mtllib {mtl_name}")
     base = 1                                   # OBJ vertices are 1-indexed
     for name, prof, pos, sweep in els["revolves"]:
@@ -750,57 +730,41 @@ def obj_export(p, title="vehicle", center=True,
         for f in faces:
             lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
-    vt_base = 1                                # texture coords: own 1-index
-    for name, verts, uvs in els.get("billboards", []):
+    for name, verts, faces, colour in els.get("figures", []):
         lines.append(f"o {name}")
         for x, y, z in verts:
             lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
-        for u, v in uvs:
-            lines.append(f"vt {u:.6g} {v:.6g}")
-        lines.append("usemtl ThrustyFigure")
-        lines.append("f " + " ".join(f"{base + i}/{vt_base + i}"
-                                     for i in range(len(verts))))
+        lines.append(f"usemtl Thrusty_{colour}")
+        for f in faces:
+            lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
-        vt_base += len(uvs)
     n = (len(els["revolves"]) + len(els["plates"])
-         + len(els.get("meshes", [])) + len(els.get("billboards", [])))
+         + len(els.get("meshes", [])) + len(els.get("figures", [])))
     return "\n".join(lines) + "\n", dict(
         n_objects=n, flags=list(els["flags"]),
         total_height_m=els["total_height_m"])
 
 
-def figure_mtl(texture=_FIGURE_TEXTURE):
-    """The .mtl sidecar for the Thrusty standee: unlit white base carrying
-    the character PNG, with map_d binding the cutout's alpha so Blender
-    clips the background."""
-    return ("# Thrusty scale-figure material (map_d = the cutout alpha)\n"
-            "newmtl ThrustyFigure\n"
-            "Ka 0.000 0.000 0.000\n"
-            "Kd 1.000 1.000 1.000\n"
-            "Ks 0.000 0.000 0.000\n"
-            "d 1.0\n"
-            "illum 1\n"
-            f"map_Kd {texture}\n"
-            f"map_d {texture}\n")
-
-
-def copy_figure_texture(dirname):
-    """Copy the mascot PNG beside an export so the textured quad can find
-    it.  Returns the written path, or None when the asset is missing."""
-    import shutil
-    if not os.path.exists(_FIGURE_PATH):
-        return None
-    dst = os.path.join(dirname or ".", _FIGURE_TEXTURE)
-    shutil.copyfile(_FIGURE_PATH, dst)
-    return dst
+def figure_mtl():
+    """The .mtl sidecar for the 3-D Thrusty: the three flat palette
+    colours his parts reference (usemtl Thrusty_white/black/red).  No
+    textures — nothing else to ship or lose."""
+    out = ["# Thrusty figure palette"]
+    for name, (r, g, b) in _PALETTE.items():
+        out += [f"newmtl Thrusty_{name}",
+                "Ka 0.000 0.000 0.000",
+                f"Kd {r:.3f} {g:.3f} {b:.3f}",
+                "Ks 0.000 0.000 0.000",
+                "d 1.0",
+                "illum 1"]
+    return "\n".join(out) + "\n"
 
 
 def write_obj_bundle(path, p, title="vehicle", center=True):
-    """Write the OBJ to `path` plus the texture sidecars the Thrusty
-    standee needs (<name>.mtl + the mascot PNG) in the same directory —
-    OBJ cannot embed textures, so they ship as a trio.  Returns the
-    obj_export info dict with a 'files' list added; sidecars appear only
-    when the export actually contains the textured figure."""
+    """Write the OBJ to `path` plus the palette .mtl the 3-D Thrusty
+    references, in the same directory.  Returns the obj_export info dict
+    with a 'files' list added; the sidecar appears only when the export
+    actually contains the figure."""
     stem = os.path.splitext(os.path.basename(path))[0]
     mtl_name = stem + ".mtl"
     text, info = obj_export(p, title=title, center=center,
@@ -813,9 +777,6 @@ def write_obj_bundle(path, p, title="vehicle", center=True):
         with open(mtl_path, "w") as f:
             f.write(figure_mtl())
         files.append(mtl_path)
-        tex = copy_figure_texture(os.path.dirname(path))
-        if tex:
-            files.append(tex)
     info["files"] = files
     return info
 
@@ -857,12 +818,12 @@ def bpy_script(p, title="vehicle", center=True):
     mesh_lines = "".join(
         f"    ({name!r}, {_fmt_verts(verts)}, {_fmt_faces(faces)}),\n"
         for name, verts, faces in els.get("meshes", []))
-    bb_lines = "".join(
-        f"    ({name!r}, {_fmt_verts(verts)}, ["
-        + ", ".join(f"({u:.6g}, {v:.6g})" for u, v in uvs) + "]),\n"
-        for name, verts, uvs in els.get("billboards", []))
+    fig_lines = "".join(
+        f"    ({name!r}, {_fmt_verts(verts)}, {_fmt_faces(faces)}, "
+        f"{colour!r}),\n"
+        for name, verts, faces, colour in els.get("figures", []))
     n = (len(els["revolves"]) + len(els["plates"])
-         + len(els.get("meshes", [])) + len(els.get("billboards", [])))
+         + len(els.get("meshes", [])) + len(els.get("figures", [])))
     header = (
         f"# Thrusty rough-draft 3-D export — {coll}\n"
         f"# Generated {datetime.date.today().isoformat()}.  Run inside "
@@ -951,35 +912,23 @@ def _plate(name, poly, thickness, pos, rot_z_deg, coll):
     return _mesh_obj(name, verts, faces, coll)
 
 
-def _billboard(name, verts, uvs, coll):
-    """The Thrusty mascot standee: a textured quad.  Geometry always
-    builds; the image texture is best-effort — it binds when the PNG
-    sidecar (FIGURE_PNG) sits next to this script, else the plain quad
-    stays and a note is printed."""
-    obj = _mesh_obj(name, verts, [tuple(range(len(verts)))], coll)
+_fig_mats = {}
+
+
+def _figure_mesh(name, verts, faces, colour, coll):
+    """One part of the 3-D Thrusty mascot: plain mesh plus a shared flat
+    palette material.  Geometry always builds; the material is
+    best-effort (viewport colour only — swap freely)."""
+    obj = _mesh_obj(name, verts, faces, coll)
     try:
-        import os
-        uvl = obj.data.uv_layers.new(name="UVMap")
-        for _i, _uv in enumerate(uvs):
-            uvl.data[_i].uv = _uv
-        try:
-            base = os.path.dirname(os.path.abspath(__file__))
-        except NameError:                 # run from Blender's text editor
-            base = os.getcwd()
-        img = bpy.data.images.load(os.path.join(base, FIGURE_PNG))
-        mat = bpy.data.materials.new(name + "_mat")
-        mat.use_nodes = True
-        nt = mat.node_tree
-        bsdf = nt.nodes["Principled BSDF"]
-        tex = nt.nodes.new("ShaderNodeTexImage")
-        tex.image = img
-        nt.links.new(bsdf.inputs["Base Color"], tex.outputs["Color"])
-        nt.links.new(bsdf.inputs["Alpha"], tex.outputs["Alpha"])
-        mat.blend_method = 'CLIP'
+        mat = _fig_mats.get(colour)
+        if mat is None:
+            mat = bpy.data.materials.new("Thrusty_" + colour)
+            mat.diffuse_color = PALETTE[colour] + (1.0,)
+            _fig_mats[colour] = mat
         obj.data.materials.append(mat)
     except Exception as exc:
-        print("Thrusty figure texture not applied (%s) — plain quad kept"
-              % exc)
+        print("Thrusty palette material not applied (%s)" % exc)
     return obj
 
 
@@ -992,18 +941,18 @@ for _name, _poly, _t, _pos, _rot in PLATES:
     _plate(_name, _poly, _t, _pos, _rot, coll)
 for _name, _verts, _faces in MESHES:      # raw meshes (e.g. the CG marker)
     _mesh_obj(_name, _verts, _faces, coll)
-for _name, _verts, _uvs in BILLBOARDS:    # the mascot standee
-    _billboard(_name, _verts, _uvs, coll)
+for _name, _verts, _faces, _col in FIGURES:   # the 3-D Thrusty mascot
+    _figure_mesh(_name, _verts, _faces, _col, coll)
 print("Thrusty export: %d objects in %r"
-      % (len(REVOLVES) + len(PLATES) + len(MESHES) + len(BILLBOARDS),
+      % (len(REVOLVES) + len(PLATES) + len(MESHES) + len(FIGURES),
          COLLECTION))
 '''
     data = (f"\nCOLLECTION = {coll!r}\n"
-            f"FIGURE_PNG = {_FIGURE_TEXTURE!r}\n\n"
+            f"PALETTE = {_PALETTE!r}\n\n"
             f"REVOLVES = [\n{rev_lines}]\n\n"
             f"PLATES = [\n{plate_lines}]\n\n"
             f"MESHES = [\n{mesh_lines}]\n\n"
-            f"BILLBOARDS = [\n{bb_lines}]\n")
+            f"FIGURES = [\n{fig_lines}]\n")
     script = header + data + body
     return script, dict(n_objects=n, flags=list(els["flags"]),
                         total_height_m=els["total_height_m"])
