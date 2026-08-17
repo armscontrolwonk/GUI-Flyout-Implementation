@@ -102,7 +102,41 @@ Upgrade path, in effort order:
   (a) swap the bundled GeoJSON to Natural Earth **50m** (drop-in, same
       format, ~few MB) — instant plot-quality win;
   (b) rebuild `launch_sites.json` with per-site provenance (citation
-      field) + site elevation + expanded coverage;
+      field) + site elevation + expanded coverage.  NAME/COORDINATE
+      SOURCE CHOSEN (2026-08-17): the two official public-domain US
+      gazetteers, paired —
+      **NGA GEOnet Names Server (GNS)** for foreign places
+      (geonames.nga.mil/geonames/GNSData/ — BGN-approved names, WGS84
+      coords, UFI unique ids, native + romanized variants, weekly
+      updates; per-country ZIPs keep downloads manageable) and
+      **USGS GNIS** for domestic
+      (usgs.gov/us-board-on-geographic-names/download-gnis-data —
+      Vandenberg, Wallops, Kodiak, WSMR).  Each rebuilt site stores
+      {name, variants, lat, lon, elev_m, source: GNS|GNIS, id: UFI or
+      GNIS-ID, retrieved: date} — provenance-first, matching the house
+      rule.  Honest limits, stated up front: a gazetteer supplies
+      authoritative NAMES and COORDINATES, not the judgment that a
+      place is a launch facility — the curated site list stays curated,
+      GNS/GNIS just anchors it; and the big complexes (Sohae, Semnan,
+      Jiuquan, Plesetsk) are present but pad-level precision still
+      comes from imagery/literature.  Third piece (added 2026-08-17):
+      **BGN Antarctic names** via USGS staged products
+      (prd-tnm.s3.amazonaws.com …/GeographicNames/Antarctica/ — take
+      the GPKG: GeoPackage = SQLite, stdlib-readable, no GIS deps) for
+      polar trajectories/FOBS ground tracks.  NOTE on acquisition from
+      a Claude session: the AWS bucket (Antarctica) IS reachable
+      through the egress proxy; geonames.nga.mil and usgs.gov download
+      pages are NOT (403) — those two must be downloaded by hand and
+      committed, like the DEM plan's baked lookups;
+  (b2) SPIN-OFF the gazetteer enables (proposed 2026-08-17): nearest-
+      populated-place annotation for trajectory outputs — bake a
+      thinned populated-places extract (GNS/GNIS P-class, ranked by
+      admin level so capitals/regional centres survive the thinning)
+      into data/, nearest-neighbour by haversine over a lat/lon grid
+      index, and impact/apogee/debris points get labels like
+      "impact ~12 km SE of <place> (GNS UFI …)".  For the reporting
+      audience this is the difference between a coordinate and a
+      sentence someone can use;
   (c) DEM (agreed 2026-08-16; source chosen 2026-08-16: **Copernicus
       GLO-30**, not SRTM — ~2–4 m vs ~6–9 m vertical accuracy, and
       SRTM's 60°N cutoff misses Plesetsk/high-latitude Russia entirely;
