@@ -304,45 +304,53 @@ def vehicle_elements(p):
         _ro_elements(ro, max_r + 1.0 + _f(ro.diameter_m),
                      revolves, plates, flags)
 
-    # Full-stack fuelled CG — the classic symbol (ring + two opposite filled
-    # quadrants) in the X-Z plane on the axis at the balance station.  Raw
-    # pre-tessellated meshes (the "meshes" element type).
-    meshes = []
+    # Full-stack fuelled CG — a SMALL classic symbol (ring + two opposite
+    # filled quadrants) sitting on the body SURFACE at the balance station,
+    # facing +X.  Raw pre-tessellated meshes (the "meshes" element type).
+    # cg_z is also the origin the export centres on.
+    meshes, cg_z = [], None
     try:
         from grid_fin_sizing import estimate_cg
-        x_cg, _L = estimate_cg(p)
-        z_cg = max(0.0, min(total, total - x_cg))     # nose at z=total
-        d1 = _f(getattr(stages[0], "diameter_m", 0.0)) or 0.6
-        meshes = cg_marker_meshes(z_cg, max(0.2, 0.7 * d1))
+        x_cg, L_est = estimate_cg(p)
+        cg_z = max(0.0, min(total, L_est - x_cg))     # height from base
+        R_local = 0.5 * (_f(getattr(stages[0], "diameter_m", 0.0)) or 0.6)
+        for s, bz, sd in stage_bases:                 # radius at the station
+            L = _f(getattr(s, "length_m", 0.0)) or 1.0
+            if bz <= cg_z <= bz + L:
+                R_local = 0.5 * sd
+                break
+        meshes = cg_marker_meshes(cg_z, R_local)
     except Exception:
         flags.append("CG marker skipped — could not estimate CG")
 
     return dict(revolves=revolves, plates=plates, flags=flags,
-                meshes=meshes, total_height_m=total)
+                meshes=meshes, cg_z=cg_z, total_height_m=total)
 
 
-def cg_marker_meshes(z_cg, radius, name="CG_fuelled", n=24):
-    """The classic CG symbol as raw meshes in the X-Z plane (normal +Y),
-    centred on the axis at (0, 0, z_cg): a thin ring plus two OPPOSITE
-    filled quadrant wedges.  Returns [(name, verts, faces), ...]."""
-    r = radius
+def cg_marker_meshes(z_cg, r_body, name="CG_fuelled", n=24):
+    """The classic CG symbol as a SMALL badge on the body surface: a thin
+    ring plus two OPPOSITE filled quadrant wedges in the Y-Z plane (facing
+    +X), centred just proud of the surface at (r_body, 0, z_cg).  Returns
+    [(name, verts, faces), ...]."""
+    r = max(0.05, 0.35 * r_body)                      # small, ~⅓ body radius
+    x0 = r_body + 0.01                                # a hair proud of skin
     ri = 0.86 * r
     out = []
     outer, inner, rf = [], [], []
     for i in range(n):
         a = 2.0 * math.pi * i / n
-        outer.append((r * math.cos(a), 0.0, z_cg + r * math.sin(a)))
-        inner.append((ri * math.cos(a), 0.0, z_cg + ri * math.sin(a)))
+        outer.append((x0, r * math.cos(a), z_cg + r * math.sin(a)))
+        inner.append((x0, ri * math.cos(a), z_cg + ri * math.sin(a)))
     for i in range(n):
         j = (i + 1) % n
         rf.append((i, j, n + j, n + i))
     out.append((f"{name}_ring", outer + inner, rf))
     for qi, a0 in ((1, 0.0), (3, math.pi)):           # opposite quadrants
-        verts = [(0.0, 0.0, z_cg)]
+        verts = [(x0, 0.0, z_cg)]
         m = 6
         for k in range(m + 1):
             a = a0 + (math.pi / 2.0) * k / m
-            verts.append((r * math.cos(a), 0.0, z_cg + r * math.sin(a)))
+            verts.append((x0, r * math.cos(a), z_cg + r * math.sin(a)))
         faces = [(0, k, k + 1) for k in range(1, m + 1)]
         out.append((f"{name}_fill{qi}", verts, faces))
     return out
@@ -503,21 +511,28 @@ def plate_mesh(poly, thickness, pos, rot_z_deg):
     return verts, faces
 
 
+def _center_shift(els):
+    """The z shift that puts the fuelled CG on the origin — cg_z when it was
+    computed, else the geometric midpoint as a fallback."""
+    cg = els.get("cg_z")
+    return cg if cg is not None else 0.5 * els["total_height_m"]
+
+
 def obj_export(p, title="vehicle", center=True):
     """A Wavefront OBJ of the vehicle — the format Blender opens DIRECTLY
     (File -> Import -> Wavefront .obj), unlike the bpy script.  Each element
     is its own named `o` group, so stages/fairing/fins stay discrete and
-    editable.  Metres, +Z up.  center=True puts the booster's axis midpoint
-    at the ORIGIN (z <- z - total/2; X=Y=0 on the core) so it drops into a
-    Blender scene centered, ready to rotate/place; center=False keeps the
-    base on z=0.  Returns (obj_text, info)."""
+    editable.  Metres, +Z up.  center=True puts the fuelled CENTRE OF GRAVITY
+    at the ORIGIN (z <- z - cg_z; X=Y=0 on the axis) so the model balances
+    about the Blender origin; center=False keeps the base on z=0.  Returns
+    (obj_text, info)."""
     els = vehicle_elements(p)
-    zc = 0.5 * els["total_height_m"] if center else 0.0
+    zc = _center_shift(els) if center else 0.0
     lines = [f"# Thrusty rough-draft 3-D export — {title}",
              "# Wavefront OBJ.  Blender: File -> Import -> Wavefront (.obj).",
              "# Units: metres.  +Z up (vehicle axis).  One object per "
              "element.",
-             f"# Origin: {'booster geometric center' if center else 'base'}."]
+             f"# Origin: {'fuelled centre of gravity' if center else 'base'}."]
     for fl in els["flags"]:
         lines.append(f"# fallback: {fl}")
     base = 1                                   # OBJ vertices are 1-indexed
@@ -563,11 +578,11 @@ def _fmt_pos(pos, zc=0.0):
 def bpy_script(p, title="vehicle", center=True):
     """The emitted Blender script (string) + a summary dict
     {'n_objects': int, 'flags': [...], 'total_height_m': float}.
-    center=True (default) puts the booster's axis midpoint at the origin —
-    same convention as obj_export — so the built stack is centered."""
+    center=True (default) puts the fuelled CG at the origin — same
+    convention as obj_export — so the built stack balances about it."""
     import datetime
     els = vehicle_elements(p)
-    zc = 0.5 * els["total_height_m"] if center else 0.0
+    zc = _center_shift(els) if center else 0.0
     coll = title.strip() or "vehicle"
     flag_lines = ("".join(f"#   - {fl}\n" for fl in els["flags"])
                   or "#   (none — every dimension came from stored data)\n")

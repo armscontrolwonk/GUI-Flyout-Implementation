@@ -371,6 +371,9 @@ def test_export_centers_booster_on_the_origin():
     veh = _demo_vehicle()
     total = bx.vehicle_elements(veh)["total_height_m"]
 
+    cg_z = bx.vehicle_elements(veh)["cg_z"]
+    assert 0.0 < cg_z < total
+
     def s1_base_z(**kw):
         """z of the S1 base ring — the stack's bottom reference, at z=0
         before centering.  Parse the OBJ, take S1's lowest vertex."""
@@ -378,18 +381,19 @@ def test_export_centers_booster_on_the_origin():
         objs, verts = _parse_obj(text)
         s1 = {i for f in objs["S1"] for i in f}
         return min(verts[i][2] for i in s1)
-    # S1 base sits at z=0 uncentered, and at −total/2 when centered
+    # S1 base sits at z=0 uncentered, and at −cg_z when centered on the CG
     assert s1_base_z(center=False) == pytest.approx(0.0, abs=1e-4)
-    assert s1_base_z() == pytest.approx(-total / 2, abs=1e-4)
-    # centering shifts EVERY vertex down by exactly total/2 (uniform)
+    assert s1_base_z() == pytest.approx(-cg_z, abs=1e-4)
+    # centering shifts EVERY vertex down by exactly cg_z (uniform), so the
+    # CG lands on the origin
     zc = [v[2] for v in _parse_obj(bx.obj_export(veh, title="C")[0])[1]]
     z0 = [v[2] for v in _parse_obj(
         bx.obj_export(veh, title="C", center=False)[0])[1]]
     for a, b in zip(sorted(zc), sorted(z0)):
-        assert a == pytest.approx(b - total / 2, abs=1e-4)
-    assert "booster geometric center" in bx.obj_export(veh)[0]
+        assert a == pytest.approx(b - cg_z, abs=1e-4)
+    assert "fuelled centre of gravity" in bx.obj_export(veh)[0]
     # the bpy script carries the same shift in its position literals
-    assert f", {-total/2:.6g})" in bx.bpy_script(veh, title="C")[0]
+    assert f", {-cg_z:.6g})" in bx.bpy_script(veh, title="C")[0]
 
 
 def test_ro_wing_thickness_from_stored_field():
@@ -509,26 +513,29 @@ def test_estimate_cg_uses_real_per_stage_lengths():
     assert h == pytest.approx(11.6, abs=0.6)
 
 
-def test_cg_marker_at_the_estimated_balance_station():
+def test_cg_marker_is_a_small_badge_on_the_surface():
     """The full-stack fuelled CG marker (classic symbol) is emitted as raw
-    meshes on the axis at z = total − x_cg (x_cg from estimate_cg, aft of
-    the nose), lying in the X-Z plane (all verts y≈0), as a ring + two
-    opposite filled quadrant wedges."""
-    from grid_fin_sizing import estimate_cg
+    meshes — a small badge on the body SURFACE at the balance station,
+    facing +X: all verts share x ≈ R_local (on the skin), lie in the Y-Z
+    plane, straddle the CG station, and are small vs the body."""
     veh = _demo_vehicle()
     els = bx.vehicle_elements(veh)
     meshes = {n: (v, f) for n, v, f in els["meshes"]}
     assert {"CG_fuelled_ring", "CG_fuelled_fill1", "CG_fuelled_fill3"} \
         <= set(meshes)
-    x_cg, _L = estimate_cg(veh)
-    z_cg = els["total_height_m"] - x_cg
-    # every marker vertex is in the X-Z plane, near the CG station
-    for _n, verts, _f in els["meshes"]:
-        assert all(abs(y) < 1e-9 for _x, y, _z in verts)
-        assert all(abs(z - z_cg) < 2.0 for _x, _y, z in verts)
-    # the ring straddles the station (spans z_cg both ways)
+    cg_z = els["cg_z"]
+    # the badge is planar in Y-Z (all verts share one x = the surface station)
+    xs = [x for _n, verts, _f in els["meshes"] for x, _y, _z in verts]
+    assert max(xs) - min(xs) < 1e-6              # a flat badge, not a disk
+    x0 = xs[0]
+    # x0 sits on some stage's skin: within the stack's radii, not a giant disk
+    R_max = max(0.5 * s.diameter_m for s in (veh, veh.stage2))
+    assert 0.0 < x0 <= R_max + 0.05
     ring_z = [z for _x, _y, z in meshes["CG_fuelled_ring"][0]]
-    assert min(ring_z) < z_cg < max(ring_z)
+    assert min(ring_z) < cg_z < max(ring_z)      # straddles the station
+    # small: the marker spans well under a body diameter
+    ys = [y for _n, verts, _f in els["meshes"] for _x, y, _z in verts]
+    assert max(ys) - min(ys) < R_max
     # it appears as OBJ objects and survives the bpy script
     obj = bx.obj_export(veh)[0]
     assert "\no CG_fuelled_ring\n" in obj
