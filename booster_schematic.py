@@ -22,7 +22,7 @@ import math
 import os
 
 import matplotlib.image as mpimg
-from matplotlib.patches import Polygon, Rectangle
+from matplotlib.patches import Circle, Polygon, Rectangle, Wedge
 
 # Thrusty mascot silhouette: a human-relatable figure standing beside the
 # vehicle for a felt sense of scale, with the quantitative reference carried by
@@ -543,10 +543,40 @@ def draw_booster(ax, p, title=None):
     _ro = getattr(p, "ro", None)
     if _ro is not None and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0:
         _draw_reentry_object(ax, _ro, _view_right, yl, veh_right=xl[1])
+    # Full-stack fuelled CG — the classic center-of-gravity symbol (a circle
+    # with two opposite quadrants filled) on the axis at the balance station.
+    _draw_cg_marker(ax, p, y)
     if title:
         ax.set_title(title, fontsize=11, weight="bold")
     ax.axis("off")
     return {"total_height_m": y, "flags": flags}
+
+
+def _draw_cg_marker(ax, p, total_h):
+    """Draw the classic CG symbol at the full-stack fuelled centre of gravity.
+    estimate_cg measures x AFT FROM THE NOSE; the schematic is nose-up with
+    the base at y=0, so the CG sits at y = total − x_cg on the axis."""
+    try:
+        from grid_fin_sizing import estimate_cg
+        x_cg, _L = estimate_cg(p)
+    except Exception:
+        return
+    y_cg = max(0.0, min(total_h, total_h - x_cg))
+    d_body = float(getattr(p, "diameter_m", 0.0) or 1.0)
+    r = max(0.15, 0.45 * d_body)                     # readable, ~body width
+    # two opposite quadrants filled black, the other two white, black rim
+    for a0 in (0.0, 180.0):
+        ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0,
+                           facecolor="black", edgecolor="black",
+                           lw=0.8, zorder=6))
+    for a0 in (90.0, 270.0):
+        ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0,
+                           facecolor="white", edgecolor="black",
+                           lw=0.8, zorder=6))
+    ax.add_patch(Circle((0.0, y_cg), r, fill=False, edgecolor="black",
+                        lw=1.0, zorder=7))
+    ax.text(r + 0.15, y_cg, "CG (fuelled)", va="center", ha="left",
+            fontsize=7.5, color=LABEL_MUT, zorder=7)
 
 
 def _draw_scale_reference(ax, xl, yl):

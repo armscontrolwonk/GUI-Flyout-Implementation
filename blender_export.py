@@ -136,9 +136,11 @@ def vehicle_elements(p):
             nxt = stages[i + 1] if i + 1 < len(stages) else None
             d_is_top = (_f(getattr(nxt, "diameter_m", 0.0)) or d_top) if nxt \
                 else d_top
+            # Hollow adapter: an open frustum tube (no end caps) — it's a
+            # shell between two stages, not a solid.  Profile is just the
+            # wall, so both ends stay open.
             revolves.append((f"Interstage_{i+1}",
-                             [(0.0, 0.0), (d_top / 2, 0.0),
-                              (d_is_top / 2, il), (0.0, il)],
+                             [(d_top / 2, 0.0), (d_is_top / 2, il)],
                              (0.0, 0.0, z), "full"))
             z += il
 
@@ -157,7 +159,10 @@ def vehicle_elements(p):
             flags.append("fairing nose shape unset — cone used")
         R = sd / 2.0
         cyl = sl - nose
-        profile = [(0.0, 0.0)]
+        # No leading (0,0) apex: the fairing is a SHELL sitting on the
+        # stack, so its base is OPEN (the stage below is capped).  Start
+        # at the base rim (R, 0).
+        profile = []
         if cyl > 0:
             profile += [(R, 0.0), (R, cyl)]
         profile += [(r, cyl + zz) for r, zz in
@@ -174,7 +179,8 @@ def vehicle_elements(p):
             flags.append("nose length unset — 1.6×⌀ used")
         if not shape:
             flags.append("nose shape unset — cone used")
-        profile = [(0.0, 0.0)] + _nose_profile(shape or "cone", nd / 2, nl)
+        # Open base (shell on the stack): start at the base rim, no cap.
+        profile = _nose_profile(shape or "cone", nd / 2, nl)
         revolves.append(("Payload_Nose", profile, (0.0, 0.0, z), "full"))
         nose_base_d = nd
         z += nl
@@ -298,8 +304,48 @@ def vehicle_elements(p):
         _ro_elements(ro, max_r + 1.0 + _f(ro.diameter_m),
                      revolves, plates, flags)
 
+    # Full-stack fuelled CG — the classic symbol (ring + two opposite filled
+    # quadrants) in the X-Z plane on the axis at the balance station.  Raw
+    # pre-tessellated meshes (the "meshes" element type).
+    meshes = []
+    try:
+        from grid_fin_sizing import estimate_cg
+        x_cg, _L = estimate_cg(p)
+        z_cg = max(0.0, min(total, total - x_cg))     # nose at z=total
+        d1 = _f(getattr(stages[0], "diameter_m", 0.0)) or 0.6
+        meshes = cg_marker_meshes(z_cg, max(0.2, 0.7 * d1))
+    except Exception:
+        flags.append("CG marker skipped — could not estimate CG")
+
     return dict(revolves=revolves, plates=plates, flags=flags,
-                total_height_m=total)
+                meshes=meshes, total_height_m=total)
+
+
+def cg_marker_meshes(z_cg, radius, name="CG_fuelled", n=24):
+    """The classic CG symbol as raw meshes in the X-Z plane (normal +Y),
+    centred on the axis at (0, 0, z_cg): a thin ring plus two OPPOSITE
+    filled quadrant wedges.  Returns [(name, verts, faces), ...]."""
+    r = radius
+    ri = 0.86 * r
+    out = []
+    outer, inner, rf = [], [], []
+    for i in range(n):
+        a = 2.0 * math.pi * i / n
+        outer.append((r * math.cos(a), 0.0, z_cg + r * math.sin(a)))
+        inner.append((ri * math.cos(a), 0.0, z_cg + ri * math.sin(a)))
+    for i in range(n):
+        j = (i + 1) % n
+        rf.append((i, j, n + j, n + i))
+    out.append((f"{name}_ring", outer + inner, rf))
+    for qi, a0 in ((1, 0.0), (3, math.pi)):           # opposite quadrants
+        verts = [(0.0, 0.0, z_cg)]
+        m = 6
+        for k in range(m + 1):
+            a = a0 + (math.pi / 2.0) * k / m
+            verts.append((r * math.cos(a), 0.0, z_cg + r * math.sin(a)))
+        faces = [(0, k, k + 1) for k in range(1, m + 1)]
+        out.append((f"{name}_fill{qi}", verts, faces))
+    return out
 
 
 def _ro_elements(ro, x_off, revolves, plates, flags):
@@ -492,7 +538,15 @@ def obj_export(p, title="vehicle", center=True):
         for f in faces:
             lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
-    n = len(els["revolves"]) + len(els["plates"])
+    for name, verts, faces in els.get("meshes", []):
+        lines.append(f"o {name}")
+        for x, y, z in verts:
+            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
+        for f in faces:
+            lines.append("f " + " ".join(str(i + base) for i in f))
+        base += len(verts)
+    n = (len(els["revolves"]) + len(els["plates"])
+         + len(els.get("meshes", [])))
     return "\n".join(lines) + "\n", dict(
         n_objects=n, flags=list(els["flags"]),
         total_height_m=els["total_height_m"])
@@ -524,7 +578,19 @@ def bpy_script(p, title="vehicle", center=True):
         f"    ({name!r}, {_fmt_pts(poly)}, {t:.6g}, {_fmt_pos(pos, zc)}, "
         f"{rot:.6g}),\n"
         for name, poly, t, pos, rot in els["plates"])
-    n = len(els["revolves"]) + len(els["plates"])
+
+    def _fmt_verts(vs):
+        return "[" + ", ".join(f"({x:.6g}, {y:.6g}, {z - zc:.6g})"
+                               for x, y, z in vs) + "]"
+
+    def _fmt_faces(fs):
+        return "[" + ", ".join("(" + ", ".join(str(i) for i in f) + ")"
+                               for f in fs) + "]"
+    mesh_lines = "".join(
+        f"    ({name!r}, {_fmt_verts(verts)}, {_fmt_faces(faces)}),\n"
+        for name, verts, faces in els.get("meshes", []))
+    n = (len(els["revolves"]) + len(els["plates"])
+         + len(els.get("meshes", [])))
     header = (
         f"# Thrusty rough-draft 3-D export — {coll}\n"
         f"# Generated {datetime.date.today().isoformat()}.  Run inside "
@@ -620,12 +686,15 @@ for _name, _profile, _pos, _sweep in REVOLVES:
              sweep=(math.pi if _sweep == "half" else 2 * math.pi))
 for _name, _poly, _t, _pos, _rot in PLATES:
     _plate(_name, _poly, _t, _pos, _rot, coll)
+for _name, _verts, _faces in MESHES:      # raw meshes (e.g. the CG marker)
+    _mesh_obj(_name, _verts, _faces, coll)
 print("Thrusty export: %d objects in %r"
-      % (len(REVOLVES) + len(PLATES), COLLECTION))
+      % (len(REVOLVES) + len(PLATES) + len(MESHES), COLLECTION))
 '''
     data = (f"\nCOLLECTION = {coll!r}\n\n"
             f"REVOLVES = [\n{rev_lines}]\n\n"
-            f"PLATES = [\n{plate_lines}]\n")
+            f"PLATES = [\n{plate_lines}]\n\n"
+            f"MESHES = [\n{mesh_lines}]\n")
     script = header + data + body
     return script, dict(n_objects=n, flags=list(els["flags"]),
                         total_height_m=els["total_height_m"])

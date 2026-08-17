@@ -59,9 +59,10 @@ def test_elements_are_discrete_and_stack_contiguously():
     assert by["S2"][1][2] == pytest.approx(8.5)
     assert by["Fairing"][1][2] == pytest.approx(11.5)
     assert els["total_height_m"] == pytest.approx(8.0 + 0.5 + 3.0 + 2.0)
-    # every revolve profile starts and ends on the axis → closed solids
+    # every revolve profile has ≥2 points so it produces faces (closed
+    # solids cap both ends, shells cap one, an interstage tube caps neither)
     for name, prof, _pos, _sw in els["revolves"]:
-        assert prof[0][0] == 0.0 and prof[-1][0] == 0.0, name
+        assert len(prof) >= 2, name
     # strap-ons ring the core at equal angles, at the stored ⌀
     p1, p2 = by["Strapon_1"][1], by["Strapon_2"][1]
     r1 = math.hypot(p1[0], p1[1])
@@ -457,6 +458,64 @@ def test_nozzle_geometry_round_trips():
     assert rt.n_nozzles == 4 and rt.nozzle_area_each_m2 == pytest.approx(0.05)
 
 
+def test_nose_and_fairing_have_open_bases_stages_capped():
+    """A nose/fairing is a SHELL sitting on the stack — its base is open
+    (no cap), so its profile starts at the base RIM (r>0), while a stage is
+    a closed solid whose profile starts at the axis (0,0) → base cap.  The
+    RO beside the stack is a complete body and stays capped."""
+    veh = _demo_vehicle()
+    by = {n: prof for n, prof, _p, _s in bx.vehicle_elements(veh)["revolves"]}
+    assert by["Fairing"][0][0] > 0.0          # open base rim
+    assert by["S1"][0] == (0.0, 0.0)          # capped stage base
+    assert by["S2"][0] == (0.0, 0.0)
+    # the fairing still closes at its TIP (apex present)
+    assert by["Fairing"][-1][0] == pytest.approx(0.0)
+    # the interstage is a hollow tube — BOTH ends open (no apex either end)
+    assert by["Interstage_1"][0][0] > 0.0 and by["Interstage_1"][-1][0] > 0.0
+    # no-fairing vehicle: the payload nose is open-based too
+    veh.stage2.shroud_length_m = 0.0
+    by2 = {n: prof for n, prof, _p, _s
+           in bx.vehicle_elements(veh)["revolves"]}
+    assert by2["Payload_Nose"][0][0] > 0.0
+    assert by2["Payload_Nose"][-1][0] == pytest.approx(0.0)   # closed tip
+    # the RO body keeps its base cap (a complete body, not a shell)
+    ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    veh.ro = ro
+    by3 = {n: prof for n, prof, _p, _s
+           in bx.vehicle_elements(veh)["revolves"]}
+    assert by3["RO_Body"][0] == (0.0, 0.0)
+
+
+def test_cg_marker_at_the_estimated_balance_station():
+    """The full-stack fuelled CG marker (classic symbol) is emitted as raw
+    meshes on the axis at z = total − x_cg (x_cg from estimate_cg, aft of
+    the nose), lying in the X-Z plane (all verts y≈0), as a ring + two
+    opposite filled quadrant wedges."""
+    from grid_fin_sizing import estimate_cg
+    veh = _demo_vehicle()
+    els = bx.vehicle_elements(veh)
+    meshes = {n: (v, f) for n, v, f in els["meshes"]}
+    assert {"CG_fuelled_ring", "CG_fuelled_fill1", "CG_fuelled_fill3"} \
+        <= set(meshes)
+    x_cg, _L = estimate_cg(veh)
+    z_cg = els["total_height_m"] - x_cg
+    # every marker vertex is in the X-Z plane, near the CG station
+    for _n, verts, _f in els["meshes"]:
+        assert all(abs(y) < 1e-9 for _x, y, _z in verts)
+        assert all(abs(z - z_cg) < 2.0 for _x, _y, z in verts)
+    # the ring straddles the station (spans z_cg both ways)
+    ring_z = [z for _x, _y, z in meshes["CG_fuelled_ring"][0]]
+    assert min(ring_z) < z_cg < max(ring_z)
+    # it appears as OBJ objects and survives the bpy script
+    obj = bx.obj_export(veh)[0]
+    assert "\no CG_fuelled_ring\n" in obj
+    script, info = bx.bpy_script(veh)
+    compile(script, "<cg>", "exec")
+    assert "MESHES = [" in script and "CG_fuelled_fill1" in script
+    assert info["n_objects"] == (len(els["revolves"]) + len(els["plates"])
+                                 + len(els["meshes"]))
+
+
 def test_bpy_script_compiles_and_names_everything():
     """The emitted script is plain Python (bpy resolves inside Blender):
     it must compile, carry every object name and the collection, and list
@@ -464,8 +523,9 @@ def test_bpy_script_compiles_and_names_everything():
     veh = _demo_vehicle()
     script, info = bx.bpy_script(veh, title="Test Vehicle")
     compile(script, "<blender-export>", "exec")      # syntax-valid
-    assert info["n_objects"] == len(bx.vehicle_elements(veh)["revolves"]) \
-        + len(bx.vehicle_elements(veh)["plates"])
+    _e = bx.vehicle_elements(veh)
+    assert info["n_objects"] == (len(_e["revolves"]) + len(_e["plates"])
+                                 + len(_e["meshes"]))
     for name in ("'S1'", "'Interstage_1'", "'S2'", "'Fairing'", "'Fin_4'",
                  "'Strapon_2'", "'Test Vehicle'"):
         assert name in script
