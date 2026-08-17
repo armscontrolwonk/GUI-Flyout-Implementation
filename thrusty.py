@@ -7531,6 +7531,13 @@ class BoosterFlyoutApp(tk.Tk):
                     label=_spec["labels"][_choice], value=_choice, variable=_var,
                     command=lambda k=_key, v=_var: self._set_model_option(k, v.get()))
             ref_menu.add_cascade(label=_spec["label"], menu=_sub)
+        # Offline gazetteer: an OPT-IN build for serious users (10.4 M
+        # named places, worldwide, official BGN lineage — a multi-minute
+        # / ~2.5 GB one-time index).  Kept out of the Find Location
+        # dialog so a casual user is never ambushed by the wait.
+        ref_menu.add_separator()
+        ref_menu.add_command(label="Offline Gazetteer…",
+                             command=self._manage_gazetteer)
         analysis_menu.add_separator()
         analysis_menu.add_cascade(label="Reference Data", menu=ref_menu)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
@@ -10907,31 +10914,31 @@ class BoosterFlyoutApp(tk.Tk):
         _rows = []   # [(display_name, lat_dd, lon_dd), …]
 
         # Offline search order: the BUNDLED gazetteer (data/gazetteer/
-        # packs — official BGN-lineage sources, always present, variants
-        # searchable) → geonamescache if installed (legacy) → online
-        # Nominatim.  The gazetteer's SQLite index builds in a thread on
-        # first ever use (~10 s for a million features), then is instant.
+        # packs — official BGN-lineage sources, variants searchable) →
+        # geonamescache if installed (legacy) → online Nominatim.
+        # The gazetteer's SQLite index is a multi-minute / ~2.5 GB build
+        # for the worldwide packs, so this dialog NEVER triggers it: it
+        # uses the index only if a serious user already built it via
+        # Analysis ▸ Reference Data ▸ Offline Gazetteer.  A casual user
+        # who never builds it just gets online search, no surprise wait.
         _gaz_db = [None]
         _gc_cities = None
         import gazetteer as _gz
-        if _gz.available():
-            def _bg_index():
-                try:
-                    db = _gz.ensure_index()
-                    dlg.after(0, lambda: (_gaz_db.__setitem__(0, db),
-                                          _run_offline()))
-                except Exception as _ex:
-                    dlg.after(0, lambda: status_var.set(
-                        f"Gazetteer index failed: {_ex}"))
-            status_var.set("Preparing offline gazetteer…")
-            threading.Thread(target=_bg_index, daemon=True).start()
+        if _gz.available() and _gz.index_ready():
+            try:
+                _gaz_db[0] = _gz.ensure_index()      # instant: already built
+            except Exception:
+                _gaz_db[0] = None
+        elif _gz.available():
+            status_var.set("Offline gazetteer not built — Analysis ▸ "
+                           "Reference Data ▸ Offline Gazetteer (or Search "
+                           "online…)")
         else:
             try:
                 import geonamescache as _gnc
                 _gc_cities = list(_gnc.GeonamesCache().get_cities().values())
             except ImportError:
-                status_var.set("No offline gazetteer packs found — "
-                               "use Search online…")
+                status_var.set("No offline gazetteer — use Search online…")
 
         def _do_offline(query):
             q = query.strip()
@@ -11892,6 +11899,82 @@ class BoosterFlyoutApp(tk.Tk):
         label = mm.MODEL_OPTIONS[key]["labels"].get(value, value)
         self._status_var.set(
             f"{mm.MODEL_OPTIONS[key]['label']} source → {label}. Re-run to apply.")
+
+    def _manage_gazetteer(self):
+        """Analysis ▸ Reference Data ▸ Offline Gazetteer… — build (or
+        rebuild) the bundled worldwide place index on demand.  The build
+        is O(minutes) and writes a ~2.5 GB cache, so it is an explicit,
+        opt-in action here rather than a surprise inside Find Location."""
+        import gazetteer as _gz
+        if not _gz.available():
+            messagebox.showinfo(
+                "Offline Gazetteer",
+                "No gazetteer packs are bundled in this build "
+                "(data/gazetteer/).  Find Location will use online "
+                "search (Nominatim) instead.", parent=self)
+            return
+        ready = _gz.index_ready()
+        try:
+            import gazetteer_build as _gb   # noqa: F401  (presence check)
+        except Exception:
+            pass
+        n = _gz.feature_count()
+        if ready:
+            if not messagebox.askyesno(
+                    "Offline Gazetteer",
+                    f"The offline index is already built and current "
+                    f"({n:,} named places, worldwide).\n\n"
+                    "Rebuild it from the bundled packs?  This takes a few "
+                    "minutes and rewrites a ~2.5 GB cache.", parent=self):
+                return
+            try:
+                _gz._DB_PATH.unlink()
+            except OSError:
+                pass
+        else:
+            if not messagebox.askyesno(
+                    "Offline Gazetteer",
+                    f"Build the offline place index now?\n\n"
+                    f"{n:,} named places worldwide (official BGN sources: "
+                    "NGA GNS + USGS GNIS + BGN Antarctic), searchable by "
+                    "every name variant with no network.\n\n"
+                    "One-time build: a few minutes, ~2.5 GB cache in "
+                    "~/.gui_missile_flyout.  Until it is built, Find "
+                    "Location uses online search.", parent=self):
+                return
+        prog = tk.Toplevel(self)
+        prog.title("Building offline gazetteer")
+        prog.resizable(False, False)
+        prog.grab_set()
+        ttk.Label(prog, padding=16, justify=tk.LEFT,
+                  text="Building the worldwide place index…\n"
+                  "This runs in the background; you can keep working.\n"
+                  "The window closes itself when done.").pack()
+        pb = ttk.Progressbar(prog, mode="indeterminate", length=320)
+        pb.pack(padx=16, pady=(0, 16)); pb.start(12)
+        done = [None]
+
+        def _bg():
+            try:
+                db = _gz.ensure_index()
+                db.close()
+                done[0] = True
+            except Exception as ex:       # noqa: BLE001
+                done[0] = ex
+
+        def _poll():
+            if done[0] is None:
+                prog.after(300, _poll); return
+            pb.stop(); prog.grab_release(); prog.destroy()
+            if done[0] is True:
+                self._status_var.set(
+                    f"Offline gazetteer ready — {n:,} places searchable in "
+                    "Find Location.")
+            else:
+                messagebox.showerror("Offline Gazetteer",
+                                     f"Build failed:\n{done[0]}", parent=self)
+        threading.Thread(target=_bg, daemon=True).start()
+        prog.after(300, _poll)
 
     def _open_damping_estimator(self):
         DampingEstimatorDialog(self)

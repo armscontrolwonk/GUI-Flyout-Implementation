@@ -78,6 +78,25 @@ def test_no_packs_degrades_to_empty(tmp_path):
     assert gz.search("anything", pack_dir=str(empty)) == []
 
 
+def test_index_ready_gates_the_expensive_build(tmp_path):
+    """index_ready() is the GUI's guard: False before any build (so the
+    Find Location dialog never triggers the multi-minute index), True
+    once built, and False again the moment the packs change."""
+    d = tmp_path / "packs"
+    d.mkdir()
+    with gzip.open(d / "p.txt.gz", "wt", encoding="utf-8") as f:
+        f.write("GNS:1|Alpha||1.0|2.0|XX|PPL|GNS\n")
+    dbp = tmp_path / "gaz.db"
+    assert not gz.index_ready(pack_dir=str(d), db_path=str(dbp))
+    gz.ensure_index(pack_dir=str(d), db_path=str(dbp)).close()
+    assert gz.index_ready(pack_dir=str(d), db_path=str(dbp))
+    with gzip.open(d / "q.txt.gz", "wt", encoding="utf-8") as f:
+        f.write("GNS:2|Beta||3.0|4.0|XX|PPL|GNS\n")
+    assert not gz.index_ready(pack_dir=str(d), db_path=str(dbp))
+    # no packs at all → not ready, never raises
+    assert not gz.index_ready(pack_dir=str(tmp_path / "nope"))
+
+
 def test_index_rebuilds_when_packs_change(fixture_env, tmp_path):
     d, db = fixture_env
     assert gz.search("kodiak", db=db)

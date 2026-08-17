@@ -105,9 +105,32 @@ def _build_db(db, pack_files, progress=None):
     db.commit()
 
 
+def index_ready(pack_dir=None, db_path=None):
+    """True when a CURRENT index exists on disk — i.e. open() would
+    return instantly without a (multi-minute) rebuild.  Lets the GUI
+    decide whether to use the offline gazetteer or defer the build to
+    an explicit user action."""
+    pack_files = packs(pack_dir)
+    if not pack_files:
+        return False
+    path = Path(db_path) if db_path else _DB_PATH
+    if not path.exists():
+        return False
+    try:
+        db = sqlite3.connect(str(path))
+        fp = db.execute("SELECT v FROM meta WHERE k='fingerprint'"
+                        ).fetchone()
+        db.close()
+    except sqlite3.OperationalError:
+        return False
+    return bool(fp) and fp[0] == _fingerprint(pack_files)
+
+
 def ensure_index(pack_dir=None, db_path=None, progress=None):
     """Open (building/refreshing if needed) the index.  Returns a
-    sqlite3 connection, or None when no packs exist."""
+    sqlite3 connection, or None when no packs exist.  The build is
+    O(minutes) for the worldwide packs, so callers that must stay
+    responsive should gate on index_ready() first."""
     pack_files = packs(pack_dir)
     if not pack_files:
         return None
@@ -122,6 +145,16 @@ def ensure_index(pack_dir=None, db_path=None, progress=None):
     if fp is None or fp[0] != _fingerprint(pack_files):
         _build_db(db, pack_files, progress)
     return db
+
+
+def feature_count(pack_dir=None):
+    """Total feature lines across the packs (cheap: gzip member sizes are
+    not summed — this counts lines, used only for the build prompt)."""
+    total = 0
+    for pf in packs(pack_dir):
+        with gzip.open(pf, "rt", encoding="utf-8") as f:
+            total += sum(1 for _ in f)
+    return total
 
 
 def search(query, limit=50, db=None, pack_dir=None):
