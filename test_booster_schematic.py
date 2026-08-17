@@ -367,10 +367,10 @@ def test_equal_aspect_is_enforced():
     assert ax.get_aspect() == 1.0
 
 
-# ── the Thrusty scale reference (~1.8 m figure + 5 m bar) ────────────────────
-def test_scale_figure_stands_at_the_human_height():
-    """The mascot silhouette is placed at _SCALE_FIGURE_M (~1.8 m, human
-    height), feet on y=0, so it reads as a person beside the stack — while the
+# ── the Thrusty scale reference (1 m figure + 5 m bar) ──────────────────────
+def test_scale_figure_stands_at_one_metre():
+    """The mascot silhouette is placed at _SCALE_FIGURE_M (1 m — Thrusty's
+    canonical height, chosen 2026-08-17), feet on y=0 — while the
     quantitative reference is carried by the separate 5 m bar."""
     import booster_schematic as bs
     if bs._scale_image() is None:
@@ -380,8 +380,8 @@ def test_scale_figure_stands_at_the_human_height():
     imgs = ax.get_images()
     assert len(imgs) == 1
     x0, x1, y0, y1 = imgs[0].get_extent()
-    assert (y0, y1) == (0.0, bs._SCALE_FIGURE_M)          # feet at 0, head at 1.8 m
-    assert bs._SCALE_FIGURE_M == 1.8
+    assert (y0, y1) == (0.0, bs._SCALE_FIGURE_M)          # feet at 0, head at 1 m
+    assert bs._SCALE_FIGURE_M == 1.0
     # width preserves the art's aspect ratio (never stretched)
     h_px, w_px = imgs[0].get_array().shape[:2]
     assert (x1 - x0) == pytest.approx(bs._SCALE_FIGURE_M * w_px / h_px)

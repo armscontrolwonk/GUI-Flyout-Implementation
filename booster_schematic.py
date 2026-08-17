@@ -24,13 +24,13 @@ import os
 import matplotlib.image as mpimg
 from matplotlib.patches import Circle, Polygon, Rectangle, Wedge
 
-# Thrusty mascot silhouette: a human-relatable figure standing beside the
-# vehicle for a felt sense of scale, with the quantitative reference carried by
-# a dimensioned metre bar next to it.  Loaded once and cached; a missing asset
+# Thrusty mascot silhouette: a familiar figure standing beside the vehicle
+# for a felt sense of scale, with the quantitative reference carried by a
+# dimensioned metre bar next to it.  Loaded once and cached; a missing asset
 # falls back to the bar alone, so headless renders and stripped checkouts work.
 _SCALE_IMG_PATH = os.path.join(os.path.dirname(__file__),
                                "assets", "thrusty_scale.png")
-_SCALE_FIGURE_M = 1.8                      # the mascot stands ~1.8 m tall (human)
+_SCALE_FIGURE_M = 1.0                      # Thrusty stands exactly 1 m tall
 _SCALE_BAR_M    = 5.0                      # the quantitative reference bar
 _UNLOADED = object()                       # sentinel (image may be an ndarray)
 _scale_img_cache = _UNLOADED
