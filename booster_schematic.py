@@ -588,8 +588,6 @@ def _draw_cg_marker(ax, p, total_h):
                            lw=0.8, zorder=6))
     ax.add_patch(Circle((0.0, y_cg), r, fill=False, edgecolor="black",
                         lw=1.0, zorder=7))
-    ax.text(r + 0.15, y_cg, "CG (fuelled)", va="center", ha="left",
-            fontsize=7.5, color=LABEL_MUT, zorder=7)
 
 
 def _draw_scale_reference(ax, xl, yl):
