@@ -124,10 +124,18 @@ Upgrade path, in effort order:
       (prd-tnm.s3.amazonaws.com …/GeographicNames/Antarctica/ — take
       the GPKG: GeoPackage = SQLite, stdlib-readable, no GIS deps) for
       polar trajectories/FOBS ground tracks.  NOTE on acquisition from
-      a Claude session: the AWS bucket (Antarctica) IS reachable
-      through the egress proxy; geonames.nga.mil and usgs.gov download
-      pages are NOT (403) — those two must be downloaded by hand and
-      committed, like the DEM plan's baked lookups;
+      a Claude session (verified 2026-08-17): the USGS staged-products
+      bucket prd-tnm.s3.amazonaws.com IS reachable through the egress
+      proxy and carries BOTH GNIS domestic names (per-state ZIPs ~1 MB,
+      AllStates ~38 MB, under …/GeographicNames/DomesticNames/) AND the
+      Antarctic gazetteer — schema spot-checked (American Samoa file):
+      pipe-delimited, feature_id | feature_name | feature_class |
+      decimal lat/lon | BGN authority fields; NO elevation column in
+      the current DomesticNames schema (the old NationalFile's
+      ELEV_IN_M is gone — elevation comes from the (c) DEM plan
+      regardless).  Only NGA GNS (foreign) is proxy-blocked (403) and
+      needs a hand-download, committed like the DEM plan's baked
+      lookups;
   (b2) SPIN-OFF the gazetteer enables (proposed 2026-08-17): nearest-
       populated-place annotation for trajectory outputs — bake a
       thinned populated-places extract (GNS/GNIS P-class, ranked by
