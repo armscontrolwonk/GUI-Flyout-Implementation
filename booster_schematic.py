@@ -563,7 +563,20 @@ def _draw_cg_marker(ax, p, total_h):
         return
     y_cg = max(0.0, min(total_h, total_h - x_cg))
     d_body = float(getattr(p, "diameter_m", 0.0) or 1.0)
-    r = max(0.15, 0.45 * d_body)                     # readable, ~body width
+    r = d_body / 20.0                                # symbol radius = ⌀/20
+    # Pixel floor so a slender vehicle's marker stays legible: convert a
+    # minimum on-screen radius to data units from the axes geometry (equal
+    # aspect, so the y scale sets it).  Recomputed each redraw, so it holds
+    # after a resize.
+    _MIN_PX = 9.0
+    try:
+        fig = ax.figure
+        ax_h_px = ax.get_position().height * fig.get_size_inches()[1] * fig.dpi
+        yl = ax.get_ylim()
+        data_per_px = (yl[1] - yl[0]) / max(ax_h_px, 1.0)
+        r = max(r, _MIN_PX * data_per_px)
+    except Exception:
+        pass
     # two opposite quadrants filled black, the other two white, black rim
     for a0 in (0.0, 180.0):
         ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0,
