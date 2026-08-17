@@ -1,12 +1,14 @@
 # References manifest — citation key → paper → where it lives
 
 The canonical paper library is the **Google Drive "Thrusty" folder**
-(https://drive.google.com/drive/folders/1IsW0ZoWI1YPSvYHITmo55Fs_1e8AyJ3H),
-where the core physics citations were uploaded 2026-07-29.  Policy: **new
-papers go to Drive, not the repo.**  The PDFs under `data/` predate that
-policy and stay for now — deleting them later will NOT shrink clones (the
-blobs stay in git history); an actual shrink needs a deliberate history
-rewrite.
+(https://drive.google.com/drive/folders/1IsW0ZoWI1YPSvYHITmo55Fs_1e8AyJ3H).
+Policy: **papers live in Drive, not the repo.**  The core physics
+citations were uploaded 2026-07-29; the FULL ~107-PDF `data/` corpus was
+uploaded 2026-08-17 (verified file-by-file against the repo) and the
+repo copies were deleted the same day.  "Repo file" names below are
+therefore historical — each file now lives in Drive under the same
+name.  Clones do not shrink until the separate, deliberate history
+rewrite (the blobs stay in git history until then).
 
 Heating/TPS sources have their own annotated bibliography in
 `HEATING_TPS_REFERENCES.md`; the grid-fin corpus is cited inline in
@@ -18,7 +20,7 @@ trajectory code names directly.
 | Key | Citation | What the code uses it for | Repo file | Drive |
 |---|---|---|---|---|
 | **AEDC-TDR-64-25** | Clark, E. L. & Trimmer, L. L., *Equations and Charts for the Evaluation of the Hypersonic Aerodynamic Characteristics of Lifting Configurations by the Newtonian Theory*, AEDC, 1964 | Modified-Newtonian K·cos²η component build-up: closed-form swept wedge (§2.1.5), cone frustum (§2.2.5), spherical-segment blunting, composite superposition (Phase 2/2b lifting-body aero in `booster_models.py`) | `data/AD0431848.pdf` | [AD0431848.pdf](https://drive.google.com/file/d/1t1H7-BNiU_iJ7Bc55-EKdtY88FV3BofJ/view) |
-| **NASA TR R-127** | Wells, W. R. & Armstrong, W. O., *Tables of Aerodynamic Coefficients Obtained from Developed Newtonian Expressions for Complete and Partial Conic and Spheric Bodies…*, 1962 | The conic/spheric closed forms behind `cd_cone_hypersonic` / `cd_blunted_cone_newtonian` (retired the "Ref (4) Ch. 5" provenance wart) | `data/19630006549.pdf` | **not yet in Drive** |
+| **NASA TR R-127** | Wells, W. R. & Armstrong, W. O., *Tables of Aerodynamic Coefficients Obtained from Developed Newtonian Expressions for Complete and Partial Conic and Spheric Bodies…*, 1962 | The conic/spheric closed forms behind `cd_cone_hypersonic` / `cd_blunted_cone_newtonian` (retired the "Ref (4) Ch. 5" provenance wart) | `data/19630006549.pdf` | [19630006549.pdf](https://drive.google.com/file/d/1qUG3uucFbxKp7OJj_enNLtkJfSJoGN-V/view) |
 | **NASA TN D-2942** | Fetterman, D. E., *Favorable Interference Effects on Maximum Lift-Drag Ratios of Half-Cone Delta-Wing Configurations at Mach 6.86*, 1965 | Half-cone + delta-wing measured anchors (L/D Figs. 3–6; Fig. 6b C_N/C_A component anchor; the Phase-3 offset-polar C_N zero-crossing) | **no PDF** (worked from extracted text) | **not yet in Drive** |
 | **NASA TN D-2956** | Fetterman, Henderson, Bertram & Johnston, *Studies Relating to the Attainment of High Lift-Drag Ratios at Hypersonic Speeds*, 1965 | Delta-wing ≡ equal-AR/area wedge equivalence; flat-bottom superiority; interference dissipation by ~M 11 | **no PDF** (worked from extracted text) | **not yet in Drive** |
 | **Grant & Braun 2010** (AIAA 2010-1212) | Grant, M. J. & Braun, R. D., *Analytic Hypersonic Aerodynamics for Conceptual Design of Entry Vehicles*, 48th AIAA Aerospace Sciences Mtg | Superposition-with-rescaling (Eq. 23); sharp-biconic peak-L/D contour anchors 1.864 / 2.011 (hit to 0.2 % / 0.05 %) | `data/48th-aiaa-aerospace-science.pdf` | [48th-aiaa-aerospace-science.pdf](https://drive.google.com/file/d/1UwoilfWZikna7yOrzENbHHiORD3gQLXF/view) |
@@ -27,7 +29,7 @@ trajectory code names directly.
 | **Lobanovskii 1983** | Lobanovskii, Yu. I., *Maximal Lift-Drag Ratio of Wing-Cone and Wing-Half-Cone Combinations…*, Izv. AN SSSR MZhG, 1983 (Springer BF01090577) | The asymmetric-body drag polar as a quadratic trinomial — minimum drag at nonzero lift, the Phase-3 C_L0 offset | `data/BF01090577.pdf` | [BF01090577.pdf](https://drive.google.com/file/d/1eDDwmhE-HbvOyyfu_l-wq3upROrzjrAK/view) |
 | **Heybey** | Heybey, W. H., *Newtonian Aerodynamics for General Body Shapes with Several Applications*, NASA TM X-53391, 1966 | Newtonian general-shape background for the Phase-2 build-ups | `data/19660012440.pdf` | [19660012440.pdf](https://drive.google.com/file/d/19A6oGCD2ZrifzVgfCY_m2IqY2MCtzy1T/view) |
 | **Tauber-Sutton 1991** | Tauber, M. E. & Sutton, K., *Stagnation-Point Radiative Heating Relations for Earth and Mars Entries*, JSR 28(1), 1991 | Radiative gas heating (zero below 9 km/s — inactive for HGV glide; the Candler-Tauber scoping) | `data/tauber-sutton-1991-stagnation-radiative-heating-earth-mars-jsr-28-1.pdf` | [tauber1991.pdf](https://drive.google.com/file/d/1Ppp6P_SOfPV6pqOtgstbKgsoj48SQWZy/view) |
-| **Sutton-Graves 1971** | Sutton, K. & Graves, R. A., *A General Stagnation-Point Convective-Heating Equation for Arbitrary Gas Mixtures*, NASA TR R-376, 1971 | The stagnation convective-heating constant (k = 1.7415e-4) at the root of the heating chain | `data/sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf` | **not yet in Drive** |
+| **Sutton-Graves 1971** | Sutton, K. & Graves, R. A., *A General Stagnation-Point Convective-Heating Equation for Arbitrary Gas Mixtures*, NASA TR R-376, 1971 | The stagnation convective-heating constant (k = 1.7415e-4) at the root of the heating chain | `data/sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf` | [sutton-graves-1971…ntrs-19720003329.pdf](https://drive.google.com/file/d/1wBfCRSnc8R-sijFD3qotEMgiI85LwXdw/view) |
 
 ## Supporting material in the Drive Thrusty folder
 
@@ -45,15 +47,16 @@ trajectory code names directly.
   code):
   [link](https://drive.google.com/file/d/1dV-PqVAvTr737ZZJlJvlxTXZVwLv2uO1/view).
 
-## Known gaps (loose ends as of 2026-08-16)
+## Known gaps (updated 2026-08-17)
 
 1. **Fetterman TN D-2942 and D-2956 have no PDF anywhere** — the Phase-2b/3
    anchors were worked from extracted text that lived only in a session
    scratchpad.  Both are public NASA NTRS documents; downloading them into
-   the Drive Thrusty folder closes the gap.
-2. **TR R-127** (`data/19630006549.pdf`) and **Sutton-Graves TR R-376** are
-   in the repo but not yet mirrored to Drive.
-3. The wider corpus under `data/` (~100 PDFs: grid fins, TPS/ablation,
-   flight-test, waveriders) remains repo-only; moving it to Drive and
-   trimming the repo is the larger, deliberate step (history rewrite needed
-   for an actual size win).
+   the Drive Thrusty folder closes the gap.  (The last remaining gap.)
+2. ~~TR R-127 and Sutton-Graves TR R-376 not mirrored to Drive~~ — CLOSED
+   2026-08-17 (both in the full-corpus upload; linked above).
+3. ~~The wider `data/` corpus is repo-only~~ — CLOSED 2026-08-17: all 107
+   PDFs uploaded to Drive (verified file-by-file), repo copies deleted.
+   Remaining: the deliberate history rewrite for the actual clone-size
+   win, and optionally sorting the flat Drive upload into topic
+   subfolders.

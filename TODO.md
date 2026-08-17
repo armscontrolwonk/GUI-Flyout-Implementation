@@ -118,7 +118,13 @@ Upgrade path, in effort order:
   (a) swap the bundled GeoJSON to Natural Earth **50m** (drop-in, same
       format, ~few MB) — instant plot-quality win;
   (b) rebuild `launch_sites.json` with per-site provenance (citation
-      field) + site elevation + expanded coverage.  NAME/COORDINATE
+      field) + site elevation + expanded coverage.  VARIANTS ARE A
+      HARD REQUIREMENT (user, 2026-08-17): romanized names differ
+      across systems (Sŏhae/Sohae, Tongch'ang-ri/Dongchang-ri), so the
+      baked extract KEEPS every GNS variant name and native-script
+      form, the picker matches against ALL of them, and results show
+      the BGN-approved primary with the matched variant — variants are
+      never dropped in thinning or repacking.  NAME/COORDINATE
       SOURCE CHOSEN (2026-08-17): the two official public-domain US
       gazetteers, paired —
       **NGA GEOnet Names Server (GNS)** for foreign places
@@ -185,6 +191,16 @@ Upgrade path, in effort order:
       from a moving release point.
 
 ### 5. Move the paper library from GitHub to an organized Drive
+STEPS 1–3 DONE 2026-08-17: all 107 data/*.pdf uploaded to the Drive
+"Thrusty" folder (flat), verified file-by-file against the repo
+(name-complete; sizes spot-checked on the largest volumes), repo copies
+deleted, REFERENCES.md gaps 2–3 closed.  REMAINING: (a) the deliberate
+HISTORY REWRITE (git filter-repo + force-push; user re-clones after) —
+the ~360 MB of blobs stay in every clone until then; (b) optionally
+sort the flat Drive upload into the planned topic subfolders and add
+per-file Drive links for the non-core corpus; (c) Fetterman D-2942/
+D-2956 PDFs (public NTRS) into Drive — the last manifest gap.
+Original plan follows.
 Agreed 2026-08-16.  The ~100 PDFs under `data/` (grid fins, TPS/ablation,
 flight test, waveriders, lifting bodies) move to the Drive "Thrusty"
 folder, organized into subfolders mirroring how the code cites them
