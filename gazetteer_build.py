@@ -116,9 +116,16 @@ def build_antarctica(gpkg_path, out_path):
 # from the header row, so minor NGA schema drift is tolerated.
 def build_gns(gns_zip, out_path, source="GNS"):
     n = 0
+    # per-UFI: [primary, variants-list, lat, lon, cc, dsg] — lean lists,
+    # not dicts: the worldwide Populated_Places file holds millions of
+    # features and this whole map lives in RAM during the bake.
     feats = {}
     z = zipfile.ZipFile(gns_zip)
-    member = next(m for m in z.namelist() if m.lower().endswith(".txt"))
+    # each GNS zip also carries disclaimer.txt / GNS_User_Guide.txt —
+    # the data member is the LARGEST .txt
+    member = max((m for m in z.infolist()
+                  if m.filename.lower().endswith(".txt")),
+                 key=lambda m: m.file_size).filename
     with z.open(member) as f:
         cols = f.readline().decode("utf-8-sig").rstrip("\r\n").split("\t")
 
@@ -128,36 +135,67 @@ def build_gns(gns_zip, out_path, source="GNS"):
                     return cols.index(nm)
             raise KeyError(names)
         i_ufi, i_nt = idx("UFI", "ufi"), idx("NT", "nt")
-        i_nm = idx("FULL_NAME_RO", "full_name_ro", "FULL_NAME")
-        i_la, i_lo = idx("LAT", "lat"), idx("LONG", "long", "LON")
-        i_cc = idx("CC1", "cc1", "COUNTRY_CODE")
-        i_dsg = idx("DSG", "dsg")
+        i_nm = idx("full_name", "FULL_NAME_RO", "full_name_ro", "FULL_NAME")
+        i_la = idx("lat_dd", "LAT", "lat")
+        i_lo = idx("long_dd", "LONG", "long", "LON")
+        i_cc = idx("cc_ft", "CC1", "cc1", "COUNTRY_CODE")
+        i_dsg = idx("desig_cd", "DSG", "dsg")
+        try:
+            i_rank = idx("name_rank", "NAME_RANK")
+        except KeyError:
+            i_rank = None
         for raw in f:
             p = raw.decode("utf-8", "replace").rstrip("\r\n").split("\t")
-            if len(p) <= max(i_nm, i_lo):
+            if len(p) <= max(i_nm, i_lo, i_dsg):
                 continue
             try:
                 lat, lon = float(p[i_la]), float(p[i_lo])
             except ValueError:
                 continue
-            fe = feats.setdefault(p[i_ufi], dict(primary=None, variants=[],
-                                                 lat=lat, lon=lon,
-                                                 cc=p[i_cc], dsg=p[i_dsg]))
-            if p[i_nt] == "N" and fe["primary"] is None:
-                fe["primary"] = p[i_nm]
+            fe = feats.get(p[i_ufi])
+            if fe is None:
+                fe = feats[p[i_ufi]] = [None, [], lat, lon,
+                                        p[i_cc], p[i_dsg]]
+            approved = p[i_nt] == "N"
+            top_rank = i_rank is None or p[i_rank] in ("1", "")
+            if approved and (fe[0] is None or top_rank):
+                if fe[0] is not None:
+                    fe[1].append(fe[0])
+                fe[0] = p[i_nm]
             else:
-                fe["variants"].append(p[i_nm])
+                fe[1].append(p[i_nm])
     with gzip.open(out_path, "wt", encoding="utf-8") as out:
         for ufi, fe in feats.items():
-            primary = fe["primary"] or (fe["variants"][0]
-                                        if fe["variants"] else None)
+            primary = fe[0] or (fe[1][0] if fe[1] else None)
             if not primary:
                 continue
-            out.write(_fmt(f"GNS:{ufi}", primary, fe["variants"],
-                           fe["lat"], fe["lon"], fe["cc"], fe["dsg"],
-                           source) + "\n")
+            out.write(_fmt(f"GNS:{ufi}", primary, fe[1],
+                           fe[2], fe[3], fe[4], fe[5], source) + "\n")
             n += 1
     return n
+
+
+_SHARD_LIMIT = 95 * 1024 * 1024        # stay under GitHub's 100 MB/file
+
+
+def shard_if_needed(out_path):
+    """Split an oversized pack into <name>_a/_b/… parts (whole lines,
+    round-robin).  gazetteer.py reads every *.txt.gz in the directory,
+    so sharding is invisible to the search code."""
+    size = os.path.getsize(out_path)
+    if size <= _SHARD_LIMIT:
+        return [out_path]
+    n_shards = size // _SHARD_LIMIT + 1
+    base = out_path[:-len(".txt.gz")]
+    outs = [gzip.open(f"{base}_{chr(97 + k)}.txt.gz", "wt",
+                      encoding="utf-8") for k in range(n_shards)]
+    with gzip.open(out_path, "rt", encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            outs[i % n_shards].write(line)
+    for o in outs:
+        o.close()
+    os.remove(out_path)
+    return [f"{base}_{chr(97 + k)}.txt.gz" for k in range(n_shards)]
 
 
 def main(raw_dir, out_dir=OUT_DIR_DEFAULT):
@@ -178,13 +216,25 @@ def main(raw_dir, out_dir=OUT_DIR_DEFAULT):
             path = os.path.join(raw_dir, member)
         done["antarctica"] = build_antarctica(
             path, os.path.join(out_dir, "antarctica.txt.gz"))
-    for name, src in (("gns_pp", "Populated_Places.zip"),
-                      ("gns_spot", "Spot_Features.zip"),
-                      ("gns_admin", "Administrative_Regions.zip")):
+    # All nine GNS class files (decision 2026-08-17: bake everything —
+    # thinning is a judgment call the data policy avoids).  The source
+    # label carries the class so search can rank cities and facilities
+    # above the world's ten thousand identically-named creeks.
+    for name, src, label in (
+            ("gns_pp", "Populated_Places.zip", "GNS-P"),
+            ("gns_spot", "Spot_Features.zip", "GNS-S"),
+            ("gns_admin", "Administrative_Regions.zip", "GNS-A"),
+            ("gns_hydro", "Hydrographic.zip", "GNS-H"),
+            ("gns_hypso", "Hypsographic.zip", "GNS-T"),
+            ("gns_areas", "Areas_Localities.zip", "GNS-L"),
+            ("gns_veg", "Vegetation.zip", "GNS-V"),
+            ("gns_transport", "Transportation_Networks.zip", "GNS-R"),
+            ("gns_undersea", "Undersea.zip", "GNS-U")):
         p = os.path.join(raw_dir, src)
         if os.path.exists(p):
-            done[name] = build_gns(p, os.path.join(out_dir,
-                                                   f"{name}.txt.gz"))
+            out = os.path.join(out_dir, f"{name}.txt.gz")
+            done[name] = build_gns(p, out, source=label)
+            shard_if_needed(out)
     for k, v in done.items():
         print(f"{k}: {v} features")
     return done

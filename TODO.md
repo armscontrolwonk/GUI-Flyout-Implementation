@@ -128,14 +128,18 @@ Upgrade path, in effort order:
       16.7 MB total.  The Find Location picker now searches it first
       (always-present offline path; geonamescache demoted to legacy
       fallback, Nominatim still the online catch-all).  PHASE 2
-      REMAINING: the NGA GNS worldwide packs — the raw zips are in the
-      Drive "Thrusty NGA" folder but Drive/NGA are egress-blocked from
-      sessions; transfer via throwaway git branch (split -b 90m → push
-      parts to `gns-staging` → session reassembles, bakes with the
-      already-tested build_gns hook, commits packs only, deletes the
-      branch).  Then: the launch_sites.json rebuild proper (anchor the
-      34 sites to GNS/GNIS IDs) and the nearest-place impact
-      annotation (b2) on top of gazetteer.nearest().  VARIANTS ARE A
+      SHIPPED (2026-08-17): all NINE NGA GNS class files baked (user
+      decision: everything, no thinning) — 9.45 M worldwide features
+      (populated places, spot/facilities, hydro, terrain, admin, areas,
+      vegetation, transport, undersea), transferred via the gns-staging
+      branch (deleted after), verified byte-for-byte, class-aware
+      ranking added (cities/facilities above creek noise).  Grand total
+      with Phase 1: 10,435,205 features, ~196 MB packs, counts + the
+      whole provenance chain in data/gazetteer/MANIFEST.md.
+      REMAINING on this thread: the launch_sites.json rebuild proper
+      (anchor the 34 sites to GNS/GNIS IDs) and the nearest-place
+      impact annotation (b2) on top of gazetteer.nearest() — both now
+      pure code, no more data acquisition.  VARIANTS ARE A
       HARD REQUIREMENT (user, 2026-08-17): romanized names differ
       across systems (Sŏhae/Sohae, Tongch'ang-ri/Dongchang-ri), so the
       baked extract KEEPS every GNS variant name and native-script

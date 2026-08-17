@@ -155,12 +155,27 @@ def search(query, limit=50, db=None, pack_dir=None):
             rows.append(dict(ext_id=p[0], primary=p[1], matched=display,
                              lat=p[2], lon=p[3], admin=p[4], fclass=p[5],
                              source=p[6], band=band))
-    populated = ("Populated Place", "PPL", "P")
     rows.sort(key=lambda r: (("exact", "prefix", "sub").index(r["band"]),
-                             0 if any(r["fclass"].startswith(t)
-                                      for t in populated) else 1,
-                             r["primary"]))
+                             _tier(r), r["primary"]))
     return rows[:limit]
+
+
+def _tier(r):
+    """Class rank inside a match band: cities, then facilities, then
+    admin/areas and general features, then water/terrain, then
+    vegetation/transport/undersea — so the world's ten thousand
+    identically-named creeks sort below the town the user meant."""
+    if (r["fclass"].startswith("PPL")
+            or r["fclass"].startswith("Populated Place")):
+        return 0
+    src = r.get("source", "")
+    if src == "GNS-S":
+        return 1
+    if src in ("GNS-H", "GNS-T"):
+        return 3
+    if src in ("GNS-V", "GNS-R", "GNS-U"):
+        return 4
+    return 2          # admin, areas, GNIS non-populated, Antarctic, unknown
 
 
 def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):

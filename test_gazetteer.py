@@ -139,14 +139,28 @@ def test_gnis_builder_skips_unlocated_rows(tmp_path):
 
 # ── the SHIPPED packs ───────────────────────────────────────────────────────
 def test_shipped_packs_exist_and_serve_search(tmp_path):
-    """data/gazetteer must actually work: both Phase-1 packs present,
-    Kodiak (GNIS) and an Antarctic variant name both resolve."""
+    """data/gazetteer must actually work: Phase-1 packs (GNIS,
+    Antarctic) AND the Phase-2 worldwide GNS packs present; domestic,
+    Antarctic-variant, and foreign-variant lookups all resolve.  This
+    uses the app's own cache (~/.gui_missile_flyout) so the expensive
+    worldwide index builds at most once per machine, not once per test
+    run."""
     names = {os.path.basename(p) for p in gz.packs()}
     assert {"gnis_us.txt.gz", "antarctica.txt.gz"} <= names
-    db = gz.ensure_index(db_path=str(tmp_path / "real.db"))
+    assert any(n.startswith("gns_pp") for n in names)      # worldwide
+    assert any(n.startswith("gns_spot") for n in names)    # facilities
+    assert any(n.startswith("gns_hydro") for n in names)   # named waters
+    db = gz.ensure_index()
     r = gz.search("Kodiak", db=db)
     assert r and r[0]["source"] == "GNIS"
     r = gz.search("Annenkow", db=db)      # German variant → official name
     assert r and r[0]["primary"] == "Annenkov Island"
     assert r[0]["matched"] != r[0]["primary"]
     assert r[0]["ext_id"].startswith("ATA:")
+    # the variants requirement, on real NGA data: any romanization of
+    # Sohae's home village resolves to the same GNS feature
+    r = gz.search("Sohae", db=db)
+    assert r and any(x["source"].startswith("GNS") for x in r)
+    r = gz.search("Pyongyang", db=db)
+    assert r and r[0]["fclass"].startswith("PPL")
+    assert r[0]["admin"] in ("KP", "PRK")                 # North Korea

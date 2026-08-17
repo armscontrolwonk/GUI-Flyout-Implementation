@@ -7,21 +7,31 @@ the repo.  Every record carries its source's own feature ID
 an official record.  Variants are kept and searchable by design (user
 requirement 2026-08-17): romanized spellings differ across systems.
 
+All NGA GNS packs bake from the nine whole-world class files retrieved
+from geonames.nga.mil 2026-08-17 (archived in the Drive "Thrusty NGA"
+folder; transferred via the throwaway `gns-staging` branch and verified
+byte-for-byte against the originals before baking).  Decision
+2026-08-17: bake ALL classes — thinning is a judgment call the data
+policy avoids; search ranking (gazetteer._tier) keeps cities and
+facilities above hydrographic/terrain noise.
+
 | Pack | Source | Retrieved | Features |
 |---|---|---|---|
 | `gnis_us.txt.gz` | USGS GNIS DomesticNames AllStates (public domain), prd-tnm.s3.amazonaws.com /StagedProducts/GeographicNames/DomesticNames/DomesticNames_AllStates_Text.zip | 2026-08-17 | 974,023 (all feature classes) |
 | `antarctica.txt.gz` | BGN/ACAN Antarctic gazetteer GPKG (public domain), prd-tnm.s3.amazonaws.com /StagedProducts/GeographicNames/Antarctica/Gazetteer_Antarctica_GPKG.zip | 2026-08-17 | 14,353 (+ AllNames variants) |
+| `gns_pp.txt.gz` | NGA GNS Populated_Places (public domain) | 2026-08-17 | 4,768,980 |
+| `gns_hydro.txt.gz` | NGA GNS Hydrographic | 2026-08-17 | 1,741,086 |
+| `gns_hypso.txt.gz` | NGA GNS Hypsographic | 2026-08-17 | 1,265,349 |
+| `gns_spot.txt.gz` | NGA GNS Spot_Features (facilities, installations, airfields) | 2026-08-17 | 860,385 |
+| `gns_areas.txt.gz` | NGA GNS Areas_Localities | 2026-08-17 | 377,271 |
+| `gns_admin.txt.gz` | NGA GNS Administrative_Regions | 2026-08-17 | 276,692 |
+| `gns_veg.txt.gz` | NGA GNS Vegetation | 2026-08-17 | 118,800 |
+| `gns_transport.txt.gz` | NGA GNS Transportation_Networks | 2026-08-17 | 31,868 |
+| `gns_undersea.txt.gz` | NGA GNS Undersea | 2026-08-17 | 6,398 |
 
-## Pending (Phase 2): NGA GNS worldwide
-
-The foreign half — GNS `Populated_Places.zip` (399 MB) and
-`Spot_Features.zip` (75 MB), archived in the Drive "Thrusty NGA" folder
-(retrieved from geonames.nga.mil 2026-08-17) — cannot reach a Claude
-session directly (both NGA and Drive are egress-blocked).  Transfer
-plan: from a local clone, `split -b 90m` the zips, push the parts to a
-throwaway `gns-staging` branch, and a session bakes the packs onto main
-(`gazetteer_build.py` already handles the GNS schema) and deletes the
-branch — main's history never carries the raw blobs.
+Total: 10,435,205 features, ~196 MB of packs.  First index build on a
+machine takes ~2½ minutes (SQLite cache, ~2.5 GB, in
+`~/.gui_missile_flyout/`); afterwards search is instant.
 
 ## Format
 
