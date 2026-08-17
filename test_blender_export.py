@@ -322,14 +322,14 @@ def test_ro_wings_honor_the_fin_count():
     ro.wing_root_chord_m = 0.4
     ro.wing_span_exposed_m = 0.2
     ro.wing_sweep_deg = 70.0
-    ro.n_fins = 4
+    ro.n_wings = 4
     veh.ro = ro
     wings = [(n, rot) for n, _poly, _t, _pos, rot
              in bx.vehicle_elements(veh)["plates"] if n.startswith("RO_Wing")]
     assert len(wings) == 4
     assert sorted(r for _n, r in wings) == pytest.approx([0.0, 90.0, 180.0,
                                                           270.0])
-    ro.n_fins = 2
+    ro.n_wings = 2
     wings2 = [n for n, *_ in bx.vehicle_elements(veh)["plates"]
               if n.startswith("RO_Wing")]
     assert len(wings2) == 2
@@ -360,6 +360,59 @@ def test_strapons_clock_into_the_gaps_between_fins():
                 for n, _pr, pos, _s in bx.vehicle_elements(veh2)["revolves"]
                 if n.startswith("Strapon"))
     assert s2 == pytest.approx([0.0, 180.0])
+
+
+def test_export_centers_booster_on_the_origin():
+    """center=True (default) puts the booster's axis midpoint at z=0 — the
+    stack spans −total/2 … +total/2 — so it drops into Blender centered.
+    center=False keeps the base on z=0.  X=Y stay on the axis for the
+    core."""
+    veh = _demo_vehicle()
+    total = bx.vehicle_elements(veh)["total_height_m"]
+
+    def s1_base_z(**kw):
+        """z of the S1 base ring — the stack's bottom reference, at z=0
+        before centering.  Parse the OBJ, take S1's lowest vertex."""
+        text, _ = bx.obj_export(veh, title="C", **kw)
+        objs, verts = _parse_obj(text)
+        s1 = {i for f in objs["S1"] for i in f}
+        return min(verts[i][2] for i in s1)
+    # S1 base sits at z=0 uncentered, and at −total/2 when centered
+    assert s1_base_z(center=False) == pytest.approx(0.0, abs=1e-4)
+    assert s1_base_z() == pytest.approx(-total / 2, abs=1e-4)
+    # centering shifts EVERY vertex down by exactly total/2 (uniform)
+    zc = [v[2] for v in _parse_obj(bx.obj_export(veh, title="C")[0])[1]]
+    z0 = [v[2] for v in _parse_obj(
+        bx.obj_export(veh, title="C", center=False)[0])[1]]
+    for a, b in zip(sorted(zc), sorted(z0)):
+        assert a == pytest.approx(b - total / 2, abs=1e-4)
+    assert "booster geometric center" in bx.obj_export(veh)[0]
+    # the bpy script carries the same shift in its position literals
+    assert f", {-total/2:.6g})" in bx.bpy_script(veh, title="C")[0]
+
+
+def test_ro_wing_thickness_from_stored_field():
+    """The RO wing uses the stored wing_thickness_m (a real ROParams
+    geometry field that JSON round-trips) — a modeler's entered thickness
+    reaches the export; nominal only when it's unset."""
+    veh = _demo_vehicle()
+    ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    ro.wing_root_chord_m = 0.4
+    ro.wing_span_exposed_m = 0.2
+    ro.wing_thickness_m = 0.05
+    veh.ro = ro
+    t = next(t for n, _poly, t, _pos, _rot
+             in bx.vehicle_elements(veh)["plates"] if n == "RO_Wing_1")
+    assert t == pytest.approx(0.05)
+    ro.wing_thickness_m = 0.0                    # unset → nominal + flag
+    els = bx.vehicle_elements(veh)
+    assert any("RO wing thickness unset" in fl for fl in els["flags"])
+    # the geometry fields JSON round-trip
+    from booster_models import ro_to_dict
+    ro.wing_thickness_m = 0.05
+    ro.n_wings = 6
+    rt = ro_from_dict(ro_to_dict(ro))
+    assert rt.wing_thickness_m == pytest.approx(0.05) and rt.n_wings == 6
 
 
 def test_bpy_script_compiles_and_names_everything():

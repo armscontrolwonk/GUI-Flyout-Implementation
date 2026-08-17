@@ -339,15 +339,18 @@ def _ro_elements(ro, x_off, revolves, plates, flags):
             return max(0.0, R * (1.0 - zz / L))
         y_tip = min(max(w_rc - w_ss * math.tan(math.radians(w_sw)), 0.0),
                     w_rc)
-        t = max(0.01, 0.02 * w_ss)
-        flags.append("RO wing thickness not stored — 0.02×span nominal")
+        # Honor the RO's stored wing_thickness_m; nominal only when unset.
+        t = _f(getattr(ro, "wing_thickness_m", 0.0))
+        if t <= 0:
+            t = max(0.01, 0.02 * w_ss)
+            flags.append("RO wing thickness unset — 0.02×span nominal")
         poly = [(r_local(0.0), 0.0), (r_local(w_rc), w_rc),
                 (r_local(0.0) + w_ss, y_tip), (r_local(0.0) + w_ss, 0.0)]
-        # Panel count from the RO's stored n_fins (default 4) — a C-HGB
+        # Panel count from the RO's stored n_wings (default 4) — a C-HGB
         # carries 4 flaps, not a 2-panel wing; distribute them evenly
         # around the body like the booster fins (was hardcoded to 2).
-        n_w = max(2, int(getattr(ro, "n_fins", 4) or 4))
-        flags.append(f"RO wings: {n_w} panels from n_fins")
+        n_w = max(2, int(getattr(ro, "n_wings", 4) or 4))
+        flags.append(f"RO wings: {n_w} panels (n_wings)")
         for k in range(n_w):
             plates.append((f"RO_Wing_{k+1}", poly, t, pos, 360.0 * k / n_w))
 
@@ -422,16 +425,21 @@ def plate_mesh(poly, thickness, pos, rot_z_deg):
     return verts, faces
 
 
-def obj_export(p, title="vehicle"):
+def obj_export(p, title="vehicle", center=True):
     """A Wavefront OBJ of the vehicle — the format Blender opens DIRECTLY
-    (File → Import → Wavefront .obj), unlike the bpy script.  Each element
+    (File -> Import -> Wavefront .obj), unlike the bpy script.  Each element
     is its own named `o` group, so stages/fairing/fins stay discrete and
-    editable.  Metres, +Z up.  Returns (obj_text, info)."""
+    editable.  Metres, +Z up.  center=True puts the booster's axis midpoint
+    at the ORIGIN (z <- z - total/2; X=Y=0 on the core) so it drops into a
+    Blender scene centered, ready to rotate/place; center=False keeps the
+    base on z=0.  Returns (obj_text, info)."""
     els = vehicle_elements(p)
+    zc = 0.5 * els["total_height_m"] if center else 0.0
     lines = [f"# Thrusty rough-draft 3-D export — {title}",
              "# Wavefront OBJ.  Blender: File -> Import -> Wavefront (.obj).",
              "# Units: metres.  +Z up (vehicle axis).  One object per "
-             "element."]
+             "element.",
+             f"# Origin: {'booster geometric center' if center else 'base'}."]
     for fl in els["flags"]:
         lines.append(f"# fallback: {fl}")
     base = 1                                   # OBJ vertices are 1-indexed
@@ -440,7 +448,7 @@ def obj_export(p, title="vehicle"):
             prof, pos, math.pi if sweep == "half" else 2 * math.pi)
         lines.append(f"o {name}")
         for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
+            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
         for f in faces:
             lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
@@ -448,7 +456,7 @@ def obj_export(p, title="vehicle"):
         verts, faces = plate_mesh(poly, t, pos, rot)
         lines.append(f"o {name}")
         for x, y, z in verts:
-            lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
+            lines.append(f"v {x:.6g} {y:.6g} {z - zc:.6g}")
         for f in faces:
             lines.append("f " + " ".join(str(i + base) for i in f))
         base += len(verts)
@@ -462,23 +470,26 @@ def _fmt_pts(pts):
     return "[" + ", ".join(f"({r:.6g}, {zz:.6g})" for r, zz in pts) + "]"
 
 
-def _fmt_pos(pos):
-    return f"({pos[0]:.6g}, {pos[1]:.6g}, {pos[2]:.6g})"
+def _fmt_pos(pos, zc=0.0):
+    return f"({pos[0]:.6g}, {pos[1]:.6g}, {pos[2] - zc:.6g})"
 
 
-def bpy_script(p, title="vehicle"):
+def bpy_script(p, title="vehicle", center=True):
     """The emitted Blender script (string) + a summary dict
-    {'n_objects': int, 'flags': [...], 'total_height_m': float}."""
+    {'n_objects': int, 'flags': [...], 'total_height_m': float}.
+    center=True (default) puts the booster's axis midpoint at the origin —
+    same convention as obj_export — so the built stack is centered."""
     import datetime
     els = vehicle_elements(p)
+    zc = 0.5 * els["total_height_m"] if center else 0.0
     coll = title.strip() or "vehicle"
     flag_lines = ("".join(f"#   - {fl}\n" for fl in els["flags"])
                   or "#   (none — every dimension came from stored data)\n")
     rev_lines = "".join(
-        f"    ({name!r}, {_fmt_pts(prof)}, {_fmt_pos(pos)}, {sweep!r}),\n"
+        f"    ({name!r}, {_fmt_pts(prof)}, {_fmt_pos(pos, zc)}, {sweep!r}),\n"
         for name, prof, pos, sweep in els["revolves"])
     plate_lines = "".join(
-        f"    ({name!r}, {_fmt_pts(poly)}, {t:.6g}, {_fmt_pos(pos)}, "
+        f"    ({name!r}, {_fmt_pts(poly)}, {t:.6g}, {_fmt_pos(pos, zc)}, "
         f"{rot:.6g}),\n"
         for name, poly, t, pos, rot in els["plates"])
     n = len(els["revolves"]) + len(els["plates"])

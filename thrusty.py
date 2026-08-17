@@ -3784,18 +3784,29 @@ class ROEditorDialog(tk.Toplevel):
         self._wing_sweep_var, self._wing_sweep_ent = _we(11, "  LE sweep:", _wsw, unit="°")
         self._wing_area_var, self._wing_area_ent = _we(12, "  wing area:", _wa, unit="m²")
         self._wing_ar_var, self._wing_ar_ent = _we(13, "  aspect ratio:", _war)
-        # All five wing entries, for gating: enabled iff Maneuvering is on AND
+        # Panel thickness + count — GEOMETRY only (feed the 3-D Blender
+        # export; the polar uses area/AR/sweep, not these).  A C-HGB carries
+        # 4 flaps; a delta glider 2.
+        _wt = (f"{ro.wing_thickness_m:g}"
+               if (ro and getattr(ro, 'wing_thickness_m', 0) > 0) else "0")
+        self._wing_thick_var, self._wing_thick_ent = _we(
+            14, "  panel thickness:", _wt, unit="m")
+        _nw = f"{getattr(ro, 'n_wings', 4)}" if ro else "4"
+        self._wing_n_var, self._wing_n_ent = _we(
+            15, "  panel count:", _nw)
+        # All wing entries, for gating: enabled iff Maneuvering is on AND
         # the form can carry a wing (the WEDGE disables them — its body is the
         # lifting surface; a wing entered here would double-count through the
         # polar's e_pull while invisible to the user).
         self._wing_entries = (self._wing_area_ent, self._wing_ar_ent,
                               self._wing_root_ent, self._wing_span_ent,
-                              self._wing_sweep_ent)
+                              self._wing_sweep_ent, self._wing_thick_ent,
+                              self._wing_n_ent)
         # Live "derived" indicator + traces: when a planform is present, S/AR
         # are recomputed and locked; otherwise they are editable.
         self._wing_derived_lbl = ttk.Label(
             geo, text="", foreground="#2a7", justify=tk.LEFT, wraplength=300)
-        self._wing_derived_lbl.grid(row=14, column=0, columnspan=2,
+        self._wing_derived_lbl.grid(row=16, column=0, columnspan=2,
                                     sticky=tk.W, pady=(0, 0))
         for _v in (self._wing_root_var, self._wing_span_var,
                    self._wing_sweep_var, self._dia_var):
@@ -4664,6 +4675,8 @@ class ROEditorDialog(tk.Toplevel):
         # Wing fields are stored only when VISIBLE (not for the wedge, whose
         # rows are disabled): hidden-but-active wing physics through the
         # polar's e_pull would be dishonest.  What you see is what's stored.
+        wing_thick = 0.0
+        wing_n = 4
         if glider_on and body_form != "wedge":
             try:
                 wing_area = max(0.0, float(self._wing_area_var.get() or 0.0))
@@ -4671,6 +4684,8 @@ class ROEditorDialog(tk.Toplevel):
                 wing_root  = max(0.0, float(self._wing_root_var.get() or 0.0))
                 wing_span  = max(0.0, float(self._wing_span_var.get() or 0.0))
                 wing_sweep = max(0.0, float(self._wing_sweep_var.get() or 0.0))
+                wing_thick = max(0.0, float(self._wing_thick_var.get() or 0.0))
+                wing_n = max(2, int(float(self._wing_n_var.get() or 4)))
             except ValueError:
                 messagebox.showerror(
                     "Invalid input", "Wing area / aspect ratio / planform "
@@ -4723,6 +4738,8 @@ class ROEditorDialog(tk.Toplevel):
             wing_root_chord_m=wing_root,
             wing_span_exposed_m=wing_span,
             wing_sweep_deg=wing_sweep,
+            wing_thickness_m=wing_thick,   # geometry only (3-D export)
+            n_wings=wing_n,                # geometry only (3-D export)
             # Estimator trim row (Phase 3): kept only for the lifting forms
             # its sweep produced it for — a stale offset carried onto a body
             # of revolution would silently skew the polar.

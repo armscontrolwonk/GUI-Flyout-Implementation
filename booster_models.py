@@ -407,6 +407,11 @@ class ROParams:
     wing_root_chord_m:      float = 0.0   # root chord along the body flank (m)
     wing_span_exposed_m:    float = 0.0   # per-side exposed span from the surface (m)
     wing_sweep_deg:         float = 0.0   # leading-edge sweep (0 = tip at TE height)
+    # GEOMETRY-only (feeds the 3-D Blender export; NOT the polar, which uses
+    # area/AR/sweep): the panel thickness and how many panels ring the body
+    # (a C-HGB carries 4 flaps; a delta glider 2).
+    wing_thickness_m:       float = 0.0   # panel max thickness (0 = export nom.)
+    n_wings:                int   = 4     # panels around the body for export
     # Trim row from the lifting-body α-sweep estimator (Phase 3 consumers:
     # the offset polar and the windward-α consistency guard).  SWEEP-native
     # coefficients — referenced to the estimator's stated A_ref (planform for
@@ -685,6 +690,8 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'wing_root_chord_m':     ro.wing_root_chord_m,
         'wing_span_exposed_m':   ro.wing_span_exposed_m,
         'wing_sweep_deg':        ro.wing_sweep_deg,
+        'wing_thickness_m':      ro.wing_thickness_m,
+        'n_wings':               ro.n_wings,
         'trim_alpha_deg':        ro.trim_alpha_deg,
         'trim_CL0':              ro.trim_CL0,
         'glider_guidance':       ro.glider_guidance,
@@ -753,6 +760,8 @@ def ro_from_dict(d: dict) -> ROParams:
         wing_root_chord_m=float(d.get('wing_root_chord_m', 0.0) or 0.0),
         wing_span_exposed_m=float(d.get('wing_span_exposed_m', 0.0) or 0.0),
         wing_sweep_deg=float(d.get('wing_sweep_deg', 0.0) or 0.0),
+        wing_thickness_m=float(d.get('wing_thickness_m', 0.0) or 0.0),
+        n_wings=int(d.get('n_wings', 4) or 4),
         trim_alpha_deg=float(d.get('trim_alpha_deg', 0.0) or 0.0),
         trim_CL0=float(d.get('trim_CL0', 0.0) or 0.0),
         glider_guidance=_g,
