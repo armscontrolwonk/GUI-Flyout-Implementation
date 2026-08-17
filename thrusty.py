@@ -2032,22 +2032,22 @@ class BoosterDialog(tk.Toplevel):
             strapon=(dict(length_m=_fv(self._b_length_var),
                           diameter_m=_fv(self._b_diam_var))
                      if _i(self._n_boosters_var, 0) > 0 else None),
-            nozzle=dict(dia_m=self._nozzle_dia_loaded()))
+            nozzle=dict(dia_m=self._nozzle_dia_loaded(1)))
         _open_image_measure_dialog(
             self, "Measure from image — booster", prompts,
             self._apply_image_measurements,
             current_fn=self._current_image_values,
             ctx=dict(dims=dims))
 
-    def _nozzle_dia_loaded(self):
-        """Stage 1's loaded per-nozzle exit DIAMETER in metres (0 if unset),
-        implied by the stored per-nozzle area — or total ÷ count when only
-        the total is filled.  Feeds the measure tool's diagram proportions
-        and the R8 delta preview (both speak metres)."""
+    def _nozzle_dia_loaded(self, stage=1):
+        """Stage `stage`'s loaded per-nozzle exit DIAMETER in metres (0 if
+        unset), implied by the stored per-nozzle area — or total ÷ count
+        when only the total is filled.  Feeds the measure tool's diagram
+        proportions and the R8 delta preview (both speak metres)."""
         frames = getattr(self, "_stage_frames", [])
-        if not frames:
+        if not 1 <= stage <= len(frames):
             return 0.0
-        fr = frames[0]
+        fr = frames[stage - 1]
         def _v(name, default=0.0):
             try:
                 return float(getattr(fr, name).get() or default)
@@ -2070,10 +2070,10 @@ class BoosterDialog(tk.Toplevel):
         2026-08-01) — except fin_sweep, DEGREES, written only by the 3-click
         angle prompt (never through the metre CONVENTIONS).  Other non-metre
         editor fields (masses kg, motor web mm, jettison km) must never be
-        added without a conversion at the boundary.  nozzle_dia is therefore
-        deliberately NOT mapped here: the stored field is an AREA (m²), so
-        apply converts π(d/2)² at the boundary and the preview derives the
-        implied diameter (_nozzle_dia_loaded)."""
+        added without a conversion at the boundary.  stageN_nozzle_dia is
+        therefore deliberately NOT mapped here: the stored field is an AREA
+        (m²), so apply converts π(d/2)² at the boundary and the preview
+        derives the implied diameter (_nozzle_dia_loaded)."""
         if field.startswith("stage"):
             # "stage2_len" / "stage3_dia" / "stage1_interstage_len" → the
             # StringVar on that stage frame.
@@ -2085,6 +2085,8 @@ class BoosterDialog(tk.Toplevel):
             if not (1 <= n <= len(frames)):
                 return None
             fr = frames[n - 1]
+            if field.endswith("_nozzle_dia"):
+                return None                      # area field: apply converts
             if field.endswith("_interstage_len"):
                 return getattr(fr, "_is_len_var", None)
             if field.endswith("_top_dia"):
@@ -2107,9 +2109,12 @@ class BoosterDialog(tk.Toplevel):
         fields this editor can actually write; None = blank/unparseable."""
         out = {}
         for f in fields:
-            if f == "nozzle_dia":
+            if f.startswith("stage") and f.endswith("_nozzle_dia"):
                 # Stored as per-nozzle AREA; the preview compares diameters.
-                d = self._nozzle_dia_loaded()
+                try:
+                    d = self._nozzle_dia_loaded(int(f[5:].split("_", 1)[0]))
+                except ValueError:
+                    d = 0.0
                 out[f] = d if d > 0.0 else None
                 continue
             var = self._img_field_var(f)
@@ -2133,19 +2138,20 @@ class BoosterDialog(tk.Toplevel):
             var = self._img_field_var(field)
             if var is not None:
                 var.set(f"{float(value):.4g}")
-        # Nozzle: the tool measured ONE exit DIAMETER (metres); the editor
-        # stores per-nozzle exit AREA (m²), so the units-contract conversion
-        # π(d/2)² happens HERE, at the boundary.  Writing the per-nozzle
-        # field fires the stage frame's _sum_nozzles trace, which refreshes
-        # the total = each × declared count (count untouched — measure one,
-        # declare count).
-        if "nozzle_dia" in (accepted or {}) and \
-                getattr(self, "_stage_frames", None):
+        # Nozzles: the tool measured ONE exit DIAMETER (metres) per stage;
+        # the editor stores per-nozzle exit AREA (m²), so the units-contract
+        # conversion π(d/2)² happens HERE, at the boundary.  Writing the
+        # per-nozzle field fires that stage frame's _sum_nozzles trace,
+        # which refreshes its total = each × declared count (count
+        # untouched — measure one, declare count).
+        for field, value in (accepted or {}).items():
+            if not (field.startswith("stage")
+                    and field.endswith("_nozzle_dia")):
+                continue
             try:
-                d_noz = float(accepted["nozzle_dia"])
-                fr = self._stage_frames[0]
-                fr._nozzle_each.set(f"{np.pi * (0.5 * d_noz) ** 2:.4g}")
-            except (ValueError, tk.TclError, AttributeError):
+                fr = self._stage_frames[int(field[5:].split("_", 1)[0]) - 1]
+                fr._nozzle_each.set(f"{np.pi * (0.5 * float(value)) ** 2:.4g}")
+            except (ValueError, IndexError, tk.TclError, AttributeError):
                 pass
         # Fin sweep is DERIVED from the fin's root/span/tip (already measured):
         # tan Λ = (root − tip)/span — a length ratio, no angle to get backwards.

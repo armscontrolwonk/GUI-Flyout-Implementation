@@ -220,24 +220,32 @@ def test_booster_button_and_apply(root):
 
 
 def test_booster_apply_converts_nozzle_diameter_to_per_nozzle_area(root):
-    """UNITS boundary: the tool measured a nozzle-exit DIAMETER (metres);
-    the editor stores per-nozzle AREA (m²) = π(d/2)², and the declared
-    nozzle count multiplies it into the total via the existing trace —
-    measure one, declare count.  The delta preview speaks diameters, so
-    _current_image_values reports the diameter the stored area implies."""
+    """UNITS boundary: the tool measured nozzle-exit DIAMETERS (metres),
+    one per stage; the editor stores per-nozzle AREA (m²) = π(d/2)² on
+    EACH stage's frame, and each declared nozzle count multiplies it into
+    that stage's total via the existing trace — measure one, declare
+    count.  The delta preview speaks diameters, so _current_image_values
+    reports the diameter each stage's stored area implies."""
     import math
     d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
     d.withdraw()
-    d._n_stages_var.set("1"); d._update_stage_frames()
-    fr = d._stage_frames[0]
-    fr._n_nozzles.set("4")
-    d._apply_image_measurements({"nozzle_dia": 0.8}, [], None)
-    each = math.pi * 0.4 ** 2
-    assert float(fr._nozzle_each.get()) == pytest.approx(each, rel=1e-3)
-    assert float(fr._nozzle_area.get()) == pytest.approx(4 * each, rel=1e-3)
-    assert fr._n_nozzles.get() == "4"            # declared count untouched
-    cur = d._current_image_values(["nozzle_dia"])
-    assert cur["nozzle_dia"] == pytest.approx(0.8, rel=1e-3)
+    d._n_stages_var.set("2"); d._update_stage_frames()
+    f1, f2 = d._stage_frames[0], d._stage_frames[1]
+    f1._n_nozzles.set("4")
+    dia_before = f1._dia.get()
+    d._apply_image_measurements(
+        {"stage1_nozzle_dia": 0.8, "stage2_nozzle_dia": 0.5}, [], None)
+    each1, each2 = math.pi * 0.4 ** 2, math.pi * 0.25 ** 2
+    assert float(f1._nozzle_each.get()) == pytest.approx(each1, rel=1e-3)
+    assert float(f1._nozzle_area.get()) == pytest.approx(4 * each1, rel=1e-3)
+    assert f1._n_nozzles.get() == "4"            # declared count untouched
+    assert float(f2._nozzle_each.get()) == pytest.approx(each2, rel=1e-3)
+    assert float(f2._nozzle_area.get()) == pytest.approx(each2, rel=1e-3)
+    # stage diameters untouched (the nozzle field must not alias _dia)
+    assert f1._dia.get() == dia_before
+    cur = d._current_image_values(["stage1_nozzle_dia", "stage2_nozzle_dia"])
+    assert cur["stage1_nozzle_dia"] == pytest.approx(0.8, rel=1e-3)
+    assert cur["stage2_nozzle_dia"] == pytest.approx(0.5, rel=1e-3)
     d.destroy()
 
 

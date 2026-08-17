@@ -588,7 +588,6 @@ _DIAGRAM_LINES = {
     "fin_tip":        ("booster", [(0.68, 0.82), (0.68, 0.86)]),
     "strapon_dia":    ("booster", [(0.31, 0.68), (0.38, 0.68)]),
     "strapon_len":    ("booster", [(0.345, 0.475), (0.345, 0.86)]),
-    "nozzle_dia":     ("booster", [(0.455, 0.925), (0.545, 0.925)]),
     OVERALL_LEN_CHECK_FIELD: ("booster", [(0.50, 0.04), (0.50, 0.86)]),
 }
 
@@ -611,7 +610,6 @@ _DIAGRAM_SUBJECTS = {
     "fairing_nose_len": "fairing",
     "fin_span": "fin", "fin_root": "fin", "fin_tip": "fin",
     "strapon_dia": "strapon", "strapon_len": "strapon",
-    "nozzle_dia": "nozzle",
     OVERALL_LEN_CHECK_FIELD: None,
 }
 
@@ -889,10 +887,11 @@ def booster_side_layout(dims, w_px=232, h_px=160, tip_floor=False):
         pts["strapon_len"] = [U(xs, ys), U(xs, base)]
         y_sd = 0.5 * (ys + base)
         pts["strapon_dia"] = [U(xs - Rs, y_sd), U(xs + Rs, y_sd)]
-    # ONE nozzle bell below the S1 base (the prompt always exists for a
-    # booster): exit half-width from the loaded diameter when set, else a
-    # representative fraction of the S1 body.  The exit lip is the clicked
-    # edge, drawn in the strip below the base line.
+    # STAGE 1's nozzle bell below the base (upper-stage bells hide inside
+    # their interstages — their prompts keep the static art): exit
+    # half-width from the loaded diameter when set, else a representative
+    # fraction of the S1 body.  The exit lip is the clicked edge, drawn in
+    # the strip below the base line.
     noz = dims.get("nozzle") or {}
     d_noz = _posf(noz.get("dia_m"))
     Rn = (min(0.98 * R1, max(1.5, 0.5 * d_noz * ppm)) if d_noz
@@ -901,7 +900,8 @@ def booster_side_layout(dims, w_px=232, h_px=160, tip_floor=False):
     polys.append(dict(tag="nozzle", pts=[
         U(cx - 0.55 * Rn, base), U(cx + 0.55 * Rn, base),
         U(cx + Rn, y_exit), U(cx - Rn, y_exit), U(cx - 0.55 * Rn, base)]))
-    pts["nozzle_dia"] = [U(cx - Rn, y_exit), U(cx + Rn, y_exit)]
+    pts["stage1_nozzle_dia"] = [U(cx - Rn, y_exit), U(cx + Rn, y_exit)]
+    subj["stage1_nozzle_dia"] = "nozzle"
     pts[OVERALL_LEN_CHECK_FIELD] = [U(cx, y0), U(cx, base)]
     for f in pts:
         subj.setdefault(f, _DIAGRAM_SUBJECTS.get(f, "body"))
@@ -938,6 +938,13 @@ def booster_dims_with_accepted(dims, accepted):
                 i = int(f[5:].split("_", 1)[0])
             except (ValueError, IndexError):
                 continue
+            if f.endswith("_nozzle_dia"):
+                # a DIAMETER in metres (the tool's unit); only stage 1's
+                # bell is drawn, and it must never fall through to the
+                # stage-diameter key below
+                if i == 1:
+                    out["nozzle"] = dict(out.get("nozzle") or {}, dia_m=v)
+                continue
             if not 1 <= i <= len(stages):
                 continue
             key = ("interstage_len_m" if f.endswith("_interstage_len")
@@ -962,10 +969,6 @@ def booster_dims_with_accepted(dims, accepted):
                        strapon_dia="diameter_m").get(f)
             if key:
                 out["strapon"] = dict(out["strapon"], **{key: v})
-        elif f == "nozzle_dia":
-            # v is the DIAMETER in metres (the tool's unit) — the area
-            # conversion belongs to the editor's apply, not the art.
-            out["nozzle"] = dict(out.get("nozzle") or {}, dia_m=v)
     out["stages"] = stages
     return out
 
@@ -981,6 +984,14 @@ def diagram_spec(prompt):
                 if hit else None)
     if f.startswith("stage"):
         second = f.startswith("stage2")          # stages ≥3 reuse the S1 box
+        if f.endswith("_nozzle_dia"):
+            # Every stage's prompt shows the same click — across the drawn
+            # bell's exit lip.  The stage being measured is named by the
+            # label (an upper stage's bell hides inside the interstage, so
+            # there is no per-stage place to draw it in a stack elevation).
+            return dict(base="booster", kind="line",
+                        pts=[(0.455, 0.925), (0.545, 0.925)],
+                        subject="nozzle")
         if f.endswith("_interstage_len"):        # the adapter atop the stage
             pts = ([(0.50, 0.14), (0.50, 0.20)] if second
                    else [(0.50, 0.38), (0.50, 0.46)])
@@ -1187,16 +1198,20 @@ def booster_prompts(n_stages=1, has_fairing=False, has_fins=False,
                       + note, view="side", convention="strapon_diameter"))
         p.append(dict(field="strapon_len", label="Click ONE strap-on's LENGTH",
                       view="side", convention="strapon_length"))
-    # Nozzle exit: measurable off a side view only when the bell protrudes
-    # below the base (common on liquid boosters) or off an aft/pad photo at
-    # the same scale — the prompt says so and Skip is always available.
-    # Measure ONE; the editor multiplies by the declared nozzle count.
-    p.append(dict(field="nozzle_dia",
-                  label="Click ONE nozzle's EXIT diameter (across the exit "
-                  "lip, where it protrudes below the stage-1 base — Skip if "
-                  "no nozzle is visible); the editor stores per-nozzle area "
-                  "× the declared count", view="side",
-                  convention="nozzle_diameter"))
+    # Nozzle exits, PER stage, grouped after the main dimensional sweep:
+    # stage 1's bell protrudes below the base; upper-stage nozzles show
+    # only in cutaway drawings or separated-stage photos — each label says
+    # so and Skip is always available.  Measure ONE; the editor multiplies
+    # by that stage's declared nozzle count.
+    for i in range(1, max(1, int(n_stages)) + 1):
+        where = ("across the exit lip, where it protrudes below the base"
+                 if i == 1 else
+                 "visible only in a cutaway or separated-stage view")
+        p.append(dict(field=f"stage{i}_nozzle_dia",
+                      label=f"Click STAGE {i}'s nozzle EXIT diameter (ONE "
+                      f"nozzle, {where} — Skip if not visible); the editor "
+                      "stores per-nozzle area × the declared count",
+                      view="side", convention="nozzle_diameter"))
     # Closure cross-check: overall length is never stored (no such editor
     # field — the model derives it from the parts), but measuring it lets the
     # dialog check that the stage (+ fairing) lengths tile it.  Warn-only.

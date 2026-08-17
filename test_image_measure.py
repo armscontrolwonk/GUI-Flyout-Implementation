@@ -271,13 +271,14 @@ def test_booster_prompts_state_the_count_assumption():
 
 
 def test_booster_prompts_minimal_is_stage_one_plus_nozzle_plus_check():
-    """Every booster checklist carries the nozzle-exit prompt (every booster
-    HAS nozzles; Skip covers photos that hide them) and ends with the
-    check-only overall length — the one 'measurement' that never writes a
-    field (the model derives the total from its parts); it exists to feed
-    the length-closure warning."""
+    """Every booster checklist carries a nozzle-exit prompt PER stage
+    (every stage has nozzles; Skip covers photos that hide them) and ends
+    with the check-only overall length — the one 'measurement' that never
+    writes a field (the model derives the total from its parts); it exists
+    to feed the length-closure warning."""
     assert [p["field"] for p in im.booster_prompts(n_stages=1)] == \
-        ["stage1_len", "stage1_dia", "nozzle_dia", im.OVERALL_LEN_CHECK_FIELD]
+        ["stage1_len", "stage1_dia", "stage1_nozzle_dia",
+         im.OVERALL_LEN_CHECK_FIELD]
 
 
 # ── length closure (warn-only, never normalizes) ────────────────────────────
@@ -547,23 +548,31 @@ def test_booster_side_layout_stacks_loaded_stages():
 
 
 def test_nozzle_diameter_prompt_diagram_and_layout():
-    """The nozzle-exit prompt: always on the booster checklist (before the
-    closure check), hands the editor the DIAMETER in metres (identity
-    convention — the area conversion π(d/2)² is the editor's boundary job,
-    stated in the labels), and its art highlights a drawn nozzle bell whose
-    exit width follows the loaded diameter."""
+    """A nozzle-exit prompt PER stage, grouped after the dimensional sweep
+    (before the closure check).  Each hands the editor the DIAMETER in
+    metres (identity convention — the area conversion π(d/2)² is the
+    editor's boundary job, stated in the labels); the art highlights a
+    drawn nozzle bell whose exit width follows stage 1's loaded diameter."""
     ps = im.booster_prompts(n_stages=2, has_fins=True, n_fins=4)
     fields = [p["field"] for p in ps]
-    noz = next(p for p in ps if p["field"] == "nozzle_dia")
-    assert fields.index("nozzle_dia") == len(fields) - 2   # just before check
-    assert noz["convention"] == "nozzle_diameter"
-    assert "Skip" in noz["label"]                          # often not visible
+    assert fields[-3:] == ["stage1_nozzle_dia", "stage2_nozzle_dia",
+                           im.OVERALL_LEN_CHECK_FIELD]
+    for i in (1, 2):
+        noz = next(p for p in ps if p["field"] == f"stage{i}_nozzle_dia")
+        assert noz["convention"] == "nozzle_diameter"
+        assert "Skip" in noz["label"]                      # often not visible
+    # an upper stage's bell hides in the assembled stack — its label says
+    # where it CAN be measured
+    s2 = next(p for p in ps if p["field"] == "stage2_nozzle_dia")
+    assert "cutaway" in s2["label"]
     label, convert = im.CONVENTIONS["nozzle_diameter"]
     assert convert(0.84) == 0.84                           # identity: metres
     assert "π(d/2)²" in label                              # conversion stated
-    # static art: a tagged nozzle element, highlighted by the prompt
-    spec = im.diagram_spec(dict(field="nozzle_dia"))
-    assert spec["base"] == "booster" and spec["subject"] == "nozzle"
+    # static art: a tagged nozzle element, highlighted by EVERY stage's
+    # prompt (one drawn bell; the label names the stage)
+    for f in ("stage1_nozzle_dia", "stage3_nozzle_dia"):
+        spec = im.diagram_spec(dict(field=f))
+        assert spec["base"] == "booster" and spec["subject"] == "nozzle"
     assert any(el["tag"] == "nozzle" for el in im.DIAGRAM_BASES["booster"])
     # proportion-aware art: exit width tracks the loaded diameter, and the
     # click segment lies across the exit lip (below the S1 base line)
@@ -571,19 +580,27 @@ def test_nozzle_diameter_prompt_diagram_and_layout():
         return im.booster_side_layout(dict(
             stages=[dict(length_m=8.0, diameter_m=1.0)],
             nozzle=(dict(dia_m=d) if d else None)), w_px=200, h_px=160)
-    wide = _lay(0.9)["pts"]["nozzle_dia"]
-    slim = _lay(0.3)["pts"]["nozzle_dia"]
+    wide = _lay(0.9)["pts"]["stage1_nozzle_dia"]
+    slim = _lay(0.3)["pts"]["stage1_nozzle_dia"]
     assert (wide[1][0] - wide[0][0]) / (slim[1][0] - slim[0][0]) \
         == pytest.approx(3.0, rel=0.02)
     assert wide[0][1] > 0.90 - 1e-9                        # below the base line
     rep = _lay(None)                                       # nothing loaded:
     assert any(p["tag"] == "nozzle" for p in rep["polys"])  # representative
-    assert rep["subjects"]["nozzle_dia"] == "nozzle"
-    # live merge: an accepted diameter reshapes the bell (still metres here)
+    assert rep["subjects"]["stage1_nozzle_dia"] == "nozzle"
+    # upper-stage prompts have no layout art (their bells are hidden) —
+    # the GUI falls back to the static diagram, never a wrong picture
+    assert "stage2_nozzle_dia" not in _lay(0.9)["pts"]
+    # live merge: an accepted stage-1 diameter reshapes the bell (still
+    # metres here); an upper stage's must NOT fall through to the stage-
+    # diameter key (the old else-branch trap)
     bm = im.booster_dims_with_accepted(
-        dict(stages=[dict(length_m=8.0, diameter_m=1.0)]),
-        {"nozzle_dia": 0.9})
+        dict(stages=[dict(length_m=8.0, diameter_m=1.0),
+                     dict(length_m=4.0, diameter_m=1.0)]),
+        {"stage1_nozzle_dia": 0.9, "stage2_nozzle_dia": 0.5})
     assert bm["nozzle"]["dia_m"] == 0.9
+    assert bm["stages"][0]["diameter_m"] == 1.0
+    assert bm["stages"][1]["diameter_m"] == 1.0
 
 
 def test_nose_radius_tangency_identity():
