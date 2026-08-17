@@ -8812,7 +8812,8 @@ class BoosterFlyoutApp(tk.Tk):
             text, info = bx.bpy_script(p, title=name)
             with open(path, "w") as f:
                 f.write(text)
-            sidecars = []          # figure colours are embedded in the script
+            tex = bx.copy_figure_texture(_os.path.dirname(path))
+            sidecars = [tex] if tex else []
             how = "In Blender: Scripting tab → Open → Run Script."
         else:
             info = bx.write_obj_bundle(path, p, title=name)

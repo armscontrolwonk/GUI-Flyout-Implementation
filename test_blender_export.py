@@ -231,36 +231,46 @@ def test_obj_export_is_valid_and_keeps_objects_discrete():
     assert rmax == pytest.approx(0.6, abs=1e-3)
 
 
-def test_thrusty_3d_figure_stands_beside_the_stack():
-    """The mascot as FULL 3-D geometry (V-2-cutaway style): discrete
-    named parts (body slab, googly eyes, thumbs-up fist, sneakers…),
-    1.8 m top-of-slab over feet, feet on the stack-base ground line,
-    parked CLEAR of every other object, palette colours bound per part
-    (mtllib/usemtl — the pupils are black, the tongue red)."""
+def test_thrusty_sculpted_figure_stands_beside_the_stack():
+    """The mascot ships as the sculpted UV-textured mesh (decimated from
+    the user's 2M-triangle master): one object named Thrusty, 1.8 m
+    tall, feet on the stack-base ground line, parked CLEAR of every
+    other object, with the texture plumbing Blender's importer binds
+    (mtllib / usemtl Thrusty_skin / vt lines)."""
     veh = _demo_vehicle()
     veh.ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
     text, info = bx.obj_export(veh, title="Demo")
     objs, verts = _parse_obj(text)
-    fig_names = {n for n in objs if n.startswith("Thrusty_")}
-    assert {"Thrusty_Body", "Thrusty_Eye_L", "Thrusty_Pupil_R",
-            "Thrusty_Fist_L", "Thrusty_Thumb_L", "Thrusty_Hand_R",
-            "Thrusty_Shoe_L", "Thrusty_Sole_R"} <= fig_names
-    fig_idx = {i for n in fig_names for f in objs[n] for i in f}
-    zs = [verts[i][2] for i in fig_idx]
-    xs = [verts[i][0] for i in fig_idx]
-    # feet on the ground line (stack base = -center_shift), slab top at
-    # +1.8 m above it
+    assert "Thrusty" in objs
+    assert len(objs["Thrusty"]) == 40000            # the decimated mesh
+    idx = {i for f in objs["Thrusty"] for i in f}
+    zs = [verts[i][2] for i in idx]
+    xs = [verts[i][0] for i in idx]
     els = bx.vehicle_elements(veh)
     ground = -bx._center_shift(els)
-    assert min(zs) == pytest.approx(ground, abs=1e-6)
-    assert max(zs) - min(zs) == pytest.approx(bx._FIGURE_M, rel=0.02)
-    # clear of everything already placed (fins, strap-ons, the RO)
-    other = {i for nm, fs in objs.items() if nm not in fig_names
+    assert min(zs) == pytest.approx(ground, abs=1e-4)
+    assert max(zs) - min(zs) == pytest.approx(bx._FIGURE_M, rel=0.01)
+    other = {i for nm, fs in objs.items() if nm != "Thrusty"
              for f in fs for i in f}
     ext = max(math.hypot(verts[i][0], verts[i][1]) for i in other)
     assert min(xs) > ext
-    # palette plumbing: colours bound per part
     assert "mtllib" in text
+    assert "usemtl Thrusty_skin" in text
+    assert any(ln.startswith("vt ") for ln in text.splitlines())
+
+
+def test_procedural_figure_is_the_fallback(monkeypatch):
+    """A stripped checkout (no mesh asset) still ships a scale figure:
+    the procedural palette build, with its parts and colours intact and
+    the substitution flagged."""
+    monkeypatch.setattr(bx, "_figure_mesh_cache", False)
+    veh = _demo_vehicle()
+    text, info = bx.obj_export(veh, title="Demo")
+    assert any("asset absent" in f for f in info["flags"])
+    objs, _verts = _parse_obj(text)
+    fig_names = {n for n in objs if n.startswith("Thrusty_")}
+    assert {"Thrusty_Body", "Thrusty_Eye_L", "Thrusty_Fist_L",
+            "Thrusty_Shoe_L"} <= fig_names
     lines = text.splitlines()
     def mtl_of(name):
         i = lines.index(f"o {name}")
@@ -268,21 +278,21 @@ def test_thrusty_3d_figure_stands_beside_the_stack():
     assert mtl_of("Thrusty_Body") == "usemtl Thrusty_white"
     assert mtl_of("Thrusty_Pupil_L") == "usemtl Thrusty_black"
     assert mtl_of("Thrusty_Tongue") == "usemtl Thrusty_red"
-    assert mtl_of("Thrusty_Shoe_R") == "usemtl Thrusty_black"
 
 
-def test_write_obj_bundle_ships_the_palette_sidecar(tmp_path):
-    """The bundle is now a pair: <name>.obj + <name>.mtl carrying the
-    figure's three flat palette colours.  No textures, no PNG."""
+def test_write_obj_bundle_ships_the_texture_sidecars(tmp_path):
+    """The bundle is a trio again: <name>.obj + <name>.mtl + the
+    sculpted figure's diffuse JPEG (OBJ cannot embed images)."""
     path = str(tmp_path / "demo.obj")
     info = bx.write_obj_bundle(path, _demo_vehicle(), title="Demo")
     names = {os.path.basename(f) for f in info["files"]}
-    assert names == {"demo.obj", "demo.mtl"}
+    assert names == {"demo.obj", "demo.mtl", "thrusty_diffuse.jpg"}
     assert "mtllib demo.mtl" in open(path).read()
     mtl = open(tmp_path / "demo.mtl").read()
+    assert "newmtl Thrusty_skin" in mtl
+    assert "map_Kd thrusty_diffuse.jpg" in mtl     # the sculpted skin
     for m in ("Thrusty_white", "Thrusty_black", "Thrusty_red"):
-        assert f"newmtl {m}" in mtl
-    assert "map_Kd" not in mtl                     # palette only
+        assert f"newmtl {m}" in mtl                # fallback palette
 
 
 def test_obj_and_bpy_build_the_same_meshes():
@@ -651,7 +661,8 @@ def test_cg_marker_is_a_small_badge_on_the_surface():
     assert "MESHES = [" in script and "CG_fuelled_fill1" in script
     assert info["n_objects"] == (len(els["revolves"]) + len(els["plates"])
                                  + len(els["meshes"])
-                                 + len(els["figures"]))
+                                 + len(els["figures"])
+                                 + (1 if els["tex_figure"] else 0))
 
 
 def test_bpy_script_compiles_and_names_everything():
@@ -664,7 +675,8 @@ def test_bpy_script_compiles_and_names_everything():
     _e = bx.vehicle_elements(veh)
     assert info["n_objects"] == (len(_e["revolves"]) + len(_e["plates"])
                                  + len(_e["meshes"])
-                                 + len(_e["figures"]))
+                                 + len(_e["figures"])
+                                 + (1 if _e["tex_figure"] else 0))
     for name in ("'S1'", "'Interstage_1'", "'S2'", "'Fairing'", "'Fin_4'",
                  "'Strapon_2'", "'Test Vehicle'"):
         assert name in script
