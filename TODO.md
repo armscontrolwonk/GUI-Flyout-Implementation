@@ -210,6 +210,35 @@ Upgrade path, in effort order:
       Scope when picked up: release-condition fields on the flight
       plan, launch-transient handling, and what "range" means measured
       from a moving release point.
+  (e) gazetteer map overlays — DESIGN OF RECORD (agreed 2026-08-17,
+      user decision: TRAJECTORY-AWARE by default on the trajectory
+      map).  Toggleable per-class layers of gazetteer features on the
+      folium trajectory map and the cartopy picker map, each class in
+      two flavors: dots, and dots + labels.  Class families: Populated,
+      Facilities (GNS-S), Water (GNS-H), Terrain/Islands (GNS-T),
+      Undersea (GNS-U).
+      PRIORITY SCORE (all terms stated, no population data exists in
+      the packs): designation-rank table per class (PPLC > PPLA >
+      PPLA2 > PPL; SEA > GULF > BAY > STM; AIRB/INSM > generic) +
+      variant-name-count bonus, capped (prominence proxy: places the
+      world writes about accumulate romanizations) + CORRIDOR BONUS
+      when a trajectory is plotted (≈1 tier within ~100 km of the
+      ground track; impact zone prefers water/undersea names; launch
+      area prefers facilities).  Corridor term ON by default for the
+      trajectory map, OFF for the location-picker map (neutral
+      reference there).
+      DENSITY: zoom-tiered class gates (explicit table: continental =
+      capitals + seas; country = +admin-1 seats, space centers, gulfs,
+      major islands; regional = +districts, installations, bays,
+      peaks; local = everything) decide ELIGIBILITY → best-per-grid-
+      cell (~12×8, top tiers bypass the grid) guarantees SPREAD →
+      greedy label-box deconfliction in priority order decides LABELS
+      (dot stays when its label is culled; label budget ≈ ⅓ of dot
+      budget).  Folium: precomputed zoom-bounded FeatureGroups (static
+      HTML, Leaflet handles show/hide), hover tooltips free on every
+      dot; cartopy: rules run live per redraw.  REJECTED: folium
+      MarkerCluster (count-bubbles hide exactly the names the reader
+      needs).
 
 ### 5. Move the paper library from GitHub to an organized Drive
 STEPS 1–3 DONE 2026-08-17: all 107 data/*.pdf uploaded to the Drive
