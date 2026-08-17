@@ -104,6 +104,9 @@ _R: dict[str, int] = {
     # trim row from the lifting-body estimator (sweep-native coefficients)
     'trim_alpha': 65,
     'trim_cl0':   66,
+    # wing geometry for the 3-D Blender export (not the polar)
+    'wing_thick': 67,
+    'n_wings':    68,
 }
 
 _VAL_COL = 4   # column D
@@ -281,6 +284,12 @@ def _build_ro_sheet(ws, ro) -> None:
            'sweep-native coefficients; 0 = symmetric polar')
     put('trim_alpha', getattr(ro, 'trim_alpha_deg', 0.0))
     put('trim_cl0',   getattr(ro, 'trim_CL0', 0.0))
+    # Wing geometry for the 3-D Blender export (panel thickness + count);
+    # geometry only — the polar never reads these.
+    _label(ws, _R['wing_thick'], 'Wing panel thickness', 'm', '3-D export')
+    _label(ws, _R['n_wings'],    'Wing panel count', '', '3-D export (e.g. 4)')
+    put('wing_thick', getattr(ro, 'wing_thickness_m', 0.0))
+    put('n_wings',    getattr(ro, 'n_wings', 4))
 
 
 def _build_ro_reference_sheet(ws) -> None:
@@ -371,6 +380,8 @@ def import_ro_xlsx(path: str):
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),
         wing_span_exposed_m=_rnum(ws, _R['wing_span'], _VAL_COL),
         wing_sweep_deg=_rnum(ws, _R['wing_sweep'], _VAL_COL),
+        wing_thickness_m=_rnum(ws, _R['wing_thick'], _VAL_COL),
+        n_wings=int(_rnum(ws, _R['n_wings'], _VAL_COL) or 4),
         trim_alpha_deg=_rnum(ws, _R['trim_alpha'], _VAL_COL),
         trim_CL0=_rnum(ws, _R['trim_cl0'], _VAL_COL),
         separation_mode=_norm_sep_mode(_rstr(ws, _R['sep'], _VAL_COL, 'separating_ro')),

@@ -28,7 +28,8 @@ def _ro(**kw):
 _NEW_FIELDS = ("body_form", "biconic", "fore_length_m", "break_diameter_m",
                "body_span_m",
                "wing_area_m2", "wing_aspect_ratio", "wing_root_chord_m",
-               "wing_span_exposed_m", "wing_sweep_deg")
+               "wing_span_exposed_m", "wing_sweep_deg",
+               "wing_thickness_m", "n_wings")
 
 
 def test_biconic_with_planform_wings_round_trips(tmp_path):
@@ -39,7 +40,7 @@ def test_biconic_with_planform_wings_round_trips(tmp_path):
     ro = _ro(biconic=True, fore_length_m=0.5, break_diameter_m=0.42,
              wing_area_m2=0.2, wing_aspect_ratio=0.0,
              wing_root_chord_m=0.6, wing_span_exposed_m=0.15,
-             wing_sweep_deg=65.0)
+             wing_sweep_deg=65.0, wing_thickness_m=0.04, n_wings=4)
     export_ro_xlsx(str(p), ro)
     back = import_ro_xlsx(str(p))
     for f in _NEW_FIELDS:
