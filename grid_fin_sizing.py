@@ -81,78 +81,79 @@ def _front_nose(params: BoosterParams):
     RV/payload nose.  Falls back to a 3-caliber tangent ogive if none is set.
     """
     d = params.diameter_m
+    # The nose caps the TOP stage, not stage 1 — use the top stage's diameter
+    # so a multi-stage fallback nose isn't sized to the fat booster (which
+    # inflated the stack length and mislaid the CG).
+    top = params
+    while getattr(top, "stage2", None) is not None:
+        top = top.stage2
+    d_top = float(getattr(top, "diameter_m", 0.0) or d)
     # shroud nose (fairing on during ascent)
     if params.shroud_nose_shape and params.shroud_nose_length_m > 0:
-        return params.shroud_nose_shape, params.shroud_nose_length_m, d
+        return (params.shroud_nose_shape, params.shroud_nose_length_m,
+                params.shroud_diameter_m or d)
     if params.nose_shape and params.nose_length_m > 0:
-        return params.nose_shape, params.nose_length_m, d
+        return params.nose_shape, params.nose_length_m, d_top
     ro = effective_ro(params)
     if ro is not None and getattr(ro, 'shape', '') and getattr(ro, 'length_m', 0) > 0:
         # RV/HGB caps the stack and acts as the nose
-        return ro.shape, ro.length_m, d
-    return "tangent_ogive", 3.0 * d, d      # generic fallback
+        return ro.shape, ro.length_m, (getattr(ro, 'diameter_m', 0.0) or d_top)
+    return "tangent_ogive", 1.6 * d_top, d_top   # matches the schematic nom.
 
 
 def estimate_cg(params: BoosterParams):
     """Estimate (x_cg_m, total_length_m) from the stage stack at liftoff/full.
 
-    x is measured aft from the nose tip.  The top-level ``length_m`` is taken as
-    the FULL stack length (the convention in the shipped factories); the body
-    region [nose, aft] is filled front->aft by the upper stages at their own
-    ``length_m`` with the aft-most (first) stage taking the remainder, and each
-    stage's OWN wet mass is m_i - m_{i+1} (cumulative-mass convention).  The
-    payload/RV mass sits in the nose region when the RV caps the stack, else
-    just behind a separate nose/shroud.  Approximate (see module docstring)."""
+    x is measured aft from the nose tip.  The stack is laid out from the REAL
+    per-stage geometry — each stage at its OWN ``length_m``, plus its declared
+    interstage, plus the nose/fairing on top — exactly as the schematic draws
+    it (``length_m`` is per-stage, NOT the whole stack; the earlier full-stack
+    assumption squeezed a multi-stage vehicle and floated the CG upward).
+    Each stage's OWN wet mass is m_i - m_{i+1} (cumulative-mass convention);
+    the payload/RV mass sits in the nose region when the RV caps the stack,
+    else just behind a separate nose/shroud.  Approximate (see docstring)."""
     nose_shape, nose_len, d = _front_nose(params)
-    L_total = max(params.length_m, nose_len + 0.5)
     ro = effective_ro(params)
     payload = (params.payload_kg if params.payload_kg > 0
                else (ro.mass_kg if ro is not None else 0.0))
     nose_is_ro = not ((params.shroud_nose_shape and params.shroud_nose_length_m > 0)
                       or (params.nose_shape and params.nose_length_m > 0))
 
-    chain = []
+    chain = []                                     # [S1 (base) ... Sn (top)]
     s = params
     while s is not None:
         chain.append(s)
         s = s.stage2
-    fwd_to_aft = list(reversed(chain))             # [stageN ... stage1]
     own = {}
     for i, st in enumerate(chain):
         nxt = chain[i + 1] if i + 1 < len(chain) else None
         upper = nxt.mass_initial if nxt is not None else payload
         own[id(st)] = max(st.mass_initial - upper, 0.0)
 
-    body_start = nose_len
-    body_len = L_total - nose_len
-    upper_stages = fwd_to_aft[:-1]
-    aft_stage = fwd_to_aft[-1]
-    lens = {id(st): (st.length_m if st.length_m > 0 else 0.0)
-            for st in upper_stages}
-    upper_sum = sum(lens.values())
-    if upper_sum >= body_len:                      # lengths inconsistent -> by mass
-        tot = sum(own[id(st)] for st in fwd_to_aft) or 1.0
-        lens = {id(st): body_len * own[id(st)] / tot for st in fwd_to_aft}
-    else:
-        lens[id(aft_stage)] = body_len - upper_sum
+    # Build heights from the BASE up, mirroring booster_schematic.draw_booster:
+    # stage, then its interstage (adapter atop it), ... then nose on top.
+    seg_y = []                                     # (mass, height-from-base)
+    y = 0.0
+    for st in chain:
+        L = st.length_m if st.length_m > 0 else max(1.0, 2.0 * st.diameter_m)
+        seg_y.append((own[id(st)], y + 0.5 * L))
+        if st.n_boosters and st.n_boosters > 0:    # strap-ons ride this stage
+            b = st.n_boosters * (st.booster_prop_kg + st.booster_inert_kg)
+            seg_y.append((b, y + 0.5 * L))
+        y += L
+        if getattr(st, "has_interstage", False) \
+                and (getattr(st, "interstage_length_m", 0.0) or 0.0) > 0:
+            y += st.interstage_length_m
+    body_top = y
+    total = body_top + nose_len
+    if payload > 0:                                # in / behind the nose
+        seg_y.append((payload,
+                      body_top + (0.5 * nose_len if nose_is_ro else 0.0)))
 
-    seg = []                                       # (mass, x_centroid)
-    if payload > 0:
-        seg.append((payload, nose_len * 0.5 if nose_is_ro else nose_len))
-    x = body_start
-    for st in fwd_to_aft:
-        L = max(lens[id(st)], 1e-6)
-        seg.append((own[id(st)], x + 0.5 * L))
-        x += L
-    if params.n_boosters > 0:                      # strap-ons at the aft stage
-        b = params.n_boosters * (params.booster_prop_kg + params.booster_inert_kg)
-        seg.append((b, L_total - 0.5 * (lens[id(aft_stage)]
-                                        if id(aft_stage) in lens else 1.0)))
-
-    msum = sum(m for m, _ in seg)
-    mx = sum(m * xx for m, xx in seg)
-    x_cg = mx / msum if msum > 0 else 0.5 * L_total
-    return x_cg, L_total
+    msum = sum(m for m, _ in seg_y)
+    my = sum(m * yy for m, yy in seg_y)
+    y_cg = my / msum if msum > 0 else 0.5 * total
+    return total - y_cg, total                     # x aft of the nose
 
 
 def _stack_layout(params: BoosterParams):

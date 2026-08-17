@@ -558,10 +558,13 @@ def _draw_cg_marker(ax, p, total_h):
     the base at y=0, so the CG sits at y = total − x_cg on the axis."""
     try:
         from grid_fin_sizing import estimate_cg
-        x_cg, _L = estimate_cg(p)
+        x_cg, L_est = estimate_cg(p)
     except Exception:
         return
-    y_cg = max(0.0, min(total_h, total_h - x_cg))
+    # estimate_cg lays the stages out the same way this schematic does, so
+    # its height-from-base (L_est − x_cg) lands on the drawn stack even if
+    # its nose-length nominal differs slightly from ours.
+    y_cg = max(0.0, min(total_h, L_est - x_cg))
     d_body = float(getattr(p, "diameter_m", 0.0) or 1.0)
     r = d_body / 20.0                                # symbol radius = ⌀/20
     # Pixel floor so a slender vehicle's marker stays legible: convert a

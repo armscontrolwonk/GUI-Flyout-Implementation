@@ -486,6 +486,29 @@ def test_nose_and_fairing_have_open_bases_stages_capped():
     assert by3["RO_Body"][0] == (0.0, 0.0)
 
 
+def test_estimate_cg_uses_real_per_stage_lengths():
+    """Regression: estimate_cg treated the root length_m as the WHOLE stack
+    and squeezed a multi-stage vehicle, floating the CG up into stage 2.
+    With the fix it lays stages out at their OWN lengths (+ interstages +
+    nose), so a heavy fuelled first stage keeps the CG DOWN in stage 1, and
+    the total matches the summed geometry."""
+    from grid_fin_sizing import estimate_cg
+    # 3 stages, heavy full first stage (TD-2-like proportions)
+    s3 = _stage("S3", 0.6, 4.0)
+    s3.mass_initial, s3.mass_propellant = 1600, 1400
+    s2 = _stage("S2", 1.3, 8.0, stage2=s3,
+                has_interstage=True, interstage_length_m=1.0)
+    s2.mass_initial, s2.mass_propellant = 6500, 3700
+    s1 = _stage("S1", 2.2, 16.0, stage2=s2,
+                has_interstage=True, interstage_length_m=1.0)
+    s1.mass_initial, s1.mass_propellant = 26400, 16100
+    x_cg, total = estimate_cg(s1)
+    assert total == pytest.approx(31.0, abs=1.0)      # 16+1+8+1+~nose
+    h = total - x_cg                                  # height from base
+    assert 8.0 < h < 16.0                             # inside stage 1
+    assert h == pytest.approx(11.6, abs=0.6)
+
+
 def test_cg_marker_at_the_estimated_balance_station():
     """The full-stack fuelled CG marker (classic symbol) is emitted as raw
     meshes on the axis at z = total − x_cg (x_cg from estimate_cg, aft of
