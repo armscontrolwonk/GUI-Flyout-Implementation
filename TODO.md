@@ -92,6 +92,22 @@ Current sources, from the code:
 - **Launch sites**: `launch_sites.json` — 34 hand-curated sites (name,
   country, lat, lon).  NO provenance, NO site elevation.  The weakest
   layer for the modeling use case.
+- **Place lookup** (the "Find Location" picker shared by launch site /
+  aim-at-target / estimate-azimuth — MISSED in the original inventory,
+  corrected 2026-08-17): offline = GeoNames.org city data via the
+  optional `geonamescache` package (name/lat/lon/country/population,
+  population-ranked); online fallback = OSM Nominatim via `geopy`.
+  Both are OPTIONAL pip packages — Thrusty bundles no gazetteer of its
+  own, and on a plain install (user's machine, screenshot 2026-08-17:
+  the picker shows the "pip install geonamescache" tip) the offline
+  path is absent entirely, leaving online-only Nominatim or nothing.
+  Both are also third-party crowd-maintained sources (GeoNames CC-BY,
+  OSM ODbL + usage policy).  Exactly what the NGA GNS / USGS GNIS trio
+  upgrades: official BGN names, public domain, baked into the repo so
+  the offline path ALWAYS exists (no pip dependency), and covering
+  facilities/spot features that city lists lack.  When 3(b) lands, the
+  picker should search the baked gazetteer first and keep Nominatim as
+  the online catch-all.
 - **Borders/coastlines**: bundled Natural Earth **110m** countries GeoJSON
   (`data/ne_110m_countries.geojson`) — NE's coarsest tier; coastlines are
   visibly polygonal at trajectory-plot zoom.
