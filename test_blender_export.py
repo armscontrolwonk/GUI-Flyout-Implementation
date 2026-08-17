@@ -541,8 +541,21 @@ def test_grid_fins_face_the_flow_and_reflect_solidity():
     assert len(zs) == 2 and zs[1] - zs[0] == pytest.approx(0.12)   # ⟂ flow
     # 0 < σ < 1 → an open lattice: many more verts (webs) than a box
     lat = bx.vehicle_elements(_grid_fin_veh(sigma=0.5))
-    lv = [v for n, v, _f in lat["meshes"] if n == "GridFin_1"][0]
+    lv, lf = [(v, f) for n, v, f in lat["meshes"] if n == "GridFin_1"][0]
     assert len(lv) > 8 * 4                          # a real lattice
+    # ...oriented at 45°: fin 1 sits at clock angle 0, so local u = x − R,
+    # w = y; the webs' long edges run DIAGONALLY (|Δu| ≈ |Δw|), which the
+    # old square lattice (axis-aligned edges) never had
+    R = 1.37 / 2
+    diag = False
+    for face in lf:
+        for k in range(len(face)):
+            p, q = lv[face[k]], lv[face[(k + 1) % len(face)]]
+            du, dw = q[0] - p[0], q[1] - p[1]
+            if (math.hypot(du, dw) > 0.1
+                    and abs(abs(du) - abs(dw)) < 0.02 * math.hypot(du, dw)):
+                diag = True
+    assert diag
     # σ = 0 (nothing set) → EMPTY: no grid-fin meshes at all
     empty = bx.vehicle_elements(_grid_fin_veh(sigma=0.0))
     assert not any(n.startswith("GridFin") for n, _v, _f in empty["meshes"])

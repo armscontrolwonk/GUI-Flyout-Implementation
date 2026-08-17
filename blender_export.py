@@ -379,23 +379,82 @@ def _grid_fin_box(a, R, gh, gw, gc, z0):
 
 
 def _grid_fin_lattice(a, R, gh, gw, gc, z0, pitch, web):
-    """An open grid-fin lattice (0<σ<1): thin webs of thickness `web` on a
-    square grid of `pitch`, extruded the chord `gc`; the broad face is ⟂
-    flow.  One merged mesh (walls in both directions + the outer frame)."""
+    """An open grid-fin lattice (0<σ<1): thin webs of thickness `web`,
+    perpendicular spacing `pitch`, running along the two 45° DIAGONALS of
+    the panel (the common real orientation — Tochka, Falcon 9 — cells read
+    as diamonds), inside a solid outer frame; extruded the chord `gc`,
+    broad face ⟂ flow.  Perpendicular web spacing is what the solidity
+    formula uses, so σ = 1 − ((p−t)/p)² is orientation-independent.  One
+    merged mesh."""
     P = _grid_fin_frame(a, R)
     z1 = z0 + gc
     t = min(web, 0.9 * pitch)
     verts, faces = [], []
-    nu = max(1, round(gh / pitch))
-    for i in range(nu + 1):                           # webs across the width
-        u = i * gh / nu
-        _box_into(verts, faces, P, max(0.0, u - t / 2), min(gh, u + t / 2),
-                  -gw / 2, gw / 2, z0, z1)
-    nw = max(1, round(gw / pitch))
-    for j in range(nw + 1):                           # webs up the height
-        w = -gw / 2 + j * gw / nw
-        _box_into(verts, faces, P, 0.0, gh,
-                  max(-gw / 2, w - t / 2), min(gw / 2, w + t / 2), z0, z1)
+
+    def _prism(poly):                     # extrude a convex (u,w) polygon
+        m = len(poly)
+        if m < 3:
+            return
+        b = len(verts)
+        for (u, w) in poly:
+            verts.append(P(u, w, z0))
+        for (u, w) in poly:
+            verts.append(P(u, w, z1))
+        faces.append(tuple(range(b + m - 1, b - 1, -1)))          # bottom
+        faces.append(tuple(range(b + m, b + 2 * m)))              # top
+        for k in range(m):
+            k2 = (k + 1) % m
+            faces.append((b + k, b + k2, b + m + k2, b + m + k))
+
+    u0, u1, w0, w1 = 0.0, gh, -gw / 2.0, gw / 2.0     # panel rectangle
+
+    def _clip_rect(poly):
+        """Sutherland–Hodgman clip of a convex polygon to the panel."""
+        for axis, lim, keep_ge in ((0, u0, True), (0, u1, False),
+                                   (1, w0, True), (1, w1, False)):
+            out = []
+            for i, cur in enumerate(poly):
+                prev = poly[i - 1]
+
+                def _in(pt):
+                    return (pt[axis] >= lim - 1e-12 if keep_ge
+                            else pt[axis] <= lim + 1e-12)
+
+                def _ix(p, q):
+                    d = q[axis] - p[axis]
+                    f = 0.0 if abs(d) < 1e-15 else (lim - p[axis]) / d
+                    return (p[0] + f * (q[0] - p[0]),
+                            p[1] + f * (q[1] - p[1]))
+                if _in(cur):
+                    if not _in(prev):
+                        out.append(_ix(prev, cur))
+                    out.append(cur)
+                elif _in(prev):
+                    out.append(_ix(prev, cur))
+            poly = out
+            if not poly:
+                return []
+        return poly
+
+    s2 = math.sqrt(0.5)
+    cu, cw = 0.5 * (u0 + u1), 0.5 * (w0 + w1)         # lattice centre
+    L = gh + gw                                       # covers the panel
+    corners = [(u0, w0), (u1, w0), (u1, w1), (u0, w1)]
+    for dx, dy in ((s2, s2), (-s2, s2)):              # two diagonal families
+        nx, ny = -dy, dx                              # strip normal
+        off_max = max(abs((x - cu) * nx + (y - cw) * ny) for x, y in corners)
+        for i in range(-int(off_max / pitch) - 1, int(off_max / pitch) + 2):
+            c = i * pitch
+            bu, bw = cu + c * nx, cw + c * ny
+            strip = [(bu - L * dx - t / 2 * nx, bw - L * dy - t / 2 * ny),
+                     (bu + L * dx - t / 2 * nx, bw + L * dy - t / 2 * ny),
+                     (bu + L * dx + t / 2 * nx, bw + L * dy + t / 2 * ny),
+                     (bu - L * dx + t / 2 * nx, bw - L * dy + t / 2 * ny)]
+            _prism(_clip_rect(strip))
+    ft = max(t, 0.5 * pitch * (1.0 - math.sqrt(0.5)))  # solid outer frame
+    for (a0, a1, b0, b1) in ((u0, u1, w0, w0 + ft), (u0, u1, w1 - ft, w1),
+                             (u0, u0 + ft, w0, w1), (u1 - ft, u1, w0, w1)):
+        _prism([(a0, b0), (a1, b0), (a1, b1), (a0, b1)])
     return verts, faces
 
 
