@@ -1,0 +1,35 @@
+#!/bin/bash
+# Thrusty.app launcher.
+#
+# Why this exists: macOS names a Dock tile after the BUNDLE the running
+# executable lives in (NSBundle.mainBundle is derived from the executable's
+# path).  A bare `python3 thrusty.py` therefore shows as "Python".  On first
+# launch this script copies the local python3 interpreter INTO the bundle
+# (Contents/MacOS/Thrusty-python, gitignored — it is machine-local); running
+# Thrusty through that copy makes macOS attribute the process to Thrusty.app,
+# so the Dock and menu bar say "Thrusty" with the Thrusty icon.
+#
+# Fallbacks are graceful: if the copy cannot be made or refuses to run, the
+# plain python3 is used — identical to running thrusty.py by hand (the Dock
+# then says "Python", exactly as before, and the app still works).
+
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"          # the repo root (bundle sits in it)
+PYBIN="$HERE/Thrusty-python"
+
+if [ ! -x "$PYBIN" ]; then
+    SRC="$(/usr/bin/env python3 -c 'import sys, os; print(os.path.realpath(sys.executable))' 2>/dev/null)"
+    if [ -n "${SRC:-}" ] && [ -f "$SRC" ]; then
+        cp "$SRC" "$PYBIN" 2>/dev/null || true
+    fi
+fi
+
+cd "$ROOT"
+if [ -x "$PYBIN" ]; then
+    "$PYBIN" "$ROOT/thrusty.py" "$@" && exit 0
+    # the copied interpreter failed (e.g. relocated libs) — remove it so the
+    # next launch retries, and fall through to the plain interpreter
+    rm -f "$PYBIN"
+fi
+exec /usr/bin/env python3 "$ROOT/thrusty.py" "$@"
