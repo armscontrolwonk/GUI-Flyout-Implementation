@@ -221,6 +221,19 @@ The one phase that touches trajectory physics, gated to lifting forms
 - Wedge planform-span field: DONE earlier (body_span_m, 2026-07-30).
 
 ## Parked earlier in the project (context in METHODS / chat)
+- Boattail (V-2-style tapered aft body): NOT worth geometry modeling
+  (agreed 2026-08-17).  Quantified from the model's own tables: a
+  20%-necked boattail cuts base drag ~36% (ΔC_D ≈ 0.05–0.08 transonic,
+  power-OFF), but nearly all atmospheric transonic passage happens under
+  power, where the plume fills the nozzle exit and suppresses most base
+  drag anyway → ascent effect ~10–15 m/s of ΔV, sub-1% of range.  For a
+  non-separating airframe (V-2, Scud-B) the descent effect is real but
+  already lives in the β the user assigns.  The USEFUL spin-off noticed
+  while checking: `_cd_base()` has an unused `base_area_ratio` hook and
+  the build-up currently charges FULL power-off base drag during the
+  burn — with nozzle exit area + count now stored per stage, a power-on
+  annulus correction (ratio = 1 − A_exit/A_base, floored at 0) is
+  derivable from stored fields, and is a larger error than any boattail.
 - Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).
 - Interstage / conical-stage drag (Phase 2 of interstage work; geometry+mass
   shipped, drag-neutral by design).
