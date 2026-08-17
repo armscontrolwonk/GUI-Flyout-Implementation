@@ -513,6 +513,30 @@ def test_estimate_cg_uses_real_per_stage_lengths():
     assert h == pytest.approx(11.6, abs=0.6)
 
 
+def test_grid_fins_are_flow_facing_boxes():
+    """A grid fin is a shallow box whose BROAD face is perpendicular to the
+    flow (the lattice faces fore/aft) — span (radial) × width (tangential) ×
+    a thin streamwise depth (chord) — not an edge-on plate.  So the
+    streamwise (z) extent equals the chord and is the SMALLEST dimension."""
+    p = _stage("S1", 1.37, 9.5)
+    p.has_grid_fins = True
+    p.n_grid_fins = 4
+    p.grid_fin_height_m = 0.4     # radial span
+    p.grid_fin_width_m = 0.5      # tangential width
+    p.grid_fin_chord_m = 0.12     # streamwise depth (thin)
+    els = bx.vehicle_elements(p)
+    boxes = {n: v for n, v, _f in els["meshes"] if n.startswith("GridFin")}
+    assert len(boxes) == 4
+    v = boxes["GridFin_1"]
+    zs = sorted({round(z, 4) for _x, _y, z in v})
+    assert len(zs) == 2                                   # two z-levels
+    depth = zs[1] - zs[0]
+    assert depth == pytest.approx(0.12)                  # streamwise = chord
+    # radial span = gh (min→max radius across the corners' radial part)
+    # depth is the smallest dimension → flat toward the flow
+    assert depth < 0.4 and depth < 0.5
+
+
 def test_cg_marker_is_a_small_badge_on_the_surface():
     """The full-stack fuelled CG marker (classic symbol) is emitted as raw
     meshes — a small badge on the body SURFACE at the balance station,

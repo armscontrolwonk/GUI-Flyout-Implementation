@@ -101,7 +101,7 @@ def vehicle_elements(p):
     rot_z_deg)], 'flags': [...], 'total_height_m': float}.  Same stacking
     rules and fallbacks as booster_schematic.draw_booster."""
     stages = stage_chain(p)
-    flags, revolves, plates = [], [], []
+    flags, revolves, plates, meshes = [], [], [], []
     z = 0.0
     finned = strap = grid_finned = None
     shroud_stage = next(
@@ -225,16 +225,31 @@ def vehicle_elements(p):
     if grid_finned:
         s, zb = grid_finned
         R = _f(s.diameter_m) / 2.0
-        gh = _f(getattr(s, "grid_fin_height_m", 0.0)) or 0.15 * 2 * R
-        gc = _f(getattr(s, "grid_fin_chord_m", 0.0)) or gh
+        gh = _f(getattr(s, "grid_fin_height_m", 0.0)) or 0.15 * 2 * R  # radial
+        gw = _f(getattr(s, "grid_fin_width_m", 0.0)) or gh             # tangent.
+        gc = _f(getattr(s, "grid_fin_chord_m", 0.0)) or 0.3 * gh       # stream
         n_g = int(s.n_grid_fins)
-        t = max(0.01, 0.05 * gh)
-        flags.append("grid fins exported as solid panels (lattice not "
-                     "modeled) — thickness nominal")
-        poly = [(R, 0.0), (R + gh, 0.0), (R + gh, gc), (R, gc)]
+        flags.append("grid fins exported as solid frame boxes (lattice not "
+                     "modeled)")
+        # A grid fin is a shallow box whose BROAD face is perpendicular to
+        # the flow (the lattice faces fore/aft): span gh (radial) × width gw
+        # (tangential) × depth gc (streamwise, thin) — not an edge-on plate.
+        r0, r1 = R, R + gh
+        z0, z1 = zb, zb + gc
         for k in range(n_g):
-            plates.append((f"GridFin_{k+1}", poly, t,
-                           (0.0, 0.0, zb + 0.2), 360.0 * k / n_g))
+            a = 2.0 * math.pi * k / n_g
+            ct, st = math.cos(a), math.sin(a)
+
+            def _P(r, w, z):                          # radial r, tangential w
+                return (r * ct - w * st, r * st + w * ct, z)
+            verts = [_P(r0, -gw / 2, z0), _P(r1, -gw / 2, z0),
+                     _P(r1, gw / 2, z0), _P(r0, gw / 2, z0),
+                     _P(r0, -gw / 2, z1), _P(r1, -gw / 2, z1),
+                     _P(r1, gw / 2, z1), _P(r0, gw / 2, z1)]
+            faces = [(0, 1, 2, 3), (7, 6, 5, 4),      # broad faces ⟂ flow
+                     (0, 4, 5, 1), (1, 5, 6, 2),
+                     (2, 6, 7, 3), (3, 7, 4, 0)]
+            meshes.append((f"GridFin_{k+1}", verts, faces))
 
     if strap:
         s, zb, Lc = strap
@@ -308,7 +323,7 @@ def vehicle_elements(p):
     # filled quadrants) sitting on the body SURFACE at the balance station,
     # facing +X.  Raw pre-tessellated meshes (the "meshes" element type).
     # cg_z is also the origin the export centres on.
-    meshes, cg_z = [], None
+    cg_z = None
     try:
         from grid_fin_sizing import estimate_cg
         x_cg, L_est = estimate_cg(p)
@@ -319,7 +334,7 @@ def vehicle_elements(p):
             if bz <= cg_z <= bz + L:
                 R_local = 0.5 * sd
                 break
-        meshes = cg_marker_meshes(cg_z, R_local)
+        meshes += cg_marker_meshes(cg_z, R_local)
     except Exception:
         flags.append("CG marker skipped — could not estimate CG")
 
