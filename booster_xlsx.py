@@ -41,6 +41,7 @@ _R: dict[str, int] = {
     'solid':       16,
     'grain':       17,
     'peak_thr':    18,
+    'n_nozzles':   19,
     # BOOSTERS (single-value; column D only)
     'b_n':         29,
     'b_thr':       30,
@@ -326,8 +327,11 @@ def _build_booster_sheet(ws, stages: list, top: dict) -> None:
     srow('burn',       'Burn time',                  's',  'burn_time_s')
     srow('isp',        'Isp (specific impulse)',     's',  'isp_s',
          notes='Solid: 230–290  Storable liq: 280–310  Cryo: 420–450')
-    srow('nozzle',     'Nozzle exit area',           'm²', 'nozzle_exit_area_m2',
+    srow('nozzle',     'Nozzle exit area (total)',   'm²', 'nozzle_exit_area_m2',
          notes='0 = legacy 2% back-pressure approx')
+    srow('n_nozzles',  'Nozzle count',               '—',  'n_nozzles',
+         cast=int, notes='3-D export: disks on the base '
+                         '(per-nozzle area = total ÷ count)')
     srow('peak_thr',   'Peak thrust (solid only)',   'N',  'thrust_peak_N',
          notes='0 = derive from thrust × fill factor')
 
@@ -677,6 +681,7 @@ def import_booster_xlsx(path: str):
             'burn_time_s':        _rnum(ws, r['burn'],     col),
             'isp_s':              _rnum(ws, r['isp'],      col),
             'nozzle_exit_area_m2':_rnum(ws, r['nozzle'],  col),
+            'n_nozzles':          int(_rnum(ws, r['n_nozzles'], col) or 1),
             'solid_motor':        _rbool(ws, r['solid'],   col),
             'grain_type':   _GRAIN_KEY.get(_rstr(ws, r['grain'],   col), ''),
             'thrust_peak_N':      _rnum(ws, r['peak_thr'],col),

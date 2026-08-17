@@ -697,7 +697,8 @@ class _StageFrame(ttk.LabelFrame):
     # T = 230 × 9.80665 × (5000−1500) / 70 ≈ 112.9 kN
     _DEFAULTS = dict(fueled="5000", dry="1500", dia="0.88",
                      length="12.0", thrust_kn="112.9", isp="230",
-                     nozzle_area="0", coast="0")
+                     nozzle_area="0", n_nozzles="1", nozzle_each="0",
+                     coast="0")
 
     _G0 = 9.80665  # m/s²
 
@@ -730,17 +731,43 @@ class _StageFrame(ttk.LabelFrame):
         self._isp_entry.pack(side=tk.LEFT)
         self._isp_hint_lbl = ttk.Label(_isp_inner, text="s", foreground="gray50")
         self._isp_hint_lbl.pack(side=tk.LEFT, padx=(2, 0))
-        # Nozzle exit area — entry + Suggest button (row 6)
+        # Nozzle exit area — TOTAL (physics + Estimate) on row 6, plus the
+        # geometry inputs (count × per-nozzle) that FEED the total and the
+        # 3-D export's base disks.  Per-nozzle drives the total when set;
+        # Estimate fills the total directly and clears per-nozzle.
         ttk.Label(self, text="Nozzle exit area (m²):").grid(
             row=6, column=0, sticky=tk.W, padx=(6, 2), pady=2)
         self._nozzle_area = tk.StringVar(value=d["nozzle_area"])
         _noz_inner = ttk.Frame(self)
         _noz_inner.grid(row=6, column=1, sticky=tk.W, padx=(0, 6), pady=2)
         ttk.Entry(_noz_inner, textvariable=self._nozzle_area, width=10).pack(side=tk.LEFT)
-        ttk.Label(_noz_inner, text="m²").pack(side=tk.LEFT, padx=(2, 6))
+        ttk.Label(_noz_inner, text="m² total").pack(side=tk.LEFT, padx=(2, 6))
         if self._stage_num == 1:
             ttk.Button(_noz_inner, text="Estimate…",
                        command=self._suggest_nozzle_area).pack(side=tk.LEFT)
+        ttk.Label(self, text="  nozzles × each:").grid(
+            row=8, column=0, sticky=tk.W, padx=(6, 2), pady=2)
+        _noz_geo = ttk.Frame(self)
+        _noz_geo.grid(row=8, column=1, sticky=tk.W, padx=(0, 6), pady=2)
+        self._n_nozzles = tk.StringVar(value=str(d.get("n_nozzles", 1)))
+        ttk.Entry(_noz_geo, textvariable=self._n_nozzles, width=4).pack(side=tk.LEFT)
+        ttk.Label(_noz_geo, text="×").pack(side=tk.LEFT, padx=3)
+        self._nozzle_each = tk.StringVar(value=str(d.get("nozzle_each", 0)))
+        ttk.Entry(_noz_geo, textvariable=self._nozzle_each, width=9).pack(side=tk.LEFT)
+        ttk.Label(_noz_geo, text="m² each  (→ total)").pack(side=tk.LEFT, padx=(2, 0))
+
+        def _sum_nozzles(*_):
+            # per-nozzle × count -> total, only when per-nozzle is set (>0),
+            # so a directly-typed / estimated total is never clobbered.
+            try:
+                each = float(self._nozzle_each.get() or 0.0)
+                n = int(float(self._n_nozzles.get() or 1))
+            except (ValueError, tk.TclError):
+                return
+            if each > 0 and n > 0:
+                self._nozzle_area.set(f"{each * n:.4f}")
+        self._n_nozzles.trace_add("write", _sum_nozzles)
+        self._nozzle_each.trace_add("write", _sum_nozzles)
 
         # Burn time (row 7) — readonly/computed for liquid; user-entered for solid.
         ttk.Label(self, text="Burn time (s):").grid(
@@ -1130,6 +1157,11 @@ class _StageFrame(ttk.LabelFrame):
         def _accept():
             ae = _compute()
             if ae is not None:
+                # Estimate produces a TOTAL — clear per-nozzle so its
+                # coupling trace can't overwrite it; the export then
+                # derives each = total / n_nozzles.
+                if hasattr(self, "_nozzle_each"):
+                    self._nozzle_each.set("0")
                 self._nozzle_area.set(f"{ae:.4f}")
                 dlg.destroy()
 
@@ -1282,6 +1314,17 @@ class _StageFrame(ttk.LabelFrame):
             result["burn"] = float(burn_str)
         except ValueError:
             raise ValueError(f"Burn time: expected a number, got {burn_str!r:.40s}")
+        # Nozzle geometry (count + per-nozzle) — optional; per-nozzle already
+        # summed into nozzle_area by the coupling trace.  Tolerant parse:
+        # blanks/junk fall back to 1 nozzle / 0 per-nozzle.
+        try:
+            result["n_nozzles"] = max(1, int(float(self._n_nozzles.get() or 1)))
+        except (ValueError, tk.TclError):
+            result["n_nozzles"] = 1
+        try:
+            result["nozzle_each"] = max(0.0, float(self._nozzle_each.get() or 0.0))
+        except (ValueError, tk.TclError):
+            result["nozzle_each"] = 0.0
         result["coast"] = 0.0   # coast is now set in the advanced pitch panel
         result["solid_motor"] = (self._propellant_var.get() == "Solid")
 
@@ -1346,6 +1389,10 @@ class _StageFrame(ttk.LabelFrame):
         self._length      .set(str(d["length"]))
         self._thrust_kn   .set(f"{thrust_kn:.1f}")
         self._isp         .set(str(d["isp"]))
+        self._nozzle_area .set(str(d.get("nozzle_area", 0)))
+        # per-nozzle first so its coupling trace doesn't clobber the total
+        self._nozzle_each .set(str(d.get("nozzle_each", 0)))
+        self._n_nozzles   .set(str(d.get("n_nozzles", 1)))
         self._nozzle_area .set(str(d.get("nozzle_area", 0)))
         # _burn_var is updated automatically by traces on Isp/thrust/masses
         self._propellant_var.set("Solid" if d.get("solid_motor", False) else "Liquid")
@@ -2176,6 +2223,8 @@ class BoosterDialog(tk.Toplevel):
                 "dia":           node.diameter_m,          "length":       node.length_m,
                 "burn":          node.burn_time_s,         "isp":          node.isp_s,
                 "nozzle_area":   node.nozzle_exit_area_m2, "coast":        node.coast_time_s,
+                "n_nozzles":     getattr(node, 'n_nozzles', 1),
+                "nozzle_each":   getattr(node, 'nozzle_area_each_m2', 0.0),
                 "solid_motor":   getattr(node, 'solid_motor', False),
                 "grain_type":    getattr(node, 'grain_type', ''),
                 "thrust_peak_N": getattr(node, 'thrust_peak_N', 0.0),
@@ -2423,6 +2472,8 @@ class BoosterDialog(tk.Toplevel):
                 burn_time_s=sd["burn"], isp_s=sd["isp"],
                 coast_time_s=sd["coast"] if not is_last else 0.0,
                 nozzle_exit_area_m2=sd["nozzle_area"],
+                n_nozzles=sd.get("n_nozzles", 1),
+                nozzle_area_each_m2=sd.get("nozzle_each", 0.0),
                 mach_table=list(_FORDEN_MACH), cd_table=list(_FORDEN_CD),
                 stage2=node,
                 solid_motor=bool(sd.get("solid_motor", False)),

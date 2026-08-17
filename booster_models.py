@@ -44,7 +44,15 @@ class BoosterParams:
     # Nozzle exit area (m²).  When > 0, thrust at altitude is computed as
     # T(h) = T_vac − P_amb(h) × Ae  (proper pressure-thrust correction).
     # When 0, a legacy 2 % sea-level back-pressure approximation is used.
+    # This is the TOTAL exit area — the only quantity the physics needs, and
+    # what the Estimate button fills.
     nozzle_exit_area_m2: float = 0.0
+    # Nozzle COUNT and per-nozzle area — geometry only (the 3-D export draws
+    # n_nozzles disks on the base).  When nozzle_area_each_m2 > 0 the TOTAL
+    # is nozzle_area_each_m2 × n_nozzles (per-nozzle drives total); otherwise
+    # each = total / n_nozzles is derived (total from Estimate drives each).
+    n_nozzles:           int   = 1
+    nozzle_area_each_m2: float = 0.0
 
     # Guidance mode
     #   "loft"         — Forden pitch-over (SRBM/MRBM): pitch to burnout_angle_deg
@@ -1921,6 +1929,8 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         'shroud_length_m':        p.shroud_length_m,
         'shroud_diameter_m':      p.shroud_diameter_m,
         'nozzle_exit_area_m2':    p.nozzle_exit_area_m2,
+        'n_nozzles':              p.n_nozzles,
+        'nozzle_area_each_m2':    p.nozzle_area_each_m2,
         'solid_motor':            p.solid_motor,
         'grain_type':             p.grain_type,
         'thrust_peak_N':          p.thrust_peak_N,
@@ -2033,6 +2043,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
         shroud_diameter_m=float(d.get('shroud_diameter_m', 0.0)),
         nozzle_exit_area_m2=float(d.get('nozzle_exit_area_m2', 0.0)),
+        n_nozzles=int(d.get('n_nozzles', 1) or 1),
+        nozzle_area_each_m2=float(d.get('nozzle_area_each_m2', 0.0) or 0.0),
         solid_motor=bool(d.get('solid_motor', False)),
         grain_type=d.get('grain_type', ''),
         thrust_peak_N=float(d.get('thrust_peak_N', 0.0)),

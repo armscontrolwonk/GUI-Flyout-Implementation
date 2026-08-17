@@ -415,6 +415,48 @@ def test_ro_wing_thickness_from_stored_field():
     assert rt.wing_thickness_m == pytest.approx(0.05) and rt.n_wings == 6
 
 
+def test_nozzles_drawn_per_stage_on_the_base():
+    """Nozzles: n_nozzles flat disks on EACH stage's aft base (radius
+    √(area_each/π)).  Per-nozzle drives the disk when set; a total-only
+    stage (from Estimate) derives each = total/n.  Every stage's nozzles
+    are drawn (upper ones hidden but SAVED) and named per stage so
+    deleting stage 1 keeps the rest."""
+    veh = _demo_vehicle()                        # 2 stages
+    veh.n_nozzles = 4
+    veh.nozzle_area_each_m2 = 0.05               # per-nozzle → disks
+    veh.stage2.n_nozzles = 1
+    veh.stage2.nozzle_exit_area_m2 = 0.3         # total only → derive each
+    veh.stage2.nozzle_area_each_m2 = 0.0
+    els = bx.vehicle_elements(veh)
+    noz = {n: (prof, pos) for n, prof, pos, _s in els["revolves"]
+           if "Nozzle" in n}
+    assert {"S1_Nozzle_1", "S1_Nozzle_2", "S1_Nozzle_3", "S1_Nozzle_4",
+            "S2_Nozzle_1"} == set(noz)
+    # S1 disk radius = √(0.05/π); on a bolt circle (off-axis)
+    r1 = noz["S1_Nozzle_1"][0][1][0]
+    assert r1 == pytest.approx(math.sqrt(0.05 / math.pi), abs=1e-4)
+    assert math.hypot(*noz["S1_Nozzle_1"][1][:2]) > 0    # ringed, not centered
+    # S1 nozzles at the stage-1 base (z≈0), S2 up inside the stack
+    assert noz["S1_Nozzle_1"][1][2] == pytest.approx(-0.005, abs=1e-6)
+    assert noz["S2_Nozzle_1"][1][2] > 1.0
+    # S2 single nozzle: radius from derived each = 0.3/1
+    assert noz["S2_Nozzle_1"][0][1][0] == pytest.approx(
+        math.sqrt(0.3 / math.pi), abs=1e-4)
+    # the disk is a valid flat filled circle (fan)
+    v, f = bx.revolve_mesh(noz["S1_Nozzle_1"][0], (0, 0, 0), 2 * math.pi)
+    assert len(f) > 0 and all(len(face) == 3 for face in f)  # triangle fan
+
+
+def test_nozzle_geometry_round_trips():
+    """n_nozzles / nozzle_area_each_m2 survive the JSON round-trip."""
+    from booster_models import booster_to_dict, booster_from_dict
+    veh = _demo_vehicle()
+    veh.n_nozzles = 4
+    veh.nozzle_area_each_m2 = 0.05
+    rt = booster_from_dict(booster_to_dict(veh))
+    assert rt.n_nozzles == 4 and rt.nozzle_area_each_m2 == pytest.approx(0.05)
+
+
 def test_bpy_script_compiles_and_names_everything():
     """The emitted script is plain Python (bpy resolves inside Blender):
     it must compile, carry every object name and the collection, and list

@@ -108,9 +108,11 @@ def vehicle_elements(p):
         (s for s in stages
          if (getattr(s, "shroud_length_m", 0.0) or 0.0) > 0.0), None)
 
+    stage_bases = []                      # (stage, aft-base z, ⌀) per stage
     for i, s in enumerate(stages):
         d = _f(getattr(s, "diameter_m", 0.0)) or 0.6
         L = _f(getattr(s, "length_m", 0.0)) or 1.0
+        stage_bases.append((s, z, d))     # z is this stage's aft base
         if not _f(getattr(s, "diameter_m", 0.0)):
             flags.append(f"S{i+1} diameter unset — 0.6 m used")
         if not _f(getattr(s, "length_m", 0.0)):
@@ -257,6 +259,36 @@ def vehicle_elements(p):
             revolves.append((f"Strapon_{k+1}", profile,
                              (c_dist * math.cos(a), c_dist * math.sin(a),
                               zb), "full"))
+
+    # Nozzles on EVERY stage's aft base: n_nozzles flat disks, each of radius
+    # sqrt(area_each/pi).  Upper-stage nozzles sit inside the stack (hidden),
+    # but are drawn and named per stage so a modeler who deletes stage 1
+    # still has them — S{i}_Nozzle_{k}.
+    for i, (s, base_z, sd) in enumerate(stage_bases, start=1):
+        n_noz = max(0, int(getattr(s, "n_nozzles", 1) or 1))
+        tot_a = _f(getattr(s, "nozzle_exit_area_m2", 0.0))
+        each_a = _f(getattr(s, "nozzle_area_each_m2", 0.0))
+        if each_a <= 0 and tot_a > 0 and n_noz > 0:
+            each_a = tot_a / n_noz         # total (e.g. Estimate) -> each
+        if n_noz <= 0 or each_a <= 0:
+            continue
+        r_noz = math.sqrt(each_a / math.pi)
+        R_base = 0.5 * sd
+        disk = [(0.0, 0.0), (r_noz, 0.0)]  # flat filled circle (revolve)
+        zb = base_z - 0.005                # a hair aft to avoid z-fighting
+        if n_noz == 1:
+            revolves.append((f"S{i}_Nozzle_1", disk, (0.0, 0.0, zb), "full"))
+            continue
+        bolt = min(0.62 * R_base, max(0.0, R_base - r_noz - 0.02))
+        if r_noz > R_base or bolt <= 0:
+            flags.append(f"S{i} nozzles (⌀{2*r_noz:.2f} m ×{n_noz}) do not "
+                         f"fit the ⌀{sd:.2f} m base — drawn overlapping")
+            bolt = max(bolt, 0.5 * R_base)
+        for k in range(n_noz):
+            a = 2.0 * math.pi * k / n_noz
+            revolves.append((f"S{i}_Nozzle_{k+1}", disk,
+                             (bolt * math.cos(a), bolt * math.sin(a), zb),
+                             "full"))
 
     total = z
     ro = getattr(p, "ro", None)
