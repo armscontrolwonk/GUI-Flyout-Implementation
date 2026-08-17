@@ -8800,19 +8800,27 @@ class BoosterFlyoutApp(tk.Tk):
         if not path:
             return
         import blender_export as bx
+        import os as _os
         if path.lower().endswith(".py"):
             text, info = bx.bpy_script(p, title=name)
+            with open(path, "w") as f:
+                f.write(text)
+            tex = bx.copy_figure_texture(_os.path.dirname(path))
+            sidecars = [tex] if tex else []
             how = "In Blender: Scripting tab → Open → Run Script."
         else:
-            text, info = bx.obj_export(p, title=name)
+            info = bx.write_obj_bundle(path, p, title=name)
+            sidecars = info["files"][1:]
             how = ("In Blender: File → Import → Wavefront (.obj).\n"
                    "Import at scale 1.0; the model is already in metres.")
-        with open(path, "w") as f:
-            f.write(text)
         msg = (f"Wrote {info['n_objects']} objects "
                f"({info['total_height_m']:.1f} m stack) to:\n{path}\n\n"
                f"{how}\nUnits are metres, +Z up; every element is a "
                "separate named object.")
+        if sidecars:
+            msg += ("\n\nSidecar files written beside it (keep them "
+                    "together — they texture the Thrusty scale figure):\n• "
+                    + "\n• ".join(_os.path.basename(s) for s in sidecars))
         if info["flags"]:
             msg += ("\n\nFallbacks for unset data (also in the file "
                     "header):\n• " + "\n• ".join(info["flags"]))

@@ -6,6 +6,7 @@ contiguous, solids close), plus a compile() of the emitted script (plain
 Python; bpy only exists inside Blender)."""
 import json
 import math
+import os
 
 import pytest
 
@@ -228,6 +229,63 @@ def test_obj_export_is_valid_and_keeps_objects_discrete():
     s1_idx = {i for f in s1_faces for i in f}
     rmax = max(math.hypot(verts[i][0], verts[i][1]) for i in s1_idx)
     assert rmax == pytest.approx(0.6, abs=1e-3)
+
+
+def test_thrusty_standee_is_a_textured_quad_beside_the_stack():
+    """The mascot scale figure (V-2-cutaway style): a quad named Thrusty,
+    1.8 m tall (the schematic's scale-figure height), width true to the
+    character art's aspect, feet on the stack-base ground line, parked
+    CLEAR of every other object — with the UV/material plumbing a texture
+    binds to (mtllib/usemtl/vt)."""
+    pytest.importorskip("PIL")
+    veh = _demo_vehicle()
+    veh.ro = ro_from_dict(json.load(open("ro_library/C-HGB.ro.json")))
+    text, info = bx.obj_export(veh, title="Demo")
+    objs, verts = _parse_obj(text)
+    assert "Thrusty" in objs
+    faces = objs["Thrusty"]
+    assert len(faces) == 1 and len(faces[0]) == 4          # one quad
+    idx = set(faces[0])
+    xs = [verts[i][0] for i in idx]
+    zs = [verts[i][2] for i in idx]
+    assert max(zs) - min(zs) == pytest.approx(bx._FIGURE_M)
+    from PIL import Image
+    with Image.open(bx._FIGURE_PATH) as im:
+        asp = im.width / im.height
+    assert max(xs) - min(xs) == pytest.approx(bx._FIGURE_M * asp, rel=1e-3)
+    # feet on the ground line: the stack base, i.e. -center_shift after
+    # CG-centering
+    els = bx.vehicle_elements(veh)
+    assert min(zs) == pytest.approx(-bx._center_shift(els))
+    # clear of everything already placed (fins, strap-ons, the RO)
+    other = {i for nm, fs in objs.items() if nm != "Thrusty"
+             for f in fs for i in f}
+    ext = max(math.hypot(verts[i][0], verts[i][1]) for i in other)
+    assert min(xs) > ext
+    # texture plumbing for Blender's importer
+    assert "mtllib" in text
+    assert "usemtl ThrustyFigure" in text
+    assert any(ln.startswith("vt ") for ln in text.splitlines())
+
+
+def test_write_obj_bundle_ships_the_texture_sidecars(tmp_path):
+    """OBJ cannot embed textures, so the bundle writer ships the trio:
+    <name>.obj referencing <name>.mtl referencing the mascot PNG (RGBA —
+    the cutout's alpha is what clips the background)."""
+    pytest.importorskip("PIL")
+    path = str(tmp_path / "demo.obj")
+    info = bx.write_obj_bundle(path, _demo_vehicle(), title="Demo")
+    names = {os.path.basename(f) for f in info["files"]}
+    assert names == {"demo.obj", "demo.mtl", "thrusty_figure.png"}
+    assert "mtllib demo.mtl" in open(path).read()
+    mtl = open(tmp_path / "demo.mtl").read()
+    assert "newmtl ThrustyFigure" in mtl
+    assert "map_Kd thrusty_figure.png" in mtl
+    assert "map_d thrusty_figure.png" in mtl
+    from PIL import Image
+    with Image.open(tmp_path / "thrusty_figure.png") as im:
+        assert im.mode == "RGBA"
+        assert im.getchannel("A").getextrema()[0] == 0     # real cutout
 
 
 def test_obj_and_bpy_build_the_same_meshes():
@@ -595,7 +653,8 @@ def test_cg_marker_is_a_small_badge_on_the_surface():
     compile(script, "<cg>", "exec")
     assert "MESHES = [" in script and "CG_fuelled_fill1" in script
     assert info["n_objects"] == (len(els["revolves"]) + len(els["plates"])
-                                 + len(els["meshes"]))
+                                 + len(els["meshes"])
+                                 + len(els["billboards"]))
 
 
 def test_bpy_script_compiles_and_names_everything():
@@ -607,7 +666,8 @@ def test_bpy_script_compiles_and_names_everything():
     compile(script, "<blender-export>", "exec")      # syntax-valid
     _e = bx.vehicle_elements(veh)
     assert info["n_objects"] == (len(_e["revolves"]) + len(_e["plates"])
-                                 + len(_e["meshes"]))
+                                 + len(_e["meshes"])
+                                 + len(_e["billboards"]))
     for name in ("'S1'", "'Interstage_1'", "'S2'", "'Fairing'", "'Fin_4'",
                  "'Strapon_2'", "'Test Vehicle'"):
         assert name in script
