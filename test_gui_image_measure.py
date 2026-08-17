@@ -219,6 +219,28 @@ def test_booster_button_and_apply(root):
     d.destroy()
 
 
+def test_booster_apply_converts_nozzle_diameter_to_per_nozzle_area(root):
+    """UNITS boundary: the tool measured a nozzle-exit DIAMETER (metres);
+    the editor stores per-nozzle AREA (m²) = π(d/2)², and the declared
+    nozzle count multiplies it into the total via the existing trace —
+    measure one, declare count.  The delta preview speaks diameters, so
+    _current_image_values reports the diameter the stored area implies."""
+    import math
+    d = thrusty.BoosterDialog(root, on_save=lambda *a, **k: None)
+    d.withdraw()
+    d._n_stages_var.set("1"); d._update_stage_frames()
+    fr = d._stage_frames[0]
+    fr._n_nozzles.set("4")
+    d._apply_image_measurements({"nozzle_dia": 0.8}, [], None)
+    each = math.pi * 0.4 ** 2
+    assert float(fr._nozzle_each.get()) == pytest.approx(each, rel=1e-3)
+    assert float(fr._nozzle_area.get()) == pytest.approx(4 * each, rel=1e-3)
+    assert fr._n_nozzles.get() == "4"            # declared count untouched
+    cur = d._current_image_values(["nozzle_dia"])
+    assert cur["nozzle_dia"] == pytest.approx(0.8, rel=1e-3)
+    d.destroy()
+
+
 def test_booster_apply_ignores_the_check_only_total(root):
     """The overall-length cross-check measurement exists only to feed the
     closure warning: apply must not write it anywhere (there is no editor

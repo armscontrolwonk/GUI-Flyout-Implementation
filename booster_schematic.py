@@ -335,24 +335,19 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
 def _nose_patch(ax, x0, y0, diam, length, color, edge, shape):
     """A nose from y0 up to y0+length, base width diam, centred on x0.
 
-    'cone' is a straight taper; anything containing 'ogive' gets a rounded
-    tangent-ogive-ish curve; blunt shapes get a capped dome.
+    Drawn from the TRUE analytic profile for the declared shape (the same
+    curve the 3-D export revolves — one source of truth), so a tangent
+    ogive, Von Kármán, LV-Haack and parabola each show their own outline.
+    The differences ARE subtle at schematic scale (a few % of the local
+    radius); honesty here means the curve is right, not that the shapes
+    look dramatically different.
     """
+    from blender_export import _nose_profile   # local: it imports this module
     R = diam / 2.0
-    s = (shape or "").lower()
-    if "ogive" in s or "haack" in s or "karman" in s or "parabola" in s:
-        n = 24
-        left = [(x0 - R * math.cos(math.pi / 2 * i / n), y0 + length * i / n)
-                for i in range(n + 1)]
-        pts = left + [(x, y) for (x, y) in
-                      ((2 * x0 - xx, yy) for (xx, yy) in reversed(left))]
-    elif "blunt" in s:
-        n = 16
-        left = [(x0 - R * math.cos(math.pi / 2 * i / n),
-                 y0 + length * math.sin(math.pi / 2 * i / n)) for i in range(n + 1)]
-        pts = left + [(2 * x0 - xx, yy) for (xx, yy) in reversed(left)]
-    else:                                   # straight cone
-        pts = [(x0 - R, y0), (x0, y0 + length), (x0 + R, y0)]
+    if R <= 0.0 or length <= 0.0:              # degenerate: plain taper
+        shape = "cone"
+    left = [(x0 - r, y0 + z) for (r, z) in _nose_profile(shape, R, length)]
+    pts = left + [(2 * x0 - xx, yy) for (xx, yy) in reversed(left)]
     ax.add_patch(Polygon(pts, closed=True, fc=color, ec=edge, lw=1.2, zorder=3))
 
 

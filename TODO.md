@@ -164,6 +164,34 @@ TYPE that is orbital, not a reentry object.  Scope when picked up:
 - Deferred question: deployment/station-keeping (out of scope — Thrusty ends
   at orbit insertion, as it ends at impact for an RV).
 
+### 6. Jettisoned-fairing drag / debris trajectory (added 2026-08-17)
+Today the fairing jettison only removes MASS from the ascending stack; the
+fairing itself vanishes — no trajectory, no impact point.  For the
+arms-control use case the fairing debris field is real information
+(where do the halves land?), so the open question is how to model the
+jettisoned fairing's own ballistic drop.  The user's framing: does it
+matter whether it comes off as a CLAMSHELL (two halves) or a FULL object —
+i.e. can we bound the accuracy loss of modeling it as one piece?
+Sketch of the bounding argument (to be built, not asserted): the fall is
+governed by ballistic coefficient β = m/(C_D·A).  A full fairing has the
+whole shell's mass but, tumbling, roughly the same frontal area as one
+half presented broadside — while a clamshell half has HALF the mass at a
+comparable tumbling-average area, so β differs by roughly 2× between the
+two idealizations (plus C_D differences between a closed shell and an
+open half-shell scoop).  The honest Thrusty move is to RUN BOTH bounding
+cases (full shell, single half) from the jettison state vector and report
+the impact-point SPREAD as the error bar — if the spread is operationally
+small (tens of km at ICBM jettison conditions, or dwarfed by wind/tumble
+uncertainty anyway), one-piece modeling is justified BY the tool, not by
+assumption.  Inputs already stored: fairing mass, dimensions (⌀, length,
+shape), jettison time/altitude, full state vector at jettison.  Scope
+when picked up: (a) tumbling-average C_D·A estimates for closed shell vs
+half shell (literature: planetary-probe shell tumbling data, Falcon 9
+fairing recovery numbers as sanity anchors); (b) a post-jettison
+point-mass propagation from the jettison state (the existing 3-DOF core
+reused with β-only drag); (c) report both impact points + spread on the
+trajectory output/map.
+
 ## Phase 2b — lifting-body estimator completion: DONE (2026-08-01)
 All four items shipped (details in PHASE2_LIFTING_BODY_PLAN.md §6):
 cone/biconic α-sweep (α=0 continuity with the zero-AoA build-ups EXACT),

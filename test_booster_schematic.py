@@ -30,6 +30,37 @@ def _load(name):
         json.load(open(f"booster_library/{name}.booster.json")))
 
 
+# ── nose patch draws the TRUE analytic profile per declared shape ───────────
+def test_nose_patch_uses_the_declared_analytic_profile():
+    """The schematic's nose outline is the same curve the 3-D export
+    revolves (one source of truth — no more one-cosine-fits-all): the four
+    curved shapes each draw their OWN profile, so e.g. tangent ogive and
+    Von Kármán genuinely differ (subtly — a few % of local radius is what
+    the real equations give at equal L and ⌀)."""
+    from booster_schematic import _nose_patch
+    from blender_export import _nose_profile
+
+    def outline(shape):
+        ax = _ax()
+        _nose_patch(ax, 0.0, 0.0, 2.0, 3.0, "#eee", "#333", shape)
+        return [tuple(v) for v in ax.patches[-1].get_xy()]
+
+    for s in ("tangent_ogive", "von_karman", "lv_haack", "parabola"):
+        # left edge == the export's analytic profile, mirrored to x0=0
+        want = [c for r, z in _nose_profile(s, 1.0, 3.0) for c in (-r, z)]
+        got = [c for pt in outline(s)[:len(want) // 2] for c in pt]
+        assert got == pytest.approx(want), s
+    # the shapes genuinely differ (all four sample the same z grid): the
+    # real equations put them a few % of local radius apart at equal L, ⌀
+    prof = {s: _nose_profile(s, 1.0, 3.0)
+            for s in ("tangent_ogive", "von_karman", "lv_haack", "parabola")}
+    names = list(prof)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            assert any(abs(ra - rb) > 1e-3 for (ra, _), (rb, _)
+                       in zip(prof[a], prof[b])), (a, b)
+
+
 # ── every library booster draws without error ───────────────────────────────
 def test_every_library_booster_renders():
     for f in glob.glob("booster_library/*.booster.json"):
