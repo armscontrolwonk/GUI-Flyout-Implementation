@@ -229,27 +229,34 @@ def vehicle_elements(p):
         gw = _f(getattr(s, "grid_fin_width_m", 0.0)) or gh             # tangent.
         gc = _f(getattr(s, "grid_fin_chord_m", 0.0)) or 0.3 * gh       # stream
         n_g = int(s.n_grid_fins)
-        flags.append("grid fins exported as solid frame boxes (lattice not "
-                     "modeled)")
-        # A grid fin is a shallow box whose BROAD face is perpendicular to
-        # the flow (the lattice faces fore/aft): span gh (radial) × width gw
-        # (tangential) × depth gc (streamwise, thin) — not an edge-on plate.
-        r0, r1 = R, R + gh
-        z0, z1 = zb, zb + gc
+        # Solidity σ drives the mesh, LITERALLY: σ→1 a solid panel, σ→0 an
+        # empty mesh, between an open lattice with the web thickness that
+        # blocks σ.  Web+pitch (if given) set σ from the real geometry;
+        # otherwise σ is the stored solidity.  No default — an all-unset
+        # grid fin exports empty (a signal to set its solidity).
+        sigma = _f(getattr(s, "grid_fin_solidity", 0.0))
+        pitch = _f(getattr(s, "grid_fin_cell_pitch_m", 0.0)) \
+            or min(gh, gw) / 6.0
+        web = _f(getattr(s, "grid_fin_web_thickness_m", 0.0))
+        if web > 0:
+            from booster_models import grid_fin_solidity as _gfs
+            sigma = _gfs(web, pitch)                   # real geometry wins
+        elif sigma > 0:
+            web = pitch * (1.0 - math.sqrt(max(0.0, 1.0 - sigma)))
+        flags.append(f"grid fins: σ={sigma:.2f} "
+                     + ("(solid panel)" if sigma >= 0.97
+                        else "(empty — set solidity)" if sigma <= 0.01
+                        else f"lattice, web {web*1000:.0f} mm / "
+                             f"pitch {pitch*1000:.0f} mm"))
         for k in range(n_g):
             a = 2.0 * math.pi * k / n_g
-            ct, st = math.cos(a), math.sin(a)
-
-            def _P(r, w, z):                          # radial r, tangential w
-                return (r * ct - w * st, r * st + w * ct, z)
-            verts = [_P(r0, -gw / 2, z0), _P(r1, -gw / 2, z0),
-                     _P(r1, gw / 2, z0), _P(r0, gw / 2, z0),
-                     _P(r0, -gw / 2, z1), _P(r1, -gw / 2, z1),
-                     _P(r1, gw / 2, z1), _P(r0, gw / 2, z1)]
-            faces = [(0, 1, 2, 3), (7, 6, 5, 4),      # broad faces ⟂ flow
-                     (0, 4, 5, 1), (1, 5, 6, 2),
-                     (2, 6, 7, 3), (3, 7, 4, 0)]
-            meshes.append((f"GridFin_{k+1}", verts, faces))
+            if sigma >= 0.97:                         # solid panel (disk)
+                v, f = _grid_fin_box(a, R, gh, gw, gc, zb)
+            elif sigma <= 0.01 or web <= 0:           # empty → nothing
+                continue
+            else:                                     # open lattice
+                v, f = _grid_fin_lattice(a, R, gh, gw, gc, zb, pitch, web)
+            meshes.append((f"GridFin_{k+1}", v, f))
 
     if strap:
         s, zb, Lc = strap
@@ -340,6 +347,56 @@ def vehicle_elements(p):
 
     return dict(revolves=revolves, plates=plates, flags=flags,
                 meshes=meshes, cg_z=cg_z, total_height_m=total)
+
+
+def _grid_fin_frame(a, R):
+    """Local (u,w,z)->world mapper for a grid fin at clock angle `a`: u is
+    radial (0 at the body skin R), w tangential, z the axis."""
+    ct, st = math.cos(a), math.sin(a)
+
+    def P(u, w, z):
+        r = R + u
+        return (r * ct - w * st, r * st + w * ct, z)
+    return P
+
+
+def _box_into(verts, faces, P, u0, u1, w0, w1, z0, z1):
+    """Append a (u,w,z) box to shared verts/faces via mapper P."""
+    b = len(verts)
+    verts.extend([P(u0, w0, z0), P(u1, w0, z0), P(u1, w1, z0), P(u0, w1, z0),
+                  P(u0, w0, z1), P(u1, w0, z1), P(u1, w1, z1), P(u0, w1, z1)])
+    for fc in ((0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1),
+               (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+        faces.append(tuple(b + i for i in fc))
+
+
+def _grid_fin_box(a, R, gh, gw, gc, z0):
+    """A solid grid-fin panel (σ→1): one shallow box, broad face ⟂ flow."""
+    P = _grid_fin_frame(a, R)
+    verts, faces = [], []
+    _box_into(verts, faces, P, 0.0, gh, -gw / 2, gw / 2, z0, z0 + gc)
+    return verts, faces
+
+
+def _grid_fin_lattice(a, R, gh, gw, gc, z0, pitch, web):
+    """An open grid-fin lattice (0<σ<1): thin webs of thickness `web` on a
+    square grid of `pitch`, extruded the chord `gc`; the broad face is ⟂
+    flow.  One merged mesh (walls in both directions + the outer frame)."""
+    P = _grid_fin_frame(a, R)
+    z1 = z0 + gc
+    t = min(web, 0.9 * pitch)
+    verts, faces = [], []
+    nu = max(1, round(gh / pitch))
+    for i in range(nu + 1):                           # webs across the width
+        u = i * gh / nu
+        _box_into(verts, faces, P, max(0.0, u - t / 2), min(gh, u + t / 2),
+                  -gw / 2, gw / 2, z0, z1)
+    nw = max(1, round(gw / pitch))
+    for j in range(nw + 1):                           # webs up the height
+        w = -gw / 2 + j * gw / nw
+        _box_into(verts, faces, P, 0.0, gh,
+                  max(-gw / 2, w - t / 2), min(gw / 2, w + t / 2), z0, z1)
+    return verts, faces
 
 
 def cg_marker_meshes(z_cg, r_body, name="CG_fuelled", n=24):

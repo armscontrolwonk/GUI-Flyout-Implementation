@@ -513,28 +513,43 @@ def test_estimate_cg_uses_real_per_stage_lengths():
     assert h == pytest.approx(11.6, abs=0.6)
 
 
-def test_grid_fins_are_flow_facing_boxes():
-    """A grid fin is a shallow box whose BROAD face is perpendicular to the
-    flow (the lattice faces fore/aft) — span (radial) × width (tangential) ×
-    a thin streamwise depth (chord) — not an edge-on plate.  So the
-    streamwise (z) extent equals the chord and is the SMALLEST dimension."""
+def _grid_fin_veh(sigma=None, web=0.0, pitch=0.0):
     p = _stage("S1", 1.37, 9.5)
     p.has_grid_fins = True
     p.n_grid_fins = 4
     p.grid_fin_height_m = 0.4     # radial span
     p.grid_fin_width_m = 0.5      # tangential width
     p.grid_fin_chord_m = 0.12     # streamwise depth (thin)
-    els = bx.vehicle_elements(p)
-    boxes = {n: v for n, v, _f in els["meshes"] if n.startswith("GridFin")}
-    assert len(boxes) == 4
-    v = boxes["GridFin_1"]
-    zs = sorted({round(z, 4) for _x, _y, z in v})
-    assert len(zs) == 2                                   # two z-levels
-    depth = zs[1] - zs[0]
-    assert depth == pytest.approx(0.12)                  # streamwise = chord
-    # radial span = gh (min→max radius across the corners' radial part)
-    # depth is the smallest dimension → flat toward the flow
-    assert depth < 0.4 and depth < 0.5
+    if sigma is not None:
+        p.grid_fin_solidity = sigma
+    p.grid_fin_web_thickness_m = web
+    p.grid_fin_cell_pitch_m = pitch
+    return p
+
+
+def test_grid_fins_face_the_flow_and_reflect_solidity():
+    """A grid fin's broad face is perpendicular to the flow (streamwise
+    depth = chord = the smallest dimension), and the mesh reflects solidity
+    σ LITERALLY: σ→1 a solid panel (one box), σ→0 an empty mesh (no fin),
+    between an open lattice (many webs).  Web+pitch derive σ from the real
+    geometry (the STARS case)."""
+    # σ = 1 → solid panel: one box per fin, and it faces the flow
+    solid = bx.vehicle_elements(_grid_fin_veh(sigma=1.0))
+    boxes = {n: v for n, v, _f in solid["meshes"] if n.startswith("GridFin")}
+    assert len(boxes) == 4 and all(len(v) == 8 for v in boxes.values())
+    zs = sorted({round(z, 4) for _x, _y, z in boxes["GridFin_1"]})
+    assert len(zs) == 2 and zs[1] - zs[0] == pytest.approx(0.12)   # ⟂ flow
+    # 0 < σ < 1 → an open lattice: many more verts (webs) than a box
+    lat = bx.vehicle_elements(_grid_fin_veh(sigma=0.5))
+    lv = [v for n, v, _f in lat["meshes"] if n == "GridFin_1"][0]
+    assert len(lv) > 8 * 4                          # a real lattice
+    # σ = 0 (nothing set) → EMPTY: no grid-fin meshes at all
+    empty = bx.vehicle_elements(_grid_fin_veh(sigma=0.0))
+    assert not any(n.startswith("GridFin") for n, _v, _f in empty["meshes"])
+    # web + pitch derive σ from geometry (STARS: 1 mm / 32 mm → ~0.06 lattice)
+    geom = bx.vehicle_elements(_grid_fin_veh(sigma=0.0, web=0.001, pitch=0.032))
+    assert any(n.startswith("GridFin") for n, _v, _f in geom["meshes"])
+    assert any("σ=0.06" in f for f in geom["flags"])
 
 
 def test_cg_marker_is_a_small_badge_on_the_surface():
