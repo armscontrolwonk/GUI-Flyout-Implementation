@@ -244,12 +244,15 @@ Upgrade path, in effort order:
 STEPS 1–3 DONE 2026-08-17: all 107 data/*.pdf uploaded to the Drive
 "Thrusty" folder (flat), verified file-by-file against the repo
 (name-complete; sizes spot-checked on the largest volumes), repo copies
-deleted, REFERENCES.md gaps 2–3 closed.  REMAINING: (a) the deliberate
-HISTORY REWRITE (git filter-repo + force-push; user re-clones after) —
-the ~360 MB of blobs stay in every clone until then; (b) optionally
-sort the flat Drive upload into the planned topic subfolders and add
-per-file Drive links for the non-core corpus; (c) Fetterman D-2942/
-D-2956 PDFs (public NTRS) into Drive — the last manifest gap.
+deleted, REFERENCES.md gaps 2–3 closed.  HISTORY REWRITE DONE
+2026-08-17 (git filter-repo --invert-paths on data/*.pdf, HEAD tree
+hash unchanged, all branches force-pushed; clone 730 → 61 MB) and
+BRANCH CLEANUP DONE 2026-08-18 (all staging/stale branches deleted
+after content verification; only main + the working branch remain).
+REMAINING: (a) optionally sort the flat Drive upload into the planned
+topic subfolders and add per-file Drive links for the non-core corpus;
+(b) Fetterman D-2942/D-2956 PDFs (public NTRS) into Drive — the last
+manifest gap.
 Original plan follows.
 Agreed 2026-08-16.  The ~100 PDFs under `data/` (grid fins, TPS/ablation,
 flight test, waveriders, lifting bodies) move to the Drive "Thrusty"
@@ -418,5 +421,6 @@ The one phase that touches trajectory physics, gated to lifting forms
   not yet mirrored to Drive; (c) the wider ~100-PDF data/ corpus
   (grid fins, TPS, flight test) is repo-only pending the deliberate
   move-and-history-rewrite.  Policy stands: new papers go to Drive.
-- Note: deleting data/*.pdf later will NOT shrink clones (blobs stay in
-  history); an actual shrink needs a deliberate history rewrite.
+- Note: deleting data/*.pdf alone would not have shrunk clones (blobs
+  stay in history); the deliberate history rewrite that actually shrank
+  them was run 2026-08-17 (see item 5).
