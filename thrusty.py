@@ -3540,9 +3540,9 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
                  or views.get("side", {}).get("anchor_total"))
         c = im.length_closure(state["accepted"], prompts, total)
         if c is None:
-            closure_var.set("length cross-check: measure the overall length "
-                            "(or anchor the scale on it)")
-            closure_lbl.config(foreground="#888")
+            # No idle nag — the prompt sequence already asks for the overall
+            # length; the line lights up once there is a result to show.
+            closure_var.set("")
         else:
             closure_var.set(im.closure_note(c))
             closure_lbl.config(
@@ -3620,8 +3620,9 @@ def _open_image_measure_dialog(parent, title, prompts, apply_fn,
         ttk.Button(bf, text="Back", command=pv.destroy).pack(
             side=tk.LEFT, padx=6)
 
-    ttk.Label(af, text=im.anchor_free_note(), foreground="#888",
-              wraplength=560, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 4))
+    # No anchor-free banner (cut 2026-08-18): each accepted value carries its
+    # own anchor-free / scale-anchor provenance flag, so the static note was
+    # boilerplate here.
     ttk.Button(af, text="Apply to editor", command=_apply).pack(side=tk.LEFT)
     ttk.Button(af, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
