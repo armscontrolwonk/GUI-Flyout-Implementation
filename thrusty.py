@@ -11074,6 +11074,70 @@ class BoosterFlyoutApp(tk.Tk):
             canvas = FigureCanvasTkAgg(fig, master=map_win)
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
             canvas.draw()
+
+            # ── Gazetteer overlays (TODO 3e).  Corridor bonus OFF by
+            # design: the picker is a neutral reference map.  Fixed
+            # global extent → the continental zoom tier applies; the
+            # density/label rules run live per redraw. ────────────────
+            try:
+                import gazetteer as _gz
+                import map_overlays as _mo
+                _ov_ok = _gz.available() and _gz.index_ready()
+            except Exception:
+                _ov_ok = False
+            if _ov_ok:
+                _ov_db = _gz.ensure_index()
+                _ov_bbox = (-90.0, 90.0, -180.0, 180.0)
+                _ov_artists, _ov_vars, _ov_cache = [], {}, {}
+                _lbl_var = tk.BooleanVar(value=True)
+
+                def _ov_redraw():
+                    for art in _ov_artists:
+                        try:
+                            art.remove()
+                        except Exception:
+                            pass
+                    _ov_artists.clear()
+                    fams = [f for f, v in _ov_vars.items() if v.get()]
+                    if fams:
+                        key = tuple(sorted(fams))
+                        if key not in _ov_cache:
+                            feats, _tr = _mo.fetch_features(
+                                _ov_db, _ov_bbox, "continental",
+                                families=fams, corridor=False)
+                            _ov_cache[key] = _mo.select(
+                                feats, _ov_bbox, "continental",
+                                families=fams)
+                        for fam, dots in _ov_cache[key].items():
+                            col = _mo.FAMILIES[fam][1]
+                            _ov_artists.append(ax.scatter(
+                                [d["lon"] for d in dots],
+                                [d["lat"] for d in dots], s=6, c=col,
+                                zorder=5, transform=ccrs.PlateCarree()))
+                            if _lbl_var.get():
+                                for d in dots:
+                                    if d["labeled"]:
+                                        _ov_artists.append(ax.text(
+                                            d["lon"] + 1.0, d["lat"],
+                                            d["name"], fontsize=6,
+                                            color=col, zorder=6,
+                                            transform=ccrs.PlateCarree()))
+                    canvas.draw_idle()
+
+                _ov_bar = ttk.Frame(map_win)
+                _ov_bar.pack(fill=tk.X, padx=6)
+                ttk.Label(_ov_bar, text="Place names:").pack(side=tk.LEFT)
+                for _fam, (_flbl, _fc) in _mo.FAMILIES.items():
+                    _v = tk.BooleanVar(value=(_fam == "populated"))
+                    _ov_vars[_fam] = _v
+                    ttk.Checkbutton(_ov_bar, text=_flbl, variable=_v,
+                                    command=_ov_redraw).pack(
+                        side=tk.LEFT, padx=2)
+                ttk.Checkbutton(_ov_bar, text="labels", variable=_lbl_var,
+                                command=_ov_redraw).pack(
+                    side=tk.LEFT, padx=8)
+                _ov_redraw()
+
             ttk.Label(map_win,
                       text="Click the map to select a point.  "
                            "Close this window to cancel.",
@@ -14300,6 +14364,27 @@ class BoosterFlyoutApp(tk.Tk):
         </script>"""
         fmap.get_root().html.add_child(folium.Element(leader_js))
 
+        # ── Gazetteer place-name overlays (design of record, TODO 3e) ──
+        # Per-class dot / dot+label layers, trajectory-aware (corridor
+        # bonus ON for this map), zoom-bucketed and precomputed so the
+        # saved HTML stays static.  Only when the offline index is
+        # already built — this export never triggers the long build.
+        _gz_note = ""
+        try:
+            import gazetteer as _gz
+            import map_overlays as _mo
+            if _gz.available() and _gz.index_ready():
+                _pay = _mo.build_payload(_gz.ensure_index(),
+                                         lat.tolist(), lon_uw.tolist())
+                fmap.get_root().html.add_child(folium.Element(
+                    _mo.folium_overlay_html(_pay, map_var)))
+            elif _gz.available():
+                _gz_note = ("  (place-name overlays skipped — build the "
+                            "offline gazetteer index first: Analysis ▸ "
+                            "Reference Data)")
+        except Exception as _gz_ex:
+            _gz_note = f"  (place-name overlays failed: {_gz_ex})"
+
         # ── Logo overlay (lower-left, ~1/8–1/7 of viewport height) ──────
         import base64 as _b64, os as _os
         _logo_path = _os.path.join(_os.path.dirname(__file__), "data", "Thrusty.png")
@@ -14316,7 +14401,7 @@ class BoosterFlyoutApp(tk.Tk):
         fmap.save(path)
         import webbrowser
         webbrowser.open(f"file://{path}")
-        self._status_var.set(f"Folium map saved and opened: {path}")
+        self._status_var.set(f"Folium map saved and opened: {path}{_gz_note}")
 
     def _export_timeline(self):
         """Export the flight event timeline to CSV."""

@@ -62,13 +62,17 @@ def _fingerprint(pack_files):
 
 
 def _build_db(db, pack_files, progress=None):
+    # nvar (variant-name count, primary excluded) is the map overlays'
+    # prominence proxy: places the world writes about accumulate
+    # romanizations.  Older indexes lack the column; readers degrade.
     db.executescript("""
         DROP TABLE IF EXISTS places;
         DROP TABLE IF EXISTS names;
         DROP TABLE IF EXISTS meta;
         CREATE TABLE places(
             id INTEGER PRIMARY KEY, ext_id TEXT, primary_name TEXT,
-            lat REAL, lon REAL, admin TEXT, fclass TEXT, source TEXT);
+            lat REAL, lon REAL, admin TEXT, fclass TEXT, source TEXT,
+            nvar INTEGER);
         CREATE TABLE names(
             norm TEXT, display TEXT, place_id INTEGER);
         CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);
@@ -83,25 +87,27 @@ def _build_db(db, pack_files, progress=None):
                     continue
                 ext_id, primary, vs, lat, lon, admin, fclass, source = parts
                 pid += 1
+                variants = [v for v in vs.split(";") if v]
                 prows.append((pid, ext_id, primary, float(lat), float(lon),
-                              admin, fclass, source))
+                              admin, fclass, source, len(variants)))
                 nrows.append((normalize(primary), primary, pid))
-                for v in vs.split(";"):
-                    if v:
-                        nrows.append((normalize(v), v, pid))
+                for v in variants:
+                    nrows.append((normalize(v), v, pid))
                 if len(prows) >= 50000:
-                    db.executemany("INSERT INTO places VALUES(?,?,?,?,?,?,?,?)",
-                                   prows)
+                    db.executemany(
+                        "INSERT INTO places VALUES(?,?,?,?,?,?,?,?,?)", prows)
                     db.executemany("INSERT INTO names VALUES(?,?,?)", nrows)
                     prows, nrows = [], []
                     if progress:
                         progress(pid)
-            db.executemany("INSERT INTO places VALUES(?,?,?,?,?,?,?,?)", prows)
+            db.executemany("INSERT INTO places VALUES(?,?,?,?,?,?,?,?,?)",
+                           prows)
             db.executemany("INSERT INTO names VALUES(?,?,?)", nrows)
     db.execute("CREATE INDEX idx_names ON names(norm)")
     db.execute("CREATE INDEX idx_lat ON places(lat)")
     db.execute("INSERT INTO meta VALUES('fingerprint', ?)",
                (_fingerprint(pack_files),))
+    db.execute("INSERT INTO meta VALUES('schema', '2')")
     db.commit()
 
 
@@ -242,3 +248,66 @@ def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
                         lon=row[3], admin=row[4], fclass=row[5],
                         source=row[6], km=dist(row)))
     return out
+
+
+def has_variant_counts(db):
+    """True when the index carries the nvar column (schema 2, built
+    after 2026-08-18).  Older indexes still serve every query; overlay
+    prominence ranking just loses its variant-count bonus until the
+    user rebuilds via Analysis ▸ Reference Data."""
+    cols = {r[1] for r in db.execute("PRAGMA table_info(places)")}
+    return "nvar" in cols
+
+
+def features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, limit=25000,
+                     db=None, pack_dir=None):
+    """Every feature inside the box, optionally restricted to an fclass
+    set (exact designation codes / class names, matched verbatim).
+    lon0..lon1 must be an ordinary interval in [-180, 180] — callers
+    handle antimeridian wrap by querying the two sub-intervals.
+    Returns (rows, truncated): rows are dicts with an nvar field (0 on
+    a pre-schema-2 index); truncated is True when `limit` cut the
+    result — never silently."""
+    db = db or ensure_index(pack_dir=pack_dir)
+    if db is None:
+        return [], False
+    nv = "nvar" if has_variant_counts(db) else "0"
+    cond = "lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?"
+    args = [min(lat0, lat1), max(lat0, lat1),
+            min(lon0, lon1), max(lon0, lon1)]
+    if fclasses:
+        fl = sorted(fclasses)
+        cond += f" AND fclass IN ({','.join('?' * len(fl))})"
+        args += fl
+    rows = db.execute(
+        f"SELECT ext_id, primary_name, lat, lon, admin, fclass, source, "
+        f"{nv} FROM places WHERE {cond} LIMIT ?", args + [limit + 1]
+    ).fetchall()
+    truncated = len(rows) > limit
+    return [dict(ext_id=r[0], primary=r[1], lat=r[2], lon=r[3], admin=r[4],
+                 fclass=r[5], source=r[6], nvar=r[7])
+            for r in rows[:limit]], truncated
+
+
+def iter_features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, db=None):
+    """Streaming variant of features_in_bbox — one pass over the lat
+    band, no LIMIT (the caller applies its own caps).  Lets a consumer
+    with per-category budgets (the map overlays) do ONE index scan for
+    all categories instead of one scan each."""
+    if db is None:
+        db = ensure_index()
+    if db is None:
+        return
+    nv = "nvar" if has_variant_counts(db) else "0"
+    cond = "lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?"
+    args = [min(lat0, lat1), max(lat0, lat1),
+            min(lon0, lon1), max(lon0, lon1)]
+    if fclasses:
+        fl = sorted(fclasses)
+        cond += f" AND fclass IN ({','.join('?' * len(fl))})"
+        args += fl
+    for r in db.execute(
+            f"SELECT ext_id, primary_name, lat, lon, admin, fclass, "
+            f"source, {nv} FROM places WHERE {cond}", args):
+        yield dict(ext_id=r[0], primary=r[1], lat=r[2], lon=r[3],
+                   admin=r[4], fclass=r[5], source=r[6], nvar=r[7])

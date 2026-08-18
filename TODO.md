@@ -210,9 +210,28 @@ Upgrade path, in effort order:
       Scope when picked up: release-condition fields on the flight
       plan, launch-transient handling, and what "range" means measured
       from a moving release point.
-  (e) gazetteer map overlays — DESIGN OF RECORD (agreed 2026-08-17,
-      user decision: TRAJECTORY-AWARE by default on the trajectory
-      map).  Toggleable per-class layers of gazetteer features on the
+  (e) gazetteer map overlays — SHIPPED (2026-08-18), built exactly to
+      the design of record below (map_overlays.py, pure + tested;
+      folium block emitted by folium_overlay_html(); picker toggles in
+      the Pick-on-map window).  Implementation notes: one streaming
+      lat-band scan per export with per-family row caps (top tiers
+      rank ≤ 1 fetched uncapped first, so capitals/seas can never be
+      lost to a cap; cap hits flagged on the map control, never
+      silent); classification + corridor promotion vectorised once,
+      the four zoom buckets then gate/grid/label the shared set
+      (~8–15 s payload on the worldwide index for an ICBM-scale bbox);
+      the folium side is embedded JSON + a self-contained JS control
+      (off / dots / dots+labels per family, zoomend bucket switching)
+      rather than literal FeatureGroups — same precomputed-static
+      behavior, one moving part.  Variant-count prominence needs the
+      schema-2 index (nvar column): old indexes work with the bonus
+      at zero and the map says so; rebuild via Analysis ▸ Reference
+      Data picks it up.  Verified in a real browser (chromium):
+      control, corridor promotion, label deconfliction, bucket
+      switching (23→75→80 markers z4→z6→z8 on a Sohae→Pacific track).
+      DESIGN OF RECORD (agreed 2026-08-17, user decision:
+      TRAJECTORY-AWARE by default on the trajectory map).
+      Toggleable per-class layers of gazetteer features on the
       folium trajectory map and the cartopy picker map, each class in
       two flavors: dots, and dots + labels.  Class families: Populated,
       Facilities (GNS-S), Water (GNS-H), Terrain/Islands (GNS-T),
