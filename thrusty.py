@@ -12016,10 +12016,14 @@ class BoosterFlyoutApp(tk.Tk):
         prog = tk.Toplevel(self)
         prog.title("Building offline gazetteer")
         prog.resizable(False, False)
-        prog.grab_set()
+        # No grab_set(): a modal grab here once contradicted the label's
+        # "keep working" promise (user report 2026-08-18).  The window
+        # stays open, the app stays interactive — though the build is
+        # CPU-heavy, so say so instead of overpromising.
         ttk.Label(prog, padding=16, justify=tk.LEFT,
                   text="Building the worldwide place index…\n"
-                  "This runs in the background; you can keep working.\n"
+                  "This takes several minutes, and the app may be "
+                  "sluggish meanwhile.\n"
                   "The window closes itself when done.").pack()
         pb = ttk.Progressbar(prog, mode="indeterminate", length=320)
         pb.pack(padx=16, pady=(0, 16)); pb.start(12)
