@@ -14483,13 +14483,18 @@ class BoosterFlyoutApp(tk.Tk):
         ax = fig.add_subplot(111)
         ax.set_xlim(-180, 180)
         ax.set_ylim(-90, 90)
-        ax.set_xlabel("Longitude (°E)", fontsize=8)
-        ax.set_ylabel("Latitude (°N)", fontsize=8)
-        ax.tick_params(labelsize=7)
+        ax.set_xlabel("Longitude (°E)", fontsize=10)
+        ax.set_ylabel("Latitude (°N)", fontsize=10)
+        ax.tick_params(labelsize=9)
         _draw_borders(ax, 0.0)
         canvas = FigureCanvasTkAgg(fig, master=win)
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        NavigationToolbar2Tk(canvas, win).update()
+        # Keep our own toolbar handle: a manually embedded toolbar is
+        # NOT attached to canvas.toolbar, so checking that attribute in
+        # the click handler raised on every click (mac field report
+        # 2026-08-18 — "click doesn't work").
+        toolbar = NavigationToolbar2Tk(canvas, win)
+        toolbar.update()
 
         bar = ttk.Frame(win)
         bar.pack(fill=tk.X, padx=6)
@@ -14529,7 +14534,7 @@ class BoosterFlyoutApp(tk.Tk):
                     continue
                 shown += len(pts)
                 state["artists"].append(ax.scatter(
-                    [p[0] for p in pts], [p[1] for p in pts], s=4,
+                    [p[0] for p in pts], [p[1] for p in pts], s=7,
                     c=self._GZX_COLORS[fam], zorder=4, linewidths=0))
             if k == 1 and shown <= 150:
                 for r in rows:
@@ -14537,8 +14542,8 @@ class BoosterFlyoutApp(tk.Tk):
                     if fam_vars[fam].get():
                         state["artists"].append(ax.annotate(
                             r["primary"], (r["lon"], r["lat"]),
-                            xytext=(3, 1), textcoords="offset points",
-                            fontsize=6, zorder=5,
+                            xytext=(4, 2), textcoords="offset points",
+                            fontsize=9, zorder=5,
                             color=self._GZX_COLORS[fam]))
             if trk_var.get() and self._result is not None:
                 rr = self._result
@@ -14591,28 +14596,32 @@ class BoosterFlyoutApp(tk.Tk):
 
         def _on_click(ev):
             if (ev.inaxes is not ax or ev.xdata is None
-                    or canvas.toolbar.mode):
+                    or getattr(toolbar, "mode", "")):
                 return
-            best, bkm = None, float("inf")
-            import math as _m
-            for r in state["rows"]:
-                d = _m.hypot((r["lon"] - ev.xdata)
-                             * _m.cos(_m.radians(ev.ydata)),
-                             r["lat"] - ev.ydata) * 111.32
-                if d < bkm:
-                    best, bkm = r, d
-            if best is None:
-                return
-            word = _gz.class_word(best["fclass"], best["source"])
-            txt = (f"{best['primary']} — {word} ({best['admin']}) "
-                   f"[{best['ext_id']}]")
-            pop = _gz.nearest_populated(best["lat"], best["lon"], n=1,
-                                        db=db)
-            if pop and pop[0]["ext_id"] != best["ext_id"]:
-                p = pop[0]
-                txt += (f"   ·   nearest populated: {p['primary']} "
-                        f"({p['admin']}), {p['km']:.0f} km {p['dir']}")
-            status.set(txt)
+            try:
+                best, bkm = None, float("inf")
+                import math as _m
+                for r in state["rows"]:
+                    d = _m.hypot((r["lon"] - ev.xdata)
+                                 * _m.cos(_m.radians(ev.ydata)),
+                                 r["lat"] - ev.ydata) * 111.32
+                    if d < bkm:
+                        best, bkm = r, d
+                if best is None:
+                    return
+                word = _gz.class_word(best["fclass"], best["source"])
+                txt = (f"{best['primary']} — {word} ({best['admin']}) "
+                       f"[{best['ext_id']}]")
+                pop = _gz.nearest_populated(best["lat"], best["lon"],
+                                            n=1, db=db)
+                if pop and pop[0]["ext_id"] != best["ext_id"]:
+                    p = pop[0]
+                    txt += (f"   ·   nearest populated: {p['primary']} "
+                            f"({p['admin']}), {p['km']:.0f} km "
+                            f"{p['dir']}")
+                status.set(txt)
+            except Exception as ex:
+                status.set(f"identify failed: {ex}")
         canvas.mpl_connect("button_press_event", _on_click)
         _refresh(force=True)
 
