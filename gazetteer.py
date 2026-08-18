@@ -69,6 +69,8 @@ def _build_db(db, pack_files, progress=None):
         DROP TABLE IF EXISTS places;
         DROP TABLE IF EXISTS names;
         DROP TABLE IF EXISTS meta;
+        DROP TABLE IF EXISTS pplaces;
+        DROP TABLE IF EXISTS places_rtree;
         CREATE TABLE places(
             id INTEGER PRIMARY KEY, ext_id TEXT, primary_name TEXT,
             lat REAL, lon REAL, admin TEXT, fclass TEXT, source TEXT,
@@ -109,6 +111,10 @@ def _build_db(db, pack_files, progress=None):
                (_fingerprint(pack_files),))
     db.execute("INSERT INTO meta VALUES('schema', '2')")
     db.commit()
+    # Spatial helpers — part of a complete build; older indexes gain
+    # them lazily (Thrusty's startup background upgrade / first use).
+    ensure_rtree(db)
+    ensure_pplaces(db)
 
 
 def index_ready(pack_dir=None, db_path=None):
@@ -143,6 +149,10 @@ def ensure_index(pack_dir=None, db_path=None, progress=None):
     path = Path(db_path) if db_path else _DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(str(path), check_same_thread=False)
+    # The startup thread may be inserting the spatial helper tables
+    # while the GUI queries — wait out its brief commit lock instead
+    # of surfacing 'database is locked'.
+    db.execute("PRAGMA busy_timeout = 15000")
     try:
         fp = db.execute("SELECT v FROM meta WHERE k='fingerprint'"
                         ).fetchone()
@@ -220,22 +230,80 @@ def _tier(r):
 _KM_PER_DEG_LAT = 111.19          # R·π/180; the meridional lower bound
 
 
-def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
-    """The n nearest features to (lat, lon) by great-circle distance,
-    searched over an expanding latitude band.  Returns dicts with a
-    'km' field added.
+def has_rtree(db):
+    return bool(db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND "
+        "name='places_rtree'").fetchone())
 
-    Correctness (bug fixed 2026-08-18): a latitude band is a strip over
-    ALL longitudes, so the nearest feature INSIDE a band can be far in
-    longitude while a closer one sits just outside it in latitude.  A
-    point outside the ±h° band is at least h·111.19 km away (great-
-    circle distance ≥ the latitude difference), so we only stop once
-    the n-th kept candidate is within that bound — never merely because
-    a band had n hits."""
+
+def ensure_rtree(db):
+    """Lazily build (once, cached in the DB) an R-Tree over every
+    feature's coordinates.  Turns nearest-neighbour box queries from
+    latitude-strip scans (seconds over open ocean — field report
+    2026-08-18: 'the nearest place search is slow') into true 2-D index
+    lookups (milliseconds).  ~75 s to build over the worldwide index
+    and ~0.6 GB in the cache DB — which is disposable and rebuildable
+    by design, never shipped.  Thrusty runs this in a background thread
+    at startup; until it exists every query falls back to the correct
+    slow path.  Returns True when usable (False: read-only DB or
+    SQLite built without the rtree module)."""
+    if has_rtree(db):
+        return True
+    try:
+        db.execute("CREATE VIRTUAL TABLE places_rtree USING rtree("
+                   "id, minlat, maxlat, minlon, maxlon)")
+        db.execute("INSERT INTO places_rtree "
+                   "SELECT id, lat, lat, lon, lon FROM places")
+        db.commit()
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def ensure_pplaces(db):
+    """Lazily build (once, cached in the DB) a small helper table of
+    ONLY populated places — GNS 'PPL*' plus GNIS 'Populated Place' —
+    with its own lat index.  nearest_populated() then searches this
+    ~5 M-row table with no fclass LIKE filter, so a remote-ocean query
+    whose box must grow to reach the nearest coast scans populated
+    rows alone instead of every feature in a continent-sized box (the
+    field-slow case, 2026-08-18).  Returns True when the table is
+    usable, False on a read-only DB (caller falls back to places)."""
+    have = db.execute("SELECT name FROM sqlite_master WHERE type='table' "
+                      "AND name='pplaces'").fetchone()
+    if have:
+        return True
+    try:
+        db.execute(
+            "CREATE TABLE pplaces AS SELECT ext_id, primary_name, lat, "
+            "lon, admin, fclass, source FROM places WHERE "
+            "fclass LIKE 'PPL%' OR fclass LIKE 'Populated Place%'")
+        db.execute("CREATE INDEX idx_ppl_lat ON pplaces(lat)")
+        db.commit()
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None,
+            table="places"):
+    """The n nearest features to (lat, lon) by great-circle distance,
+    searched over an expanding lat/lon BOX.  Returns dicts with a 'km'
+    field added.
+
+    Correctness AND speed (2026-08-18): the box is grown by a search
+    radius r; its half-height is r/111.19° in latitude and its
+    half-width r/(111.19·cos φ)° in longitude, with cos taken at the
+    box's most poleward edge so the box provably COVERS radius r in
+    every direction.  We stop once the n-th kept candidate is within r
+    — nothing outside the box can be closer.  Bounding BOTH axes (the
+    earlier version bounded latitude only) keeps a sparse-ocean query
+    from scanning a whole global latitude strip: the field-slow case."""
     import math
     db = db or ensure_index(pack_dir=pack_dir)
     if db is None:
         return []
+    use_rt = table == "places" and has_rtree(db)
 
     def dist(row):
         la1, lo1, la2, lo2 = map(math.radians, (lat, lon, row[2], row[3]))
@@ -244,28 +312,65 @@ def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
              * math.sin((lo2 - lo1) / 2) ** 2)
         return 6371.0 * 2 * math.asin(min(1.0, math.sqrt(a)))
 
+    # fclass_prefix may be a single prefix or a LIST of them (matched as
+    # an OR) — nearest_populated passes both vocabularies at once so a
+    # non-US point never runs a doomed global scan for the nearest US
+    # 'Populated Place' when a GNS 'PPL' already sits next door.
+    prefixes = ([fclass_prefix] if isinstance(fclass_prefix, str)
+                else list(fclass_prefix or []))
+    if prefixes:
+        fc = " AND (" + " OR ".join("fclass LIKE ?" for _ in prefixes) + ")"
+        fca = [p + "%" for p in prefixes]
+    else:
+        fc, fca = "", []
+
+    def box(hlat, hlon):
+        lo_lat, hi_lat = lat - hlat, lat + hlat
+        if hlon >= 180.0:                       # whole-globe longitude
+            lon_conds = [("", [])]
+        else:
+            a, b = lon - hlon, lon + hlon
+            lon_conds = []
+            for k in (-360.0, 0.0, 360.0):      # antimeridian wrap
+                loa, hib = max(a + k, -180.0), min(b + k, 180.0)
+                if loa < hib:
+                    lon_conds.append((" AND lon BETWEEN ? AND ?",
+                                      [loa, hib]))
+        rows = []
+        for lc, la in lon_conds:
+            if use_rt:
+                # true 2-D lookup: the R-Tree prunes both axes at once
+                rows += db.execute(
+                    "SELECT p.ext_id, p.primary_name, p.lat, p.lon, "
+                    "p.admin, p.fclass, p.source FROM places_rtree rt "
+                    "JOIN places p ON p.id = rt.id WHERE "
+                    "rt.minlat BETWEEN ? AND ?"
+                    + lc.replace("lon", "rt.minlon") + fc,
+                    [lo_lat, hi_lat] + la + fca).fetchall()
+            else:
+                rows += db.execute(
+                    "SELECT ext_id, primary_name, lat, lon, admin, "
+                    "fclass, source FROM " + table
+                    + " WHERE lat BETWEEN ? AND ?" + lc + fc,
+                    [lo_lat, hi_lat] + la + fca).fetchall()
+        return rows
+
     ranked = []
-    for half_band in (0.5, 2.0, 8.0, 30.0, 90.1):
-        cond = "lat BETWEEN ? AND ?"
-        args = [lat - half_band, lat + half_band]
-        if fclass_prefix:
-            cond += " AND fclass LIKE ?"
-            args.append(fclass_prefix + "%")
-        cands = db.execute(
-            f"SELECT ext_id, primary_name, lat, lon, admin, fclass, source "
-            f"FROM places WHERE {cond}", args).fetchall()
-        ranked = sorted(cands, key=dist)[:n]
-        # Safe to stop only when the band already reaches past the worst
-        # kept distance — then nothing outside it (Δlat > half_band, so
-        # > half_band·111.19 km away) can beat what we have.
-        if (len(ranked) >= n
-                and dist(ranked[-1]) <= half_band * _KM_PER_DEG_LAT):
+    r = 30.0                                    # km; grows ×4 each round
+    while True:
+        hlat = r / _KM_PER_DEG_LAT
+        edge = min(89.9, abs(lat) + hlat)       # most poleward box edge
+        coslat = max(0.02, math.cos(math.radians(edge)))
+        hlon = min(180.0, r / (_KM_PER_DEG_LAT * coslat))
+        ranked = sorted(box(hlat, hlon), key=dist)[:n]
+        if len(ranked) >= n and dist(ranked[-1]) <= r:
             break
-        if half_band > 90.0:
+        if hlat >= 180.0:                       # box already spans the globe
             break
-    return [dict(ext_id=r[0], primary=r[1], lat=r[2], lon=r[3],
-                 admin=r[4], fclass=r[5], source=r[6], km=dist(r))
-            for r in ranked]
+        r *= 4.0
+    return [dict(ext_id=x[0], primary=x[1], lat=x[2], lon=x[3],
+                 admin=x[4], fclass=x[5], source=x[6], km=dist(x))
+            for x in ranked]
 
 
 # Human words for the common NGA GNS designation codes (from the GNS
@@ -377,18 +482,21 @@ def nearest_populated(lat, lon, n=1, db=None, pack_dir=None):
     db = db or ensure_index(pack_dir=pack_dir)
     if db is None:
         return []
-    rows = (nearest(lat, lon, n=n, db=db, fclass_prefix="PPL")
-            + nearest(lat, lon, n=n, db=db,
-                      fclass_prefix="Populated Place"))
-    rows.sort(key=lambda r: r["km"])
-    seen, out = set(), []
-    for r in rows:
-        if r["ext_id"] in seen:
-            continue
-        seen.add(r["ext_id"])
+    # Fastest available path: the R-Tree (2-D pruning, fclass filter is
+    # cheap on the few joined rows) → the pre-filtered populated-places
+    # helper table (lat index only, but small) → a combined-vocabulary
+    # filter over the full table (read-only DB, always correct).
+    if has_rtree(db):
+        out = nearest(lat, lon, n=n, db=db,
+                      fclass_prefix=["PPL", "Populated Place"])
+    elif ensure_pplaces(db):
+        out = nearest(lat, lon, n=n, db=db, table="pplaces")
+    else:
+        out = nearest(lat, lon, n=n, db=db,
+                      fclass_prefix=["PPL", "Populated Place"])
+    for r in out:
         r["dir"] = compass_8(r["lat"], r["lon"], lat, lon)
-        out.append(r)
-    return out[:n]
+    return out
 
 
 def has_variant_counts(db):

@@ -15109,9 +15109,31 @@ class BoosterFlyoutApp(tk.Tk):
         )
 
 
+def _bg_spatial_upgrade():
+    """One-time background upgrade of an ALREADY-BUILT gazetteer index:
+    add the R-Tree and populated-places helper tables that make the
+    Nearby Places / Explorer nearest-neighbour queries millisecond-fast
+    (field report 2026-08-18: 'the nearest place search is slow').
+    Runs silently off the UI thread at startup; fresh index builds get
+    the helpers directly; until this finishes, queries use the slower
+    correct fallback.  Never triggers the multi-minute index build
+    itself — users who haven't opted into the gazetteer pay nothing."""
+    try:
+        import gazetteer as _gz
+        if not (_gz.available() and _gz.index_ready()):
+            return
+        db = _gz.ensure_index()          # thread-local connection
+        _gz.ensure_rtree(db)
+        _gz.ensure_pplaces(db)
+        db.close()
+    except Exception:
+        pass                             # cosmetic speed-up only
+
+
 # ---------------------------------------------------------------------------
 def main():
     app = BoosterFlyoutApp()
+    threading.Thread(target=_bg_spatial_upgrade, daemon=True).start()
     app.mainloop()
 
 

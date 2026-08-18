@@ -157,6 +157,27 @@ def test_nearest_is_the_true_global_nearest_not_just_within_a_band(
     assert [x["primary"] for x in r2] == ["Close Ridge", "Far Plain"]
 
 
+def test_rtree_fast_path_agrees_with_the_fallback(fixture_env):
+    """The R-Tree spatial index is a SPEED layer, never a different
+    answer: with it dropped, nearest()/nearest_populated() return the
+    identical features and distances via the slow path.  (Fresh index
+    builds create the R-Tree; older caches gain it from Thrusty's
+    startup background upgrade.)"""
+    _d, db = fixture_env
+    assert gz.has_rtree(db)                     # _build_db made it
+    fast_any = gz.nearest(39.60, 124.80, n=2, db=db)
+    fast_pop = gz.nearest_populated(57.8, -152.5, n=2, db=db)
+    db.execute("DROP TABLE places_rtree")
+    db.execute("DROP TABLE IF EXISTS pplaces")
+    db.commit()
+    assert not gz.has_rtree(db)
+    slow_any = gz.nearest(39.60, 124.80, n=2, db=db)
+    slow_pop = gz.nearest_populated(57.8, -152.5, n=2, db=db)
+    key = lambda rows: [(r["ext_id"], round(r["km"], 3)) for r in rows]
+    assert key(fast_any) == key(slow_any)
+    assert key(fast_pop) == key(slow_pop)
+
+
 def test_no_packs_degrades_to_empty(tmp_path):
     empty = tmp_path / "none"
     empty.mkdir()
