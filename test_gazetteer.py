@@ -128,6 +128,35 @@ def test_viewport_sample_returns_all_under_budget_and_samples_over(
     assert ids <= {r["ext_id"] for r in rows}
 
 
+def test_nearest_is_the_true_global_nearest_not_just_within_a_band(
+        tmp_path):
+    """Regression (2026-08-18): the expanding-band search used to stop
+    at the first latitude strip with a hit and return the nearest
+    WITHIN that strip — but a strip spans all longitudes, so a feature
+    far in longitude could beat a much closer one just outside the
+    strip in latitude.  Here the query point has a feature 0.6° away in
+    latitude but almost on top of it in longitude (the true nearest),
+    and a decoy on nearly the same latitude but 40° of longitude away
+    (~1300 km).  The band search must return the true nearest."""
+    d = tmp_path / "packs"
+    d.mkdir()
+    lines = [
+        # true nearest: 0.6° north, same longitude (~67 km)
+        "GNS:1|Close Ridge||12.40000|-40.40000|XX|RDGU|GNS-U",
+        # decoy: essentially same latitude, 40° west (~4300 km)
+        "GNS:2|Far Plain||11.80000|-80.00000|XX|PLNU|GNS-U",
+    ]
+    with gzip.open(d / "p.txt.gz", "wt", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    db = gz.ensure_index(pack_dir=str(d), db_path=str(tmp_path / "g.db"))
+    r = gz.nearest(11.79, -40.39, n=1, db=db)
+    assert r[0]["primary"] == "Close Ridge"
+    assert r[0]["km"] < 100.0
+    # and it must still find the decoy when asked for both, ordered
+    r2 = gz.nearest(11.79, -40.39, n=2, db=db)
+    assert [x["primary"] for x in r2] == ["Close Ridge", "Far Plain"]
+
+
 def test_no_packs_degrades_to_empty(tmp_path):
     empty = tmp_path / "none"
     empty.mkdir()

@@ -217,14 +217,34 @@ def _tier(r):
     return 2          # admin, areas, GNIS non-populated, Antarctic, unknown
 
 
+_KM_PER_DEG_LAT = 111.19          # R·π/180; the meridional lower bound
+
+
 def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
     """The n nearest features to (lat, lon) by great-circle distance,
     searched over an expanding latitude band.  Returns dicts with a
-    'km' field added."""
+    'km' field added.
+
+    Correctness (bug fixed 2026-08-18): a latitude band is a strip over
+    ALL longitudes, so the nearest feature INSIDE a band can be far in
+    longitude while a closer one sits just outside it in latitude.  A
+    point outside the ±h° band is at least h·111.19 km away (great-
+    circle distance ≥ the latitude difference), so we only stop once
+    the n-th kept candidate is within that bound — never merely because
+    a band had n hits."""
     import math
     db = db or ensure_index(pack_dir=pack_dir)
     if db is None:
         return []
+
+    def dist(row):
+        la1, lo1, la2, lo2 = map(math.radians, (lat, lon, row[2], row[3]))
+        a = (math.sin((la2 - la1) / 2) ** 2
+             + math.cos(la1) * math.cos(la2)
+             * math.sin((lo2 - lo1) / 2) ** 2)
+        return 6371.0 * 2 * math.asin(min(1.0, math.sqrt(a)))
+
+    ranked = []
     for half_band in (0.5, 2.0, 8.0, 30.0, 90.1):
         cond = "lat BETWEEN ? AND ?"
         args = [lat - half_band, lat + half_band]
@@ -234,20 +254,18 @@ def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
         cands = db.execute(
             f"SELECT ext_id, primary_name, lat, lon, admin, fclass, source "
             f"FROM places WHERE {cond}", args).fetchall()
-        if len(cands) >= n or half_band > 90.0:
+        ranked = sorted(cands, key=dist)[:n]
+        # Safe to stop only when the band already reaches past the worst
+        # kept distance — then nothing outside it (Δlat > half_band, so
+        # > half_band·111.19 km away) can beat what we have.
+        if (len(ranked) >= n
+                and dist(ranked[-1]) <= half_band * _KM_PER_DEG_LAT):
             break
-    def dist(row):
-        la1, lo1, la2, lo2 = map(math.radians, (lat, lon, row[2], row[3]))
-        a = (math.sin((la2 - la1) / 2) ** 2
-             + math.cos(la1) * math.cos(la2)
-             * math.sin((lo2 - lo1) / 2) ** 2)
-        return 6371.0 * 2 * math.asin(min(1.0, math.sqrt(a)))
-    out = []
-    for row in sorted(cands, key=dist)[:n]:
-        out.append(dict(ext_id=row[0], primary=row[1], lat=row[2],
-                        lon=row[3], admin=row[4], fclass=row[5],
-                        source=row[6], km=dist(row)))
-    return out
+        if half_band > 90.0:
+            break
+    return [dict(ext_id=r[0], primary=r[1], lat=r[2], lon=r[3],
+                 admin=r[4], fclass=r[5], source=r[6], km=dist(r))
+            for r in ranked]
 
 
 # Human words for the common NGA GNS designation codes (from the GNS
