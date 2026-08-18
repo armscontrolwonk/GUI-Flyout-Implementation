@@ -188,6 +188,7 @@ _DIR_EVENTS       = _THRUSTY_ROOT / "events"
 _DIR_MAPS         = _THRUSTY_ROOT / "maps"
 _DIR_PLOTS        = _THRUSTY_ROOT / "plots"
 _DIR_SCENARIOS    = _THRUSTY_ROOT / "scenarios"
+_DIR_BLENDER      = _THRUSTY_ROOT / "blender_models"
 
 
 def _safe_name(s: str, maxlen: int = 40) -> str:
@@ -8800,6 +8801,7 @@ class BoosterFlyoutApp(tk.Tk):
         path = filedialog.asksaveasfilename(
             title="Export 3-D model for Blender",
             defaultextension=".obj",
+            initialdir=str(_ensure_dir(_DIR_BLENDER)),
             initialfile=f"{name.replace(' ', '_')}.obj",
             filetypes=[("Wavefront OBJ (File → Import in Blender)", "*.obj"),
                        ("Blender Python script (run in Scripting tab)",
