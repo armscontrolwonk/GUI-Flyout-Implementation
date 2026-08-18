@@ -130,7 +130,7 @@ variant per object is remembered in
 | `booster_schematic.py` | ~210 | To-scale side elevation of the stack (Schematic tab renderer); pure matplotlib, data-honest fallback flags |
 | `mass_estimator.py` | ~1 260 | Stage dry-mass estimator (Wilhite-school MERs + aggregate relations); divergence cross-check. See `MASS_ESTIMATOR.md` |
 | `booster_xlsx.py` / `ro_xlsx.py` | ~740 / ~320 | Spreadsheet (XLSX) import/export for boosters and reentry objects |
-| `gazetteer.py` | ~380 | Bundled offline gazetteer (10.4 M official BGN-lineage names, variant-aware search, nearest-populated-place lookup for the Nearby Places report) |
+| `gazetteer.py` | ~560 | Bundled offline gazetteer (10.4 M official BGN-lineage names): variant-aware search, nearest-populated / nearest-any lookups (Nearby Places report), sampled viewport queries (Gazetteer Explorer) |
 
 `trajectory.py` glide modes model reentry as a **phugoid-damping spectrum**:
 skip-glide (undamped, ζ=0) → damped-phugoid glide (ζ≈0.7) → non-oscillatory glide /

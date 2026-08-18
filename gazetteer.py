@@ -250,6 +250,92 @@ def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
     return out
 
 
+# Human words for the common NGA GNS designation codes (from the GNS
+# User Guide's designation-code list; the long tail falls back to the
+# raw code, still traceable via the ext_id).  GNIS and BGN-Antarctic
+# class names are already words and pass through.
+_DESIG_WORDS = {
+    "PPL": "populated place", "PPLC": "capital", "PPLA": "seat of a "
+    "first-order admin division", "PPLA2": "seat of a second-order "
+    "admin division", "PPLA3": "seat of a third-order admin division",
+    "PPLA4": "seat of a fourth-order admin division", "PPLX": "section "
+    "of populated place", "PPLL": "populated locality", "PPLQ":
+    "abandoned populated place", "PPLF": "farm village", "PPLW":
+    "destroyed populated place", "STLMT": "settlement",
+    "AIRB": "airbase", "AIRP": "airport", "AIRF": "airfield",
+    "INSM": "military installation", "CTRS": "space center",
+    "FT": "fort", "DAM": "dam", "PRT": "port", "STNM": "meteorological "
+    "station", "STNR": "radio station", "STNS": "satellite station",
+    "PSTB": "border post", "RSTN": "railroad station", "OBPT":
+    "observation point", "FRM": "farm", "SCH": "school", "CH": "church",
+    "MSQE": "mosque", "TMPL": "temple", "MSTY": "monastery",
+    "RUIN": "ruin", "CMP": "camp", "MN": "mine", "BDG": "bridge",
+    "OCN": "ocean", "SEA": "sea", "GULF": "gulf", "STRT": "strait",
+    "CHN": "channel", "BAY": "bay", "COVE": "cove", "LGN": "lagoon",
+    "LK": "lake", "LKI": "intermittent lake", "STM": "stream",
+    "STMI": "intermittent stream", "RSV": "reservoir", "SPNG":
+    "spring", "WAD": "wadi", "SWMP": "swamp", "MRSH": "marsh",
+    "CNL": "canal", "HBR": "harbor", "ANCH": "anchorage", "RF": "reef",
+    "SHOL": "shoal", "WLL": "well", "PND": "pond", "FLLS": "waterfall",
+    "MT": "mountain", "MTS": "mountains", "PK": "peak", "HLL": "hill",
+    "HLLS": "hills", "RDGE": "ridge", "VAL": "valley", "PASS": "pass",
+    "ISL": "island", "ISLS": "islands", "PEN": "peninsula",
+    "CAPE": "cape", "PT": "point", "PLAT": "plateau", "DSRT":
+    "desert", "VLC": "volcano", "CLF": "cliff", "GRGE": "gorge",
+    "DUNE": "dune", "SPUR": "spur", "RK": "rock", "SLP": "slope",
+    "DPR": "depression", "PLN": "plain",
+    "SMU": "seamount", "TRGU": "trough", "TRNU": "trench",
+    "RDGU": "undersea ridge", "BSNU": "undersea basin", "PLNU":
+    "abyssal plain", "CNYU": "undersea canyon", "BNKU": "bank",
+    "KNLU": "knoll", "TMTU": "tablemount", "FURU": "undersea furrow",
+    "VALU": "undersea valley", "RFU": "undersea reef", "SHLU":
+    "undersea shoal", "ESCU": "escarpment", "FRZU": "fracture zone",
+    "RISU": "undersea rise", "SPRU": "undersea spur", "HLU":
+    "undersea hill",
+    "ADM1": "first-order admin division", "ADM2": "second-order admin "
+    "division", "PCLI": "independent political entity", "LCTY":
+    "locality", "AREA": "area", "RGN": "region", "TRB": "tribal area",
+    "CULT": "cultivated area", "FRST": "forest", "GRSLD": "grassland",
+    "RD": "road", "RR": "railroad", "TNL": "tunnel", "TRIG":
+    "triangulation station",
+}
+
+
+def class_word(fclass, source=""):
+    """The feature class in words: GNS designation codes decoded via
+    the table above, GNIS / Antarctic class names (already words)
+    lowercased, unknown codes returned verbatim."""
+    if (source or "").startswith("GNS"):
+        return _DESIG_WORDS.get(fclass, fclass)
+    return (fclass or "").lower() or "feature"
+
+
+def family(fclass, source):
+    """Coarse display family for map coloring — TOTAL over the packs
+    (everything gets a family; 'other' catches admin/areas/vegetation/
+    transport and unmapped classes).  GNS rides its source-pack letter;
+    GNIS/Antarctic map by class name."""
+    src = source or ""
+    if src.startswith("GNS-"):
+        return {"P": "populated", "S": "facilities", "H": "water",
+                "T": "terrain", "U": "undersea"}.get(src[4:5], "other")
+    fc = fclass or ""
+    if fc in ("Populated Place", "Camp"):
+        return "populated"
+    if fc in ("Military", "Airport", "Locale", "Station", "Base"):
+        return "facilities"
+    if fc in ("Sea", "Gulf", "Bay", "Lake", "Stream", "Channel",
+              "Reservoir", "Spring", "Canal", "Swamp", "Harbor",
+              "Lagoon", "Gut", "Falls", "Rapids", "Strait", "Arroyo"):
+        return "water"
+    if fc in ("Island", "Islands", "Summit", "Ridge", "Range", "Cape",
+              "Valley", "Basin", "Beach", "Cliff", "Peninsula",
+              "Glacier", "Mountain", "Point", "Flat", "Gap", "Bar",
+              "Bend", "Area", "Pillar", "Crater", "Ledge", "Rock"):
+        return "terrain"
+    return "other"
+
+
 def compass_8(from_lat, from_lon, to_lat, to_lon):
     """8-point compass direction of (to) as seen FROM (from) — initial
     great-circle bearing, so 'impact 12 km SE of X' reads correctly."""
@@ -297,13 +383,16 @@ def has_variant_counts(db):
 
 
 def features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, limit=25000,
-                     db=None, pack_dir=None):
+                     db=None, pack_dir=None, sample_mod=1):
     """Every feature inside the box, optionally restricted to an fclass
     set (exact designation codes / class names, matched verbatim).
     lon0..lon1 must be an ordinary interval in [-180, 180] — callers
     handle antimeridian wrap by querying the two sub-intervals.
-    Returns (rows, truncated): rows are dicts with an nvar field (0 on
-    a pre-schema-2 index); truncated is True when `limit` cut the
+    sample_mod > 1 keeps only ids ≡ 0 (mod k) — the ids are assigned
+    uniformly at build time, so this is an unbiased 1-in-k spatial
+    sample (the Explorer's wide-view thinning).  Returns
+    (rows, truncated): rows are dicts with an nvar field (0 on a
+    pre-schema-2 index); truncated is True when `limit` cut the
     result — never silently."""
     db = db or ensure_index(pack_dir=pack_dir)
     if db is None:
@@ -312,6 +401,9 @@ def features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, limit=25000,
     cond = "lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?"
     args = [min(lat0, lat1), max(lat0, lat1),
             min(lon0, lon1), max(lon0, lon1)]
+    if sample_mod > 1:
+        cond += " AND id % ? = 0"
+        args.append(int(sample_mod))
     if fclasses:
         fl = sorted(fclasses)
         cond += f" AND fclass IN ({','.join('?' * len(fl))})"
@@ -324,6 +416,46 @@ def features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, limit=25000,
     return [dict(ext_id=r[0], primary=r[1], lat=r[2], lon=r[3], admin=r[4],
                  fclass=r[5], source=r[6], nvar=r[7])
             for r in rows[:limit]], truncated
+
+
+def viewport_sample(lat0, lat1, lon0, lon1, budget=20000, db=None,
+                    k_hint=1):
+    """The Explorer's viewport fetch: everything in the box when it
+    fits the point budget, else an unbiased 1-in-k id-modulo sample
+    with k escalated until it fits.  k starts from an area-fraction
+    guess against the DB's true feature count (MAX(id) — ids are
+    sequential), refined by k_hint (the previous redraw's k), so a
+    typical view needs ONE scan; it also de-escalates when the guess
+    overshot (a feature-sparse ocean viewport), so a view that could
+    have shown everything never stays needlessly thinned.  Returns
+    (rows, k) — k > 1 tells the caller to say 'showing a 1-in-k
+    sample' out loud."""
+    db = db or ensure_index()
+    if db is None:
+        return [], 1
+    total = (db.execute("SELECT MAX(id) FROM places").fetchone()[0]
+             or 0)
+    area_frac = (abs(lat1 - lat0) * abs(lon1 - lon0)) / (180.0 * 360.0)
+    guess = max(1, int(total * min(1.0, area_frac) / max(1, budget)))
+    k = 1
+    while k < max(guess, k_hint // 4):
+        k *= 4
+    rows, trunc = features_in_bbox(lat0, lat1, lon0, lon1, limit=budget,
+                                   db=db, sample_mod=k)
+    while trunc and k < 65536:                    # too dense: thin more
+        k *= 4
+        rows, trunc = features_in_bbox(lat0, lat1, lon0, lon1,
+                                       limit=budget, db=db,
+                                       sample_mod=k)
+    while not trunc and k > 1 and len(rows) <= budget // 8:
+        k_try = max(1, k // 16)                   # too sparse: walk back
+        rows2, trunc2 = features_in_bbox(lat0, lat1, lon0, lon1,
+                                         limit=budget, db=db,
+                                         sample_mod=k_try)
+        if trunc2:
+            break                                 # k was right after all
+        rows, k = rows2, k_try
+    return rows, k
 
 
 def iter_features_in_bbox(lat0, lat1, lon0, lon1, fclasses=None, db=None):

@@ -193,7 +193,25 @@ Upgrade path, in effort order:
       one-click copyable sentence report.  No thinned extract was
       needed — the full index answers in milliseconds off the lat
       index.  Requires the offline index (gated on index_ready with a
-      pointer to Analysis ▸ Reference Data);
+      pointer to Analysis ▸ Reference Data).
+      EXTENDED (2026-08-18, same session): a second column per event —
+      nearest named feature of ANY class (ocean impacts get the
+      seamount/trough/island; over land often a stream or hill, shown
+      anyway, honestly), classes decoded to words via
+      gazetteer.class_word() (NGA designation-code table, raw code
+      fallback).  And a second tool, **Cartography ▸ Gazetteer
+      Explorer…** (user request: "a light map… zoomable with ALL
+      locations"): matplotlib + bundled NE coastlines (no cartopy, no
+      network), every zoom/pan re-queries the index for the viewport
+      in a worker thread; above a 20k point budget it draws an
+      UNBIASED 1-in-k id-modulo sample and says so in the corner
+      (gazetteer.viewport_sample(), guess-escalate-deescalate on
+      MAX(id)); under it, everything, with names below ~150 in view;
+      click-to-identify (class in words, source id, nearest populated
+      place); family-coloured dots with per-family toggles ('other'
+      catches admin/vegetation/transport — nothing hidden); optional
+      ground-track overlay.  Timings on the worldwide index: global
+      ~10 s (sampled 1-in-1024), region ~5 s, close-up instant;
   (c) DEM (agreed 2026-08-16; source chosen 2026-08-16: **Copernicus
       GLO-30**, not SRTM — ~2–4 m vs ~6–9 m vertical accuracy, and
       SRTM's 60°N cutoff misses Plesetsk/high-latitude Russia entirely;

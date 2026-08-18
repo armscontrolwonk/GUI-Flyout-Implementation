@@ -94,6 +94,40 @@ def test_nearest_populated_merges_vocabularies(fixture_env):
     assert r[0]["dir"] == "SE"           # the point, as seen from Sŏhae
 
 
+def test_class_word_decodes_gns_codes_and_passes_names_through():
+    assert gz.class_word("SMU", "GNS-U") == "seamount"
+    assert gz.class_word("TRGU", "GNS-U") == "trough"
+    assert gz.class_word("PPLC", "GNS-P") == "capital"
+    assert gz.class_word("ZZXQ", "GNS-H") == "ZZXQ"     # unknown: verbatim
+    assert gz.class_word("Island", "GNIS") == "island"
+    assert gz.class_word("Summit", "BGN-Antarctic") == "summit"
+
+
+def test_family_is_total_over_the_packs():
+    assert gz.family("PPL", "GNS-P") == "populated"
+    assert gz.family("AIRB", "GNS-S") == "facilities"
+    assert gz.family("STM", "GNS-H") == "water"
+    assert gz.family("ISL", "GNS-T") == "terrain"
+    assert gz.family("SMU", "GNS-U") == "undersea"
+    assert gz.family("CULT", "GNS-V") == "other"        # vegetation
+    assert gz.family("PCLIX", "GNS-A") == "other"       # admin
+    assert gz.family("Populated Place", "GNIS") == "populated"
+    assert gz.family("Stream", "GNIS") == "water"
+    assert gz.family("Whatever", "GNIS") == "other"     # never a KeyError
+
+
+def test_viewport_sample_returns_all_under_budget_and_samples_over(
+        fixture_env):
+    _d, db = fixture_env
+    rows, k = gz.viewport_sample(-90, 90, -180, 180, budget=100, db=db)
+    assert k == 1 and len(rows) == 4                    # tiny fixture: all
+    rows2, k2 = gz.viewport_sample(-90, 90, -180, 180, budget=2, db=db)
+    assert k2 > 1 and len(rows2) <= 2                   # sampled, said so
+    # the sample is the id-modulo subset — deterministic, unbiased
+    ids = {r["ext_id"] for r in rows2}
+    assert ids <= {r["ext_id"] for r in rows}
+
+
 def test_no_packs_degrades_to_empty(tmp_path):
     empty = tmp_path / "none"
     empty.mkdir()

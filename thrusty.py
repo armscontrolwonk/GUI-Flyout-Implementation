@@ -7573,6 +7573,7 @@ class BoosterFlyoutApp(tk.Tk):
         carto_menu.add_command(label="Open Folium Map…",         command=self._export_folium)
         carto_menu.add_command(label="Export Cartopy Map…",      command=self._export_cartopy)
         carto_menu.add_command(label="Nearby Places…",           command=self._nearby_places)
+        carto_menu.add_command(label="Gazetteer Explorer…",      command=self._gazetteer_explorer)
         carto_menu.add_separator()
         carto_menu.add_command(label="HGV Footprint…",           command=self._open_footprint)
         carto_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
@@ -14387,43 +14388,57 @@ class BoosterFlyoutApp(tk.Tk):
 
         db = _gz.ensure_index()
         dlg = tk.Toplevel(self)
-        dlg.title("Nearby Places — nearest populated place per event")
-        cols = ("event", "t", "coords", "place", "dist", "dir")
+        dlg.title("Nearby Places — nearest populated place and nearest "
+                  "named feature per event")
+        cols = ("event", "t", "coords", "place", "feat")
         tree = ttk.Treeview(dlg, columns=cols, show="headings",
                             height=min(14, max(4, len(events))))
-        for c, (h, w) in zip(cols, (("Event", 180), ("t (s)", 70),
-                                    ("Lat / Lon", 170),
-                                    ("Nearest populated place", 260),
-                                    ("Distance", 90), ("Dir", 50))):
+        for c, (h, w) in zip(cols, (("Event", 165), ("t (s)", 60),
+                                    ("Lat / Lon", 165),
+                                    ("Nearest populated place", 290),
+                                    ("Nearest named feature (any)",
+                                     320))):
             tree.heading(c, text=h)
             tree.column(c, width=w, anchor=tk.W)
+
+        def _fmt(p):
+            km = (f"{p['km']:.1f}" if p['km'] < 100 else f"{p['km']:.0f}")
+            return f"{p['primary']} — {km} km {p['dir']}"
+
         lines = []
         for name, elat, elon, ts in events:
-            hit = _gz.nearest_populated(elat, elon, n=1, db=db)
             ns = 'N' if elat >= 0 else 'S'
             ew = 'E' if elon >= 0 else 'W'
             coord = f"{abs(elat):.4f}°{ns}  {abs(elon):.4f}°{ew}"
-            if hit:
-                p = hit[0]
-                where = f"{p['primary']} ({p['admin']})"
-                dist = (f"{p['km']:.1f} km" if p['km'] < 100
-                        else f"{p['km']:.0f} km")
-                tree.insert("", tk.END, values=(name, f"{ts:.0f}", coord,
-                                                where, dist, p['dir']))
-                lines.append(f"{name}: ~{p['km']:.0f} km {p['dir']} of "
-                             f"{p['primary']} ({p['admin']}) "
-                             f"[{p['ext_id']}]  — t={ts:.0f} s, {coord}")
-            else:
-                tree.insert("", tk.END, values=(name, f"{ts:.0f}", coord,
-                                                "(no index hit)", "", ""))
-                lines.append(f"{name}: no gazetteer hit — t={ts:.0f} s, "
-                             f"{coord}")
+            pop = _gz.nearest_populated(elat, elon, n=1, db=db)
+            any_ = _gz.nearest(elat, elon, n=1, db=db)
+            cell_p = cell_f = "(no index hit)"
+            line = f"{name} (t={ts:.0f} s, {coord}):"
+            if pop:
+                p = pop[0]
+                cell_p = f"{_fmt(p)}  ({p['admin']})"
+                line += (f" ~{p['km']:.0f} km {p['dir']} of "
+                         f"{p['primary']} ({p['admin']}) [{p['ext_id']}]")
+            if any_:
+                f = any_[0]
+                f["dir"] = _gz.compass_8(f["lat"], f["lon"], elat, elon)
+                word = _gz.class_word(f["fclass"], f["source"])
+                cell_f = f"{_fmt(f)}  ({word})"
+                line += (f"; nearest feature ~{f['km']:.0f} km "
+                         f"{f['dir']} of {f['primary']} ({word}) "
+                         f"[{f['ext_id']}]")
+            tree.insert("", tk.END, values=(name, f"{ts:.0f}", coord,
+                                            cell_p, cell_f))
+            lines.append(line)
         tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         ttk.Label(dlg, foreground="#888", justify=tk.LEFT, padding=(8, 0),
-                  text="Distances are great-circle to the place's "
+                  text="Distances are great-circle to the feature's "
                   "gazetteer coordinate; direction is the event as seen "
-                  "FROM the place.  Sources: NGA GNS / USGS GNIS "
-                  "(ids in the copied text).").pack(anchor=tk.W)
+                  "FROM the feature.  'Any' spans every class — over "
+                  "water that is the nearest seamount/trough/island; "
+                  "over land often a stream or hill.  Sources: NGA GNS "
+                  "/ USGS GNIS (ids in the copied text).").pack(
+                      anchor=tk.W)
         bf = ttk.Frame(dlg)
         bf.pack(pady=(4, 8))
 
@@ -14436,6 +14451,170 @@ class BoosterFlyoutApp(tk.Tk):
             side=tk.LEFT, padx=4)
         ttk.Button(bf, text="Close", command=dlg.destroy).pack(
             side=tk.LEFT, padx=4)
+
+    _GZX_COLORS = {"populated": "#4d4d4d", "facilities": "#b2182b",
+                   "water": "#2166ac", "terrain": "#8c510a",
+                   "undersea": "#35978f", "other": "#bbbbbb"}
+
+    def _gazetteer_explorer(self):
+        """Cartography → Gazetteer Explorer…: a zoomable working map of
+        ALL 10.4 M gazetteer features (user request 2026-08-18) — a
+        lookup tool, not a presentation product.  matplotlib + the
+        bundled NE coastlines (no cartopy, no network).  Every zoom/pan
+        re-queries the SQLite index for the viewport; above the point
+        budget it draws an unbiased 1-in-k id sample and SAYS SO in the
+        corner; zoomed in far enough you see literally everything, with
+        names once fewer than ~150 features are in view.  Click a dot
+        to identify it (class in words, source id, nearest populated
+        place).  Optional ground-track overlay from the last run."""
+        import gazetteer as _gz
+        if not (_gz.available() and _gz.index_ready()):
+            messagebox.showinfo(
+                "Gazetteer Explorer",
+                "The offline gazetteer index is not built yet.\n\n"
+                "Analysis ▸ Reference Data ▸ Offline Gazetteer… builds "
+                "it once (several minutes).", parent=self)
+            return
+        db = _gz.ensure_index()
+        win = tk.Toplevel(self)
+        win.title("Gazetteer Explorer — every named place, zoom to see "
+                  "all of them")
+        fig = Figure(figsize=(11, 5.6), tight_layout=True)
+        ax = fig.add_subplot(111)
+        ax.set_xlim(-180, 180)
+        ax.set_ylim(-90, 90)
+        ax.set_xlabel("Longitude (°E)", fontsize=8)
+        ax.set_ylabel("Latitude (°N)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        _draw_borders(ax, 0.0)
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        NavigationToolbar2Tk(canvas, win).update()
+
+        bar = ttk.Frame(win)
+        bar.pack(fill=tk.X, padx=6)
+        fam_vars = {}
+        for fam in self._GZX_COLORS:
+            v = tk.BooleanVar(value=True)
+            fam_vars[fam] = v
+            ttk.Checkbutton(bar, text=fam, variable=v,
+                            command=lambda: _refresh(force=True)).pack(
+                side=tk.LEFT, padx=2)
+        trk_var = tk.BooleanVar(value=self._result is not None)
+        if self._result is not None:
+            ttk.Checkbutton(bar, text="ground track", variable=trk_var,
+                            command=lambda: _refresh(force=True)).pack(
+                side=tk.LEFT, padx=8)
+        status = tk.StringVar(value="loading…")
+        ttk.Label(win, textvariable=status, foreground="#666",
+                  justify=tk.LEFT, padding=(8, 2)).pack(anchor=tk.W)
+
+        state = {"lims": None, "busy": False, "k": 64,
+                 "artists": [], "rows": []}
+
+        def _apply(rows, k, lims):
+            for a in state["artists"]:
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+            state["artists"], state["rows"] = [], rows
+            shown = 0
+            for fam in self._GZX_COLORS:
+                if not fam_vars[fam].get():
+                    continue
+                pts = [(r["lon"], r["lat"]) for r in rows
+                       if _gz.family(r["fclass"], r["source"]) == fam]
+                if not pts:
+                    continue
+                shown += len(pts)
+                state["artists"].append(ax.scatter(
+                    [p[0] for p in pts], [p[1] for p in pts], s=4,
+                    c=self._GZX_COLORS[fam], zorder=4, linewidths=0))
+            if k == 1 and shown <= 150:
+                for r in rows:
+                    fam = _gz.family(r["fclass"], r["source"])
+                    if fam_vars[fam].get():
+                        state["artists"].append(ax.annotate(
+                            r["primary"], (r["lon"], r["lat"]),
+                            xytext=(3, 1), textcoords="offset points",
+                            fontsize=6, zorder=5,
+                            color=self._GZX_COLORS[fam]))
+            if trk_var.get() and self._result is not None:
+                rr = self._result
+                tlo = np.asarray(rr['lon'], dtype=float)
+                tla = np.asarray(rr['lat'], dtype=float)
+                brk = np.where(np.abs(np.diff(tlo)) > 180.0)[0]
+                tlo, tla = tlo.copy(), tla.copy()
+                tlo[brk] = np.nan
+                state["artists"].append(ax.plot(
+                    tlo, tla, color="black", lw=1.2, zorder=6)[0])
+            state["k"] = k
+            note = (f"{shown:,} features in view — complete" if k == 1
+                    else f"showing a 1-in-{k} sample ({shown:,} dots) — "
+                    "zoom in for all")
+            status.set(note + "   ·   click a dot to identify")
+            canvas.draw_idle()
+
+        def _refresh(force=False):
+            lims = (ax.get_xlim(), ax.get_ylim())
+            if state["busy"] or (not force and lims == state["lims"]):
+                return
+            state["lims"] = lims
+            state["busy"] = True
+            (x0, x1), (y0, y1) = lims
+            status.set("querying index…")
+
+            def _work():
+                try:
+                    rows, k = _gz.viewport_sample(
+                        max(-90, y0), min(90, y1), max(-180, x0),
+                        min(180, x1), budget=20000, db=None,
+                        k_hint=state["k"])
+                except Exception as ex:
+                    rows, k = [], 1
+                    win.after(0, lambda: status.set(f"query failed: {ex}"))
+                def _done():
+                    state["busy"] = False
+                    _apply(rows, k, lims)
+                    if (ax.get_xlim(), ax.get_ylim()) != lims:
+                        _refresh()          # user moved on meanwhile
+                win.after(0, _done)
+            threading.Thread(target=_work, daemon=True).start()
+
+        # viewport_sample opens its own connection in the worker thread
+        # (sqlite connections are not shared across threads); the main
+        # thread keeps `db` only for the click-identify lookups.
+        def _on_draw(_ev):
+            win.after(60, _refresh)
+        canvas.mpl_connect("draw_event", _on_draw)
+
+        def _on_click(ev):
+            if (ev.inaxes is not ax or ev.xdata is None
+                    or canvas.toolbar.mode):
+                return
+            best, bkm = None, float("inf")
+            import math as _m
+            for r in state["rows"]:
+                d = _m.hypot((r["lon"] - ev.xdata)
+                             * _m.cos(_m.radians(ev.ydata)),
+                             r["lat"] - ev.ydata) * 111.32
+                if d < bkm:
+                    best, bkm = r, d
+            if best is None:
+                return
+            word = _gz.class_word(best["fclass"], best["source"])
+            txt = (f"{best['primary']} — {word} ({best['admin']}) "
+                   f"[{best['ext_id']}]")
+            pop = _gz.nearest_populated(best["lat"], best["lon"], n=1,
+                                        db=db)
+            if pop and pop[0]["ext_id"] != best["ext_id"]:
+                p = pop[0]
+                txt += (f"   ·   nearest populated: {p['primary']} "
+                        f"({p['admin']}), {p['km']:.0f} km {p['dir']}")
+            status.set(txt)
+        canvas.mpl_connect("button_press_event", _on_click)
+        _refresh(force=True)
 
     def _export_timeline(self):
         """Export the flight event timeline to CSV."""
