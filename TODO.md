@@ -108,15 +108,21 @@ Current sources, from the code:
   facilities/spot features that city lists lack.  When 3(b) lands, the
   picker should search the baked gazetteer first and keep Nominatim as
   the online catch-all.
-- **Borders/coastlines**: bundled Natural Earth **110m** countries GeoJSON
-  (`data/ne_110m_countries.geojson`) — NE's coarsest tier; coastlines are
-  visibly polygonal at trajectory-plot zoom.
+- **Borders/coastlines**: bundled Natural Earth **50m** countries GeoJSON
+  (`data/ne_50m_countries.geojson`, 1.8 MB) — upgraded from 110m 2026-08-18.
 - **Interactive maps**: folium with CartoDB positron tiles (online; fine).
 - **Terrain/elevation**: NONE — trajectories end at h = 0 (sea level)
   everywhere; launch altitude unmodeled.
 Upgrade path, in effort order:
-  (a) swap the bundled GeoJSON to Natural Earth **50m** (drop-in, same
-      format, ~few MB) — instant plot-quality win;
+  (a) NE 50m coastline swap — SHIPPED (2026-08-18): bundled
+      ne_50m_countries.geojson (geometry-only, properties stripped,
+      coords 4-dp; 1.8 MB) replaces the 110m tier on every matplotlib
+      map (Ground Track plot + Gazetteer Explorer via _load_borders,
+      which now prefers 50m and falls back to 110m if present).
+      Resolves the Bahamas, Lesser Antilles arc, Florida Keys the
+      110m tier dropped entirely.  (The cartopy picker map draws its
+      OWN coastlines at 110m — left as-is to avoid triggering cartopy's
+      on-demand download, given the known cert issue.);
   (b) rebuild `launch_sites.json` with per-site provenance (citation
       field) + site elevation + expanded coverage.
       GAZETTEER PHASE 1 SHIPPED (2026-08-17): bundled offline gazetteer

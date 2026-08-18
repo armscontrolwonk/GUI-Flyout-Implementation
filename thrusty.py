@@ -75,12 +75,18 @@ def _open_file(path: str) -> None:
 
 
 def _load_borders():
-    """Return the Natural Earth 110m country GeoJSON (lazy, cached)."""
+    """Return the bundled Natural Earth country GeoJSON (lazy, cached).
+    Prefers the 50m tier (finer coastlines on every map); falls back to
+    the 110m file if that's all a checkout carries."""
     global _BORDERS_CACHE
     if _BORDERS_CACHE is None:
-        p = Path(__file__).parent / "data" / "ne_110m_countries.geojson"
-        if p.exists():
-            _BORDERS_CACHE = json.loads(p.read_text())
+        d = Path(__file__).parent / "data"
+        for name in ("ne_50m_countries.geojson",
+                     "ne_110m_countries.geojson"):
+            p = d / name
+            if p.exists():
+                _BORDERS_CACHE = json.loads(p.read_text())
+                break
     return _BORDERS_CACHE
 
 
