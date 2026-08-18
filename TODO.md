@@ -179,15 +179,21 @@ Upgrade path, in effort order:
       regardless).  Only NGA GNS (foreign) is proxy-blocked (403) and
       needs a hand-download, committed like the DEM plan's baked
       lookups;
-  (b2) SPIN-OFF the gazetteer enables (proposed 2026-08-17): nearest-
-      populated-place annotation for trajectory outputs — bake a
-      thinned populated-places extract (GNS/GNIS P-class, ranked by
-      admin level so capitals/regional centres survive the thinning)
-      into data/, nearest-neighbour by haversine over a lat/lon grid
-      index, and impact/apogee/debris points get labels like
-      "impact ~12 km SE of <place> (GNS UFI …)".  For the reporting
-      audience this is the difference between a coordinate and a
-      sentence someone can use;
+  (b2) nearest-populated-place lookup — SHIPPED (2026-08-18) as
+      **Cartography ▸ Nearby Places…**, per the user's reframe after
+      the overlay withdrawal (3e): not a map product anyone sees, but
+      a lookup the user opens to put coordinates into words.  For
+      every key trajectory event (launch, stage/fairing/debris
+      impacts, apogee ground point, reentry, impact) it reports the
+      nearest POPULATED place — gazetteer.nearest_populated(), merged
+      across GNS PPL* and GNIS 'Populated Place', never a creek or a
+      ridge — with great-circle distance, 8-point compass direction
+      as seen FROM the place, and the GNS UFI / GNIS id, e.g.
+      "Impact: ~7 km S of Ebeye (MHL) [GNS:10256638]".  Table view +
+      one-click copyable sentence report.  No thinned extract was
+      needed — the full index answers in milliseconds off the lat
+      index.  Requires the offline index (gated on index_ready with a
+      pointer to Analysis ▸ Reference Data);
   (c) DEM (agreed 2026-08-16; source chosen 2026-08-16: **Copernicus
       GLO-30**, not SRTM — ~2–4 m vs ~6–9 m vertical accuracy, and
       SRTM's 60°N cutoff misses Plesetsk/high-latitude Russia entirely;
@@ -210,25 +216,21 @@ Upgrade path, in effort order:
       Scope when picked up: release-condition fields on the flight
       plan, launch-transient handling, and what "range" means measured
       from a moving release point.
-  (e) gazetteer map overlays — SHIPPED (2026-08-18), built exactly to
-      the design of record below (map_overlays.py, pure + tested;
-      folium block emitted by folium_overlay_html(); picker toggles in
-      the Pick-on-map window).  Implementation notes: one streaming
-      lat-band scan per export with per-family row caps (top tiers
-      rank ≤ 1 fetched uncapped first, so capitals/seas can never be
-      lost to a cap; cap hits flagged on the map control, never
-      silent); classification + corridor promotion vectorised once,
-      the four zoom buckets then gate/grid/label the shared set
-      (~8–15 s payload on the worldwide index for an ICBM-scale bbox);
-      the folium side is embedded JSON + a self-contained JS control
-      (off / dots / dots+labels per family, zoomend bucket switching)
-      rather than literal FeatureGroups — same precomputed-static
-      behavior, one moving part.  Variant-count prominence needs the
-      schema-2 index (nvar column): old indexes work with the bonus
-      at zero and the map says so; rebuild via Analysis ▸ Reference
-      Data picks it up.  Verified in a real browser (chromium):
-      control, corridor promotion, label deconfliction, bucket
-      switching (23→75→80 markers z4→z6→z8 on a Sohae→Pacific track).
+  (e) gazetteer map overlays — BUILT 2026-08-18, then WITHDRAWN the
+      same day on the user's field test (Canaveral→Atlantic map): the
+      basemap tiles already label places, and the overlay cluttered —
+      every Caribbean provincial seat at once, labels colliding, the
+      US side dark (root causes diagnosed before withdrawal: rank ≤ 1
+      grid bypass too generous, label boxes sized at mid-bucket zoom,
+      lat-ascending fetch cap starving the bbox's north, and a REAL
+      data asymmetry — NGA GNS is foreign-only, so US cities exist
+      only as unranked GNIS 'Populated Place' rows and can never
+      compete with foreign capitals).  USER DECISION: leave the maps
+      to their tiles; the 10.4 M-name index serves lookups instead —
+      see 3b2, SHIPPED as Cartography ▸ Nearby Places.  The full
+      implementation (map_overlays.py + tests, browser-verified) lives
+      in git history at commit 798132c if a map layer is ever wanted
+      again.  Original design of record kept below for that case.
       DESIGN OF RECORD (agreed 2026-08-17, user decision:
       TRAJECTORY-AWARE by default on the trajectory map).
       Toggleable per-class layers of gazetteer features on the

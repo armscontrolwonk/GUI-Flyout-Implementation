@@ -71,6 +71,29 @@ def test_nearest_reports_distance(fixture_env):
     assert r[0]["km"] < 10.0
 
 
+def test_compass_8_cardinal_identities():
+    assert gz.compass_8(0, 0, 1, 0) == "N"
+    assert gz.compass_8(0, 0, 0, 1) == "E"
+    assert gz.compass_8(0, 0, -1, -1) == "SW"
+    assert gz.compass_8(39.66, 124.705, 39.60, 124.80) == "SE"
+
+
+def test_nearest_populated_merges_vocabularies(fixture_env):
+    """The Nearby Places lookup: populated-only across BOTH source
+    vocabularies (GNS PPL* codes and GNIS 'Populated Place'), never a
+    terrain feature, with distance and a from-the-place direction."""
+    _d, db = fixture_env
+    # near Kodiak: the GNIS town wins, Kodiak Island (Island) never
+    r = gz.nearest_populated(57.8, -152.5, n=2, db=db)
+    assert r[0]["primary"] == "Kodiak"
+    assert all(x["fclass"].startswith(("PPL", "Populated")) for x in r)
+    # near Sŏhae: the GNS village, with km + compass direction
+    r = gz.nearest_populated(39.60, 124.80, n=1, db=db)
+    assert r[0]["primary"] == "Sŏhae"
+    assert r[0]["km"] < 15.0
+    assert r[0]["dir"] == "SE"           # the point, as seen from Sŏhae
+
+
 def test_no_packs_degrades_to_empty(tmp_path):
     empty = tmp_path / "none"
     empty.mkdir()

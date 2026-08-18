@@ -7572,6 +7572,7 @@ class BoosterFlyoutApp(tk.Tk):
         carto_menu = tk.Menu(menubar, tearoff=0)
         carto_menu.add_command(label="Open Folium Map…",         command=self._export_folium)
         carto_menu.add_command(label="Export Cartopy Map…",      command=self._export_cartopy)
+        carto_menu.add_command(label="Nearby Places…",           command=self._nearby_places)
         carto_menu.add_separator()
         carto_menu.add_command(label="HGV Footprint…",           command=self._open_footprint)
         carto_menu.add_command(label="Range Ring (Cartopy)…",    command=self._open_range_ring)
@@ -11074,70 +11075,6 @@ class BoosterFlyoutApp(tk.Tk):
             canvas = FigureCanvasTkAgg(fig, master=map_win)
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
             canvas.draw()
-
-            # ── Gazetteer overlays (TODO 3e).  Corridor bonus OFF by
-            # design: the picker is a neutral reference map.  Fixed
-            # global extent → the continental zoom tier applies; the
-            # density/label rules run live per redraw. ────────────────
-            try:
-                import gazetteer as _gz
-                import map_overlays as _mo
-                _ov_ok = _gz.available() and _gz.index_ready()
-            except Exception:
-                _ov_ok = False
-            if _ov_ok:
-                _ov_db = _gz.ensure_index()
-                _ov_bbox = (-90.0, 90.0, -180.0, 180.0)
-                _ov_artists, _ov_vars, _ov_cache = [], {}, {}
-                _lbl_var = tk.BooleanVar(value=True)
-
-                def _ov_redraw():
-                    for art in _ov_artists:
-                        try:
-                            art.remove()
-                        except Exception:
-                            pass
-                    _ov_artists.clear()
-                    fams = [f for f, v in _ov_vars.items() if v.get()]
-                    if fams:
-                        key = tuple(sorted(fams))
-                        if key not in _ov_cache:
-                            feats, _tr = _mo.fetch_features(
-                                _ov_db, _ov_bbox, "continental",
-                                families=fams, corridor=False)
-                            _ov_cache[key] = _mo.select(
-                                feats, _ov_bbox, "continental",
-                                families=fams)
-                        for fam, dots in _ov_cache[key].items():
-                            col = _mo.FAMILIES[fam][1]
-                            _ov_artists.append(ax.scatter(
-                                [d["lon"] for d in dots],
-                                [d["lat"] for d in dots], s=6, c=col,
-                                zorder=5, transform=ccrs.PlateCarree()))
-                            if _lbl_var.get():
-                                for d in dots:
-                                    if d["labeled"]:
-                                        _ov_artists.append(ax.text(
-                                            d["lon"] + 1.0, d["lat"],
-                                            d["name"], fontsize=6,
-                                            color=col, zorder=6,
-                                            transform=ccrs.PlateCarree()))
-                    canvas.draw_idle()
-
-                _ov_bar = ttk.Frame(map_win)
-                _ov_bar.pack(fill=tk.X, padx=6)
-                ttk.Label(_ov_bar, text="Place names:").pack(side=tk.LEFT)
-                for _fam, (_flbl, _fc) in _mo.FAMILIES.items():
-                    _v = tk.BooleanVar(value=(_fam == "populated"))
-                    _ov_vars[_fam] = _v
-                    ttk.Checkbutton(_ov_bar, text=_flbl, variable=_v,
-                                    command=_ov_redraw).pack(
-                        side=tk.LEFT, padx=2)
-                ttk.Checkbutton(_ov_bar, text="labels", variable=_lbl_var,
-                                command=_ov_redraw).pack(
-                    side=tk.LEFT, padx=8)
-                _ov_redraw()
-
             ttk.Label(map_win,
                       text="Click the map to select a point.  "
                            "Close this window to cancel.",
@@ -14367,27 +14304,10 @@ class BoosterFlyoutApp(tk.Tk):
         }})();
         </script>"""
         fmap.get_root().html.add_child(folium.Element(leader_js))
-
-        # ── Gazetteer place-name overlays (design of record, TODO 3e) ──
-        # Per-class dot / dot+label layers, trajectory-aware (corridor
-        # bonus ON for this map), zoom-bucketed and precomputed so the
-        # saved HTML stays static.  Only when the offline index is
-        # already built — this export never triggers the long build.
-        _gz_note = ""
-        try:
-            import gazetteer as _gz
-            import map_overlays as _mo
-            if _gz.available() and _gz.index_ready():
-                _pay = _mo.build_payload(_gz.ensure_index(),
-                                         lat.tolist(), lon_uw.tolist())
-                fmap.get_root().html.add_child(folium.Element(
-                    _mo.folium_overlay_html(_pay, map_var)))
-            elif _gz.available():
-                _gz_note = ("  (place-name overlays skipped — build the "
-                            "offline gazetteer index first: Analysis ▸ "
-                            "Reference Data)")
-        except Exception as _gz_ex:
-            _gz_note = f"  (place-name overlays failed: {_gz_ex})"
+        # (Gazetteer dot/label overlays were tried here and WITHDRAWN —
+        # user decision 2026-08-18: the basemap tiles already label
+        # places, and the field test cluttered.  The gazetteer serves
+        # the Nearby Places lookup instead.)
 
         # ── Logo overlay (lower-left, ~1/8–1/7 of viewport height) ──────
         import base64 as _b64, os as _os
@@ -14405,7 +14325,117 @@ class BoosterFlyoutApp(tk.Tk):
         fmap.save(path)
         import webbrowser
         webbrowser.open(f"file://{path}")
-        self._status_var.set(f"Folium map saved and opened: {path}{_gz_note}")
+        self._status_var.set(f"Folium map saved and opened: {path}")
+
+    def _nearby_places(self):
+        """Cartography → Nearby Places…: the gazetteer as a LOOKUP, not
+        a map layer (user decision 2026-08-18, after the overlay field
+        test: basemap tiles already label places; what the 10.4 M-name
+        index is uniquely good for is turning coordinates into words).
+        For every key trajectory event — launch, stage/fairing/debris
+        impacts, apogee ground point, reentry, the impact — the nearest
+        POPULATED place, with distance and compass direction, as a
+        table plus copyable sentences."""
+        if self._result is None:
+            messagebox.showinfo("No data", "Run a simulation first.")
+            return
+        import gazetteer as _gz
+        if not (_gz.available() and _gz.index_ready()):
+            messagebox.showinfo(
+                "Nearby Places",
+                "The offline gazetteer index is not built yet.\n\n"
+                "Analysis ▸ Reference Data ▸ Offline Gazetteer… builds "
+                "it once (several minutes); after that this lookup is "
+                "instant.", parent=self)
+            return
+        r = self._result
+        t = np.asarray(r['t'])
+        la = np.asarray(r['lat'])
+        lo = np.asarray(r['lon'])
+        # unwrap for interpolation, wrap the sample back to [-180, 180]
+        _d = np.diff(lo)
+        _d = (_d + 180.0) % 360.0 - 180.0
+        lo_uw = np.empty_like(lo, dtype=float)
+        lo_uw[0] = lo[0]
+        if len(_d):
+            lo_uw[1:] = lo[0] + np.cumsum(_d)
+
+        import re as _re
+
+        def _at(ts):
+            lon = float(np.interp(ts, t, lo_uw))
+            return (float(np.interp(ts, t, la)),
+                    ((lon + 180.0) % 360.0) - 180.0)
+
+        def _short(e):
+            return _re.sub(r'\s*\(\d[^)]*\)\s*$', '', e).strip()
+
+        events = [("Launch", float(la[0]),
+                   ((float(lo[0]) + 180.0) % 360.0) - 180.0, 0.0)]
+        for ms in r.get('milestones', []):
+            e, ts = ms.get('event', ''), float(ms.get('t_s', 0.0))
+            el = e.lower()
+            if ms.get('is_debris', False):
+                if 'impact' in el and 'impact_lat' in ms:
+                    events.append((_short(e), float(ms['impact_lat']),
+                                   float(ms['impact_lon']), ts))
+                continue
+            if any(k in el for k in ('impact', 'apogee', 're-entry',
+                                     'insertion')):
+                ela, elo = _at(ts)
+                events.append((_short(e), ela, elo, ts))
+
+        db = _gz.ensure_index()
+        dlg = tk.Toplevel(self)
+        dlg.title("Nearby Places — nearest populated place per event")
+        cols = ("event", "t", "coords", "place", "dist", "dir")
+        tree = ttk.Treeview(dlg, columns=cols, show="headings",
+                            height=min(14, max(4, len(events))))
+        for c, (h, w) in zip(cols, (("Event", 180), ("t (s)", 70),
+                                    ("Lat / Lon", 170),
+                                    ("Nearest populated place", 260),
+                                    ("Distance", 90), ("Dir", 50))):
+            tree.heading(c, text=h)
+            tree.column(c, width=w, anchor=tk.W)
+        lines = []
+        for name, elat, elon, ts in events:
+            hit = _gz.nearest_populated(elat, elon, n=1, db=db)
+            ns = 'N' if elat >= 0 else 'S'
+            ew = 'E' if elon >= 0 else 'W'
+            coord = f"{abs(elat):.4f}°{ns}  {abs(elon):.4f}°{ew}"
+            if hit:
+                p = hit[0]
+                where = f"{p['primary']} ({p['admin']})"
+                dist = (f"{p['km']:.1f} km" if p['km'] < 100
+                        else f"{p['km']:.0f} km")
+                tree.insert("", tk.END, values=(name, f"{ts:.0f}", coord,
+                                                where, dist, p['dir']))
+                lines.append(f"{name}: ~{p['km']:.0f} km {p['dir']} of "
+                             f"{p['primary']} ({p['admin']}) "
+                             f"[{p['ext_id']}]  — t={ts:.0f} s, {coord}")
+            else:
+                tree.insert("", tk.END, values=(name, f"{ts:.0f}", coord,
+                                                "(no index hit)", "", ""))
+                lines.append(f"{name}: no gazetteer hit — t={ts:.0f} s, "
+                             f"{coord}")
+        tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        ttk.Label(dlg, foreground="#888", justify=tk.LEFT, padding=(8, 0),
+                  text="Distances are great-circle to the place's "
+                  "gazetteer coordinate; direction is the event as seen "
+                  "FROM the place.  Sources: NGA GNS / USGS GNIS "
+                  "(ids in the copied text).").pack(anchor=tk.W)
+        bf = ttk.Frame(dlg)
+        bf.pack(pady=(4, 8))
+
+        def _copy():
+            dlg.clipboard_clear()
+            dlg.clipboard_append("\n".join(lines))
+            self._status_var.set("Nearby-places report copied to "
+                                 "clipboard")
+        ttk.Button(bf, text="Copy report", command=_copy).pack(
+            side=tk.LEFT, padx=4)
+        ttk.Button(bf, text="Close", command=dlg.destroy).pack(
+            side=tk.LEFT, padx=4)
 
     def _export_timeline(self):
         """Export the flight event timeline to CSV."""

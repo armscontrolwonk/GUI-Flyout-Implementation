@@ -250,6 +250,43 @@ def nearest(lat, lon, n=1, db=None, pack_dir=None, fclass_prefix=None):
     return out
 
 
+def compass_8(from_lat, from_lon, to_lat, to_lon):
+    """8-point compass direction of (to) as seen FROM (from) — initial
+    great-circle bearing, so 'impact 12 km SE of X' reads correctly."""
+    import math
+    la1, lo1, la2, lo2 = map(math.radians,
+                             (from_lat, from_lon, to_lat, to_lon))
+    y = math.sin(lo2 - lo1) * math.cos(la2)
+    x = (math.cos(la1) * math.sin(la2)
+         - math.sin(la1) * math.cos(la2) * math.cos(lo2 - lo1))
+    brg = (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+    return ("N", "NE", "E", "SE", "S", "SW", "W", "NW")[
+        int((brg + 22.5) // 45.0) % 8]
+
+
+def nearest_populated(lat, lon, n=1, db=None, pack_dir=None):
+    """The n nearest POPULATED places, merged across the sources' own
+    vocabularies (GNS PPL* designation codes, GNIS/Antarctic 'Populated
+    Place'), sorted by distance.  Each dict gains 'km' and 'dir' (the
+    8-point compass direction of the query point as seen from the
+    place), ready for 'impact ~12 km SE of <place>' phrasing."""
+    db = db or ensure_index(pack_dir=pack_dir)
+    if db is None:
+        return []
+    rows = (nearest(lat, lon, n=n, db=db, fclass_prefix="PPL")
+            + nearest(lat, lon, n=n, db=db,
+                      fclass_prefix="Populated Place"))
+    rows.sort(key=lambda r: r["km"])
+    seen, out = set(), []
+    for r in rows:
+        if r["ext_id"] in seen:
+            continue
+        seen.add(r["ext_id"])
+        r["dir"] = compass_8(r["lat"], r["lon"], lat, lon)
+        out.append(r)
+    return out[:n]
+
+
 def has_variant_counts(db):
     """True when the index carries the nvar column (schema 2, built
     after 2026-08-18).  Older indexes still serve every query; overlay
