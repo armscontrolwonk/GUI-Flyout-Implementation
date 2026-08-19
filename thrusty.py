@@ -12864,39 +12864,54 @@ class BoosterFlyoutApp(tk.Tk):
             ax_qm.fill_between(_tb, _qb, alpha=0.18, color='steelblue')
             ax_qm.plot(_tb, _qb, color='steelblue', lw=1.3, label='q (kPa)')
             ax_mch.plot(_tb, _mb, color='darkorange', lw=1.2, ls='--', label='Mach')
-            # Annotate max-q
+            # Annotate max-q and max q·α (the SP-8099 combined-load design
+            # metric).  When the two peaks fall at nearly the same time — a
+            # straight ascent, where peak q·α just rides max-q — their labels
+            # would stack illegibly, so they are merged into one box; when they
+            # are well separated in time (a dogleg spikes q·α away from max-q)
+            # they are drawn as two, each beside its own dotted marker.
             _qmax_i = int(np.argmax(_qb))
             ax_qm.axvline(_tb[_qmax_i], color='steelblue', lw=0.8, ls=':', alpha=0.7)
-            ax_qm.annotate(
-                f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
-                xy=(_tb[_qmax_i], _qb[_qmax_i]),
-                xytext=(6, -4), textcoords='offset points',
-                fontsize=6, color='steelblue', va='top')
-            # Annotate max q·α — the SP-8099 combined-load design metric.
-            # A dogleg (or any maneuver) that spikes α at dynamic pressure
-            # shows up here even when max-q itself doesn't move.
+            _span = max(float(_tb[-1] - _tb[0]), 1e-6)
+
             _qa = np.asarray(r.get('q_alpha_kpa_deg', []))
+            _qa_i = None
             if len(_qa) == len(_t_aero):
                 _qa_b = _qa[_mask]
                 _qa_f = np.where(np.isfinite(_qa_b), _qa_b, -1.0)
                 if np.any(_qa_f > 0.0):
                     _qa_i = int(np.argmax(_qa_f))
+
+            _coincident = (_qa_i is not None
+                           and abs(_tb[_qa_i] - _tb[_qmax_i]) < 0.06 * _span)
+
+            if _qa_i is not None and _coincident:
+                # One merged label — peak q·α occurs essentially at max-q.
+                ax_qm.annotate(
+                    f"max-q {_qb[_qmax_i]:.1f} kPa · M{_mb[_qmax_i]:.1f}\n"
+                    f"max q·α {_qa_b[_qa_i]:.0f} kPa·°",
+                    xy=(_tb[_qmax_i], _qb[_qmax_i]),
+                    xytext=(6, -4), textcoords='offset points',
+                    fontsize=6, color='#333333', va='top', ha='left')
+            else:
+                ax_qm.annotate(
+                    f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
+                    xy=(_tb[_qmax_i], _qb[_qmax_i]),
+                    xytext=(6, -4), textcoords='offset points',
+                    fontsize=6, color='steelblue', va='top')
+                if _qa_i is not None:
+                    # Peak q·α is well separated (dogleg case): its own marker,
+                    # labelled on the side that keeps it on-axis and above the
+                    # low q there so it clears the curve.
                     ax_qm.axvline(_tb[_qa_i], color='crimson', lw=0.8,
                                   ls=':', alpha=0.7)
-                    # Hang the label below its anchor when peak q·α lands high
-                    # on the plot (e.g. it coincides with max-q) so it clears
-                    # the title; otherwise place it above.  Nudge left near the
-                    # right edge so it doesn't run off-axis.
-                    _q_hi = _qb[_qa_i] > 0.72 * float(np.max(_qb))
-                    _t_late = _tb[_qa_i] > 0.75 * float(_tb[-1])
-                    _dx = -6 if _t_late else 6
-                    _ha = 'right' if _t_late else 'left'
-                    _dy, _va = (-6, 'top') if _q_hi else (8, 'bottom')
+                    _t_late = _tb[_qa_i] > 0.7 * float(_tb[-1])
+                    _dx, _ha = ((-6, 'right') if _t_late else (6, 'left'))
                     ax_qm.annotate(
                         f"max q·α\n{_qa_b[_qa_i]:.0f} kPa·°",
                         xy=(_tb[_qa_i], _qb[_qa_i]),
-                        xytext=(_dx, _dy), textcoords='offset points',
-                        fontsize=6, color='crimson', va=_va, ha=_ha)
+                        xytext=(_dx, 8), textcoords='offset points',
+                        fontsize=6, color='crimson', va='bottom', ha=_ha)
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')
