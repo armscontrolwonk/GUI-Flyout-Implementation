@@ -6626,6 +6626,7 @@ class FootprintDialog(tk.Toplevel):
                     yaw_maneuvers=yaw,
                     launch_elevation_deg=el,
                     alpha_limit_deg=self._app._alpha_limit_value(),
+                    alpha_induced_drag=self._app._alpha_induced_value(),
                     max_time_s=_max_t,
                 )
             except Exception:
@@ -8008,6 +8009,16 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(yf, text="° (SP-8099: 5–10)", foreground="#555555").grid(
             row=4, column=2, columnspan=3, sticky=tk.W, padx=(2, 8),
             pady=(4, 1))
+        # α-induced drag: the angle of attack develops an aerodynamic normal
+        # force whose induced-drag component bleeds energy and reshapes q
+        # (Jorgensen cross-flow; Fresconi 2017 / Kim 2013).  Off = the α load
+        # is reported but does not feed back on the trajectory.
+        self._alpha_induced_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            yf, text="α induced drag (bleeds energy, reshapes q)",
+            variable=self._alpha_induced_var).grid(
+            row=5, column=0, columnspan=5, sticky=tk.W, padx=(8, 8),
+            pady=(1, 2))
 
         # Row 11: Reset trajectory button — always visible in Ascent Mode
         self._reset_traj_btn = ttk.Button(
@@ -8992,6 +9003,9 @@ class BoosterFlyoutApp(tk.Tk):
         if getattr(self, '_alpha_limit_var', None):
             _al = _gk('alpha_limit_deg')
             self._alpha_limit_var.set("" if _al in (None, "") else str(_al))
+        # α-induced boost drag toggle stored with the yaw program.
+        if getattr(self, '_alpha_induced_var', None):
+            self._alpha_induced_var.set(bool(_gk('alpha_induced_drag', False)))
 
         # Seed glider mission-control fields from the RV if it has glider
         # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
@@ -9874,6 +9888,10 @@ class BoosterFlyoutApp(tk.Tk):
                                    if adv_yaw and getattr(
                                        self, '_alpha_limit_var', None)
                                    else None)
+        # α-induced boost drag toggle (default off) travels with it too.
+        base['alpha_induced_drag'] = bool(
+            adv_yaw and getattr(self, '_alpha_induced_var', None)
+            and self._alpha_induced_var.get())
         # Yaw is owned by the global program (yaw_maneuvers) above.  Clear any
         # per-stage stage_yaw_* so a legacy baked dogleg can't override the
         # visible grid on the next load/run (it was surfaced into the grid in
@@ -11757,6 +11775,18 @@ class BoosterFlyoutApp(tk.Tk):
             return None
         return v if v > 0.0 else None
 
+    def _alpha_induced_value(self):
+        """Whether α-induced boost drag is enabled, from the guidance panel.
+
+        Gated on the Yaw/dogleg checkbox like the α limit — a hidden stale
+        toggle never silently reshapes a plan's trajectory.
+        """
+        _chk = getattr(self, '_adv_yaw_var', None)
+        if not (_chk and _chk.get()):
+            return False
+        _v = getattr(self, '_alpha_induced_var', None)
+        return bool(_v and _v.get())
+
     def _get_inputs(self):
         booster  = get_booster(self._booster_var.get())
 
@@ -12376,6 +12406,7 @@ class BoosterFlyoutApp(tk.Tk):
                     yaw_maneuvers=yaw_maneuvers,
                     launch_elevation_deg=launch_elevation_deg,
                     alpha_limit_deg=self._alpha_limit_value(),
+                    alpha_induced_drag=self._alpha_induced_value(),
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)

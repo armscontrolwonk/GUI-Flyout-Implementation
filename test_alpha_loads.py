@@ -154,3 +154,70 @@ def test_no_limit_is_byte_identical_to_legacy_call():
                                alpha_limit_deg=None)
     assert r_a['range_km'] == r_b['range_km']
     assert np.array_equal(np.asarray(r_a['alt']), np.asarray(r_b['alt']))
+
+
+# ── 5. α-induced drag (item 3): energy bleed reshapes q ─────────────────────
+# The angle of attack develops an aerodynamic normal force whose induced-drag
+# component bleeds energy (Jorgensen cross-flow; Fresconi 2017 sin²α axial,
+# Kim 2013 induced-drag polar).  Modeled as a pure cost — it can only slow the
+# vehicle — and off by default so validated trajectories are untouched.
+
+def test_induced_drag_off_is_byte_identical():
+    r_a = _fly()
+    r_b = _fly(alpha_induced_drag=False)
+    assert r_a['range_km'] == r_b['range_km']
+    assert np.array_equal(np.asarray(r_a['alt']), np.asarray(r_b['alt']))
+    assert r_a['alpha_induced_drag'] is False
+
+
+def test_induced_drag_reshapes_max_q_on_straight_ascent():
+    """Even a straight ascent flies a few degrees of α during pitch-over, so
+    induced drag slightly lowers speed and — the point of item 3 — moves
+    max-q, which the reporting-only model left unchanged."""
+    r_off = _fly()
+    r_on = _fly(alpha_induced_drag=True)
+    q_off = np.asarray(r_off['q_pa']).max()
+    q_on = np.asarray(r_on['q_pa']).max()
+    assert r_on['alpha_induced_drag'] is True
+    assert q_on < q_off                       # q genuinely reshaped
+    assert r_on['range_km'] < r_off['range_km']   # pure energy cost
+
+
+def test_induced_drag_is_a_pure_cost_never_extends_range():
+    """The lift projection is deliberately not applied, so induced drag can
+    only shorten range — never the counterintuitive free-loft lengthening a
+    normal-force term would produce."""
+    for kw in ({}, dict(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0),
+               dict(yaw_maneuvers=DOGLEG)):
+        r_off = _fly(**kw)
+        r_on = _fly(alpha_induced_drag=True, **kw)
+        assert r_on['range_km'] <= r_off['range_km'] + 1e-9
+
+
+def test_induced_drag_penalty_grows_with_alpha():
+    """A sharper (un-limited, α≈40°) dogleg pays a larger induced-drag range
+    penalty than the same dogleg clamped to a 10° envelope."""
+    def penalty(**kw):
+        return (_fly(**kw)['range_km']
+                - _fly(alpha_induced_drag=True, **kw)['range_km'])
+    pen_clamped = penalty(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0)
+    pen_free = penalty(yaw_maneuvers=DOGLEG)
+    assert pen_free > pen_clamped > 0.0
+
+
+def test_induced_drag_zero_when_alpha_zero():
+    """A purely vertical launch held at 90° elevation with no yaw flies at
+    α≈0 through the dense atmosphere, so induced drag must be negligible even
+    when enabled (the term vanishes at α=0)."""
+    p = get_booster("No-dong")
+    # Vertical, no pitch-over maneuver: launch elevation 90°, turn deferred to
+    # the end of burn so α stays ~0 through max-q.
+    r_off = integrate_trajectory(p, LAT, LON, AZ, max_time_s=3600.0,
+                                 launch_elevation_deg=90.0,
+                                 gt_turn_start_s=1e6)
+    r_on = integrate_trajectory(p, LAT, LON, AZ, max_time_s=3600.0,
+                                launch_elevation_deg=90.0,
+                                gt_turn_start_s=1e6, alpha_induced_drag=True)
+    # α is tiny (near-vertical, thrust along velocity), so the apogee is
+    # essentially unchanged.
+    assert abs(r_on['apogee_km'] - r_off['apogee_km']) / r_off['apogee_km'] < 0.01

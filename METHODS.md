@@ -2296,12 +2296,57 @@ dogleg costs only the thrust-vector misalignment the EOM already
 integrates. `alpha_limit_deg = None` (the default everywhere) is
 byte-identical to the legacy behavior.
 
-Known limitation (documented, deliberate): α produces no normal force
-or induced drag on the boost aero model — drag remains axial (Section
-8), so the α trace and q·α metric expose the load without yet
-re-shaping the trajectory's energy budget. The α limit bounds the
-regime so the reported loads stay inside the envelope where that
-approximation is defensible.
+**α-induced drag (opt-in, per flight plan).** By default the α term is
+reporting-only — the boost drag stays axial (Section 8), so the q·α
+trace exposes the load without feeding back on the trajectory's energy
+budget. Setting `alpha_induced_drag=True` (GUI: the "α induced drag"
+checkbox in the yaw/dogleg panel) closes that gap: a commanded thrust
+axis offset from the velocity by α develops an aerodynamic normal force,
+modeled with the same Jorgensen slender-body-potential + Allen-Perkins
+viscous cross-flow build-up used for glider L/D (Section 12,
+`glider_ld.py`), referenced to the boost frontal area:
+
+```
+C_N(α) = C_Nα_pot·sin(2α)/2 + η·C_dn(M·sinα)·(A_p/A_ref)·sin²α
+```
+
+with `C_Nα_pot = 2` per rad (slender-body, nose-dominated), `η = 1`, and
+`A_p` the side-projected planform of the still-attached stack. Only the
+**induced-drag** projection of that normal force, `N·sinα` along −v, is
+applied to the trajectory (`_boost_alpha_aero_force`). It bleeds kinetic
+energy and so reshapes q — scaling as α² at small α, since `C_N ∝ α` —
+which is the energy cost SP-8099's q·α metric implies and that agile-
+maneuver studies charge explicitly: Fresconi et al. (2017, ARL-TR-8085)
+with a sin²α cross-flow axial term, and Kim et al. (2013) with the
+induced-drag polar `C_D = C_D0 + k·C_L²` whose dynamic-pressure collapse
+(velocity falling to ~10 m/s) is what makes their 180° extreme-α reversal
+flyable at all.
+
+The **lift** projection (`N·cosα`, perpendicular to v) is deliberately
+*not* applied as a trajectory force. An ascending booster is designed to
+fly at low α precisely to avoid these loads, and crediting its body
+normal force as free loft would let the simplified pitch program's few-
+degree α mimic a lifting body (an early build did exactly this and
+*extended* range by ~30 km on a straight ascent — the wrong sign for a
+maneuver penalty). This matches `drag_force_vector`'s established ascent
+convention, where a finned stage's normal force is a static-margin
+(stability) effect, not a trajectory force. So the α term is a pure
+cost — it can only slow the vehicle, and with it enabled max-q genuinely
+moves (a plain No-dong ascent: 629 → 617 kPa; a hard dogleg pays far
+more). The term vanishes at α = 0, so `alpha_induced_drag=False` (the
+default everywhere) is byte-identical to the legacy dynamics.
+
+Scope note: this is a screening-grade model. `C_Nα_pot = 2` is the
+slender-body potential value, the planform is a rectangular
+length × diameter approximation, and body–fin and configurational
+asymmetries (the phantom-yaw side forces and canard–fin vortex coupling
+that Fresconi's 6-DOF model resolves) are out of scope for this 3-DOF
+point-mass tool — as is the fin-effectiveness dead zone (Kim's
+uncontrollable 35° < α < 130° domain), which is a control-authority
+limit an engine-gimballed booster does not share (SP-8099's "hard-over
+engine" remains the correct attitude bound). The α limit above keeps the
+maneuver inside the envelope where the screening cross-flow model is
+defensible.
 
 ---
 
@@ -4549,6 +4594,27 @@ optimisation) should use higher-fidelity tools.
   which the large-α steering + aero load became the design combined-load
   condition (p. 13), and the relative-magnitude table putting steering /
   pitch-command loads at 0.05–0.15 of the wind bending moment (p. 10).
+
+- **Fresconi, F., Gruenwald, B., Yucelen, T., & Sahu, J.** (2017).
+  *Adaptive Missile Flight Control for Complex Aerodynamic Phenomena.*
+  US Army Research Laboratory, ARL-TR-8085. Corroborating source for the
+  α-induced boost aero (Section 9.6): the high-maneuvering aerodynamic
+  model with a sin²α cross-flow axial-force term and sinα + sin³α normal-
+  force terms (its Eq. 3), which the Jorgensen cross-flow build-up used
+  here reduces to. Its 6-DOF phenomena (phantom-yaw side forces,
+  canard–fin vortex coupling, α-dependent roll) are explicitly out of
+  scope for the 3-DOF screening model.
+
+- **Kim, Y., Kim, B. S., & Park, J.** (2013). "Aerodynamic pitch control
+  design for reversal of missile's flight direction." *Proc. IMechE Part
+  G: J. Aerospace Engineering* 227(9): 1523–1532. Corroborating source
+  for the α energy cost (Section 9.6): the induced-drag polar
+  `C_D = C_D0 + k·C_L²` and the observation that an extreme-α (180°)
+  reversal is only flyable because dynamic pressure collapses (velocity
+  to ~10 m/s) — the same q-dependence that motivates gating the α limit
+  on dynamic pressure. Its fin-effectiveness dead zone
+  (35° < α < 130°) is a control-authority limit specific to fin-steered
+  airframes, not gimballed boosters.
 
 - **Tsiolkovsky, K. E.** (1903). *Issledovanie mirovykh prostranstv
   reaktivnymi priborami* [Exploration of Outer Space by Reaction

@@ -92,6 +92,7 @@ from booster_models import (
     BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     booster_drag_vector, effective_ro, booster_separation_time,
+    booster_area,
     wing_geometry, wedge_planform_area,
     _wedge_coeffs, _half_cone_coeffs, NEWTON_K_SLENDER,
     SHROUD_Q_FAIRING,
@@ -840,6 +841,96 @@ def _alpha_limited_dir(thrust_dir, vel, alpha_limit_deg, alt_m):
     return d / n if n > 1e-12 else thrust_dir
 
 
+# Slender-body potential normal-force slope (per rad), referenced to the
+# frontal/base area.  Munk/slender-body theory gives 2·(A_base/A_ref); for a
+# pointed body with A_base = A_ref this is 2.0 and is nose-dominated (the
+# cylindrical afterbody adds none in potential flow — only viscous cross-flow).
+# The same value the glider-L/D build-up uses for its body term (glider_ld.py).
+_BOOST_C_NA_POT = 2.0
+_BOOST_CROSSFLOW_ETA = 1.0    # viscous cross-flow proportionality (Jorgensen p.26)
+
+
+def _attached_planform_area(astage):
+    """Side-projected planform area (m²) of the currently-flying stack — the
+    active (burning) stage and every stage still stacked above it — for the
+    Allen-Perkins viscous cross-flow term.  Lower stages have already
+    separated; upper stages are reached by walking the stage2 chain from the
+    active stage.  A stage with no explicit length falls back to a 5-caliber
+    body, matching the glider-L/D build-up's convention."""
+    A_p = 0.0
+    s = astage
+    while s is not None:
+        d = float(getattr(s, 'diameter_m', 0.0) or 0.0)
+        if d > 0.0:
+            L = float(s.length_m) if s.length_m > 0.0 else 5.0 * d
+            A_p += L * d
+        s = s.stage2
+    return A_p
+
+
+def _boost_alpha_aero_force(astage, top_params, vel, alt_m, thrust_dir):
+    """α-induced aerodynamic force during powered atmospheric flight.
+
+    When the commanded thrust axis is offset from the velocity vector by an
+    angle of attack α, the airframe develops an aerodynamic normal force
+    N = q·A_ref·C_N.  Modeled with the Jorgensen slender-body-potential +
+    Allen-Perkins viscous cross-flow build-up (the same one used for glider
+    L/D, glider_ld.py), referenced to the boost frontal area so it is
+    consistent with the axial zero-lift drag:
+
+        C_N(α) = C_Nα_pot·sin(2α)/2 + η·C_dn(M·sinα)·(A_p/A_ref)·sin²α
+
+    Only the INDUCED-DRAG projection of that normal force, N·sinα along −v, is
+    applied to the trajectory: it bleeds kinetic energy and so reshapes q
+    (∝ α² at small α, since C_N ∝ α).  This is the energy cost SP-8099's q·α
+    metric implies and that agile-maneuver studies charge explicitly —
+    Fresconi et al. 2017 (ARL-TR-8085) with a sin²α cross-flow axial term, and
+    Kim et al. 2013 with the induced-drag polar C_D = C_D0 + k·C_L² whose
+    dynamic-pressure collapse is what makes an extreme-α maneuver flyable.
+
+    The lift projection (N·cosα perpendicular to v) is deliberately NOT applied
+    as a trajectory force: an ascending booster is designed to fly at low α
+    precisely to avoid these loads, and treating its body normal force as free
+    loft would let the simplified pitch program's few-degree α mimic a lifting
+    body.  This matches drag_force_vector's established ascent convention,
+    where a finned stage's normal force is a stability (static-margin) effect,
+    not a trajectory force.  So the α term here is a pure cost — it can only
+    slow the vehicle, never extend its range.
+
+    Vanishes at α = 0, so with no maneuver this returns a zero vector and the
+    boost trajectory is unchanged.  Returns an ECEF force vector (N) to ADD to
+    the axial zero-lift drag.
+    """
+    speed = float(np.linalg.norm(vel))
+    if speed < _TGT_KICK_HOLD_V_MS:
+        return np.zeros(3)
+    v_hat = vel / speed
+    cos_a = float(np.clip(np.dot(thrust_dir, v_hat), -1.0, 1.0))
+    alpha = float(np.arccos(cos_a))
+    if alpha < 1e-4:
+        return np.zeros(3)
+
+    _, _, rho, a_snd = atmosphere(max(float(alt_m), 0.0))
+    if rho <= 0.0 or a_snd <= 0.0:
+        return np.zeros(3)
+    q    = 0.5 * rho * speed * speed
+    mach = speed / a_snd
+
+    A_ref = booster_area(astage, altitude_m=alt_m, top_params=top_params)
+    if A_ref <= 0.0:
+        return np.zeros(3)
+    A_p = _attached_planform_area(astage)
+
+    from glider_ld import crossflow_cd
+    sn   = np.sin(alpha)
+    c_dn = crossflow_cd(mach * sn)
+    C_N  = (_BOOST_C_NA_POT * np.sin(2.0 * alpha) / 2.0
+            + _BOOST_CROSSFLOW_ETA * c_dn * (A_p / A_ref) * sn * sn)
+
+    N = q * A_ref * C_N                       # ⟂ body axis
+    return -(N * sn) * v_hat                   # induced drag, along −velocity
+
+
 def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
                           azimuth_rad, t, gt_turn_start_s, gt_turn_stop_s,
                           t_final_ignition=0.0, alt_m=None,
@@ -1315,10 +1406,12 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         f_drag = f_drag + f_lift
         else:
             f_drag = np.zeros(3)
+        _in_boost_drag = False
     else:
         f_drag = drag_force_vector(astage, vel, alt, top_params=params, t_s=t)
         if params.n_boosters > 0 and t <= booster_separation_time(params):
             f_drag = f_drag + booster_drag_vector(params, vel, alt)
+        _in_boost_drag = True
 
     # --- Thrust with mode-selected guidance ---
     # For orbital_insertion mode with a liquid-engine final stage, check
@@ -1372,6 +1465,18 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     else:
         f_thrust = np.zeros(3)
 
+    # --- α-induced aerodynamic force (opt-in; SP-8099 / Fresconi / Kim) ---
+    # While the engine is on and the vehicle is in the powered atmospheric
+    # (boost) drag regime, a commanded thrust axis offset from the velocity by
+    # an angle of attack develops an aerodynamic normal force whose induced-
+    # drag component bleeds energy and reshapes q.  Off by default (pure zero
+    # increment) so every validated trajectory is unchanged; enabled per plan
+    # via alpha_induced_drag.  Zero at α = 0 regardless.
+    f_alpha = np.zeros(3)
+    if (engine_on and _in_boost_drag
+            and getattr(params, '_alpha_induced_drag', False)):
+        f_alpha = _boost_alpha_aero_force(astage, params, vel, alt, thrust_dir)
+
     # --- Mass ---
     m = booster_mass(params, t, alt)
 
@@ -1380,7 +1485,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     a_centrifugal = centrifugal_acceleration(pos)
 
     # --- Total acceleration (Forden Eq. 6) ---
-    accel = g + (f_drag + f_thrust) / m + a_coriolis + a_centrifugal
+    accel = g + (f_drag + f_thrust + f_alpha) / m + a_coriolis + a_centrifugal
 
     return np.concatenate([vel, accel])
 
@@ -1804,6 +1909,7 @@ def integrate_trajectory(params: BoosterParams,
                          yaw_maneuvers: list = None,
                          launch_elevation_deg: float = None,
                          alpha_limit_deg: float = None,
+                         alpha_induced_drag: bool = False,
                          _search_mode: bool = False):
     """
     Integrate a booster trajectory from launch to impact.
@@ -1826,6 +1932,13 @@ def integrate_trajectory(params: BoosterParams,
                             preliminary-design envelope.  None/0 = no limit
                             (legacy behavior); commanded α is then only
                             reported/flagged, never constrained.
+    alpha_induced_drag    : when True, the angle of attack develops an
+                            aerodynamic normal force during boost whose
+                            induced-drag component bleeds energy and reshapes q
+                            (Jorgensen cross-flow build-up; see
+                            _boost_alpha_aero_force).  Off by default so every
+                            validated trajectory is byte-identical; the effect
+                            is a pure increment that vanishes at α = 0.
 
     Returns
     -------
@@ -1950,6 +2063,9 @@ def integrate_trajectory(params: BoosterParams,
     # eom_args tuple shape used by many call sites.  None/0 = no limit.
     params._alpha_limit_deg = (float(alpha_limit_deg)
                                if alpha_limit_deg else None)
+    # α-induced boost aero (normal force + induced drag).  Opt-in; default off
+    # is byte-identical to the legacy dynamics.
+    params._alpha_induced_drag = bool(alpha_induced_drag)
     # Commanded pull-up phase latch [0 fall | 1 pulling | 2 handed off] —
     # one-way per mission; persists across integration passes, reset here.
     params._pullup_phase = [0]
@@ -3678,6 +3794,7 @@ def integrate_trajectory(params: BoosterParams,
         'q_pa':                  _q_pa,
         'q_alpha_kpa_deg':       _q_alpha_kpa_deg,
         'alpha_limit_engaged':   _alpha_limit_engaged,
+        'alpha_induced_drag':    bool(getattr(params, '_alpha_induced_drag', False)),
         'glide_regime':          _glide_regime,
     }
 
