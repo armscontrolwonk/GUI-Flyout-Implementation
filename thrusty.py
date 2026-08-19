@@ -6625,6 +6625,7 @@ class FootprintDialog(tk.Toplevel):
                     gt_turn_stop_s=gt_stop,
                     yaw_maneuvers=yaw,
                     launch_elevation_deg=el,
+                    alpha_limit_deg=self._app._alpha_limit_value(),
                     max_time_s=_max_t,
                 )
             except Exception:
@@ -7994,6 +7995,19 @@ class BoosterFlyoutApp(tk.Tk):
                     row=_yr, column=_mc, padx=3, pady=1)
             ttk.Label(yf, text=_unit).grid(
                 row=_yr, column=4, sticky=tk.W, padx=(2, 8), pady=1)
+        # Sustained angle-of-attack envelope enforced on the commanded attitude
+        # while dynamic pressure is significant (NASA SP-8099 §2.1.2.2:
+        # 5–10° at max q is the preliminary-design condition).  Blank = no
+        # limit: the maneuver is flown as commanded and only flagged in the
+        # Flight Timeline when it exceeds the envelope.
+        self._alpha_limit_var = tk.StringVar(value="")
+        ttk.Label(yf, text="α limit:").grid(
+            row=4, column=0, sticky=tk.W, padx=(8, 2), pady=(4, 1))
+        ttk.Entry(yf, textvariable=self._alpha_limit_var, width=6).grid(
+            row=4, column=1, padx=3, pady=(4, 1))
+        ttk.Label(yf, text="° (SP-8099: 5–10)", foreground="#555555").grid(
+            row=4, column=2, columnspan=3, sticky=tk.W, padx=(2, 8),
+            pady=(4, 1))
 
         # Row 11: Reset trajectory button — always visible in Ascent Mode
         self._reset_traj_btn = ttk.Button(
@@ -8974,6 +8988,10 @@ class BoosterFlyoutApp(tk.Tk):
                 yv['start'].set(_m(man[0] if len(man) > 0 else ""))
                 yv['stop'].set(_m(man[1] if len(man) > 1 else ""))
                 yv['final_az'].set(_m(man[2] if len(man) > 2 else ""))
+        # Sustained-α envelope (SP-8099) stored with the yaw program.
+        if getattr(self, '_alpha_limit_var', None):
+            _al = _gk('alpha_limit_deg')
+            self._alpha_limit_var.set("" if _al in (None, "") else str(_al))
 
         # Seed glider mission-control fields from the RV if it has glider
         # enabled.  Vehicle properties (L/D, g-limit, βₛ, separation_mode)
@@ -9851,6 +9869,11 @@ class BoosterFlyoutApp(tk.Tk):
                 yaw.append([self._fnum(yv['start']), self._fnum(yv['stop']),
                             self._fnum(yv['final_az'])])
         base['yaw_maneuvers'] = yaw
+        # Sustained-α envelope travels with the yaw program (None = no limit).
+        base['alpha_limit_deg'] = (self._fnum(self._alpha_limit_var)
+                                   if adv_yaw and getattr(
+                                       self, '_alpha_limit_var', None)
+                                   else None)
         # Yaw is owned by the global program (yaw_maneuvers) above.  Clear any
         # per-stage stage_yaw_* so a legacy baked dogleg can't override the
         # visible grid on the next load/run (it was surfaced into the grid in
@@ -11717,6 +11740,23 @@ class BoosterFlyoutApp(tk.Tk):
                     if _re.search(r'\d\s*[-–—:]\s*\d', s) else "")
             raise ValueError(f"{label}: '{s}' is not a number{hint}") from None
 
+    def _alpha_limit_value(self):
+        """Sustained-α envelope (°) from the guidance panel, or None.
+
+        Gated exactly like the yaw program it sits with: the field is only
+        honored while the Yaw/dogleg checkbox is enabled, so a hidden stale
+        value can never silently constrain a plan (SP-8099 §2.1.2.2 gives
+        5–10° at max q as the standard envelope).
+        """
+        _chk = getattr(self, '_adv_yaw_var', None)
+        if not (_chk and _chk.get()):
+            return None
+        try:
+            v = float(self._alpha_limit_var.get().strip())
+        except (ValueError, AttributeError):
+            return None
+        return v if v > 0.0 else None
+
     def _get_inputs(self):
         booster  = get_booster(self._booster_var.get())
 
@@ -12335,6 +12375,7 @@ class BoosterFlyoutApp(tk.Tk):
                     target_orbit_alt_km=target_orbit_km,
                     yaw_maneuvers=yaw_maneuvers,
                     launch_elevation_deg=launch_elevation_deg,
+                    alpha_limit_deg=self._alpha_limit_value(),
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
@@ -12683,6 +12724,17 @@ class BoosterFlyoutApp(tk.Tk):
 
         if len(t_plot) > 0 and len(pc) == len(t_plot):
             ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
+            # Boost angle of attack — thrust axis vs velocity (SP-8099).  Same
+            # degree axis as pitch; NaN outside powered flight so it gaps.
+            _al_g = np.asarray(r.get('alpha_deg', []))
+            if len(_al_g) == len(t_plot) and np.any(np.isfinite(_al_g)):
+                ax_g.plot(t_plot, _al_g, color='crimson', lw=1.1,
+                          label='α (°)')
+                # Show the enforced envelope while it was engaged.
+                _al_eng = r.get('alpha_limit_engaged')
+                if _al_eng:
+                    ax_g.axhline(_al_eng['alpha_limit_deg'], color='crimson',
+                                 lw=0.8, ls=':', alpha=0.6)
             if len(ac) == len(t_plot):
                 ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
                            ls='--', label='Azimuth (°)')
@@ -12765,6 +12817,22 @@ class BoosterFlyoutApp(tk.Tk):
                 xy=(_tb[_qmax_i], _qb[_qmax_i]),
                 xytext=(6, -4), textcoords='offset points',
                 fontsize=6, color='steelblue', va='top')
+            # Annotate max q·α — the SP-8099 combined-load design metric.
+            # A dogleg (or any maneuver) that spikes α at dynamic pressure
+            # shows up here even when max-q itself doesn't move.
+            _qa = np.asarray(r.get('q_alpha_kpa_deg', []))
+            if len(_qa) == len(_t_aero):
+                _qa_b = _qa[_mask]
+                _qa_f = np.where(np.isfinite(_qa_b), _qa_b, -1.0)
+                if np.any(_qa_f > 0.0):
+                    _qa_i = int(np.argmax(_qa_f))
+                    ax_qm.axvline(_tb[_qa_i], color='crimson', lw=0.8,
+                                  ls=':', alpha=0.7)
+                    ax_qm.annotate(
+                        f"max q·α\n{_qa_b[_qa_i]:.0f} kPa·°",
+                        xy=(_tb[_qa_i], _qb[_qa_i]),
+                        xytext=(6, 8), textcoords='offset points',
+                        fontsize=6, color='crimson', va='bottom')
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')

@@ -2241,6 +2241,68 @@ combine in the ENU resolution via the standard spherical-coordinate
 basis projection, with elevation θ and azimuth ψ as independent
 parameters.
 
+### 9.6 Boost angle of attack, the q·α load, and the α envelope (SP-8099)
+
+The commanded thrust axis is not generally aligned with the velocity
+vector. The angle between them — the boost angle of attack α — is the
+physically limiting quantity for a maneuvering booster: the combined
+aerodynamic + steering load scales with the product of dynamic pressure
+and angle of attack, **q·α**, and NASA SP-8099 (*Combining Ascent
+Loads*, 1972) is the criteria monograph for how those loads combine.
+Its §2.1.2.2 (p. 12) gives the standard preliminary-design load
+condition — *"a 5° to 10° angle of attack at the maximum dynamic
+pressure condition"*, bounded by the *"hard-over engine condition"* —
+and its p. 13 case study is the exact maneuver Thrusty's yaw program
+commands: a sharp range-safety *"dog-leg"* whose *"large angle of
+attack"* and steering-plus-aero load *"were found to be the design
+combined-load condition."* (For scale, SP-8099 p. 10 tabulates
+steering / pitch-command loads at 0.05–0.15 of the wind bending moment
+in nominal flight — small until a sharp maneuver makes them dominant.)
+
+Without a constraint, the guidance model would fly any commanded
+attitude instantly and for free: thrust is applied along the commanded
+direction, only axial drag is charged, and a 1-second 90° dogleg at
+max-q reports no consequence. Two mechanisms close that gap:
+
+**Reporting (always on).** Every run computes, at each output step of
+powered flight, `α(t)` = angle between the commanded thrust direction
+(the same `_commanded_thrust_dir` the EOM flew) and the air-relative
+velocity (ECEF velocity — the atmosphere co-rotates), the dynamic
+pressure `q(t) = ½ρv²`, and the combined-load trace `q·α(t)` (kPa·°).
+These are returned as `alpha_deg`, `alpha_cmd_deg`, `q_pa`, and
+`q_alpha_kpa_deg`, drawn on the guidance and dynamic-pressure plots,
+and summarised by a **Max q·α** Flight Timeline milestone. A plan that
+demands α > 25° while q > 1 kPa — beyond any realistic envelope
+(|α| ≲ 25° is also the Munk-model validity edge used in Section 8) —
+gets a **⚠ α exceeds SP-8099 envelope** timeline warning: the maneuver
+is still flown as commanded, but never silently.
+
+**The α limit (opt-in, per flight plan).** `integrate_trajectory`
+accepts `alpha_limit_deg` (GUI: the "α limit" field in the yaw/dogleg
+panel; SP-8099's 5–10° is the documented default range). When set, the
+commanded thrust direction is clamped to a cone of half-angle α_max
+about the velocity vector — a spherical interpolation from `v̂` toward
+the raw command, stopped at the cone — whenever q exceeds a 100 Pa
+gate. Under the clamp the vehicle turns only as fast as the bounded
+lateral thrust component rotates the velocity vector, so a commanded
+instantaneous dogleg stretches over the time it physically needs
+instead of being flown at α ≈ 90° for free; a maneuver the envelope
+cannot complete before burnout honestly fails to complete. Engagement
+is reported (`alpha_limit_engaged`: window, peak commanded α, limit)
+and flagged as an **α-limit engaged** timeline milestone. Below the
+gate (upper atmosphere / vacuum) the command is followed directly:
+the α limit is an aerodynamic-load constraint, and an exoatmospheric
+dogleg costs only the thrust-vector misalignment the EOM already
+integrates. `alpha_limit_deg = None` (the default everywhere) is
+byte-identical to the legacy behavior.
+
+Known limitation (documented, deliberate): α produces no normal force
+or induced drag on the boost aero model — drag remains axial (Section
+8), so the α trace and q·α metric expose the load without yet
+re-shaping the trajectory's energy budget. The α limit bounds the
+regime so the reported loads stay inside the envelope where that
+approximation is defensible.
+
 ---
 
 ## 10. Range optimisation and targeting
@@ -4478,6 +4540,15 @@ optimisation) should use higher-fidelity tools.
 - **Wheelon, A. D.** (1959). "Free Flight of a Ballistic Missile."
   *ARS Journal* 29: 915–926. Source for the optimal-burnout-angle
   formula `γ_opt = ½·arccos(Q/(2−Q))` (Section 10.2).
+
+- **NASA SP-8099** (1972). *Combining Ascent Loads.* NASA Space Vehicle
+  Design Criteria (Structures) monograph. Source for the boost q·α
+  combined-load metric and the α envelope (Section 9.6): the 5°–10°
+  angle-of-attack-at-max-q preliminary-design condition and hard-over
+  engine bound (§2.1.2.2, p. 12), the range-safety dogleg case study in
+  which the large-α steering + aero load became the design combined-load
+  condition (p. 13), and the relative-magnitude table putting steering /
+  pitch-command loads at 0.05–0.15 of the wind bending moment (p. 10).
 
 - **Tsiolkovsky, K. E.** (1903). *Issledovanie mirovykh prostranstv
   reaktivnymi priborami* [Exploration of Outer Space by Reaction

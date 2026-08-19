@@ -51,6 +51,19 @@ Azimuth is constant by default; optional yaw maneuvers provide dogleg
 corrections.  The ENU frame is re-evaluated at each step so that "local
 vertical" tracks the booster as it moves downrange.
 
+Boost angle of attack and the q·α load (NASA SP-8099)
+-----------------------------------------------------
+The commanded thrust axis is not generally aligned with the velocity
+vector, and the angle between them — the boost angle of attack α — sets
+the combined aerodynamic + steering load q·α that sizes the structure
+(NASA SP-8099, "Combining Ascent Loads", 1972).  Every run reports
+α(t), q(t) and q·α(t) plus a "Max q·α" timeline milestone.  An optional
+per-plan α limit (integrate_trajectory alpha_limit_deg; SP-8099
+§2.1.2.2's preliminary-design envelope is 5°–10° at max q) clamps the
+commanded attitude to a cone about the velocity vector while q is
+significant, so a sharp dogleg slews over the time it physically needs
+instead of being flown instantaneously at α ≈ 90° for free.
+
 Validation against Forden Table 3 (maximum ranges, azimuth 40° East of N):
   Booster         Our model   Forden    Notes
   Scud-B          ~288 km     288 km    matches with correct params + guidance
@@ -768,9 +781,69 @@ def _aero_polar(ro, ld_override: float = None) -> '_Polar':
 # Commanded thrust direction — the single source of truth for attitude
 # ---------------------------------------------------------------------------
 
+# Angle-of-attack envelope (NASA SP-8099, "Combining Ascent Loads", 1972).
+# A booster in atmosphere cannot fly at arbitrary α: the q·α (dynamic pressure
+# × angle of attack) load is the structure-sizing combined-load condition, and
+# SP-8099 §2.1.2.2 gives 5°–10° α at max-q as the standard preliminary-design
+# envelope (the "hard-over engine" case bounds it).  Its p. 13 dogleg example
+# — a sharp range-safety dogleg whose large α + steering load became the
+# design combined-load condition — is exactly the maneuver Thrusty's yaw
+# program commands, so the guidance must not fly an α the airframe could not.
+#
+# _ALPHA_GATE_Q_PA: the α limit is an AERODYNAMIC-load constraint, so it is
+#   enforced only while q exceeds this gate.  Below it (upper atmosphere /
+#   vacuum) attitude maneuvers are load-free and the command is followed
+#   directly — a dogleg completed exoatmospherically costs only the thrust-
+#   vector misalignment the EOM already integrates.
+# _ALPHA_WARN_DEG: flag threshold used when NO α limit is set — beyond any
+#   realistic envelope (|α| ≲ 25° is also the Munk-model validity edge used
+#   throughout this codebase), so a plan that demands it gets a visible
+#   timeline warning instead of a silently free maneuver.
+_ALPHA_GATE_Q_PA = 100.0
+_ALPHA_WARN_DEG  = 25.0
+_ALPHA_WARN_Q_PA = 1000.0     # only warn where q makes the α load meaningful
+
+
+def _alpha_limited_dir(thrust_dir, vel, alpha_limit_deg, alt_m):
+    """Clamp a commanded thrust direction to the α envelope.
+
+    Returns the unit vector within a cone of half-angle alpha_limit_deg about
+    the velocity direction that is closest to thrust_dir (a slerp from v̂
+    toward the command, stopped at the cone).  With the clamp active the
+    vehicle turns at the rate the bounded lateral (thrust-component) force
+    actually rotates the velocity vector — a commanded instantaneous dogleg
+    therefore stretches over the time it physically needs instead of being
+    flown for free at α ≈ 90° (SP-8099 p. 13).
+
+    The clamp releases when q ≤ _ALPHA_GATE_Q_PA (aero loads negligible) and
+    below the launch kick-hold speed (v̂ undefined at liftoff).
+    """
+    speed = float(np.linalg.norm(vel))
+    if speed < _TGT_KICK_HOLD_V_MS:
+        return thrust_dir
+    _, _, rho, _ = atmosphere(max(float(alt_m), 0.0))
+    if 0.5 * rho * speed * speed <= _ALPHA_GATE_Q_PA:
+        return thrust_dir
+    v_hat = vel / speed
+    cos_a = float(np.clip(np.dot(thrust_dir, v_hat), -1.0, 1.0))
+    ang   = float(np.arccos(cos_a))
+    lim   = np.radians(alpha_limit_deg)
+    if ang <= lim:
+        return thrust_dir
+    sin_ang = float(np.sin(ang))
+    if sin_ang < 1e-6:
+        # Command anti-parallel to velocity — no unique great-circle path;
+        # leave the command unclamped rather than invent a turn plane.
+        return thrust_dir
+    d = (np.sin(ang - lim) * v_hat + np.sin(lim) * thrust_dir) / sin_ang
+    n = float(np.linalg.norm(d))
+    return d / n if n > 1e-12 else thrust_dir
+
+
 def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
                           azimuth_rad, t, gt_turn_start_s, gt_turn_stop_s,
-                          t_final_ignition=0.0):
+                          t_final_ignition=0.0, alt_m=None,
+                          apply_alpha_limit=True):
     """Unit thrust-pointing vector (ECEF) for the active guidance law.
 
     Single source of truth for commanded attitude: the EOM applies thrust along
@@ -779,37 +852,52 @@ def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
     flown (previously the plot re-derived pitch with a parallel formula that
     diverged whenever the per-stage fields changed).  `azimuth_rad` must already
     include any yaw / dogleg program.
+
+    When the flight plan sets an α limit (params._alpha_limit_deg, stashed by
+    integrate_trajectory) the raw command is clamped to the α envelope while
+    dynamic pressure is significant — see _alpha_limited_dir.  The plot loop
+    passes apply_alpha_limit=False to recover the raw command for the
+    envelope-violation diagnostics.  alt_m avoids re-deriving altitude when
+    the caller already has it; only needed when a limit is set.
     """
     if params.guidance == "true_gravity_turn":
-        return _true_gravity_turn_thrust_dir(
+        raw = _true_gravity_turn_thrust_dir(
             pos, vel, lat_rad, lon_rad, azimuth_rad, t, astage)
-    if astage is not None and astage.stage_burnout_angle_deg is not None:
+    elif astage is not None and astage.stage_burnout_angle_deg is not None:
         _eff_start = (astage.stage_turn_start_s
                       if astage.stage_turn_start_s is not None else gt_turn_start_s)
         _eff_stop  = (astage.stage_turn_stop_s
                       if astage.stage_turn_stop_s is not None else gt_turn_stop_s)
-        return _gravity_turn_thrust_dir(
+        raw = _gravity_turn_thrust_dir(
             lat_rad, lon_rad, azimuth_rad,
             astage.stage_burnout_angle_deg, _eff_start, _eff_stop, t,
             start_angle_deg=_prev_burnout_angle(params, astage))
-    if params.guidance == "orbital_insertion":
-        return _orbital_insertion_thrust_dir(
+    elif params.guidance == "orbital_insertion":
+        raw = _orbital_insertion_thrust_dir(
             lat_rad, lon_rad, azimuth_rad,
             params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s,
             t_final_ignition, t)
-    # A stage with no per-stage burnout angle continues the ascent from where
-    # the previous stage left off -- NOT from launch elevation.  When no stage
-    # carries an override, _prev_burnout_angle() returns launch_elevation_deg
-    # for every stage, so the whole boost is the single continuous global ramp.
-    # When an earlier stage DID pitch to a per-stage angle, this later stage
-    # holds/continues from that angle instead of snapping the pitch back up to
-    # 90 deg and re-running the global ramp (the "pitch resets each stage" bug).
-    _start_angle = (_prev_burnout_angle(params, astage)
-                    if astage is not None else params.launch_elevation_deg)
-    return _gravity_turn_thrust_dir(
-        lat_rad, lon_rad, azimuth_rad,
-        params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s, t,
-        start_angle_deg=_start_angle)
+    else:
+        # A stage with no per-stage burnout angle continues the ascent from where
+        # the previous stage left off -- NOT from launch elevation.  When no stage
+        # carries an override, _prev_burnout_angle() returns launch_elevation_deg
+        # for every stage, so the whole boost is the single continuous global ramp.
+        # When an earlier stage DID pitch to a per-stage angle, this later stage
+        # holds/continues from that angle instead of snapping the pitch back up to
+        # 90 deg and re-running the global ramp (the "pitch resets each stage" bug).
+        _start_angle = (_prev_burnout_angle(params, astage)
+                        if astage is not None else params.launch_elevation_deg)
+        raw = _gravity_turn_thrust_dir(
+            lat_rad, lon_rad, azimuth_rad,
+            params.burnout_angle_deg, gt_turn_start_s, gt_turn_stop_s, t,
+            start_angle_deg=_start_angle)
+
+    _lim = getattr(params, '_alpha_limit_deg', None)
+    if apply_alpha_limit and _lim is not None and _lim > 0.0:
+        if alt_m is None:
+            _, _, alt_m = ecef_to_geodetic(pos)
+        raw = _alpha_limited_dir(raw, vel, float(_lim), alt_m)
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -1279,7 +1367,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
         # what was flown.
         thrust_dir = _commanded_thrust_dir(
             params, astage, pos, vel, lat, lon, azimuth_rad, t,
-            gt_turn_start_s, gt_turn_stop_s, t_final_ignition)
+            gt_turn_start_s, gt_turn_stop_s, t_final_ignition, alt_m=alt)
         f_thrust = thrust_force(params, t, alt, thrust_dir)
     else:
         f_thrust = np.zeros(3)
@@ -1715,6 +1803,7 @@ def integrate_trajectory(params: BoosterParams,
                          target_orbit_alt_km: float = None,
                          yaw_maneuvers: list = None,
                          launch_elevation_deg: float = None,
+                         alpha_limit_deg: float = None,
                          _search_mode: bool = False):
     """
     Integrate a booster trajectory from launch to impact.
@@ -1730,6 +1819,13 @@ def integrate_trajectory(params: BoosterParams,
     cutoff_time_s         : engine cutoff time (s); defaults to full burn
     dt_output             : output time step (s)
     max_time_s            : maximum flight time (s)
+    alpha_limit_deg       : sustained angle-of-attack envelope (°) enforced on
+                            the commanded thrust direction while dynamic
+                            pressure exceeds _ALPHA_GATE_Q_PA.  NASA SP-8099
+                            §2.1.2.2 gives 5°–10° at max-q as the standard
+                            preliminary-design envelope.  None/0 = no limit
+                            (legacy behavior); commanded α is then only
+                            reported/flagged, never constrained.
 
     Returns
     -------
@@ -1848,6 +1944,12 @@ def integrate_trajectory(params: BoosterParams,
     if not hasattr(params, '__dict__'):
         params = copy.copy(params)
     params._gl_above_pierce = [False]   # set once alt > 100 km
+    # Angle-of-attack envelope for the boost guidance (SP-8099).  Stashed on
+    # params (like the latches below) so _commanded_thrust_dir — shared by the
+    # EOM and the guidance-program plot — sees it without changing the
+    # eom_args tuple shape used by many call sites.  None/0 = no limit.
+    params._alpha_limit_deg = (float(alpha_limit_deg)
+                               if alpha_limit_deg else None)
     # Commanded pull-up phase latch [0 fall | 1 pulling | 2 handed off] —
     # one-way per mission; persists across integration passes, reset here.
     params._pullup_phase = [0]
@@ -3401,8 +3503,19 @@ def integrate_trajectory(params: BoosterParams,
     _az_cmd     = []
     _last_pitch = float(params.launch_elevation_deg)
     _last_az    = float('nan')
+    # Boost angle of attack and q·α (NASA SP-8099 "Combining Ascent Loads").
+    # α = angle between the FLOWN thrust axis (α-limit applied, if set) and
+    # the air-relative velocity (= ECEF velocity: the atmosphere co-rotates).
+    # α_cmd is the RAW commanded α before the limit — the two differ only
+    # while the α-limit is engaged.  Both are NaN outside powered flight and
+    # below the kick-hold speed (v̂ undefined at liftoff).  q·α is SP-8099's
+    # design combined-load metric for a maneuvering booster — the quantity a
+    # dogleg actually spikes (its §2.1.2.2 envelope: 5–10° α at max q).
+    _alpha_deg     = []
+    _alpha_cmd_deg = []
     for _i_gp, _t_gp in enumerate(t_arr):
         _gp_stage, _t_since = active_stage_and_t(params, _t_gp)
+        _a_now, _ac_now = float('nan'), float('nan')
         if _in_burn_window(_t_gp):
             _lat_i = np.radians(lats[_i_gp])
             _lon_i = np.radians(lons[_i_gp])
@@ -3410,7 +3523,8 @@ def integrate_trajectory(params: BoosterParams,
             _tdir  = _commanded_thrust_dir(
                 params, _gp_stage, pos_arr[_i_gp], vel_arr[_i_gp],
                 _lat_i, _lon_i, _az_i, _t_gp,
-                gt_turn_start_s, gt_turn_stop_s, _t_final_ignition)
+                gt_turn_start_s, gt_turn_stop_s, _t_final_ignition,
+                alt_m=alts[_i_gp])
             _ee, _en, _eu = _enu_frame(_lat_i, _lon_i)
             _last_pitch = float(np.degrees(np.arcsin(
                 np.clip(float(np.dot(_tdir, _eu)), -1.0, 1.0))))
@@ -3419,12 +3533,89 @@ def integrate_trajectory(params: BoosterParams,
             _e_comp, _n_comp = float(np.dot(_tdir, _ee)), float(np.dot(_tdir, _en))
             if _e_comp * _e_comp + _n_comp * _n_comp > 1e-8:
                 _last_az = float(np.degrees(np.arctan2(_e_comp, _n_comp))) % 360.0
+            if speeds[_i_gp] >= _TGT_KICK_HOLD_V_MS:
+                _v_hat_i = vel_arr[_i_gp] / speeds[_i_gp]
+                _a_now = float(np.degrees(np.arccos(
+                    np.clip(float(np.dot(_tdir, _v_hat_i)), -1.0, 1.0))))
+                if getattr(params, '_alpha_limit_deg', None):
+                    _tdir_raw = _commanded_thrust_dir(
+                        params, _gp_stage, pos_arr[_i_gp], vel_arr[_i_gp],
+                        _lat_i, _lon_i, _az_i, _t_gp,
+                        gt_turn_start_s, gt_turn_stop_s, _t_final_ignition,
+                        alt_m=alts[_i_gp], apply_alpha_limit=False)
+                    _ac_now = float(np.degrees(np.arccos(
+                        np.clip(float(np.dot(_tdir_raw, _v_hat_i)),
+                                -1.0, 1.0))))
+                else:
+                    _ac_now = _a_now
         if _t_gp <= _final_burn_end:
             _pitch_cmd.append(_last_pitch)
             _az_cmd.append(_last_az)
         else:
             _pitch_cmd.append(float('nan'))
             _az_cmd.append(float('nan'))
+        _alpha_deg.append(_a_now)
+        _alpha_cmd_deg.append(_ac_now)
+
+    # Dynamic pressure and the q·α combined-load trace (SP-8099 §2.1.2.2).
+    _alpha_deg     = np.asarray(_alpha_deg)
+    _alpha_cmd_deg = np.asarray(_alpha_cmd_deg)
+    _q_pa = np.empty(len(t_arr))
+    for _i_q in range(len(t_arr)):
+        _, _, _rho_q, _ = atmosphere(max(float(alts[_i_q]), 0.0))
+        _q_pa[_i_q] = 0.5 * _rho_q * speeds[_i_q] ** 2
+    _q_alpha_kpa_deg = (_q_pa / 1e3) * _alpha_deg     # NaN off-burn, as α
+
+    # Timeline milestones for the ascent-load picture.  Labels carry their
+    # own "(N s, …)" parenthetical because the generic time-annotation pass
+    # above has already run.
+    _qa_fin = np.where(np.isfinite(_q_alpha_kpa_deg), _q_alpha_kpa_deg, -1.0)
+    if np.any(_qa_fin > 0.0):
+        _i_qa = int(np.argmax(_qa_fin))
+        _row_qa = _milestone(float(t_arr[_i_qa]))
+        _row_qa['event'] = (
+            f"Max q·α ({t_arr[_i_qa]:.0f} s, "
+            f"{_q_alpha_kpa_deg[_i_qa]:.1f} kPa·°: "
+            f"q {_q_pa[_i_qa]/1e3:.1f} kPa, α {_alpha_deg[_i_qa]:.1f}°)")
+        _insert_chrono(_row_qa)
+
+    # α-limit engagement / envelope-violation flags.
+    _alpha_limit_engaged = None
+    _lim_ms = getattr(params, '_alpha_limit_deg', None)
+    if _lim_ms:
+        _eng = (np.isfinite(_alpha_cmd_deg)
+                & (_alpha_cmd_deg > _lim_ms + 0.1)
+                & (_q_pa > _ALPHA_GATE_Q_PA))
+        if np.any(_eng):
+            _ie = np.where(_eng)[0]
+            _alpha_limit_engaged = {
+                't_start_s':         float(t_arr[_ie[0]]),
+                't_end_s':           float(t_arr[_ie[-1]]),
+                'alpha_cmd_max_deg': float(np.max(_alpha_cmd_deg[_ie])),
+                'alpha_limit_deg':   float(_lim_ms),
+            }
+            _row_al = _milestone(float(t_arr[_ie[0]]))
+            _row_al['event'] = (
+                f"α-limit engaged ({t_arr[_ie[0]]:.0f}–{t_arr[_ie[-1]]:.0f} s, "
+                f"cmd α up to {_alpha_limit_engaged['alpha_cmd_max_deg']:.0f}° "
+                f"held at {_lim_ms:.0f}°)")
+            _insert_chrono(_row_al)
+    else:
+        # No limit set: a large-α maneuver is flown as commanded, so make the
+        # load consequence visible — SP-8099's dogleg example (p. 13) is
+        # precisely a large-α maneuver becoming the design load condition.
+        _viol = (np.isfinite(_alpha_deg)
+                 & (_alpha_deg > _ALPHA_WARN_DEG)
+                 & (_q_pa > _ALPHA_WARN_Q_PA))
+        if np.any(_viol):
+            _iv = np.where(_viol)[0]
+            _iv_pk = _iv[int(np.argmax(_alpha_deg[_iv]))]
+            _row_av = _milestone(float(t_arr[_iv[0]]))
+            _row_av['event'] = (
+                f"⚠ α exceeds SP-8099 envelope ({t_arr[_iv[0]]:.0f} s, "
+                f"α up to {_alpha_deg[_iv_pk]:.0f}° at "
+                f"q {_q_pa[_iv_pk]/1e3:.0f} kPa — set an α limit)")
+            _insert_chrono(_row_av)
 
     # Diagnostic glide-regime verdict (skip / capture / plunge) for lifting
     # glide RVs.  See glide_regime.py and GLIDE_CAPTURE_DESIGN.md.
@@ -3478,6 +3669,15 @@ def integrate_trajectory(params: BoosterParams,
         'orbital_elements':      _orb_elements,
         'pitch_cmd_deg':         _pitch_cmd,
         'az_cmd_deg':            _az_cmd,
+        # Ascent combined-load traces (SP-8099): flown α, raw commanded α
+        # (differs from flown only while the α-limit is engaged), dynamic
+        # pressure (Pa), and the q·α design metric (kPa·°).  α-based arrays
+        # are NaN outside powered flight / below the kick-hold speed.
+        'alpha_deg':             _alpha_deg,
+        'alpha_cmd_deg':         _alpha_cmd_deg,
+        'q_pa':                  _q_pa,
+        'q_alpha_kpa_deg':       _q_alpha_kpa_deg,
+        'alpha_limit_engaged':   _alpha_limit_engaged,
         'glide_regime':          _glide_regime,
     }
 
