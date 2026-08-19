@@ -5596,6 +5596,29 @@ class FlightPlanDialog(tk.Toplevel):
                 trip[_k] = sv
             self._yaw_rows.append(trip)
 
+        # Angle-of-attack envelope + induced-drag toggle (NASA SP-8099), sitting
+        # with the dogleg they govern.  The α limit clamps the commanded thrust
+        # to a cone about the velocity while dynamic pressure is significant, so
+        # a sharp dogleg slews over the time it physically needs instead of
+        # being flown instantly at α≈90°; blank = no limit (the maneuver is
+        # flown as commanded and only flagged when it exceeds the envelope).
+        _alv = plan.get('alpha_limit_deg')
+        self._alpha_limit_var = tk.StringVar(
+            value="" if _alv in (None, "") else f"{float(_alv):g}")
+        ttk.Label(_yf, text="α limit (°):").grid(
+            row=4, column=0, sticky=tk.E, padx=3, pady=(8, 1))
+        ttk.Entry(_yf, textvariable=self._alpha_limit_var, width=8).grid(
+            row=4, column=1, padx=3, pady=(8, 1))
+        ttk.Label(_yf, text="SP-8099: 5–10; blank = warn only",
+                  foreground="#555555").grid(
+            row=4, column=2, columnspan=2, sticky=tk.W, padx=3, pady=(8, 1))
+        self._alpha_induced_var = tk.BooleanVar(
+            value=bool(plan.get('alpha_induced_drag', False)))
+        ttk.Checkbutton(
+            _yf, text="α induced drag (bleeds energy, reshapes q)",
+            variable=self._alpha_induced_var).grid(
+            row=5, column=0, columnspan=4, sticky=tk.W, padx=3, pady=(1, 2))
+
         # ── Provenance ───────────────────────────────────────────────────
         ttk.Label(frm, text="Source:").grid(row=r, column=0, sticky=tk.W, pady=(10, 2))
         self._source_var = tk.StringVar(value=str(plan.get('source', '')))
@@ -5729,6 +5752,9 @@ class FlightPlanDialog(tk.Toplevel):
                 yaw.append([self._f(trip['start']), self._f(trip['stop']), fa])
         plan['yaw_maneuvers'] = yaw
         plan['adv_yaw_on'] = bool(yaw)
+        # α envelope + induced-drag toggle travel with the dogleg.
+        plan['alpha_limit_deg'] = self._f(self._alpha_limit_var)
+        plan['alpha_induced_drag'] = bool(self._alpha_induced_var.get())
         # Yaw is owned by the global grid above; clear any per-stage stage_yaw_*
         # (surfaced into the grid on load) so it can't override it on reload.
         for st in stages:
@@ -9883,14 +9909,16 @@ class BoosterFlyoutApp(tk.Tk):
                 yaw.append([self._fnum(yv['start']), self._fnum(yv['stop']),
                             self._fnum(yv['final_az'])])
         base['yaw_maneuvers'] = yaw
-        # Sustained-α envelope travels with the yaw program (None = no limit).
+        # α envelope + induced-drag toggle are surfaced from the plan into these
+        # vars on load and edited in the Flight Plan dialog; snapshot them back
+        # faithfully (independent of the removed sidebar yaw checkbox, and of
+        # whether a dogleg is present — an α limit or induced drag can apply to
+        # a straight ascent too).  None = no limit.
         base['alpha_limit_deg'] = (self._fnum(self._alpha_limit_var)
-                                   if adv_yaw and getattr(
-                                       self, '_alpha_limit_var', None)
+                                   if getattr(self, '_alpha_limit_var', None)
                                    else None)
-        # α-induced boost drag toggle (default off) travels with it too.
         base['alpha_induced_drag'] = bool(
-            adv_yaw and getattr(self, '_alpha_induced_var', None)
+            getattr(self, '_alpha_induced_var', None)
             and self._alpha_induced_var.get())
         # Yaw is owned by the global program (yaw_maneuvers) above.  Clear any
         # per-stage stage_yaw_* so a legacy baked dogleg can't override the
@@ -11759,16 +11787,15 @@ class BoosterFlyoutApp(tk.Tk):
             raise ValueError(f"{label}: '{s}' is not a number{hint}") from None
 
     def _alpha_limit_value(self):
-        """Sustained-α envelope (°) from the guidance panel, or None.
+        """Sustained-α envelope (°) for the run, or None (no limit).
 
-        Gated exactly like the yaw program it sits with: the field is only
-        honored while the Yaw/dogleg checkbox is enabled, so a hidden stale
-        value can never silently constrain a plan (SP-8099 §2.1.2.2 gives
-        5–10° at max q as the standard envelope).
+        The dogleg lives in the Flight Plan dialog (the sidebar yaw controls
+        were removed); the α limit and induced-drag toggle now travel with it
+        in the plan JSON.  On plan load they are surfaced into these vars
+        (reset from the plan every time, so no stale value leaks), which are
+        the transfer bus the run path reads — so this is NOT gated on the
+        former sidebar checkbox.  SP-8099 §2.1.2.2 gives 5–10° at max q.
         """
-        _chk = getattr(self, '_adv_yaw_var', None)
-        if not (_chk and _chk.get()):
-            return None
         try:
             v = float(self._alpha_limit_var.get().strip())
         except (ValueError, AttributeError):
@@ -11776,14 +11803,11 @@ class BoosterFlyoutApp(tk.Tk):
         return v if v > 0.0 else None
 
     def _alpha_induced_value(self):
-        """Whether α-induced boost drag is enabled, from the guidance panel.
+        """Whether α-induced boost drag is enabled for the run.
 
-        Gated on the Yaw/dogleg checkbox like the α limit — a hidden stale
-        toggle never silently reshapes a plan's trajectory.
+        Surfaced from the plan into this var on load (see _alpha_limit_value);
+        read directly, not gated on the removed sidebar yaw checkbox.
         """
-        _chk = getattr(self, '_adv_yaw_var', None)
-        if not (_chk and _chk.get()):
-            return False
         _v = getattr(self, '_alpha_induced_var', None)
         return bool(_v and _v.get())
 
@@ -12859,11 +12883,20 @@ class BoosterFlyoutApp(tk.Tk):
                     _qa_i = int(np.argmax(_qa_f))
                     ax_qm.axvline(_tb[_qa_i], color='crimson', lw=0.8,
                                   ls=':', alpha=0.7)
+                    # Hang the label below its anchor when peak q·α lands high
+                    # on the plot (e.g. it coincides with max-q) so it clears
+                    # the title; otherwise place it above.  Nudge left near the
+                    # right edge so it doesn't run off-axis.
+                    _q_hi = _qb[_qa_i] > 0.72 * float(np.max(_qb))
+                    _t_late = _tb[_qa_i] > 0.75 * float(_tb[-1])
+                    _dx = -6 if _t_late else 6
+                    _ha = 'right' if _t_late else 'left'
+                    _dy, _va = (-6, 'top') if _q_hi else (8, 'bottom')
                     ax_qm.annotate(
                         f"max q·α\n{_qa_b[_qa_i]:.0f} kPa·°",
                         xy=(_tb[_qa_i], _qb[_qa_i]),
-                        xytext=(6, 8), textcoords='offset points',
-                        fontsize=6, color='crimson', va='bottom')
+                        xytext=(_dx, _dy), textcoords='offset points',
+                        fontsize=6, color='crimson', va=_va, ha=_ha)
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')
