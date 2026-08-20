@@ -13787,14 +13787,15 @@ class BoosterFlyoutApp(tk.Tk):
             return (float(np.interp(ms['t_s'], t, lat)),
                     float(np.interp(ms['t_s'], t, lon)))
 
-        # Tick half-length: ~1.5 % of the map's latitude span so ticks scale
-        # with the map extent (same visual weight at all ranges).
+        # Tick half-length: ~0.8 % of the map's latitude span so ticks scale
+        # with the map extent (same visual weight at all ranges) while staying
+        # small relative to the launch/impact circles.
         try:
             _ext = ax.get_extent(crs=ccrs.PlateCarree())
             _lat_span = max(1.0, _ext[3] - _ext[2])
         except Exception:
             _lat_span = max(1.0, float(np.ptp(lat)))
-        _tick_half = max(0.25, _lat_span * 0.015)
+        _tick_half = max(0.12, _lat_span * 0.008)
 
         for ms in r.get('milestones', []):
             is_debris = ms.get('is_debris', False)
@@ -14154,7 +14155,7 @@ class BoosterFlyoutApp(tk.Tk):
             var V_ABOVE   = 4;    // px between dot and nearest edge of label
             var STACK_GAP = 3;    // px between stacked labels
             var PAD       = 2;    // extra padding around each label box
-            var TICK_HALF = 8;    // px: half-length of tick mark
+            var TICK_HALF = 5;    // px: half-length of tick mark (≈ circle radius)
             var CLUSTER_R = 60;   // px: dot-distance threshold for new stack group
 
             var _svg = null, _con = null, _divs = [], _labelsLayer = null;
