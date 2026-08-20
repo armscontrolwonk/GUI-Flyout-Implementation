@@ -12802,9 +12802,11 @@ class BoosterFlyoutApp(tk.Tk):
                 if (_al_eng and len(_alc_g) == len(t_plot)
                         and np.any(np.isfinite(_alc_g)
                                    & (_alc_g > _al_g + 0.5))):
-                    ax_g.plot(t_plot, _alc_g, color='crimson', lw=1.0,
+                    ax_g.plot(t_plot, _alc_g, color='forestgreen', lw=1.0,
                               ls='--', alpha=0.55, label='α cmd (°)')
-                ax_g.plot(t_plot, _al_g, color='crimson', lw=1.1,
+                # α is green — distinct from pitch (blue) and azimuth (orange),
+                # and clearly on the left (Elevation / α) axis.
+                ax_g.plot(t_plot, _al_g, color='forestgreen', lw=1.1,
                           label='α flown (°)' if _al_eng else 'α (°)')
             if len(ac) == len(t_plot):
                 ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
