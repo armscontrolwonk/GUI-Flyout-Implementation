@@ -3676,7 +3676,18 @@ def integrate_trajectory(params: BoosterParams,
             # thrust (cos elevation ~ 0), so hold the last value there.
             _e_comp, _n_comp = float(np.dot(_tdir, _ee)), float(np.dot(_tdir, _en))
             if _e_comp * _e_comp + _n_comp * _n_comp > 1e-8:
-                _last_az = float(np.degrees(np.arctan2(_e_comp, _n_comp))) % 360.0
+                _az_raw = float(np.degrees(np.arctan2(_e_comp, _n_comp)))  # [-180,180]
+                if np.isfinite(_last_az):
+                    # Keep the trace continuous with the previous sample rather
+                    # than wrapping to [0,360).  For a due-N/S heading the east
+                    # component is machine-zero and its SIGN is pure round-off,
+                    # so a plain "% 360" flickers the heading between ~0° and
+                    # ~360° every step (the vertical-spike glitch).  Unwrapping
+                    # relative to the last value pins it smoothly instead.
+                    _az_raw += 360.0 * round((_last_az - _az_raw) / 360.0)
+                    _last_az = _az_raw
+                else:
+                    _last_az = _az_raw % 360.0
             if speeds[_i_gp] >= _TGT_KICK_HOLD_V_MS:
                 _v_hat_i = vel_arr[_i_gp] / speeds[_i_gp]
                 _a_now = float(np.degrees(np.arccos(
