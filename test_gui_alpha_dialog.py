@@ -44,6 +44,21 @@ def _plan():
             'yaw_maneuvers': [[55.0, 56.0, 200.0]], 'stages': [{}, {}]}
 
 
+def test_dialog_defaults_alpha_limit_to_10(root):
+    """A plan that never set alpha_limit_deg opens with the 10° default; a
+    plan that stored None (user cleared it) stays blank."""
+    b = get_booster("AUR+HGB")
+    d1 = thrusty.FlightPlanDialog(root, "AUR+HGB",
+                                  {'guidance': 'pitch_program', 'stages': [{}, {}]}, b)
+    assert d1._alpha_limit_var.get() == "10"
+    d1.destroy()
+    d2 = thrusty.FlightPlanDialog(root, "AUR+HGB",
+                                  {'guidance': 'pitch_program', 'stages': [{}, {}],
+                                   'alpha_limit_deg': None}, b)
+    assert d2._alpha_limit_var.get() == ""
+    d2.destroy()
+
+
 def test_dialog_saves_alpha_fields(root):
     b = get_booster("AUR+HGB")
     dlg = thrusty.FlightPlanDialog(root, "AUR+HGB", _plan(), b)

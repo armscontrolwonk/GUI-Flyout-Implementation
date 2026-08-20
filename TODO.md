@@ -7,6 +7,45 @@ invent.
 
 ## New — not yet planned
 
+### 7. Vehicle-derived structural α / q·α capacity — SHELVED (2026-08-20)
+Prototyped and deliberately parked while building the ascent q·α load
+model (METHODS §9.6).  The SHIPPED feature is: (a) q·α reporting + a
+constant-q·α α-limit envelope (10° default at max-q, user-set; replaced
+the arbitrary 100 Pa gate — the envelope self-deactivates in vacuum
+because q·α→0), and (b) an applied lateral-g readout `n_lat =
+q·A_ref·C_Nα·α/(m·g₀)`.  What is SHELVED is auto-DERIVING the structural
+*capacity* (the ceiling) from vehicle data.
+The idea, kept for whoever adds a structural model: anchor a thin-cylinder
+bending capacity to the axial thrust the case demonstrably carries,
+`M_cap ≈ F·R/2` (no material/skin data needed), convert to a lateral-g
+ceiling, and use it to auto-set the limit.  Why parked (all validated
+against real data this session):
+  - It estimates CAPACITY; user guides publish EXPERIENCED load — equal
+    only for loads-optimised vehicles.  Minotaur-IV (Peacekeeper SR118,
+    over-built for its SLV role) estimates 1.05 g vs its <0.5 g nominal:
+    consistent (cap ≥ nominal·FoS) but unvalidatable (capacity is
+    proprietary).  Accuracy ≈ ±2×, single-point anchor (START-1 0.56 g
+    est vs 0.7 g published).
+  - `M_cr = P_cr·R/2` assumes monocoque — meaningless for a
+    pressure-stabilised (balloon) tank; `P_cr≈thrust` ignores that
+    ground-handling / combined max-q may size the structure.
+  - Bending arm `≈0.25·L` swings the answer ~3× and was effectively fitted
+    to the one anchor.  Real methods (SMC-S-004; CNES EUCASS 2013) carry
+    distributed mass/aero to locate critical stations.
+  - Limits the STEERING term only; SP-8099 p.10 + CNES put steering at
+    0.05–0.15 of the WIND bending moment, and Thrusty models no winds.
+Validation corpus gathered (in Drive / session): SP-8099; CNES EUCASS
+2013 (Delorme et al.); NSSL Phase-2 CDRL (→ SMC-S-004, day-of-launch
+placarding, limit-load allowables vocabulary); START-1 User's Handbook
+(0.7 g); Cyclone-4 (0.3–0.6 g); Minotaur I / IV-V-VI (<0.5 g steady,
+6–12 g CLA transient); Pegasus (−2.33 g winged pull-up).  Open lead for
+an absolute q·α placard in Pa·rad: Bartos, AIAA 2001-0841 (Delta
+load-relief wind model).  If picked up: add structural inputs (skin
+gauge, material, construction type incl. balloon-tank flag) so capacity
+is derived not fitted, and combine with a wind model so the limited term
+is the sizing one.
+
+
 ### 1. Image dimensioning tool — Phases A (complete) + B SHIPPED (2026-08-01)
 Working "Measure from image…" on BOTH editors (shared dialog).  RO: load →
 scale+provenance → prompts from the FULL declared topology (body form +

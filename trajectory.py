@@ -791,44 +791,55 @@ def _aero_polar(ro, ld_override: float = None) -> '_Polar':
 # design combined-load condition — is exactly the maneuver Thrusty's yaw
 # program commands, so the guidance must not fly an α the airframe could not.
 #
-# _ALPHA_GATE_Q_PA: the α limit is an AERODYNAMIC-load constraint, so it is
-#   enforced only while q exceeds this gate.  Below it (upper atmosphere /
-#   vacuum) attitude maneuvers are load-free and the command is followed
-#   directly — a dogleg completed exoatmospherically costs only the thrust-
-#   vector misalignment the EOM already integrates.
-# _ALPHA_WARN_DEG: flag threshold used when NO α limit is set — beyond any
-#   realistic envelope (|α| ≲ 25° is also the Munk-model validity edge used
-#   throughout this codebase), so a plan that demands it gets a visible
-#   timeline warning instead of a silently free maneuver.
-_ALPHA_GATE_Q_PA = 100.0
+# The α limit is enforced as a CONSTANT-q·α (constant-load) envelope, not a
+#   fixed angle gated on an absolute pressure.  The user's alpha_limit_deg is
+#   read as SP-8099's convention — the maximum α "at the maximum dynamic
+#   pressure condition" — so the enforced quantity is the LOAD:
+#       q(t)·α(t) ≤ q_max-q · alpha_limit_deg
+#   Rearranged, the instantaneous allowance is α_allow(t) = alpha_limit_deg ·
+#   q_max-q / q(t): exactly the limit at max-q, proportionally more where q is
+#   lower, and unbounded as q → 0.  So the envelope self-deactivates in vacuum
+#   with NO arbitrary pressure threshold (this replaces the old hand-picked
+#   100 Pa gate).  q_max-q is the ascent max-q, tracked as a running maximum on
+#   params._maxq_pa during integration (max-q is reached early, before any
+#   dogleg, so the reference is settled by the time a maneuver needs clamping).
+# _ALPHA_WARN_DEG / _ALPHA_WARN_Q_PA: reporting-only thresholds for the "no
+#   limit set" timeline warning — NOT part of the enforced physics.  |α| ≲ 25°
+#   is the Munk-model validity edge used throughout this codebase.
 _ALPHA_WARN_DEG  = 25.0
 _ALPHA_WARN_Q_PA = 1000.0     # only warn where q makes the α load meaningful
 
 
-def _alpha_limited_dir(thrust_dir, vel, alpha_limit_deg, alt_m):
-    """Clamp a commanded thrust direction to the α envelope.
+def _alpha_limited_dir(thrust_dir, vel, alpha_limit_deg, alt_m, maxq_ref_pa):
+    """Clamp a commanded thrust direction to the constant-q·α load envelope.
 
-    Returns the unit vector within a cone of half-angle alpha_limit_deg about
-    the velocity direction that is closest to thrust_dir (a slerp from v̂
-    toward the command, stopped at the cone).  With the clamp active the
-    vehicle turns at the rate the bounded lateral (thrust-component) force
-    actually rotates the velocity vector — a commanded instantaneous dogleg
-    therefore stretches over the time it physically needs instead of being
-    flown for free at α ≈ 90° (SP-8099 p. 13).
+    Returns the unit vector within a cone about the velocity direction (a slerp
+    from v̂ toward the command, stopped at the cone) whose half-angle is the
+    instantaneous α allowance α_allow = alpha_limit_deg · q_max-q / q — i.e. the
+    angle that holds the load q·α at the ceiling set by alpha_limit_deg at
+    max-q.  With the clamp active the vehicle turns only as fast as the bounded
+    lateral (thrust-component) force rotates the velocity vector, so a
+    commanded instantaneous dogleg stretches over the time it physically needs
+    (SP-8099 p. 13) — and the allowance grows smoothly as q falls, vanishing in
+    vacuum, with no arbitrary pressure gate.
 
-    The clamp releases when q ≤ _ALPHA_GATE_Q_PA (aero loads negligible) and
-    below the launch kick-hold speed (v̂ undefined at liftoff).
+    maxq_ref_pa is the ascent max-q reference (running max on params._maxq_pa).
+    Falls through unclamped below the launch kick-hold speed (v̂ undefined at
+    liftoff) and until a max-q reference / nonzero q exists.
     """
     speed = float(np.linalg.norm(vel))
     if speed < _TGT_KICK_HOLD_V_MS:
         return thrust_dir
     _, _, rho, _ = atmosphere(max(float(alt_m), 0.0))
-    if 0.5 * rho * speed * speed <= _ALPHA_GATE_Q_PA:
+    q = 0.5 * rho * speed * speed
+    if q <= 0.0 or maxq_ref_pa <= 0.0:
         return thrust_dir
+    # Constant-load allowance: the α that keeps q·α at the max-q ceiling.
+    alpha_allow_deg = alpha_limit_deg * (maxq_ref_pa / q)
     v_hat = vel / speed
     cos_a = float(np.clip(np.dot(thrust_dir, v_hat), -1.0, 1.0))
     ang   = float(np.arccos(cos_a))
-    lim   = np.radians(alpha_limit_deg)
+    lim   = np.radians(alpha_allow_deg)
     if ang <= lim:
         return thrust_dir
     sin_ang = float(np.sin(ang))
@@ -987,7 +998,8 @@ def _commanded_thrust_dir(params, astage, pos, vel, lat_rad, lon_rad,
     if apply_alpha_limit and _lim is not None and _lim > 0.0:
         if alt_m is None:
             _, _, alt_m = ecef_to_geodetic(pos)
-        raw = _alpha_limited_dir(raw, vel, float(_lim), alt_m)
+        _maxq_ref = getattr(params, '_maxq_pa', [0.0])[0]
+        raw = _alpha_limited_dir(raw, vel, float(_lim), alt_m, _maxq_ref)
     return raw
 
 
@@ -1024,6 +1036,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 
     lat, lon, alt = ecef_to_geodetic(pos)
     alt = max(alt, 0.0)
+
+    # Track running ASCENT max-q — the reference q for the constant-q·α α
+    # envelope (_alpha_limited_dir).  Gated to powered flight so the (higher)
+    # reentry q never inflates the reference; the α clamp only acts during
+    # powered flight anyway, and by burnout this holds the true ascent max-q.
+    _mq = getattr(params, '_maxq_pa', None)
+    if _mq is not None and t <= total_burn_time(params):
+        _spd_mq = float(np.linalg.norm(vel))
+        if _spd_mq > 0.0:
+            _, _, _rho_mq, _ = atmosphere(alt)
+            _q_mq = 0.5 * _rho_mq * _spd_mq * _spd_mq
+            if _q_mq > _mq[0]:
+                _mq[0] = _q_mq
 
     # --- Gravity ---
     g = gravity_ecef(pos)
@@ -2063,6 +2088,9 @@ def integrate_trajectory(params: BoosterParams,
     # eom_args tuple shape used by many call sites.  None/0 = no limit.
     params._alpha_limit_deg = (float(alpha_limit_deg)
                                if alpha_limit_deg else None)
+    # Running ascent max-q (Pa), the reference for the constant-q·α envelope.
+    # Updated every EOM call; settled by the time any dogleg needs clamping.
+    params._maxq_pa = [0.0]
     # α-induced boost aero (normal force + induced drag).  Opt-in; default off
     # is byte-identical to the legacy dynamics.
     params._alpha_induced_drag = bool(alpha_induced_drag)
@@ -3682,6 +3710,25 @@ def integrate_trajectory(params: BoosterParams,
         _q_pa[_i_q] = 0.5 * _rho_q * speeds[_i_q] ** 2
     _q_alpha_kpa_deg = (_q_pa / 1e3) * _alpha_deg     # NaN off-burn, as α
 
+    # Lateral load-factor readout (the APPLIED aerodynamic side load, honestly
+    # computable — NOT a structural capacity).  n_lat = N/(m·g0) with the
+    # small-angle body normal force N ≈ q·A_ref·C_Nα·α (slender-body C_Nα = 2
+    # /rad), referenced to the boost frontal area.  This is what payload user's
+    # guides tabulate as the ascent lateral load factor (e.g. START-1 ~0.7 g,
+    # Cyclone-4 / Minotaur steady lateral 0.3–0.7 g).  NaN outside powered
+    # flight, as α.
+    _lateral_g = np.full(len(t_arr), np.nan)
+    for _i_lg in range(len(t_arr)):
+        _a_lg = _alpha_deg[_i_lg]
+        if np.isfinite(_a_lg) and masses[_i_lg] > 0.0:
+            _gp_lg, _ = active_stage_and_t(params, float(t_arr[_i_lg]))
+            _aref_lg = booster_area(_gp_lg if _gp_lg is not None else params,
+                                    altitude_m=float(alts[_i_lg]),
+                                    top_params=params)
+            _N_lg = (_q_pa[_i_lg] * _aref_lg * _BOOST_C_NA_POT
+                     * np.radians(abs(_a_lg)))
+            _lateral_g[_i_lg] = _N_lg / (masses[_i_lg] * 9.80665)
+
     # Timeline milestones for the ascent-load picture.  Labels carry their
     # own "(N s, …)" parenthetical because the generic time-annotation pass
     # above has already run.
@@ -3695,13 +3742,26 @@ def integrate_trajectory(params: BoosterParams,
             f"q {_q_pa[_i_qa]/1e3:.1f} kPa, α {_alpha_deg[_i_qa]:.1f}°)")
         _insert_chrono(_row_qa)
 
-    # α-limit engagement / envelope-violation flags.
+    # Max lateral load-factor milestone (the applied aero side load).
+    _lg_fin = np.where(np.isfinite(_lateral_g), _lateral_g, -1.0)
+    if np.any(_lg_fin > 0.0):
+        _i_lgm = int(np.argmax(_lg_fin))
+        _row_lg = _milestone(float(t_arr[_i_lgm]))
+        _row_lg['event'] = (
+            f"Max lateral load ({t_arr[_i_lgm]:.0f} s, "
+            f"{_lateral_g[_i_lgm]:.2f} g at α {_alpha_deg[_i_lgm]:.1f}°)")
+        _insert_chrono(_row_lg)
+
+    # α-limit engagement flag.  With the constant-q·α envelope the clamp
+    # "engages" wherever it actually reduced the commanded angle — i.e. the
+    # flown α fell meaningfully short of the raw command.  (No pressure gate:
+    # the envelope self-relaxes as q falls, so engagement is read directly from
+    # the clamp biting, not from an arbitrary q threshold.)
     _alpha_limit_engaged = None
     _lim_ms = getattr(params, '_alpha_limit_deg', None)
     if _lim_ms:
-        _eng = (np.isfinite(_alpha_cmd_deg)
-                & (_alpha_cmd_deg > _lim_ms + 0.1)
-                & (_q_pa > _ALPHA_GATE_Q_PA))
+        _eng = (np.isfinite(_alpha_cmd_deg) & np.isfinite(_alpha_deg)
+                & (_alpha_cmd_deg > _alpha_deg + 0.5))
         if np.any(_eng):
             _ie = np.where(_eng)[0]
             _alpha_limit_engaged = {
@@ -3714,7 +3774,7 @@ def integrate_trajectory(params: BoosterParams,
             _row_al['event'] = (
                 f"α-limit engaged ({t_arr[_ie[0]]:.0f}–{t_arr[_ie[-1]]:.0f} s, "
                 f"cmd α up to {_alpha_limit_engaged['alpha_cmd_max_deg']:.0f}° "
-                f"held at {_lim_ms:.0f}°)")
+                f"held to the q·α envelope, {_lim_ms:.0f}° at max-q)")
             _insert_chrono(_row_al)
     else:
         # No limit set: a large-α maneuver is flown as commanded, so make the
@@ -3793,6 +3853,7 @@ def integrate_trajectory(params: BoosterParams,
         'alpha_cmd_deg':         _alpha_cmd_deg,
         'q_pa':                  _q_pa,
         'q_alpha_kpa_deg':       _q_alpha_kpa_deg,
+        'lateral_g':             _lateral_g,
         'alpha_limit_engaged':   _alpha_limit_engaged,
         'alpha_induced_drag':    bool(getattr(params, '_alpha_induced_drag', False)),
         'glide_regime':          _glide_regime,

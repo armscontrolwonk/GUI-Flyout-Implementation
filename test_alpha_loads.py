@@ -27,14 +27,17 @@ instantly and for free: thrust was defined as the flight direction, so a
 import numpy as np
 
 from booster_models import BOOSTER_DB, get_booster, load_booster_library
-from trajectory import integrate_trajectory, _ALPHA_GATE_Q_PA
+from trajectory import integrate_trajectory
 
 load_booster_library()
 
 LAT, LON, AZ = 40.0, 128.0, 90.0
-# A 1-second 90° dogleg commanded through the high-q regime — the impossible
-# instantaneous turn this feature exists to catch.
+# A 1-second 90° dogleg commanded post-max-q — the impossible instantaneous
+# turn this feature exists to make visible.
 DOGLEG = [(55.0, 56.0, 0.0)]
+# A dogleg spanning ascent max-q (~33 s for No-dong) — where the constant-q·α
+# load envelope actually binds and clamps the angle.
+MAXQ_DOGLEG = [(28.0, 34.0, 180.0)]
 
 _CACHE = {}
 
@@ -109,37 +112,64 @@ def test_dogleg_spikes_alpha_and_flags_envelope():
     assert r['alpha_limit_engaged'] is None      # no limit was set
 
 
-# ── 3. α-limited dogleg: railed, reported, stretched ────────────────────────
+# ── 3. constant-q·α envelope: load held, angle relaxes, no pressure gate ─────
 
-def test_alpha_limit_clamps_flown_alpha():
-    r = _fly(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0)
-    a = np.asarray(r['alpha_deg'])
-    q = np.asarray(r['q_pa'])
-    gated = np.isfinite(a) & (q > _ALPHA_GATE_Q_PA)
-    assert np.max(a[gated]) <= 10.0 + 0.2
+def test_alpha_limit_holds_the_qalpha_load_at_the_ceiling():
+    """A max-q dogleg is clamped so the LOAD q·α stays at the ceiling
+    (α_limit at max-q), not so the angle stays at α_limit.  Near max-q the
+    flown α ≈ α_limit; the clamp engages and is reported."""
+    r = _fly(yaw_maneuvers=MAXQ_DOGLEG, alpha_limit_deg=10.0)
+    a = np.asarray(r['alpha_deg']); q = np.asarray(r['q_pa'])
+    t = np.asarray(r['t']); fin = np.isfinite(a)
+    qmax = q[fin & (t <= 70.0)].max()
+    ceiling = qmax * 10.0                      # kPa·° equivalent (Pa·° here)
+    # q·α never exceeds the ceiling by more than a small tolerance.
+    qa = q[fin] * a[fin]
+    assert qa.max() <= ceiling * 1.05
     eng = r['alpha_limit_engaged']
-    assert eng is not None
-    assert eng['alpha_limit_deg'] == 10.0
-    assert eng['alpha_cmd_max_deg'] > 25.0       # the raw demand was outsize
-    assert 55.0 <= eng['t_start_s'] <= 60.0
+    assert eng is not None and eng['alpha_limit_deg'] == 10.0
+    assert eng['alpha_cmd_max_deg'] > 12.0     # raw demand exceeded the envelope
     assert any(m['event'].startswith('α-limit engaged')
                for m in r['milestones'])
 
 
+def test_envelope_relaxes_as_q_falls_no_pressure_gate():
+    """Constant-load: the allowed α grows as q drops.  Well past max-q the
+    same 10° (at-max-q) limit permits far more than 10° of flown α — and does
+    so smoothly, with no fixed-pressure cutoff."""
+    r = _fly(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0)   # dogleg at low q
+    a = np.asarray(r['alpha_deg']); t = np.asarray(r['t'])
+    dl = np.isfinite(a) & (t >= 55.0) & (t <= 70.0)
+    # Low-q dogleg: the load stays bounded, so tens of degrees are allowed.
+    assert np.nanmax(a[dl]) > 25.0
+
+
 def test_alpha_limit_stretches_the_maneuver():
-    """Clamped, the vehicle turns only as fast as bounded lateral force
-    rotates the velocity vector — so the trajectory genuinely differs from
-    the instantaneous free turn."""
-    r_free = _fly(yaw_maneuvers=DOGLEG)
-    r_lim = _fly(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0)
+    """Clamped at max-q, the vehicle turns only as fast as the bounded lateral
+    force rotates velocity — the trajectory genuinely differs from the free
+    turn, and the flown heading lags the instantly-commanded one."""
+    r_free = _fly(yaw_maneuvers=MAXQ_DOGLEG)
+    r_lim = _fly(yaw_maneuvers=MAXQ_DOGLEG, alpha_limit_deg=10.0)
     assert abs(r_free['range_km'] - r_lim['range_km']) > 10.0
-    # Commanded azimuth completes instantly; the FLOWN azimuth (derived from
-    # the clamped thrust vector) is still far from the 0° target at yaw end.
-    t = np.asarray(r_lim['t'])
-    az = np.asarray(r_lim['az_cmd_deg'])
-    i58 = int(np.searchsorted(t, 58.0))
-    err = abs(((az[i58] - 0.0 + 180.0) % 360.0) - 180.0)
+    t = np.asarray(r_lim['t']); az = np.asarray(r_lim['az_cmd_deg'])
+    i = int(np.searchsorted(t, 33.0))
+    err = abs(((az[i] - 180.0 + 180.0) % 360.0) - 180.0)
     assert err > 20.0
+
+
+# ── lateral-g readout ───────────────────────────────────────────────────────
+
+def test_lateral_g_reported():
+    """The applied aerodynamic lateral load factor is reported as an array and
+    a 'Max lateral load' milestone, and clusters where the guides put it
+    (fractions of a g for a slender liquid)."""
+    r = _fly(yaw_maneuvers=DOGLEG)
+    lg = np.asarray(r['lateral_g']); t = np.asarray(r['t'])
+    assert len(lg) == len(t)
+    fin = lg[np.isfinite(lg)]
+    assert fin.size and 0.0 < float(fin.max()) < 3.0
+    assert any(m['event'].startswith('Max lateral load')
+               for m in r['milestones'])
 
 
 # ── 4. default off = legacy dynamics ────────────────────────────────────────
@@ -195,13 +225,14 @@ def test_induced_drag_is_a_pure_cost_never_extends_range():
 
 
 def test_induced_drag_penalty_grows_with_alpha():
-    """A sharper (un-limited, α≈40°) dogleg pays a larger induced-drag range
-    penalty than the same dogleg clamped to a 10° envelope."""
+    """A free max-q dogleg (large α at high q) pays a larger induced-drag range
+    penalty than the same dogleg clamped to the q·α envelope, which holds the
+    angle down where q is high."""
     def penalty(**kw):
         return (_fly(**kw)['range_km']
                 - _fly(alpha_induced_drag=True, **kw)['range_km'])
-    pen_clamped = penalty(yaw_maneuvers=DOGLEG, alpha_limit_deg=10.0)
-    pen_free = penalty(yaw_maneuvers=DOGLEG)
+    pen_clamped = penalty(yaw_maneuvers=MAXQ_DOGLEG, alpha_limit_deg=10.0)
+    pen_free = penalty(yaw_maneuvers=MAXQ_DOGLEG)
     assert pen_free > pen_clamped > 0.0
 
 

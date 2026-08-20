@@ -5602,14 +5602,19 @@ class FlightPlanDialog(tk.Toplevel):
         # a sharp dogleg slews over the time it physically needs instead of
         # being flown instantly at α≈90°; blank = no limit (the maneuver is
         # flown as commanded and only flagged when it exceeds the envelope).
-        _alv = plan.get('alpha_limit_deg')
-        self._alpha_limit_var = tk.StringVar(
-            value="" if _alv in (None, "") else f"{float(_alv):g}")
+        # Default 10° (SP-8099 mid-envelope) when the plan has never set the
+        # key; a stored None (user cleared it) stays blank.
+        if 'alpha_limit_deg' in plan:
+            _alv = plan.get('alpha_limit_deg')
+            _alv_str = "" if _alv in (None, "") else f"{float(_alv):g}"
+        else:
+            _alv_str = "10"
+        self._alpha_limit_var = tk.StringVar(value=_alv_str)
         ttk.Label(_yf, text="α limit (°):").grid(
             row=4, column=0, sticky=tk.E, padx=3, pady=(8, 1))
         ttk.Entry(_yf, textvariable=self._alpha_limit_var, width=8).grid(
             row=4, column=1, padx=3, pady=(8, 1))
-        ttk.Label(_yf, text="SP-8099: 5–10; blank = warn only",
+        ttk.Label(_yf, text="at max-q (SP-8099 5–10); blank = warn only",
                   foreground="#555555").grid(
             row=4, column=2, columnspan=2, sticky=tk.W, padx=3, pady=(8, 1))
         self._alpha_induced_var = tk.BooleanVar(
@@ -9025,10 +9030,12 @@ class BoosterFlyoutApp(tk.Tk):
                 yv['start'].set(_m(man[0] if len(man) > 0 else ""))
                 yv['stop'].set(_m(man[1] if len(man) > 1 else ""))
                 yv['final_az'].set(_m(man[2] if len(man) > 2 else ""))
-        # Sustained-α envelope (SP-8099) stored with the yaw program.
+        # Sustained-α envelope (SP-8099) stored with the yaw program.  Default
+        # 10° when the plan has never set it (key absent → _gk returns the 10.0
+        # default); a plan that stored None (user cleared it) keeps blank.
         if getattr(self, '_alpha_limit_var', None):
-            _al = _gk('alpha_limit_deg')
-            self._alpha_limit_var.set("" if _al in (None, "") else str(_al))
+            _al = _gk('alpha_limit_deg', 10.0)
+            self._alpha_limit_var.set("" if _al in (None, "") else f"{float(_al):g}")
         # α-induced boost drag toggle stored with the yaw program.
         if getattr(self, '_alpha_induced_var', None):
             self._alpha_induced_var.set(bool(_gk('alpha_induced_drag', False)))
@@ -12915,6 +12922,17 @@ class BoosterFlyoutApp(tk.Tk):
                         xy=(_tb[_qa_i], _qb[_qa_i]),
                         xytext=(_dx, 8), textcoords='offset points',
                         fontsize=6, color='crimson', va='bottom', ha=_ha)
+            # Peak lateral load factor (applied aero side load) — the metric
+            # payload user's guides tabulate; a small corner readout.
+            _lg = np.asarray(r.get('lateral_g', []))
+            if len(_lg) == len(_t_aero):
+                _lg_b = _lg[_mask]
+                _lg_f = _lg_b[np.isfinite(_lg_b)]
+                if _lg_f.size and float(_lg_f.max()) > 0.0:
+                    ax_qm.text(
+                        0.02, 0.97, f"peak lateral {_lg_f.max():.2f} g",
+                        transform=ax_qm.transAxes, fontsize=6, color='crimson',
+                        va='top', ha='left')
             _l1, _lb1 = ax_qm.get_legend_handles_labels()
             _l2, _lb2 = ax_mch.get_legend_handles_labels()
             ax_qm.legend(_l1 + _l2, _lb1 + _lb2, fontsize=6, loc='upper right')

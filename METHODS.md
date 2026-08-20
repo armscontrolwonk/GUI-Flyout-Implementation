@@ -2268,32 +2268,47 @@ max-q reports no consequence. Two mechanisms close that gap:
 powered flight, `α(t)` = angle between the commanded thrust direction
 (the same `_commanded_thrust_dir` the EOM flew) and the air-relative
 velocity (ECEF velocity — the atmosphere co-rotates), the dynamic
-pressure `q(t) = ½ρv²`, and the combined-load trace `q·α(t)` (kPa·°).
-These are returned as `alpha_deg`, `alpha_cmd_deg`, `q_pa`, and
-`q_alpha_kpa_deg`, drawn on the guidance and dynamic-pressure plots,
-and summarised by a **Max q·α** Flight Timeline milestone. A plan that
-demands α > 25° while q > 1 kPa — beyond any realistic envelope
-(|α| ≲ 25° is also the Munk-model validity edge used in Section 8) —
-gets a **⚠ α exceeds SP-8099 envelope** timeline warning: the maneuver
-is still flown as commanded, but never silently.
+pressure `q(t) = ½ρv²`, the combined-load trace `q·α(t)` (kPa·°), and
+the **applied lateral load factor** `n_lat(t) = q·A_ref·C_Nα·α / (m·g₀)`
+(the aerodynamic side load in g — the quantity payload user's guides
+tabulate; see below). These are returned as `alpha_deg`, `alpha_cmd_deg`,
+`q_pa`, `q_alpha_kpa_deg`, and `lateral_g`, drawn on the guidance and
+dynamic-pressure plots, and summarised by **Max q·α** and **Max lateral
+load** Flight Timeline milestones. When *no* limit is set, a plan that
+demands α > 25° while q > 1 kPa gets a **⚠ α exceeds SP-8099 envelope**
+timeline warning: the maneuver is still flown as commanded, but never
+silently.
 
-**The α limit (opt-in, per flight plan).** `integrate_trajectory`
-accepts `alpha_limit_deg` (GUI: the "α limit" field in the yaw/dogleg
-panel; SP-8099's 5–10° is the documented default range). When set, the
-commanded thrust direction is clamped to a cone of half-angle α_max
-about the velocity vector — a spherical interpolation from `v̂` toward
-the raw command, stopped at the cone — whenever q exceeds a 100 Pa
-gate. Under the clamp the vehicle turns only as fast as the bounded
-lateral thrust component rotates the velocity vector, so a commanded
-instantaneous dogleg stretches over the time it physically needs
-instead of being flown at α ≈ 90° for free; a maneuver the envelope
-cannot complete before burnout honestly fails to complete. Engagement
-is reported (`alpha_limit_engaged`: window, peak commanded α, limit)
-and flagged as an **α-limit engaged** timeline milestone. Below the
-gate (upper atmosphere / vacuum) the command is followed directly:
-the α limit is an aerodynamic-load constraint, and an exoatmospheric
-dogleg costs only the thrust-vector misalignment the EOM already
-integrates. `alpha_limit_deg = None` (the default everywhere) is
+**The α limit — a constant-q·α load envelope (per flight plan).**
+`integrate_trajectory` accepts `alpha_limit_deg` (GUI: the "α limit"
+field in the Flight Plan dialog's yaw/dogleg panel, **defaulting to
+10°** — the top of SP-8099's 5–10° band — and user-editable; blank =
+no limit, warn only). The number is read in SP-8099's own convention:
+the maximum α *at the maximum-dynamic-pressure condition*. The enforced
+quantity is therefore the **load**, not the angle —
+
+```
+q(t)·α(t) ≤ q_max-q · alpha_limit_deg      ⇒      α_allow(t) = alpha_limit_deg · q_max-q / q(t)
+```
+
+— so the allowance equals the limit at max-q, grows in proportion as q
+falls, and is unbounded as `q → 0`. The commanded thrust is clamped to a
+cone of half-angle `α_allow(t)` about the velocity vector (spherical
+interpolation from `v̂` toward the command, stopped at the cone). This
+**replaces the earlier hand-picked 100 Pa pressure gate**: the envelope
+now self-deactivates in vacuum as a *consequence of the load physics*
+(q·α → 0), with no arbitrary constant. `q_max-q` is the ascent max-q,
+tracked as a running maximum during integration (`params._maxq_pa`);
+max-q is reached early, before any dogleg, so the reference is settled
+by the time a maneuver needs clamping. Under the clamp the vehicle turns
+only as fast as the bounded lateral force rotates the velocity vector, so
+a commanded instantaneous dogleg stretches over the time it physically
+needs; a maneuver whose *load* stays under the ceiling (e.g. a large-α
+turn where q is already low) is permitted, while one that would spike
+q·α at max-q is held to the envelope. Engagement — the clamp actually
+reducing the commanded angle — is reported (`alpha_limit_engaged`) and
+flagged as an **α-limit engaged** milestone. `alpha_limit_deg = None`
+(the `integrate_trajectory` default; the GUI default is 10°) is
 byte-identical to the legacy behavior.
 
 **α-induced drag (opt-in, per flight plan).** By default the α term is
@@ -2347,6 +2362,53 @@ limit an engine-gimballed booster does not share (SP-8099's "hard-over
 engine" remains the correct attitude bound). The α limit above keeps the
 maneuver inside the envelope where the screening cross-flow model is
 defensible.
+
+#### Lateral load factor, and the shelved vehicle-derived capacity
+
+The **applied** lateral load factor `n_lat = q·A_ref·C_Nα·α / (m·g₀)`
+(returned as `lateral_g`, shown as a "peak lateral N g" plot readout and
+a "Max lateral load" milestone) is the aerodynamic side load in g — the
+same quantity every payload user's guide tabulates for the atmospheric
+phase. Cross-checking against published guides puts the steady-state
+first-stage lateral load in a tight band: **START-1 0.7 g, Cyclone-4
+0.3–0.6 g, Minotaur I/IV < 0.5 g** (with a slender liquid like Scud
+estimated ~0.2 g). This band, plus SP-8099's 5–10° and the CNES result
+that a simplified q·α estimate matches full 6-DOF within ~5%
+(Delorme et al., EUCASS 2013), is what justifies the 10° / order-of-
+0.5 g default. It is an *applied-load* readout only — no structural
+capacity is claimed.
+
+A **vehicle-derived structural capacity** was prototyped and
+deliberately **shelved** (kept here as a documented option, not wired
+in). The idea: anchor a thin-cylinder bending capacity to the axial
+thrust the case demonstrably carries, `M_cap ≈ F·R/2`, and convert to a
+lateral-g ceiling — no material or skin-gauge data needed. It reproduces
+the right order of magnitude (START-1: estimate 0.56 g vs published
+0.7 g) but was judged **not accurate or general enough to enforce a
+limit**, for reasons worth recording:
+
+- It estimates *capacity*, whereas the guides publish *experienced*
+  load; the two coincide only for loads-optimised vehicles. A repurposed
+  ICBM motor (Minotaur-IV = Peacekeeper SR118) is over-built for its SLV
+  role, so the estimate (1.05 g) far exceeds its < 0.5 g nominal —
+  consistent (`capacity ≥ nominal·FoS`) but unvalidatable, since capacity
+  ground truth is proprietary. Net accuracy is **≈ ±2×, anchored at a
+  single point**.
+- `M_cr = P_cr·R/2` assumes **monocoque** construction; it is meaningless
+  for a pressure-stabilised (balloon) tank, and the `P_cr ≈ thrust`
+  anchor ignores that ground-handling or the combined max-q case may
+  size the structure instead.
+- The bending arm (`≈ 0.25·L`) swings the answer ~3× and was effectively
+  fitted to the one anchor; the real methods (SMC-S-004; CNES) carry
+  distributed mass/aero to locate critical stations.
+- It limits the **steering** term, which SP-8099 (p. 10) and CNES both
+  put at 0.05–0.15 of the *wind* bending moment — and Thrusty models no
+  winds, so the load that actually sizes the airframe is out of reach.
+
+The honest conclusion: the enforced envelope is the SP-8099 α limit
+(constant-q·α, 10° default, user-set), the reporting is the q·α and
+lateral-g traces, and `F·R/2` remains a research-grade capacity gauge
+recorded here for anyone who later adds a structural model. See TODO.md.
 
 ---
 
@@ -4611,10 +4673,31 @@ optimisation) should use higher-fidelity tools.
   for the α energy cost (Section 9.6): the induced-drag polar
   `C_D = C_D0 + k·C_L²` and the observation that an extreme-α (180°)
   reversal is only flyable because dynamic pressure collapses (velocity
-  to ~10 m/s) — the same q-dependence that motivates gating the α limit
-  on dynamic pressure. Its fin-effectiveness dead zone
-  (35° < α < 130°) is a control-authority limit specific to fin-steered
-  airframes, not gimballed boosters.
+  to ~10 m/s) — the same q-dependence behind the constant-q·α envelope.
+  Its fin-effectiveness dead zone (35° < α < 130°) is a control-authority
+  limit specific to fin-steered airframes, not gimballed boosters.
+
+- **Delorme, D., Desmariaux, J., Carpentier, B., & Espinosa, A.** (2013).
+  "Day-of-launch wind biasing trajectory optimization impact on launch
+  vehicles pre-dimensioning methodologies." *5th European Conference for
+  Aerospace Sciences (EUCASS)*, CNES Launchers Directorate. Source for
+  the q·α load framing (Section 9.6): states q·α as "the main driver of
+  the lateral loads applied to the structure of the launch vehicle during
+  atmospheric flight," and validates that a simplified "phase-1" q·α
+  estimate matches full 6-DOF within ~5% (slightly conservative) — the
+  fidelity warrant for a screening q·α limit. Its controllability
+  criterion (K1 control efficiency vs A6 aerodynamic instability) uses
+  the same inputs (thrust, lever arm, inertia, q, S, C_Nα, CP–CoM arm).
+
+- **Payload user's guides** (lateral load-factor cross-check, Section
+  9.6): START-1 *Space Launch System User's Handbook Vol. I* (2002),
+  Table 4-1 — 1st-stage lateral 0.7 g; Cyclone-4 User's Guide §5.5 Tables
+  20–21 — 1st-stage lateral 0.3–0.6 g; Orbital/Northrop *Minotaur I*
+  (TM-14025) and *Minotaur IV/V/VI* (TM-17589) — steady-state lateral
+  < 0.5 g (large CLA transient laterals are structural-dynamics response,
+  out of scope for a 3-DOF tool); Pegasus User's Guide Fig. 4-3 — the
+  −2.33 g aerodynamic pull-up is a winged-lift load, the air-launch
+  analogue relevant to the parked air-launch work (TODO.md).
 
 - **Tsiolkovsky, K. E.** (1903). *Issledovanie mirovykh prostranstv
   reaktivnymi priborami* [Exploration of Outer Space by Reaction
