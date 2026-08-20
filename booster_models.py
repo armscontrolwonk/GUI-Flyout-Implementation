@@ -999,6 +999,16 @@ MODEL_OPTIONS = {
         # Atmosphere model lives in atmosphere.py; reconfigure it on change.
         "apply":   lambda v: configure_atmosphere(model=v),
     },
+    "terrain": {
+        "label":   "Terrain (DEM)",
+        "choices": ("terrarium", "coarse"),
+        "labels":  {"terrarium": "Terrarium z11 tiles (network, cached)",
+                    "coarse":    "Bundled 0.05° grid (offline)"},
+        "default": "terrarium",
+        # Governs GUI-side pad-elevation sampling (terrain.py); the trajectory
+        # integrator always uses the offline coarse grid for determinism.
+        "apply":   lambda v: __import__("terrain").configure_terrain(v),
+    },
 }
 _MODEL_SELECTION = {k: v["default"] for k, v in MODEL_OPTIONS.items()}
 # Reflect the atmosphere model actually active (msis may have fallen back to

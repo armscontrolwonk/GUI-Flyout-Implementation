@@ -1518,8 +1518,16 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
 def _hit_ground(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                 gt_turn_stop_s, target_orbit_alt_m=0.0, t_final_ignition=0.0,
                 yaw_maneuvers=None):
-    """Event: booster hits the ground (altitude = 0)."""
-    _, _, alt = ecef_to_geodetic(state[:3])
+    """Event: booster hits the ground.
+
+    With the DEM on (params._terrain_dem), the ground is the real terrain height
+    at the sub-vehicle point (terrain.py coarse grid — offline, bilinear, so the
+    event stays continuous for the root-finder); otherwise flat sea level."""
+    lat, lon, alt = ecef_to_geodetic(state[:3])
+    if getattr(params, '_terrain_dem', False):
+        import terrain as _terrain
+        return alt - _terrain.ground_elevation(np.degrees(lat), np.degrees(lon),
+                                               hi_res=False)
     return alt
 
 _hit_ground.terminal  = True
@@ -1935,6 +1943,8 @@ def integrate_trajectory(params: BoosterParams,
                          launch_elevation_deg: float = None,
                          alpha_limit_deg: float = None,
                          alpha_induced_drag: bool = False,
+                         terrain_dem: bool = False,
+                         launch_elev_m: float = None,
                          _search_mode: bool = False):
     """
     Integrate a booster trajectory from launch to impact.
@@ -1964,6 +1974,16 @@ def integrate_trajectory(params: BoosterParams,
                             _boost_alpha_aero_force).  Off by default so every
                             validated trajectory is byte-identical; the effect
                             is a pure increment that vanishes at α = 0.
+    terrain_dem           : when True, the trajectory starts at the launch
+                            site's real ground elevation and terminates on real
+                            terrain height (terrain.py bundled coarse grid —
+                            offline, no network inside the integrator).  Off by
+                            default = flat sea-level Earth, byte-identical to
+                            the legacy dynamics and the Forden benchmarks.
+    launch_elev_m         : precise launch-pad elevation (m) to use instead of
+                            the coarse-grid sample — e.g. the hi-res value
+                            baked into launch_sites.json.  Only read when
+                            terrain_dem is True; None = sample the grid.
 
     Returns
     -------
@@ -2094,6 +2114,11 @@ def integrate_trajectory(params: BoosterParams,
     # α-induced boost aero (normal force + induced drag).  Opt-in; default off
     # is byte-identical to the legacy dynamics.
     params._alpha_induced_drag = bool(alpha_induced_drag)
+    # Terrain DEM: when on, launch from real ground elevation and terminate the
+    # trajectory on real ground height (terrain.py coarse grid — offline, no
+    # network inside the integrator).  Opt-in; default off = flat sea-level
+    # Earth, byte-identical to the legacy dynamics and the Forden benchmarks.
+    params._terrain_dem = bool(terrain_dem)
     # Commanded pull-up phase latch [0 fall | 1 pulling | 2 handed off] —
     # one-way per mission; persists across integration passes, reset here.
     params._pullup_phase = [0]
@@ -2126,8 +2151,17 @@ def integrate_trajectory(params: BoosterParams,
     az   = np.radians(launch_azimuth_deg)
 
     # Initial position on surface; initial velocity: small nudge along the
-    # launch direction so the integrator starts above ground.
-    pos0 = geodetic_to_ecef(lat0, lon0, 0.0)
+    # launch direction so the integrator starts above ground.  With the DEM on,
+    # start at the launch site's real elevation (the caller's precise baked
+    # value when given, else the coarse grid); flat sea level otherwise.
+    if terrain_dem:
+        import terrain as _terrain
+        _launch_elev = (float(launch_elev_m) if launch_elev_m is not None
+                        else _terrain.ground_elevation(launch_lat_deg, launch_lon_deg,
+                                                       hi_res=False))
+    else:
+        _launch_elev = 0.0
+    pos0 = geodetic_to_ecef(lat0, lon0, _launch_elev)
     e_east0, e_north0, e_up0 = _enu_frame(lat0, lon0)
     el0  = np.radians(params.launch_elevation_deg)
     launch_dir = (np.cos(el0) * np.sin(az) * e_east0 +
@@ -4058,7 +4092,8 @@ def _search_one(args):
     """
     (la, ts,
      params, lat, lon, az,
-     guidance, cutoff, gt_start, max_time_s) = args
+     guidance, cutoff, gt_start, max_time_s,
+     terrain_dem, launch_elev_m) = args
     ts_str = f"ts={ts:.1f}s" if ts is not None else "ts=full"
     try:
         r = integrate_trajectory(
@@ -4069,6 +4104,8 @@ def _search_one(args):
             gt_turn_start_s=gt_start,
             gt_turn_stop_s=ts,
             max_time_s=max_time_s,
+            terrain_dem=terrain_dem,
+            launch_elev_m=launch_elev_m,
             _search_mode=True,
         )
         if r.get('orbital', False):
@@ -4130,7 +4167,9 @@ def maximize_range(params: BoosterParams,
                    gt_turn_start_s: float = 5.0,
                    gt_turn_stop_s: float = None,
                    reentry_query_alt_km: float = None,
-                   cancel_event: threading.Event = None) -> dict:
+                   cancel_event: threading.Event = None,
+                   terrain_dem: bool = False,
+                   launch_elev_m: float = None) -> dict:
     """
     Find the maximum range by optimising burnout angle and turn-stop time.
 
@@ -4165,6 +4204,8 @@ def maximize_range(params: BoosterParams,
             cutoff_time_s=effective_cutoff,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
+            terrain_dem=terrain_dem,
+            launch_elev_m=launch_elev_m,
         )
         traj['max_range_km']           = traj['range_km']
         traj['optimal_burnout_angle_deg'] = burnout_angle_deg
@@ -4178,7 +4219,8 @@ def maximize_range(params: BoosterParams,
 
     # Common kwargs passed unchanged to every _search_one call.
     _common = (params, launch_lat_deg, launch_lon_deg, launch_azimuth_deg,
-               effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0)
+               effective_guidance, effective_cutoff, gt_turn_start_s, 3600.0,
+               terrain_dem, launch_elev_m)
 
     def _run_parallel(candidates, label="coarse"):
         """Submit a list of (la, ts) pairs; return (la, ts, range_km) list.
@@ -4273,6 +4315,8 @@ def maximize_range(params: BoosterParams,
             gt_turn_start_s=gt_turn_start_s,
             gt_turn_stop_s=gt_turn_stop_s,
             reentry_query_alt_km=reentry_query_alt_km,
+            terrain_dem=terrain_dem,
+            launch_elev_m=launch_elev_m,
         )
         traj['max_range_km']           = None
         traj['optimal_burnout_angle_deg'] = None
@@ -4288,6 +4332,8 @@ def maximize_range(params: BoosterParams,
         gt_turn_start_s=gt_turn_start_s,
         gt_turn_stop_s=best_ts,
         reentry_query_alt_km=reentry_query_alt_km,
+        terrain_dem=terrain_dem,
+        launch_elev_m=launch_elev_m,
     )
     traj['max_range_km']           = traj['range_km']
     traj['optimal_burnout_angle_deg'] = best_la

@@ -1,51 +1,274 @@
 [
-  {"name": "Woomera",                    "country": "Australia",   "lat": -31.1500, "lon":  136.8200},
-
-  {"name": "Alcântara",                  "country": "Brazil",      "lat":  -2.3726, "lon":  -44.3962},
-
-  {"name": "Jiuquan (LC-4)",             "country": "China",       "lat":  40.9608, "lon":  100.2986},
-  {"name": "Taiyuan (LC-9)",             "country": "China",       "lat":  38.8490, "lon":  111.6140},
-  {"name": "Wenchang (LC-1)",            "country": "China",       "lat":  19.6145, "lon":  110.9517},
-  {"name": "Xichang (LC-2)",             "country": "China",       "lat":  28.2463, "lon":  102.0263},
-
-  {"name": "Sohae (Main Pad)",           "country": "DPRK",        "lat":  39.6600, "lon":  124.7050},
-  {"name": "Tonghae (Musudan-ri)",       "country": "DPRK",        "lat":  40.8556, "lon":  129.6644},
-  {"name": "Sunan Airfield",             "country": "DPRK",        "lat":  39.1240, "lon":  125.6680},
-
-  {"name": "Kourou (ELA-3)",             "country": "France",      "lat":   5.2390, "lon":  -52.7690},
-
-  {"name": "Satish Dhawan SC (FLP)",     "country": "India",       "lat":  13.7330, "lon":   80.2350},
-  {"name": "Satish Dhawan SC (SLP)",     "country": "India",       "lat":  13.7190, "lon":   80.2280},
-
-  {"name": "Chabahar Space Base",        "country": "Iran",        "lat":  25.1431, "lon":   61.2606},
-  {"name": "Imam Khomeini Spaceport",    "country": "Iran",        "lat":  35.2347, "lon":   53.9208},
-  {"name": "Shahroud (Site 1)",          "country": "Iran",        "lat":  36.2050, "lon":   55.2980},
-
-  {"name": "Palmachim AB",               "country": "Israel",      "lat":  31.8986, "lon":   34.6892},
-
-  {"name": "Tanegashima (Y-1)",          "country": "Japan",       "lat":  30.4005, "lon":  130.9756},
-  {"name": "Uchinoura SC",               "country": "Japan",       "lat":  31.2519, "lon":  131.0811},
-
-  {"name": "Mahia (LC-1)",               "country": "New Zealand", "lat": -39.2600, "lon":  177.8600},
-
-  {"name": "Andøya",                     "country": "Norway",      "lat":  69.2900, "lon":   16.0200},
-
-  {"name": "Sonmiani",                   "country": "Pakistan",    "lat":  25.0600, "lon":   66.7500},
-
-  {"name": "Baikonur (Site 1)",          "country": "Russia",      "lat":  45.9200, "lon":   63.3420},
-  {"name": "Dombarovsky (Yasny)",        "country": "Russia",      "lat":  51.3600, "lon":   59.8500},
-  {"name": "Kapustin Yar",               "country": "Russia",      "lat":  48.5700, "lon":   46.2500},
-  {"name": "Plesetsk (Site 43)",         "country": "Russia",      "lat":  62.9270, "lon":   40.5770},
-  {"name": "Vostochny",                  "country": "Russia",      "lat":  51.8840, "lon":  128.3340},
-
-  {"name": "Naro SC",                    "country": "South Korea", "lat":  34.4327, "lon":  127.5353},
-
-  {"name": "Esrange",                    "country": "Sweden",      "lat":  67.8900, "lon":   21.1000},
-
-  {"name": "Cape Canaveral (SLC-40)",    "country": "USA",         "lat":  28.5619, "lon":  -80.5772},
-  {"name": "Cape Canaveral (SLC-41)",    "country": "USA",         "lat":  28.5835, "lon":  -80.5830},
-  {"name": "Kauai Test Facility (PMRF)", "country": "USA",         "lat":  22.0228, "lon": -159.7850},
-  {"name": "Vandenberg (SLC-4E)",        "country": "USA",         "lat":  34.6320, "lon": -120.6130},
-  {"name": "Wallops Island",             "country": "USA",         "lat":  37.9402, "lon":  -75.4664},
-  {"name": "White Sands",                "country": "USA",         "lat":  32.3799, "lon": -106.4823}
+  {
+    "name": "Woomera",
+    "country": "Australia",
+    "lat": -31.15,
+    "lon": 136.82,
+    "elev_m": 169,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Alcântara",
+    "country": "Brazil",
+    "lat": -2.3726,
+    "lon": -44.3962,
+    "elev_m": 40,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Jiuquan (LC-4)",
+    "country": "China",
+    "lat": 40.9608,
+    "lon": 100.2986,
+    "elev_m": 1074,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Taiyuan (LC-9)",
+    "country": "China",
+    "lat": 38.849,
+    "lon": 111.614,
+    "elev_m": 1488,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Wenchang (LC-1)",
+    "country": "China",
+    "lat": 19.6145,
+    "lon": 110.9517,
+    "elev_m": 11,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Xichang (LC-2)",
+    "country": "China",
+    "lat": 28.2463,
+    "lon": 102.0263,
+    "elev_m": 1857,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Sohae (Main Pad)",
+    "country": "DPRK",
+    "lat": 39.66,
+    "lon": 124.705,
+    "elev_m": 61,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Tonghae (Musudan-ri)",
+    "country": "DPRK",
+    "lat": 40.8556,
+    "lon": 129.6644,
+    "elev_m": 44,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Sunan Airfield",
+    "country": "DPRK",
+    "lat": 39.124,
+    "lon": 125.668,
+    "elev_m": 16,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Kourou (ELA-3)",
+    "country": "France",
+    "lat": 5.239,
+    "lon": -52.769,
+    "elev_m": 10,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Satish Dhawan SC (FLP)",
+    "country": "India",
+    "lat": 13.733,
+    "lon": 80.235,
+    "elev_m": 21,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Satish Dhawan SC (SLP)",
+    "country": "India",
+    "lat": 13.719,
+    "lon": 80.228,
+    "elev_m": 5,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Chabahar Space Base",
+    "country": "Iran",
+    "lat": 25.1431,
+    "lon": 61.2606,
+    "elev_m": 25,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Imam Khomeini Spaceport",
+    "country": "Iran",
+    "lat": 35.2347,
+    "lon": 53.9208,
+    "elev_m": 943,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Shahroud (Site 1)",
+    "country": "Iran",
+    "lat": 36.205,
+    "lon": 55.298,
+    "elev_m": 1472,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Palmachim AB",
+    "country": "Israel",
+    "lat": 31.8986,
+    "lon": 34.6892,
+    "elev_m": 9,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Tanegashima (Y-1)",
+    "country": "Japan",
+    "lat": 30.4005,
+    "lon": 130.9756,
+    "elev_m": 12,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Uchinoura SC",
+    "country": "Japan",
+    "lat": 31.2519,
+    "lon": 131.0811,
+    "elev_m": 210,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Mahia (LC-1)",
+    "country": "New Zealand",
+    "lat": -39.26,
+    "lon": 177.86,
+    "elev_m": -1,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Andøya",
+    "country": "Norway",
+    "lat": 69.29,
+    "lon": 16.02,
+    "elev_m": 140,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Sonmiani",
+    "country": "Pakistan",
+    "lat": 25.06,
+    "lon": 66.75,
+    "elev_m": 49,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Baikonur (Site 1)",
+    "country": "Russia",
+    "lat": 45.92,
+    "lon": 63.342,
+    "elev_m": 117,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Dombarovsky (Yasny)",
+    "country": "Russia",
+    "lat": 51.36,
+    "lon": 59.85,
+    "elev_m": 273,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Kapustin Yar",
+    "country": "Russia",
+    "lat": 48.57,
+    "lon": 46.25,
+    "elev_m": 21,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Plesetsk (Site 43)",
+    "country": "Russia",
+    "lat": 62.927,
+    "lon": 40.577,
+    "elev_m": 93,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Vostochny",
+    "country": "Russia",
+    "lat": 51.884,
+    "lon": 128.334,
+    "elev_m": 277,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Naro SC",
+    "country": "South Korea",
+    "lat": 34.4327,
+    "lon": 127.5353,
+    "elev_m": 129,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Esrange",
+    "country": "Sweden",
+    "lat": 67.89,
+    "lon": 21.1,
+    "elev_m": 334,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Cape Canaveral (SLC-40)",
+    "country": "USA",
+    "lat": 28.5619,
+    "lon": -80.5772,
+    "elev_m": 5,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Cape Canaveral (SLC-41)",
+    "country": "USA",
+    "lat": 28.5835,
+    "lon": -80.583,
+    "elev_m": 6,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Kauai Test Facility (PMRF)",
+    "country": "USA",
+    "lat": 22.0228,
+    "lon": -159.785,
+    "elev_m": 5,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Vandenberg (SLC-4E)",
+    "country": "USA",
+    "lat": 34.632,
+    "lon": -120.613,
+    "elev_m": 123,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "Wallops Island",
+    "country": "USA",
+    "lat": 37.9402,
+    "lon": -75.4664,
+    "elev_m": 11,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  },
+  {
+    "name": "White Sands",
+    "country": "USA",
+    "lat": 32.3799,
+    "lon": -106.4823,
+    "elev_m": 1294,
+    "elev_source": "AWS Terrarium z11 (retrieved 2026-08-20)"
+  }
 ]

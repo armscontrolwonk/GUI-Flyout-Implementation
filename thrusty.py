@@ -6658,6 +6658,8 @@ class FootprintDialog(tk.Toplevel):
                     launch_elevation_deg=el,
                     alpha_limit_deg=self._app._alpha_limit_value(),
                     alpha_induced_drag=self._app._alpha_induced_value(),
+                    terrain_dem=self._app._terrain_dem_value(),
+                    launch_elev_m=self._app._launch_elev_value(),
                     max_time_s=_max_t,
                 )
             except Exception:
@@ -7890,6 +7892,20 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Button(lf_grid, text="Estimate…", width=10,
                    command=self._estimate_azimuth
                    ).grid(row=2, column=2, sticky=tk.W, padx=4, pady=2)
+
+        # Terrain (DEM): launch from real ground elevation and terminate on real
+        # ground height (terrain.py — bundled coarse grid, offline).  Off by
+        # default = flat sea-level Earth (the Forden benchmark condition).
+        self._terrain_dem_var = tk.BooleanVar(value=False)
+        _terr_row = ttk.Frame(lf_grid)
+        _terr_row.grid(row=3, column=0, columnspan=3, sticky=tk.W,
+                       padx=(8, 2), pady=(2, 4))
+        ttk.Checkbutton(_terr_row, text="Use terrain (DEM)",
+                        variable=self._terrain_dem_var,
+                        command=self._on_terrain_toggled).pack(side=tk.LEFT)
+        self._terrain_elev_lbl = ttk.Label(_terr_row, text="",
+                                           foreground="#555555")
+        self._terrain_elev_lbl.pack(side=tk.LEFT, padx=(6, 0))
 
         # Flight Plan section takes its place now (after Launch Site), then the
         # ascent strip is built inside it as a plain frame — one consolidated
@@ -9384,6 +9400,7 @@ class BoosterFlyoutApp(tk.Tk):
         self._launch_lon.set(f"{site['lon']:.4f}")
         is_user = name not in _BUNDLED_SITE_NAMES
         self._site_del_btn.config(state=tk.NORMAL if is_user else tk.DISABLED)
+        self._on_terrain_toggled()
 
     def _new_site(self):
         """Clear the site selector and lat/lon fields for fresh entry."""
@@ -11818,6 +11835,56 @@ class BoosterFlyoutApp(tk.Tk):
         _v = getattr(self, '_alpha_induced_var', None)
         return bool(_v and _v.get())
 
+    def _terrain_dem_value(self):
+        """Whether the run uses real terrain (DEM) for launch and impact."""
+        _v = getattr(self, '_terrain_dem_var', None)
+        return bool(_v and _v.get())
+
+    def _launch_elev_value(self):
+        """Baked launch-pad elevation (m) for the current lat/lon, or None.
+
+        launch_sites.json carries a per-site `elev_m` sampled once at high
+        resolution (see its `elev_source`), which is finer than the bundled
+        coarse grid the integrator falls back to.  Use it only while the
+        lat/lon fields still sit on that site — once the user moves the pad,
+        the baked number belongs to somewhere else and terrain.py resolves
+        the elevation from the grid instead.
+        """
+        site = self._site_map.get(self._site_var.get())
+        if site is None or site.get('elev_m') is None:
+            return None
+        try:
+            lat = float(self._launch_lat.get())
+            lon = float(self._launch_lon.get())
+        except (ValueError, AttributeError, tk.TclError):
+            return None
+        if abs(lat - float(site['lat'])) > 1e-4 or abs(lon - float(site['lon'])) > 1e-4:
+            return None
+        return float(site['elev_m'])
+
+    def _on_terrain_toggled(self, _event=None):
+        """Refresh the elevation readout beside the "Use terrain (DEM)" box."""
+        lbl = getattr(self, '_terrain_elev_lbl', None)
+        if lbl is None:
+            return
+        if not self._terrain_dem_value():
+            lbl.config(text="")
+            return
+        elev = self._launch_elev_value()
+        if elev is not None:
+            lbl.config(text=f"pad {elev:,.0f} m (site)")
+            return
+        # No baked site value — sample the bundled coarse grid for the readout,
+        # which is exactly what the integrator will use for this pad.
+        try:
+            import terrain as _terrain
+            lat = float(self._launch_lat.get())
+            lon = float(self._launch_lon.get())
+            lbl.config(
+                text=f"pad {_terrain.ground_elevation(lat, lon):,.0f} m (grid)")
+        except Exception:
+            lbl.config(text="pad elevation unavailable")
+
     def _get_inputs(self):
         booster  = get_booster(self._booster_var.get())
 
@@ -12418,7 +12485,9 @@ class BoosterFlyoutApp(tk.Tk):
                                         gt_turn_start_s=gt_start_s,
                                         gt_turn_stop_s=gt_stop_s,
                                         reentry_query_alt_km=q_alt,
-                                        cancel_event=self._cancel_event)
+                                        cancel_event=self._cancel_event,
+                                        terrain_dem=self._terrain_dem_value(),
+                                        launch_elev_m=self._launch_elev_value())
             else:
                 # Orbital insertion trajectories can have very long flight
                 # times: a highly elliptical transfer orbit peaks at thousands
@@ -12438,6 +12507,8 @@ class BoosterFlyoutApp(tk.Tk):
                     launch_elevation_deg=launch_elevation_deg,
                     alpha_limit_deg=self._alpha_limit_value(),
                     alpha_induced_drag=self._alpha_induced_value(),
+                    terrain_dem=self._terrain_dem_value(),
+                    launch_elev_m=self._launch_elev_value(),
                     max_time_s=_max_t)
             self._result = result
             self.after(0, self._on_result_ready)
