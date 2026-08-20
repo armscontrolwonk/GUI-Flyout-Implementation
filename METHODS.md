@@ -212,6 +212,72 @@ longitude (`_enu_frame`, `trajectory.py`). The unit vectors are
 The thrust direction is computed in ENU according to the guidance law
 (Section 9) and then transformed back to ECEF for the EOM integration.
 
+### 2.5 Terrain — digital elevation model
+
+By default the Earth's surface is the WGS-84 ellipsoid at `h = 0`:
+trajectories launch from sea level and terminate when the altitude crosses
+zero, whatever the real ground underneath. This is the flat-surface
+condition all the Forden benchmark comparisons (Section 15) were validated
+against, and it remains the default. The **Use terrain (DEM)** checkbox in
+the Launch Site panel opts a run into real topography
+(`integrate_trajectory(terrain_dem=True)`), which changes exactly two
+things:
+
+1. **Launch altitude.** The initial state is placed at the launch site's
+   real ground elevation. A pad's precise elevation, when known, is passed
+   as `launch_elev_m` — every bundled site in `launch_sites.json` carries a
+   pre-baked `elev_m` (with an `elev_source` provenance string) sampled once
+   from high-resolution tiles; a hand-entered pad falls back to the bundled
+   coarse grid. Starting Xichang at its true 1 857 m rather than 0 m gives
+   the vehicle ~1.9 km less atmosphere to climb through, a ~1 % range
+   effect for an MRBM-class booster.
+
+2. **Ground-impact termination.** The `_hit_ground` event root-finds
+   `alt − h_ground(φ, λ)` instead of `alt`, where `h_ground` is the terrain
+   height under the sub-vehicle point, floored to 0 over the oceans
+   (`terrain.py:ground_elevation` — the sea surface, not the sea floor, is
+   the trajectory floor). The same floor terminates a shot into the Tibetan
+   plateau ~4 000 m earlier than the sea-level assumption. Bilinear
+   interpolation keeps the event function continuous, which `solve_ivp`'s
+   root-finder requires.
+
+**Elevation data (`terrain.py`).** Two layers, both derived from the AWS
+Open Data *Terrarium* terrain tiles (`elevation-tiles-prod`, a public global
+blend of SRTM, GMTED2010, ETOPO1, and national DEMs; elevation is
+PNG-encoded as `h = 256R + G + B/256 − 32768` metres):
+
+* **Coarse (bundled, offline)** — `data/dem/terrain_0p05deg.npy`, a
+  7200×3600 int16 grid at 0.05° (~5.5 km) resolution covering the globe,
+  produced reproducibly by `dem_build.py` from the full zoom-5 tile set
+  (native Web-Mercator, inverse-Mercator resampled to equirectangular;
+  poleward of Mercator's ±85.05° cutoff the edge value is held). The grid
+  is memory-mapped on first use and sampled bilinearly with longitude
+  wraparound. ~52 MB on disk, no network dependency.
+* **High-resolution (on demand)** — individual Terrarium tiles at zoom 11
+  (~76 m/px at the equator, scaling with cos φ), fetched over the network,
+  cached on disk (`~/.gui_missile_flyout/dem_tiles`), and sampled
+  bilinearly. Any failure — offline, timeout, missing tile — silently falls
+  back to the coarse grid, so an elevation query always returns a value.
+
+The active source for default lookups is selectable under **Analysis ▸
+Reference Data ▸ Terrain (DEM)** (the same `MODEL_OPTIONS` registry as the
+atmosphere and drag sources, Section 4): *Terrarium z11 tiles* (network,
+cached) or *Bundled 0.05° grid* (offline). The choice governs GUI-side
+sampling — the pad-elevation readout and site baking. **The trajectory
+integrator itself always uses the offline coarse grid** (`hi_res=False`),
+so a run never blocks on the network and results are deterministic and
+reproducible regardless of connectivity.
+
+A 0.05° cell averages ~5.5 km of relief, so a valley pad in steep terrain
+can sit several hundred metres below its cell mean (Xichang: 1 857 m pad in
+a ~2 400 m cell) — this is why site elevations are baked from the hi-res
+layer rather than sampled from the grid at run time. Heights are metres
+above the tiles' native vertical datum (a geoid proxy), treated
+interchangeably with ellipsoidal height; the ~±50 m geoid separation is
+well inside the tens-of-metres screening accuracy of the tool. Terrain is
+evaluated only for the launch state and the impact/floor test — it does not
+occult line-of-sight or modify the atmosphere column.
+
 ---
 
 ## 3. Gravity model
@@ -545,7 +611,7 @@ Event functions used (passed to `solve_ivp(events=...)`):
 
 | Event | Purpose |
 |---|---|
-| `_hit_ground` | Trajectory termination at altitude ≤ 0 |
+| `_hit_ground` | Trajectory termination at altitude ≤ 0 (or ≤ real terrain height with the DEM on, Section 2.5) |
 | `_apogee_event` (sign change of `ṙ·r̂`) | Apogee detection |
 | Milestone-altitude crossings | 100 km re-entry, shroud jettison, user-defined queries |
 | `_glider_pierce_atmosphere` | HGV pull-up / equilibrium-glide handoff |
@@ -4849,6 +4915,19 @@ underlying Heineman / MacConochie–Klich / Glatt lineage) in
   Technical Report TR8350.2, 3rd ed. (2000). Source for `GM`, `R_E`,
   flattening `f`, J₂, and the Earth rotation rate `Ω` used throughout
   the EOM (Section 3, Section 5).
+
+- **Terrarium terrain tiles.** *Terrain Tiles* on the AWS Open Data
+  Registry (`elevation-tiles-prod`), originally produced by Mapzen — a
+  global, openly licensed blend of NASA SRTM, USGS GMTED2010, NOAA
+  ETOPO1, and national DEMs, PNG-encoded at 256 px Web-Mercator tiles
+  (`h = 256R + G + B/256 − 32768` m). Source for both the bundled 0.05°
+  coarse elevation grid and the on-demand zoom-11 lookups (Section 2.5).
+
+- **Farr, T. G., et al. (2007).** "The Shuttle Radar Topography
+  Mission." *Reviews of Geophysics* 45(2): RG2004. The ~30 m radar DEM
+  underlying the Terrarium blend across ±60° latitude — the effective
+  native resolution of the hi-res layer over nearly all launch and
+  impact terrain of interest (Section 2.5).
 
 ### Numerical methods
 

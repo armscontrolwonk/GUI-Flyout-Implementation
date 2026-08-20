@@ -150,8 +150,9 @@ Current sources, from the code:
 - **Borders/coastlines**: bundled Natural Earth **50m** countries GeoJSON
   (`data/ne_50m_countries.geojson`, 1.8 MB) — upgraded from 110m 2026-08-18.
 - **Interactive maps**: folium with CartoDB positron tiles (online; fine).
-- **Terrain/elevation**: NONE — trajectories end at h = 0 (sea level)
-  everywhere; launch altitude unmodeled.
+- **Terrain/elevation**: SHIPPED 2026-08-20 (see (c)) — opt-in DEM:
+  launch at real pad elevation, terminate on real ground height;
+  default remains flat sea level (Forden benchmark condition).
 Upgrade path, in effort order:
   (a) NE 50m coastline swap — SHIPPED (2026-08-18): bundled
       ne_50m_countries.geojson (geometry-only, properties stripped,
@@ -257,19 +258,40 @@ Upgrade path, in effort order:
       catches admin/vegetation/transport — nothing hidden); optional
       ground-track overlay.  Timings on the worldwide index: global
       ~10 s (sampled 1-in-1024), region ~5 s, close-up instant;
-  (c) DEM (agreed 2026-08-16; source chosen 2026-08-16: **Copernicus
-      GLO-30**, not SRTM — ~2–4 m vs ~6–9 m vertical accuracy, and
-      SRTM's 60°N cutoff misses Plesetsk/high-latitude Russia entirely;
-      both are surface models, canopy-biased over forest — FABDEM is
-      the bare-earth variant if that ever matters, license caveat):
-      trajectories START at the launch site's real altitude and
-      TERMINATE on real ground height (impact and the low-altitude
-      glide floor) — the physics-relevant step, and the only one that
-      touches trajectory code.  Architecture: bake one-time GLO-30
-      lookups into the site database of (b) as elev_m + provenance (no
-      runtime DEM needed for launch altitude); fetch GLO-30 tiles
-      on demand along the ground track for impact/glide, cached, with
-      a bundled coarse ETOPO-2022 fallback (~tens of MB) for offline;
+  (c) DEM — SHIPPED 2026-08-20.  SOURCE DECISION REVISED (user,
+      2026-08-20, after a pros/cons comparison): **AWS Terrarium
+      terrain tiles** (elevation-tiles-prod; SRTM/GMTED2010/ETOPO1
+      blend, PNG-encoded, zero new deps) replace the 2026-08-16
+      GLO-30 choice for BOTH layers — GLO-30's COG format needs
+      rasterio/GDAL, and Terrarium's blend has no 60°N cutoff
+      (GMTED2010 covers Plesetsk).  GLO-30 (uniform 30 m TanDEM-X,
+      ~2–4 m vertical, better void handling — the stronger source
+      over African/high-relief terrain) remains the documented
+      upgrade path: it would slot in as a third Reference Data
+      radiobutton behind a COG reader if sub-100 m terminal-glide
+      terrain ever matters.  As shipped: trajectories START at the
+      launch site's real altitude and TERMINATE on real ground height
+      (integrate_trajectory(terrain_dem=True, launch_elev_m=…);
+      "Use terrain (DEM)" checkbox + live pad readout in the Launch
+      Site panel; default OFF = flat sea level, byte-identical to the
+      Forden benchmarks).  Architecture as agreed: one-time hi-res
+      (z11, ~76 m/px·cosφ) elevations baked into launch_sites.json as
+      elev_m + elev_source provenance (rebake: `python3 dem_build.py
+      sites`); bundled coarse 0.05° global grid (user-chosen
+      resolution 2026-08-20; data/dem/terrain_0p05deg.npy, ~52 MB,
+      baked reproducibly by dem_build.py from the z5 tile set,
+      provenance in data/dem/MANIFEST.md) serves the integrator —
+      always offline/deterministic, bilinear + lon-wrap; on-demand
+      z11 tiles (disk-cached, coarse fallback on any failure) serve
+      GUI-side pad sampling, source selectable under Analysis ▸
+      Reference Data ▸ Terrain (DEM) via the MODEL_OPTIONS registry.
+      Ocean floor is floored to sea surface (ground = max(elev, 0)).
+      The low-altitude GLIDE FLOOR comes free: every HGV glide/bridge/
+      equilibrium segment terminates through the same _hit_ground
+      event (shared eom_args carry params._terrain_dem), so glides
+      floor on real terrain too — verified end-to-end with the
+      Minotaur-IV + HTV-2 stack.  terrain.py, tests in
+      test_terrain_dem.py, METHODS §2.5;
   (d) air-launched missiles (agreed 2026-08-16, follows from (c)'s
       launch-state generalization): initial state = carrier release
       altitude + speed + flight-path angle instead of a ground pad —
