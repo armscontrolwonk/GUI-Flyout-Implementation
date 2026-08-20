@@ -12828,9 +12828,12 @@ class BoosterFlyoutApp(tk.Tk):
                 if 'burnout' in _ev or 'ignition' in _ev:
                     ax_g.axvline(_t, color='#aaaaaa', lw=0.8, ls=':')
         ax_g.set_xlabel('Time (s)', fontsize=7)
-        ax_g.set_ylabel('Elevation (°)', fontsize=7, color='royalblue')
-        ax_g.tick_params(labelsize=7, colors='royalblue')
-        ax_g.set_title('Pitch, Azimuth vs. Time', fontsize=8)
+        # The left axis carries BOTH the pitch (elevation) and α traces — they
+        # are angles in the same degrees — so label it for both and keep the
+        # ticks a neutral colour rather than pitch-blue.
+        ax_g.set_ylabel('Elevation / α (°)', fontsize=7, color='#333333')
+        ax_g.tick_params(labelsize=7, colors='#333333')
+        ax_g.set_title('Pitch, α, Azimuth vs. Time', fontsize=8)
         ax_g.grid(True, alpha=0.35)
 
         # ── Dyn. Pressure & Mach (burn period only) ──────────────────
