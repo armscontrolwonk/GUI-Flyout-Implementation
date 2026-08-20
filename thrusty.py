@@ -12788,15 +12788,24 @@ class BoosterFlyoutApp(tk.Tk):
             ax_g.plot(t_plot, pc, color='royalblue', lw=1.4, label='Pitch (°)')
             # Boost angle of attack — thrust axis vs velocity (SP-8099).  Same
             # degree axis as pitch; NaN outside powered flight so it gaps.
-            _al_g = np.asarray(r.get('alpha_deg', []))
+            # Solid = FLOWN α (after the q·α clamp); dashed = COMMANDED α (the
+            # raw maneuver demand).  They coincide unless the limit engaged, in
+            # which case the gap between them is exactly what the clamp held
+            # back — "demanded X°, flew Y°".
+            _al_g  = np.asarray(r.get('alpha_deg', []))
+            _alc_g = np.asarray(r.get('alpha_cmd_deg', []))
             if len(_al_g) == len(t_plot) and np.any(np.isfinite(_al_g)):
-                ax_g.plot(t_plot, _al_g, color='crimson', lw=1.1,
-                          label='α (°)')
-                # Show the enforced envelope while it was engaged.
                 _al_eng = r.get('alpha_limit_engaged')
-                if _al_eng:
-                    ax_g.axhline(_al_eng['alpha_limit_deg'], color='crimson',
-                                 lw=0.8, ls=':', alpha=0.6)
+                # Draw the commanded (demand) trace only when it diverges from
+                # the flown one — i.e. the clamp actually bit — so an
+                # unclamped run keeps a single clean α line.
+                if (_al_eng and len(_alc_g) == len(t_plot)
+                        and np.any(np.isfinite(_alc_g)
+                                   & (_alc_g > _al_g + 0.5))):
+                    ax_g.plot(t_plot, _alc_g, color='crimson', lw=1.0,
+                              ls='--', alpha=0.55, label='α cmd (°)')
+                ax_g.plot(t_plot, _al_g, color='crimson', lw=1.1,
+                          label='α flown (°)' if _al_eng else 'α (°)')
             if len(ac) == len(t_plot):
                 ax_g2.plot(t_plot, ac, color='darkorange', lw=1.4,
                            ls='--', label='Azimuth (°)')
@@ -12874,54 +12883,17 @@ class BoosterFlyoutApp(tk.Tk):
             ax_qm.fill_between(_tb, _qb, alpha=0.18, color='steelblue')
             ax_qm.plot(_tb, _qb, color='steelblue', lw=1.3, label='q (kPa)')
             ax_mch.plot(_tb, _mb, color='darkorange', lw=1.2, ls='--', label='Mach')
-            # Annotate max-q and max q·α (the SP-8099 combined-load design
-            # metric).  When the two peaks fall at nearly the same time — a
-            # straight ascent, where peak q·α just rides max-q — their labels
-            # would stack illegibly, so they are merged into one box; when they
-            # are well separated in time (a dogleg spikes q·α away from max-q)
-            # they are drawn as two, each beside its own dotted marker.
+            # Annotate max-q only.  The q·α peak (the SP-8099 combined-load
+            # metric) is reported in the Flight Timeline as a "Max q·α"
+            # milestone rather than on this plot — it is proportional to the
+            # lateral-g readout below, so annotating both here was redundant.
             _qmax_i = int(np.argmax(_qb))
             ax_qm.axvline(_tb[_qmax_i], color='steelblue', lw=0.8, ls=':', alpha=0.7)
-            _span = max(float(_tb[-1] - _tb[0]), 1e-6)
-
-            _qa = np.asarray(r.get('q_alpha_kpa_deg', []))
-            _qa_i = None
-            if len(_qa) == len(_t_aero):
-                _qa_b = _qa[_mask]
-                _qa_f = np.where(np.isfinite(_qa_b), _qa_b, -1.0)
-                if np.any(_qa_f > 0.0):
-                    _qa_i = int(np.argmax(_qa_f))
-
-            _coincident = (_qa_i is not None
-                           and abs(_tb[_qa_i] - _tb[_qmax_i]) < 0.06 * _span)
-
-            if _qa_i is not None and _coincident:
-                # One merged label — peak q·α occurs essentially at max-q.
-                ax_qm.annotate(
-                    f"max-q {_qb[_qmax_i]:.1f} kPa · M{_mb[_qmax_i]:.1f}\n"
-                    f"max q·α {_qa_b[_qa_i]:.0f} kPa·°",
-                    xy=(_tb[_qmax_i], _qb[_qmax_i]),
-                    xytext=(6, -4), textcoords='offset points',
-                    fontsize=6, color='#333333', va='top', ha='left')
-            else:
-                ax_qm.annotate(
-                    f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
-                    xy=(_tb[_qmax_i], _qb[_qmax_i]),
-                    xytext=(6, -4), textcoords='offset points',
-                    fontsize=6, color='steelblue', va='top')
-                if _qa_i is not None:
-                    # Peak q·α is well separated (dogleg case): its own marker,
-                    # labelled on the side that keeps it on-axis and above the
-                    # low q there so it clears the curve.
-                    ax_qm.axvline(_tb[_qa_i], color='crimson', lw=0.8,
-                                  ls=':', alpha=0.7)
-                    _t_late = _tb[_qa_i] > 0.7 * float(_tb[-1])
-                    _dx, _ha = ((-6, 'right') if _t_late else (6, 'left'))
-                    ax_qm.annotate(
-                        f"max q·α\n{_qa_b[_qa_i]:.0f} kPa·°",
-                        xy=(_tb[_qa_i], _qb[_qa_i]),
-                        xytext=(_dx, 8), textcoords='offset points',
-                        fontsize=6, color='crimson', va='bottom', ha=_ha)
+            ax_qm.annotate(
+                f"max-q\n{_qb[_qmax_i]:.1f} kPa\nM {_mb[_qmax_i]:.1f}",
+                xy=(_tb[_qmax_i], _qb[_qmax_i]),
+                xytext=(6, -4), textcoords='offset points',
+                fontsize=6, color='steelblue', va='top')
             # Peak lateral load factor (applied aero side load) — the metric
             # payload user's guides tabulate; a small corner readout.
             _lg = np.asarray(r.get('lateral_g', []))

@@ -2272,9 +2272,13 @@ pressure `q(t) = ½ρv²`, the combined-load trace `q·α(t)` (kPa·°), and
 the **applied lateral load factor** `n_lat(t) = q·A_ref·C_Nα·α / (m·g₀)`
 (the aerodynamic side load in g — the quantity payload user's guides
 tabulate; see below). These are returned as `alpha_deg`, `alpha_cmd_deg`,
-`q_pa`, `q_alpha_kpa_deg`, and `lateral_g`, drawn on the guidance and
-dynamic-pressure plots, and summarised by **Max q·α** and **Max lateral
-load** Flight Timeline milestones. When *no* limit is set, a plan that
+`q_pa`, `q_alpha_kpa_deg`, and `lateral_g`. The guidance plot draws the
+flown α (solid) and, when the clamp engaged, the commanded α (dashed) so
+the gap shows what the limit held back; the dynamic-pressure plot draws
+max-q and a peak lateral-g readout. q·α is proportional to the lateral-g
+readout, so it is reported only as a **Max q·α** Flight Timeline
+milestone (alongside **Max lateral load**) rather than annotated on the
+plot. When *no* limit is set, a plan that
 demands α > 25° while q > 1 kPa gets a **⚠ α exceeds SP-8099 envelope**
 timeline warning: the maneuver is still flown as commanded, but never
 silently.
