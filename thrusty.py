@@ -3772,16 +3772,23 @@ class ROEditorDialog(tk.Toplevel):
         self._name_var = tk.StringVar(value=ro.name if ro else "")
         self._name_entry = _entry(1, self._name_var)
 
-        # Mass
-        _lbl(2, "Mass (kg):")
+        # Mass.  Inherited (read-only) from the booster's last stage in body
+        # mode — the airframe IS that stage — so the label says so; a separating
+        # RV owns its mass.  (Separation is fixed for the life of this dialog.)
+        _from_booster = " (from booster)" if self._plan_sep == 'body' else ""
+        _lbl(2, "Mass (kg):" + _from_booster)
         self._mass_var = tk.StringVar(
             value=f"{ro.mass_kg:.0f}" if ro else f"{mass_kg:.0f}")
         self._mass_entry = _entry(2, self._mass_var, width=10)
 
-        # β with Estimate button
+        # β with Estimate button.  For a non-separating body β is emergent from
+        # the whole airframe (derived β(Mach) at run time), so it defaults to the
+        # 0 = derive sentinel rather than a typed placeholder; a separating RV
+        # keeps its designed-value default.  (FRONT_END_DESIGN.md Part II §10.)
         _lbl(3, "β (kg/m²):")
         self._beta_var = tk.StringVar(
-            value=f"{ro.beta_kg_m2:.0f}" if ro else "10000")
+            value=(f"{ro.beta_kg_m2:.0f}" if (ro and ro.beta_kg_m2 > 0)
+                   else ("0" if self._plan_sep == 'body' else "10000")))
         _beta_row = ttk.Frame(frm)
         _beta_row.grid(row=3, column=1, sticky=tk.W, pady=3)
         self._beta_entry = ttk.Entry(_beta_row, textvariable=self._beta_var, width=10)
@@ -3789,6 +3796,12 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Label(_beta_row, text=" kg/m²").pack(side=tk.LEFT)
         ttk.Button(_beta_row, text="Estimate…",
                    command=self._calc_beta).pack(side=tk.LEFT, padx=(6, 0))
+        # "0 = derive" hint for a non-separating body (managed in
+        # _update_separation_state); nose-first β(Mach) is derived from the
+        # airframe, a tumbling body from the spinning-cylinder model.
+        self._beta_derive_lbl = ttk.Label(
+            _beta_row, text="  0 = derive (nose-first, or tumbling if unstable)",
+            foreground="#2a7")
 
         # Shape — a SINGLE selector merging the nose profile (axisymmetric)
         # with the lifting-body forms.  From the user's view "shape" and "body
@@ -3819,13 +3832,14 @@ class ROEditorDialog(tk.Toplevel):
                    command=self._measure_from_image).grid(
             row=1, column=1, sticky=tk.W, pady=(0, 3))
 
-        # Diameter + length
-        _lbl(2, "Diameter (m):", parent=geo)
+        # Diameter + length — inherited (read-only) from the booster's last
+        # stage in body mode, labeled "from booster" to match.
+        _lbl(2, "Diameter (m):" + _from_booster, parent=geo)
         self._dia_var = tk.StringVar(
             value=f"{ro.diameter_m:.2f}" if ro else "0.5")
         self._dia_entry = _entry(2, self._dia_var, width=10, parent=geo)
 
-        _lbl(3, "Length (m):", parent=geo)
+        _lbl(3, "Length (m):" + _from_booster, parent=geo)
         self._len_var = tk.StringVar(
             value=f"{ro.length_m:.2f}" if ro else "2.0")
         self._len_entry = _entry(3, self._len_var, width=10, parent=geo)
@@ -3956,11 +3970,20 @@ class ROEditorDialog(tk.Toplevel):
 
         ttk.Label(self._glider_frm, text="Lift/drag (L/D):").grid(
             row=0, column=0, sticky=tk.W, padx=(0, 8), pady=2)
-        _LD = f"{ro.glider_LD:.2f}"          if (ro and ro.glider_LD > 0) else "2.5"
+        # Non-separating body: L/D is emergent from the airframe (derived at run
+        # time via the trim gate), so default to 0 = derive; a separating RV
+        # keeps its designed-value default.
+        _LD = (f"{ro.glider_LD:.2f}" if (ro and ro.glider_LD > 0)
+               else ("0" if self._plan_sep == 'body' else "2.5"))
         self._LD_var = tk.StringVar(value=_LD)
         self._LD_entry = ttk.Entry(self._glider_frm, textvariable=self._LD_var,
                                    width=10)
         self._LD_entry.grid(row=0, column=1, sticky=tk.W, pady=2)
+        # "0 = derive" hint, shown only in body mode (managed in
+        # _update_separation_state) so a separating RV is not confused.
+        self._LD_derive_lbl = ttk.Label(
+            self._glider_frm, text="0 = derive from geometry (nose + body + fins)",
+            foreground="#2a7")
         # Estimator trim row (Phase 3): α* feeds the windward-α consistency
         # guard, C_L0 the offset polar.  Set only by "Use β and L/D" (lifting
         # forms); shown read-only so the stored state is never invisible.
@@ -5093,11 +5116,11 @@ class ROEditorDialog(tk.Toplevel):
         }
 
     def _update_separation_state(self):
-        """When the active reentry plan says 'body' (no separation),
-        mass/diameter/length are inherited from the booster body at run-time,
-        so disable those entries to make the inheritance visible to the user.
-        β stays editable (it's a glide-phase scalar with no clean default from
-        the body's Mach-dependent Cd table)."""
+        """When the active reentry plan says 'body' (no separation), the airframe
+        IS the last stage, so mass/diameter/length are inherited from the
+        booster's Stage panel (read-only, "from booster") and the aero (β, L/D)
+        is derived from the whole stack (0 = derive).  A separating RV owns all
+        of these as designed inputs.  FRONT_END_DESIGN.md Part II §8–§10."""
         is_body = (self._plan_sep == 'body')
         state = 'disabled' if is_body else 'normal'
         for w in (getattr(self, '_mass_entry', None),
@@ -5110,6 +5133,18 @@ class ROEditorDialog(tk.Toplevel):
         _bn = getattr(self, '_body_nose_entry', None)
         if _bn is not None:
             _bn.configure(state='normal' if is_body else 'disabled')
+        # "0 = derive" hints beside β and L/D — shown only for a body, where the
+        # sentinel 0 triggers the geometry derivation; hidden for a separating RV
+        # whose β/L-D are designed inputs.
+        _bl = getattr(self, '_beta_derive_lbl', None)      # packed in _beta_row
+        if _bl is not None:
+            _bl.pack(side=tk.LEFT) if is_body else _bl.pack_forget()
+        _ll = getattr(self, '_LD_derive_lbl', None)        # gridded in _glider_frm
+        if _ll is not None:
+            if is_body:
+                _ll.grid(row=0, column=2, sticky=tk.W, padx=(8, 0))
+            else:
+                _ll.grid_remove()
 
     def _ok(self):
         ro = self._build_ro()
