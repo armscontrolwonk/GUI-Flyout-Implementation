@@ -207,3 +207,116 @@ test (`test_front_end_consistency.py`) stand as the guarantee.
 - Separating-RV, multi-object, and lifting-body behavior is unchanged (pinned).
 - Any change to flown numbers (Phase 3) is reported with before/after, never
   silent.
+
+---
+
+# Part II — Ownership and derivation (the booster-default RO)
+
+Status: **proposed** (decisions settled with the user 2026-08-21; not yet built).
+Part I made the *depiction* honest. Part II makes the *authorship* honest: for a
+non-separating body the "reentry object" is not an independent thing you design
+in isolation — it is a **view onto this booster's front end**, with its geometry
+inherited from the airframe and its aero (β, L/D, stability) *emergent from the
+whole stack*. The current separate-RO editor invites you to type those emergent
+quantities as if they were free inputs, which is the root of every inconsistency
+in this document (the CG double-count of §2/the 2fb6cf5 fix was the same disease
+in the physics path).
+
+## 8. Ownership — the booster-default reentry object
+
+**Decision (user, 2026-08-21): keep the "there is always a reentry object"
+doctrine; a non-separating plan auto-seeds a booster-default RO.** When
+`separation_mode = "body"` is selected, the RV is not a blank object the user
+must invent — it is seeded as *this booster's front end* and presented as such:
+
+- **Inherited-from-booster fields** (mass, diameter, length) are shown
+  **read-only**, labeled "from booster", because `effective_ro` already takes
+  them from the last stage at run time. The editor stops offering an input the
+  code discards (the Part I complaint, now structural rather than per-field
+  greying).
+- **Front-end fields** (nose shape, `body_nose_length_m`, nose radius, TPS
+  material) are editable and labeled **"this airframe's nose"** — they are the
+  only geometry a unitary body actually adds, and they live here rather than in
+  a phantom detached object.
+- **Emergent aero** (β, L/D, static-margin verdict) is **derived, not typed**
+  (§9–§10): shown with a live value and an Estimate/preview, `0 = derive`.
+
+Rejected alternative (A): moving the front end into the booster editor's Front
+End panel. It reads intuitively for a unitary missile but forks the reentry
+model — β/L-D/TPS/attitude would have to migrate onto the booster too — and
+undoes the BODY_REENTRY_DESIGN.md consolidation. Option B keeps one home for all
+reentry physics and one code path (`effective_ro`), while fixing the *framing* so
+the object visibly belongs to the booster.
+
+## 9. The derived-vs-entered matrix
+
+The heart of the user's concern: for a non-separating body, be explicit about
+which quantities are inherited, which are genuine front-end inputs, and which are
+**derived from the full booster+RO stack** and must never be free inputs.
+
+| Quantity | Non-separating body | Why |
+|---|---|---|
+| mass, diameter, length | **inherited** (read-only, "from booster") | the airframe IS the last stage (`effective_ro`) |
+| nose shape, `body_nose_length_m`, nose radius, TPS material | **entered** ("this airframe's nose") | the only geometry a unitary body adds |
+| **β (ballistic coeff.)** | **derived β(Mach)** from the airframe Cd₀ (§10); `0 = derive` | β = m/(Cd·A) of the *whole* body, not a sub-cone |
+| **L/D** | **derived** (`glider_ld` + `trim_gate`); `0 = derive` | emergent from nose+body+fins at trim (already built) |
+| CG / CP / static margin | **derived** from the full stack (`grid_fin_sizing`) | position depends on the whole mass+area layout |
+| boost front-end drag/area | **derived** (`_boost_front_geometry`) | the exposed nose is the front end |
+| g-limit, bank, terminal dive, pull-up, ζ | **entered** | the maneuvering *plan*, not geometry |
+| `separation_mode`, `reentry_attitude` | **plan-level** (sidebar) | how it is flown |
+
+For a **separating RV** the same matrix flips the top three rows to *entered*:
+mass/diameter/length/β/L-D are the RV's own designed properties (it is a real,
+detachable object), so nothing here changes for that case.
+
+## 10. Deriving β(Mach) from the airframe
+
+Today β is the one emergent quantity still typed on a body (the design comment
+even says "no clean way to derive a single scalar β from a Mach-dependent body Cd
+table"). That is exactly right — and the fix is to stop asking for a single
+scalar. Mirror what L/D already does: derive a **β(Mach) table**, not a number.
+
+The primitives exist: `glider_ld._body_cd0(last, mach)` (nose + skin-friction +
+base Cd₀ of the airframe) and `booster_area(params)` (the front-end reference
+area). So for a body with `beta_kg_m2 <= 0`:
+
+```
+β_body(M) = effective_ro.mass_kg / ( _body_cd0(last, M) · A_ref )
+```
+
+sampled over the same Mach grid the L/D table uses (`trajectory.py` ~2070),
+stashed as `params._beta_of_mach` alongside `params._ld_of_mach`, and read by the
+drag terms (`trajectory.py:1099/1232/1267/1347`) in place of the scalar
+`_ero.beta_kg_m2`. A **scalar fallback** at `GLIDE_MACH_REF` fills the analytic
+paths and any non-table read, exactly as L/D does. A separating RV, or any body
+with β entered `> 0`, keeps its scalar untouched — `0 = derive` is opt-in and the
+legacy default (β = 10000) still means "typed".
+
+Honesty caveats to surface (not hide): a Mach-dependent β makes the "ballistic
+coefficient" a curve, so the reports/estimator must show β at the reference Mach
+plus its range, and note it is a screening Cd₀ build-up, not a measured value —
+the same disclosure standard as the L/D estimate.
+
+## 11. Phasing (Part II)
+
+Independently shippable, each gated on tests; **not started**.
+
+- **P2-A — β(Mach) derivation.** Add `_beta_of_mach` for a body with β≤0,
+  mirroring `_ld_of_mach`; wire the drag reads to prefer it; scalar fallback at
+  the ref Mach. Pin byte-identity for separating RVs and for any body with β>0.
+- **P2-B — booster-default RO seeding + editor framing.** Auto-seed the RO on
+  `body` selection; relabel inherited fields "from booster" (read-only) and
+  front-end fields "this airframe's nose"; show β and L/D as derived with an
+  Estimate/preview and `0 = derive`. No physics change beyond P2-A.
+- **P2-C — the derived-vs-entered guard.** One test asserting the §9 matrix: for
+  a body, mass/dia/length/β/L-D are not independently honored (changing the typed
+  value while `0`/inherited does not change the flown result); for a separating
+  RV they are. This is the standing guarantee that emergent quantities stay
+  emergent.
+- **P2-D — docs.** METHODS §6.4/§12 + this doc's status.
+
+Open question deferred to build time: the CG estimate is *full-tank* (§ Part I,
+`estimate_cg` docstring) but reentry stability wants the *empty/burnout* CG;
+with a near-neutral body (the KN-23 came out SM ≈ 0) that difference can flip the
+verdict. Worth a burnout-CG option, but it is a separate correctness item from
+the ownership/β framing here.
