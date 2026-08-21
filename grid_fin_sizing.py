@@ -88,13 +88,28 @@ def _front_nose(params: BoosterParams):
     while getattr(top, "stage2", None) is not None:
         top = top.stage2
     d_top = float(getattr(top, "diameter_m", 0.0) or d)
+    ro = effective_ro(params)
+    # NON-SEPARATING body: the airframe IS the vehicle, so its nose is the
+    # forward taper carved SUBTRACTIVELY from the last stage's own length
+    # (FRONT_END_DESIGN.md), NOT the inherited full body length — using
+    # ro.length_m here (which effective_ro sets to the stage length in body
+    # mode) would stack the body on top of itself and float the CG out past
+    # the tail, falsely flagging a stable body as unstable.
+    if (ro is not None
+            and getattr(ro, 'separation_mode', 'separating_ro') == 'body'
+            and float(getattr(ro, 'diameter_m', 0.0) or 0.0) > 0.0):
+        _bn = float(getattr(ro, 'body_nose_length_m', 0.0) or 0.0)
+        if _bn <= 0.0:
+            _bn = min(3.0 * d_top, 0.5 * float(top.length_m or (2.0 * d_top)))
+        _bn = max(0.0, min(_bn, float(top.length_m or _bn)))
+        return (getattr(ro, 'shape', '') or 'tangent_ogive', _bn,
+                float(getattr(ro, 'diameter_m', 0.0) or d_top))
     # shroud nose (fairing on during ascent)
     if params.shroud_nose_shape and params.shroud_nose_length_m > 0:
         return (params.shroud_nose_shape, params.shroud_nose_length_m,
                 params.shroud_diameter_m or d)
     if params.nose_shape and params.nose_length_m > 0:
         return params.nose_shape, params.nose_length_m, d_top
-    ro = effective_ro(params)
     if ro is not None and getattr(ro, 'shape', '') and getattr(ro, 'length_m', 0) > 0:
         # RV/HGB caps the stack and acts as the nose
         return ro.shape, ro.length_m, (getattr(ro, 'diameter_m', 0.0) or d_top)
@@ -145,10 +160,19 @@ def estimate_cg(params: BoosterParams):
                 and (getattr(st, "interstage_length_m", 0.0) or 0.0) > 0:
             y += st.interstage_length_m
     body_top = y
-    total = body_top + nose_len
-    if payload > 0:                                # in / behind the nose
-        seg_y.append((payload,
-                      body_top + (0.5 * nose_len if nose_is_ro else 0.0)))
+    _is_body = (ro is not None
+                and getattr(ro, 'separation_mode', 'separating_ro') == 'body')
+    if _is_body:
+        # The nose is carved from the airframe (subtractive), so it is already
+        # inside body_top — do NOT stack it, and do NOT add a separate payload
+        # mass on top: the reentering body IS the last stage, whose own mass is
+        # already distributed over the stage segments above.
+        total = body_top
+    else:
+        total = body_top + nose_len
+        if payload > 0:                            # in / behind the nose
+            seg_y.append((payload,
+                          body_top + (0.5 * nose_len if nose_is_ro else 0.0)))
 
     msum = sum(m for m, _ in seg_y)
     my = sum(m * yy for m, yy in seg_y)
@@ -165,16 +189,9 @@ def _stack_layout(params: BoosterParams):
     estimate_cg (upper stages at their own length_m, aft stage takes the
     remainder), so the two agree on station positions."""
     d_body = params.diameter_m
-    ro = effective_ro(params)
-    if params.shroud_nose_shape and params.shroud_nose_length_m > 0:
-        nshape, nlen, nd = (params.shroud_nose_shape, params.shroud_nose_length_m,
-                            (params.shroud_diameter_m or d_body))
-    elif params.nose_shape and params.nose_length_m > 0:
-        nshape, nlen, nd = params.nose_shape, params.nose_length_m, d_body
-    elif ro is not None and getattr(ro, 'shape', '') and getattr(ro, 'length_m', 0) > 0:
-        nshape, nlen, nd = ro.shape, ro.length_m, (ro.diameter_m or d_body)
-    else:
-        nshape, nlen, nd = "tangent_ogive", 3.0 * d_body, d_body
+    # One source of truth for the as-flown nose (handles the non-separating
+    # body's subtractive taper), so the CP layout and the CG estimate agree.
+    nshape, nlen, nd = _front_nose(params)
     nose_x_cp = _nose_cp_fraction(nshape) * nlen
     L_total = max(params.length_m, nlen + 0.5)
 
