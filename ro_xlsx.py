@@ -109,6 +109,7 @@ _R: dict[str, int] = {
     'n_wings':    68,
     # non-separating body: forward-taper (nose) length carved from the body
     'body_nose':  70,
+    'reentry_cg':  71,
 }
 
 _VAL_COL = 4   # column D
@@ -267,6 +268,10 @@ def _build_ro_sheet(ws, ro) -> None:
            'non-separating body only: forward taper carved from the body '
            '(0 = auto); separating RVs use their own length instead')
     put('body_nose', getattr(ro, 'body_nose_length_m', 0.0))
+    _label(ws, _R['reentry_cg'], 'Reentry CG', 'm',
+           'non-separating body only: CG aft of nose for reentry stability '
+           '(0 = auto, uniform-airframe centroid)')
+    put('reentry_cg', getattr(ro, 'reentry_cg_m', 0.0))
 
     # Wings (appended rows).  The planform (root chord + exposed span + sweep)
     # is the PRIMARY data: when present, S and AR are DERIVED from it by
@@ -382,6 +387,7 @@ def import_ro_xlsx(path: str):
         break_diameter_m=_rnum(ws, _R['break_dia'], _VAL_COL),
         body_span_m=_rnum(ws, _R['body_span'], _VAL_COL),
         body_nose_length_m=_rnum(ws, _R['body_nose'], _VAL_COL),
+        reentry_cg_m=_rnum(ws, _R['reentry_cg'], _VAL_COL),
         wing_area_m2=_rnum(ws, _R['wing_area'], _VAL_COL),
         wing_aspect_ratio=_rnum(ws, _R['wing_ar'], _VAL_COL),
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),

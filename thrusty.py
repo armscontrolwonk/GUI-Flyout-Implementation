@@ -3928,6 +3928,24 @@ class ROEditorDialog(tk.Toplevel):
         _nw = f"{getattr(ro, 'n_wings', 4)}" if ro else "4"
         self._wing_n_var, self._wing_n_ent = _we(
             15, "  panel count:", _nw)
+
+        # Reentry CG (body only): where the CG sits decides nose-first trim vs
+        # tumbling (hence the whole glide).  The auto-estimate treats the empty
+        # airframe as a uniform tube (CG at the centroid); a real warhead-forward
+        # missile sits ahead of that.  0 = auto.  Shown/gated for a body in
+        # _update_separation_state.  (FRONT_END_DESIGN.md Part II.)
+        self._reentry_cg_lbl = ttk.Label(geo, text="Reentry CG (m):")
+        self._reentry_cg_lbl.grid(row=16, column=0, sticky=tk.W,
+                                  padx=(0, 8), pady=2)
+        self._reentry_cg_var = tk.StringVar(
+            value=f"{getattr(ro, 'reentry_cg_m', 0.0):.2f}" if ro else "0")
+        self._reentry_cg_entry = _entry(16, self._reentry_cg_var, width=10,
+                                        parent=geo)
+        self._reentry_cg_hint = ttk.Label(
+            geo, text="0 = auto (uniform-airframe centroid; set forward for a "
+            "warhead-forward body)", foreground="#2a7", wraplength=320,
+            justify=tk.LEFT)
+        self._reentry_cg_hint.grid(row=17, column=0, columnspan=3, sticky=tk.W)
         # All wing entries, for gating: enabled iff Maneuvering is on AND
         # the form can carry a wing (the WEDGE disables them — its body is the
         # lifting surface; a wing entered here would double-count through the
@@ -4812,6 +4830,13 @@ class ROEditorDialog(tk.Toplevel):
                 parent=self)
             return None
 
+        try:
+            reentry_cg = max(0.0, float(self._reentry_cg_var.get() or 0.0))
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input", "Reentry CG must be a number.", parent=self)
+            return None
+
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
         wing_root = wing_span = wing_sweep = 0.0
@@ -4882,7 +4907,7 @@ class ROEditorDialog(tk.Toplevel):
             biconic=biconic, fore_length_m=fore_len_m,
             break_diameter_m=break_dia_m,
             body_form=body_form, body_span_m=body_span,
-            body_nose_length_m=body_nose,
+            body_nose_length_m=body_nose, reentry_cg_m=reentry_cg,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -5133,6 +5158,22 @@ class ROEditorDialog(tk.Toplevel):
         _bn = getattr(self, '_body_nose_entry', None)
         if _bn is not None:
             _bn.configure(state='normal' if is_body else 'disabled')
+        # Reentry CG: body-only (it sets the reentry static margin).  Hide the
+        # whole row for a separating RV, whose stability is its own designed
+        # property rather than the airframe's.
+        _cg_lbl = getattr(self, '_reentry_cg_lbl', None)
+        _cg_ent = getattr(self, '_reentry_cg_entry', None)
+        _cg_hint = getattr(self, '_reentry_cg_hint', None)
+        if _cg_lbl is not None and _cg_ent is not None:
+            if is_body:
+                _cg_lbl.grid(row=16, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+                _cg_ent.grid()
+                if _cg_hint is not None:
+                    _cg_hint.grid(row=17, column=0, columnspan=3, sticky=tk.W)
+            else:
+                _cg_lbl.grid_remove(); _cg_ent.grid_remove()
+                if _cg_hint is not None:
+                    _cg_hint.grid_remove()
         # "0 = derive" hints beside β and L/D — shown only for a body, where the
         # sentinel 0 triggers the geometry derivation; hidden for a separating RV
         # whose β/L-D are designed inputs.

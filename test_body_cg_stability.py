@@ -91,3 +91,51 @@ def test_separating_rv_length_is_unchanged():
     p2.ro = ro
     _x_cg, total = gfs.estimate_cg(p2)
     assert total > 6.7          # RV length is added on top for a separating RV
+
+
+# ── reentry CG override (warhead-forward) ───────────────────────────────────
+
+def _kn23_cg(reentry_cg_m):
+    p = get_booster("Scud-B (R-17)")
+    p.diameter_m = 1.1
+    p.length_m = 6.7
+    ro = ROParams(name="KN23", mass_kg=500.0, beta_kg_m2=0.0, shape="karman",
+                  diameter_m=1.1, length_m=2.0, separation_mode="body",
+                  glider_enabled=True, glider_LD=0.0, glider_guidance="damped_glide",
+                  body_nose_length_m=2.0, reentry_cg_m=reentry_cg_m)
+    p2 = compose_loadout(p, ro, 1)
+    p2.ro = ro
+    return p2
+
+
+def _fly_cg(reentry_cg_m):
+    return integrate_trajectory(_kn23_cg(reentry_cg_m), 39.12, 125.67, 90.0,
+                                burnout_angle_deg=-2.0, max_time_s=3600.0)
+
+
+def test_reentry_cg_override_moves_the_static_margin():
+    """A forward CG raises the static margin; an aft CG drops it below zero
+    (CP ahead of CG) — the override is honoured by the trim gate."""
+    g_fwd = trim_gate.trim_gate(_kn23_cg(2.0), mach=glider_ld.GLIDE_MACH_REF,
+                                x_cg_m=2.0)
+    g_aft = trim_gate.trim_gate(_kn23_cg(6.0), mach=glider_ld.GLIDE_MACH_REF,
+                                x_cg_m=6.0)
+    assert g_fwd["static_margin_cal"] > g_aft["static_margin_cal"]
+    assert g_fwd["static_margin_cal"] > 0.0            # forward -> stable
+    assert g_aft["static_margin_cal"] < 0.0            # aft -> unstable
+
+
+def test_reentry_cg_forward_glides_aft_tumbles():
+    """The override flows through the run: a warhead-forward body glides
+    (nose-first), an aft CG tumbles (bluff, slow impact)."""
+    r_fwd = _fly_cg(2.0)
+    r_aft = _fly_cg(6.0)
+    assert r_fwd["range_km"] > r_aft["range_km"] * 2.0
+    assert r_fwd["impact_speed_ms"] > 2.0 * r_aft["impact_speed_ms"]
+
+
+def test_reentry_cg_auto_is_the_airframe_centroid():
+    """0 = auto places the CG at the uniform-airframe centre (half the
+    airframe length)."""
+    x_cg, total = gfs.estimate_cg(_kn23_cg(0.0))
+    assert abs(x_cg - 0.5 * total) < 1e-6

@@ -2088,7 +2088,9 @@ def integrate_trajectory(params: BoosterParams,
             import glider_ld
             import trim_gate as _tg
             import dataclasses as _dc
-            _g = _tg.trim_gate(params, mach=glider_ld.GLIDE_MACH_REF)
+            _cg_ovr = float(getattr(_ro, 'reentry_cg_m', 0.0) or 0.0)
+            _g = _tg.trim_gate(params, mach=glider_ld.GLIDE_MACH_REF,
+                               x_cg_m=(_cg_ovr if _cg_ovr > 0.0 else None))
             if not _g.get("error"):
                 _reentry_trim = {
                     'static_margin_cal': _g['static_margin_cal'],

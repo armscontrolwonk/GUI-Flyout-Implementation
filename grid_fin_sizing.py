@@ -163,11 +163,17 @@ def estimate_cg(params: BoosterParams):
     _is_body = (ro is not None
                 and getattr(ro, 'separation_mode', 'separating_ro') == 'body')
     if _is_body:
-        # The nose is carved from the airframe (subtractive), so it is already
-        # inside body_top — do NOT stack it, and do NOT add a separate payload
-        # mass on top: the reentering body IS the last stage, whose own mass is
-        # already distributed over the stage segments above.
+        # The reentering body IS the last stage, empty (its propellant is spent
+        # and any earlier stages are gone) — so the reentry CG is the empty
+        # airframe's centroid.  Modelled as a uniform tube, that is the body
+        # centre; the nose is carved from the airframe (subtractive), already
+        # inside body_top, so nothing is stacked and no separate payload mass is
+        # added.  A real missile packs its warhead/guidance forward, moving the
+        # CG ahead of this centroid — captured by ROParams.reentry_cg_m, which
+        # overrides this estimate at the trim gate.  (Full-tank vs burnout is a
+        # no-op for a uniform single body: both centre on the tube.)
         total = body_top
+        return 0.5 * total, total
     else:
         total = body_top + nose_len
         if payload > 0:                            # in / behind the nose

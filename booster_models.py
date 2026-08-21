@@ -356,6 +356,16 @@ class ROParams:
     # carries its own independent length_m instead and ignores this field.
     body_nose_length_m: float = 0.0
 
+    # Reentry centre-of-gravity of a NON-SEPARATING body, metres aft of the nose
+    # tip.  The reentry static margin (trim_gate.py) — which decides nose-first
+    # trim vs tumbling, hence the whole glide — turns on where the CG sits, and
+    # the auto-estimate treats the empty airframe as a uniform tube (CG at the
+    # centroid).  A real missile packs its dense warhead/guidance forward, moving
+    # the CG ahead of that centroid and making the body markedly more stable.
+    # 0 = auto (uniform-airframe centroid, grid_fin_sizing.estimate_cg); a
+    # positive value overrides it.  Meaningful only for separation_mode=="body".
+    reentry_cg_m: float = 0.0
+
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
@@ -702,6 +712,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'body_form':             ro.body_form,
         'body_span_m':           ro.body_span_m,
         'body_nose_length_m':    ro.body_nose_length_m,
+        'reentry_cg_m':          ro.reentry_cg_m,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -773,6 +784,7 @@ def ro_from_dict(d: dict) -> ROParams:
                    else 'axisymmetric'),
         body_span_m=float(d.get('body_span_m', 0.0) or 0.0),
         body_nose_length_m=float(d.get('body_nose_length_m', 0.0) or 0.0),
+        reentry_cg_m=float(d.get('reentry_cg_m', 0.0) or 0.0),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
