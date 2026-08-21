@@ -343,10 +343,18 @@ Independently shippable, each gated on tests. **P2-A/B/C/D done (2026-08-21).**
 - **P2-D — docs — DONE.** This doc's status; METHODS §6.4 (Part I) carries the
   DRAWN ≡ FLOWN note.
 
-Remaining follow-ups (not blocking): surfacing the derived β/L-D in the on-screen
-reports with their Mach range and the screening-Cd₀ caveat, wiring the orphaned
-`_estimate_body_LD` build-up to a sidebar button, and the burnout-vs-full-tank CG
-option (§ end of Part II).
+Follow-ups — **all done (2026-08-21):**
+- **Reentry CG** — `ROParams.reentry_cg_m` (0 = uniform-airframe centroid; a
+  positive value overrides at the trim gate), body-only editor field, round-trip.
+  Investigation showed burnout-vs-full-tank CG is a no-op for a uniform single
+  body — both centre on the tube — so the real lever is CG *placement*
+  (warhead-forward → stable). `test_body_cg_stability.py`.
+- **Report surfacing** — the Booster Parameters tab previews the derived β (ref
+  Mach + M2–12 range + screening caveat) and the trim-gated L/D (with static
+  margin, or the tumbling verdict) whenever they are left at 0 = derive.
+- **Estimate body L/D button** — the whole-body build-up (`_estimate_body_LD`)
+  is wired to a sidebar "Estimate body L/D…" button and composes the current
+  object so it matches the run.
 
 Open question deferred to build time: the CG estimate is *full-tank* (§ Part I,
 `estimate_cg` docstring) but reentry stability wants the *empty/burnout* CG;

@@ -7949,6 +7949,15 @@ class BoosterFlyoutApp(tk.Tk):
         ttk.Label(_lo, text="× object carried through boost").pack(
             side=tk.LEFT, padx=(4, 0))
 
+        # Estimate the whole-body L/D from geometry (Jorgensen + Allen-Perkins
+        # + N-K-P build-up) — the value a NON-SEPARATING body uses when its L/D
+        # is left at 0 = derive.  Reads the composed stack (booster + this
+        # object), so it matches what the run derives.
+        _est = ttk.Frame(rf)
+        _est.pack(padx=6, pady=(0, 4))
+        ttk.Button(_est, text="Estimate body L/D…",
+                   command=self._estimate_body_LD).pack(side=tk.LEFT)
+
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
         lf.pack(fill=tk.X, padx=6, pady=3)
@@ -9349,6 +9358,18 @@ class BoosterFlyoutApp(tk.Tk):
             p = get_booster(self._booster_var.get())
         except Exception:
             return
+        # Compose the current reentry object + loadout so the build-up sees the
+        # real front-end nose (the RO's, for a body) and the composed mass — the
+        # same stack the run derives its L/D from.
+        try:
+            _name, _uro = self._active_reentry_object()
+            if _uro is not None:
+                _n = (max(1, int(self._loadout_n_var.get()))
+                      if hasattr(self, '_loadout_n_var') else 1)
+                p = mm.compose_loadout(p, _uro, _n)
+                p.ro = _uro
+        except Exception:
+            pass
         mach_ref = glider_ld.GLIDE_MACH_REF
         r = glider_ld.whole_booster_LD(p, mach=mach_ref)
         if r.get("error"):
