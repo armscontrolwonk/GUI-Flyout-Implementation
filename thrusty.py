@@ -3811,12 +3811,17 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Label(_beta_row, text=" kg/m²").pack(side=tk.LEFT)
         ttk.Button(_beta_row, text="Estimate…",
                    command=self._calc_beta).pack(side=tk.LEFT, padx=(6, 0))
-        # "0 = derive" hint for a non-separating body (managed in
-        # _update_separation_state); nose-first β(Mach) is derived from the
-        # airframe, a tumbling body from the spinning-cylinder model.
+        # Inline derived-β preview for a non-separating body (managed in
+        # _update_separation_state).  Mirrors the L/D field: with β left at the
+        # sentinel 0 the label shows the geometry-derived β the run will use —
+        # nose-first β(Mach) from the airframe Cd0, or the spinning-cylinder β
+        # if the trim gate declares the body unstable (tumbling).  A trace keeps
+        # it live as the user edits.  (FRONT_END_DESIGN.md Part II §10.)
         self._beta_derive_lbl = ttk.Label(
             _beta_row, text="  0 = derive (nose-first, or tumbling if unstable)",
-            foreground="#2a7")
+            foreground="#2a7", wraplength=360, justify=tk.LEFT)
+        self._beta_var.trace_add(
+            "write", lambda *_a: self._refresh_beta_preview())
 
         # Shape — a SINGLE selector merging the nose profile (axisymmetric)
         # with the lifting-body forms.  From the user's view "shape" and "body
@@ -5205,6 +5210,8 @@ class ROEditorDialog(tk.Toplevel):
         _bl = getattr(self, '_beta_derive_lbl', None)      # packed in _beta_row
         if _bl is not None:
             _bl.pack(side=tk.LEFT) if is_body else _bl.pack_forget()
+        if is_body:
+            self._refresh_beta_preview()
         # L/D: an Estimate button (row 0, col 2) + a live derived-value label
         # (row 1, spanning) — the inline "0 → derives ~2.57" preview.
         _lb = getattr(self, '_LD_est_btn', None)
@@ -5280,6 +5287,75 @@ class ROEditorDialog(tk.Toplevel):
                                 f"(SM {_sm:+.1f} cal, M{_gld.GLIDE_MACH_REF:.0f})")
         except Exception:
             lbl.config(text="0 = derive from geometry")
+
+    def _refresh_beta_preview(self):
+        """Update the inline β preview next to the field (body mode): the
+        geometry-derived ballistic coefficient the run will use, composed from
+        the live object onto the current booster.  This mirrors the L/D preview
+        and the runtime derivation (trajectory.py §β-derive): a body flagged
+        unstable by the trim gate tumbles, so the spinning-cylinder β wins over
+        the nose-first β(Mach) table."""
+        lbl = getattr(self, '_beta_derive_lbl', None)
+        if lbl is None or self._plan_sep != 'body':
+            return
+        try:
+            _b = float(self._beta_var.get() or 0.0)
+        except (ValueError, tk.TclError):
+            _b = 0.0
+        if _b > 0.0:
+            lbl.config(text="  typed value — clear to 0 to derive from geometry")
+            return
+        if self._booster is None:
+            lbl.config(text="  0 = derive β(Mach) from the airframe")
+            return
+        try:
+            import glider_ld as _gld
+            import trim_gate as _tg
+            import dataclasses as _dc
+            import math as _math
+            ro = self._preview_ro()
+            p = mm.compose_loadout(self._booster, ro, 1)
+            p.ro = ro
+            _cg = float(getattr(ro, 'reentry_cg_m', 0.0) or 0.0)
+            g = _tg.trim_gate(p, mach=_gld.GLIDE_MACH_REF,
+                              x_cg_m=(_cg if _cg > 0.0 else None))
+            # Unstable → the run forces tumbling; the spinning-cylinder β (from
+            # effective_ro's tumbling branch) is what actually flies, not the
+            # nose-first table.  Report that so the preview stays honest.
+            if (not g.get('error')) and g.get('LD_achievable', 0.0) <= 0.0:
+                p_t = mm.compose_loadout(self._booster, ro, 1)
+                p_t.ro = _dc.replace(ro, reentry_attitude='tumbling')
+                _et = mm.effective_ro(p_t)
+                _bt = float(getattr(_et, 'beta_kg_m2', 0.0) or 0.0)
+                _sm = g['static_margin_cal']
+                if _bt > 0.0:
+                    lbl.config(text=f"  0 → tumbles: β ~{_bt:,.0f} kg/m² "
+                                    f"(unstable, SM {_sm:+.1f} cal)")
+                else:
+                    lbl.config(text=f"  0 → tumbles (unstable, SM {_sm:+.1f} cal)")
+                return
+            # Nose-first: β(Mach) = m / (Cd0_body(M)·A_base), sampled at the
+            # reference Mach with its M2–12 spread (matches trajectory.py).
+            _last = _gld._last_stage(p)
+            _mass = float(mm.effective_ro(p).mass_kg)
+            _A = _math.pi * (float(_last.diameter_m) / 2.0) ** 2
+            if _A <= 0.0 or _mass <= 0.0:
+                lbl.config(text="  0 = derive — set body geometry")
+                return
+
+            def _bfn(M):
+                _cd = float(_gld.body_cd0(p, M))
+                return _mass / (_cd * _A) if _cd > 0.0 else 0.0
+            b_ref = _bfn(_gld.GLIDE_MACH_REF)
+            b_lo, b_hi = _bfn(2.0), _bfn(12.0)
+            if b_ref <= 0.0:
+                lbl.config(text="  0 = derive from geometry")
+                return
+            lbl.config(text=f"  0 → derives ~{b_ref:,.0f} kg/m²  "
+                            f"({min(b_lo, b_hi):,.0f}–{max(b_lo, b_hi):,.0f} "
+                            f"over M2–12)")
+        except Exception:
+            lbl.config(text="  0 = derive β(Mach) from geometry")
 
     def _ok(self):
         ro = self._build_ro()
