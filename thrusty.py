@@ -3715,7 +3715,8 @@ class ROEditorDialog(tk.Toplevel):
         "half_cone":    "half-cone lifting body",
     }
 
-    def __init__(self, parent, ro=None, mass_kg=500.0, plan_sep=None):
+    def __init__(self, parent, ro=None, mass_kg=500.0, plan_sep=None,
+                 booster=None):
         super().__init__(parent)
         # plan_sep: the ACTIVE reentry plan's separation mode ('body' |
         # 'separating_ro').  Separation is a plan choice, not an object property,
@@ -3723,6 +3724,11 @@ class ROEditorDialog(tk.Toplevel):
         # fields) even for a brand-new object — otherwise a non-separating plan
         # would open the editor in separating mode and hide the nose fields.
         self._plan_sep_override = plan_sep
+        # booster: the current sidebar booster (raw).  For a non-separating body
+        # the L/D and β are DERIVED from the whole airframe (stage + fins + nose),
+        # which the object alone does not carry — so the editor composes its live
+        # values onto this booster to preview them inline next to the fields.
+        self._booster = booster
         self.title("Edit Reentry Object" if ro is not None else "New Reentry Object")
         self.resizable(False, True)
         self.grab_set()
@@ -4006,11 +4012,17 @@ class ROEditorDialog(tk.Toplevel):
         self._LD_entry = ttk.Entry(self._glider_frm, textvariable=self._LD_var,
                                    width=10)
         self._LD_entry.grid(row=0, column=1, sticky=tk.W, pady=2)
-        # "0 = derive" hint, shown only in body mode (managed in
-        # _update_separation_state) so a separating RV is not confused.
+        # Body-only: an inline "Estimate" button and a live derived-value label
+        # next to the field (managed in _update_separation_state).  L/D for a
+        # non-separating body is derived from the WHOLE airframe (stage + fins +
+        # nose), so the estimate composes the live object onto the current
+        # booster; a 0 in the field then reads as "0 → derives ~2.57".
+        self._LD_est_btn = ttk.Button(self._glider_frm, text="Estimate",
+                                      width=9, command=self._refresh_ld_preview)
         self._LD_derive_lbl = ttk.Label(
-            self._glider_frm, text="0 = derive from geometry (nose + body + fins)",
-            foreground="#2a7")
+            self._glider_frm, text="", foreground="#2a7",
+            wraplength=340, justify=tk.LEFT)
+        self._LD_var.trace_add("write", lambda *_a: self._refresh_ld_preview())
         # Estimator trim row (Phase 3): α* feeds the windward-α consistency
         # guard, C_L0 the offset polar.  Set only by "Use β and L/D" (lifting
         # forms); shown read-only so the stored state is never invisible.
@@ -4033,6 +4045,10 @@ class ROEditorDialog(tk.Toplevel):
         self._sync_wing_derived()
         self._update_glider_state()
         self._update_body_form_state()   # apply wedge gating to the wing rows
+        # Re-run separation gating now that the glider widgets exist, so the
+        # body-only inline L/D Estimate button + derived-value label appear and
+        # the preview populates on open.
+        self._update_separation_state()
 
         # ── Thermal protection (TPS) materials — per location (§10) ──────
         _tps_box = ttk.LabelFrame(right, text="Thermal protection (TPS) materials",
@@ -5183,18 +5199,87 @@ class ROEditorDialog(tk.Toplevel):
                 _cg_lbl.grid_remove(); _cg_ent.grid_remove()
                 if _cg_hint is not None:
                     _cg_hint.grid_remove()
-        # "0 = derive" hints beside β and L/D — shown only for a body, where the
-        # sentinel 0 triggers the geometry derivation; hidden for a separating RV
-        # whose β/L-D are designed inputs.
+        # "0 = derive" hints / inline previews beside β and L/D — shown only for
+        # a body, where the sentinel 0 triggers the geometry derivation; hidden
+        # for a separating RV whose β/L-D are designed inputs.
         _bl = getattr(self, '_beta_derive_lbl', None)      # packed in _beta_row
         if _bl is not None:
             _bl.pack(side=tk.LEFT) if is_body else _bl.pack_forget()
-        _ll = getattr(self, '_LD_derive_lbl', None)        # gridded in _glider_frm
+        # L/D: an Estimate button (row 0, col 2) + a live derived-value label
+        # (row 1, spanning) — the inline "0 → derives ~2.57" preview.
+        _lb = getattr(self, '_LD_est_btn', None)
+        _ll = getattr(self, '_LD_derive_lbl', None)
+        if _lb is not None:
+            if is_body:
+                _lb.grid(row=0, column=2, sticky=tk.W, padx=(8, 0))
+            else:
+                _lb.grid_remove()
         if _ll is not None:
             if is_body:
-                _ll.grid(row=0, column=2, sticky=tk.W, padx=(8, 0))
+                _ll.grid(row=1, column=0, columnspan=3, sticky=tk.W)
             else:
                 _ll.grid_remove()
+        if is_body:
+            self._refresh_ld_preview()
+
+    def _preview_ro(self):
+        """A lightweight ROParams from the LIVE editor fields (no validation
+        dialogs) for the inline body-mode L/D preview.  Only the fields the trim
+        gate reads matter (shape, nose taper, reentry CG); mass/diameter are
+        inherited from the booster stage at run time."""
+        def _f(var, d=0.0):
+            try:
+                return float(var.get() or 0.0)
+            except (ValueError, tk.TclError):
+                return d
+        _bn = getattr(self, '_body_nose_var', None)
+        _cg = getattr(self, '_reentry_cg_var', None)
+        return mm.ROParams(
+            name="preview", mass_kg=max(_f(self._mass_var, 1.0), 1.0),
+            beta_kg_m2=0.0, shape=self._shape_key(),
+            diameter_m=_f(self._dia_var), length_m=_f(self._len_var),
+            nose_radius_m=_f(self._nose_var, 0.0),
+            body_nose_length_m=(_f(_bn) if _bn is not None else 0.0),
+            reentry_cg_m=(_f(_cg) if _cg is not None else 0.0),
+            separation_mode='body', glider_enabled=True, glider_LD=0.0)
+
+    def _refresh_ld_preview(self):
+        """Update the inline L/D preview next to the field (body mode): the
+        geometry-derived, trim-gated L/D the run will use, composed from the live
+        object onto the current booster."""
+        lbl = getattr(self, '_LD_derive_lbl', None)
+        if lbl is None or self._plan_sep != 'body':
+            return
+        try:
+            _ld = float(self._LD_var.get() or 0.0)
+        except (ValueError, tk.TclError):
+            _ld = 0.0
+        if _ld > 0.0:
+            lbl.config(text="typed value — clear to 0 to derive from geometry")
+            return
+        if self._booster is None:
+            lbl.config(text="0 = derive from geometry (nose + body + fins)")
+            return
+        try:
+            import glider_ld as _gld
+            import trim_gate as _tg
+            ro = self._preview_ro()
+            p = mm.compose_loadout(self._booster, ro, 1)
+            p.ro = ro
+            _cg = float(getattr(ro, 'reentry_cg_m', 0.0) or 0.0)
+            g = _tg.trim_gate(p, mach=_gld.GLIDE_MACH_REF,
+                              x_cg_m=(_cg if _cg > 0.0 else None))
+            if g.get('error'):
+                lbl.config(text="0 = derive — set body geometry / fins")
+                return
+            _sm = g['static_margin_cal']
+            if g['LD_achievable'] <= 0.0:
+                lbl.config(text=f"0 → tumbles — unstable (SM {_sm:+.1f} cal)")
+            else:
+                lbl.config(text=f"0 → derives ~{g['LD_achievable']:.2f} "
+                                f"(SM {_sm:+.1f} cal, M{_gld.GLIDE_MACH_REF:.0f})")
+        except Exception:
+            lbl.config(text="0 = derive from geometry")
 
     def _ok(self):
         ro = self._build_ro()
@@ -7957,15 +8042,8 @@ class BoosterFlyoutApp(tk.Tk):
         self._loadout_spin.pack(side=tk.LEFT, padx=(4, 0))
         ttk.Label(_lo, text="× object carried through boost").pack(
             side=tk.LEFT, padx=(4, 0))
-
-        # Estimate the whole-body L/D from geometry (Jorgensen + Allen-Perkins
-        # + N-K-P build-up) — the value a NON-SEPARATING body uses when its L/D
-        # is left at 0 = derive.  Reads the composed stack (booster + this
-        # object), so it matches what the run derives.
-        _est = ttk.Frame(rf)
-        _est.pack(padx=6, pady=(0, 4))
-        ttk.Button(_est, text="Estimate body L/D…",
-                   command=self._estimate_body_LD).pack(side=tk.LEFT)
+        # (The whole-body L/D estimate lives inside the Reentry Object editor,
+        # inline next to the L/D field — not here; the sidebar space is scarce.)
 
         # ── Launch site ────────────────────────────────────────────────
         lf = ttk.LabelFrame(parent, text="Launch Site")
@@ -9914,6 +9992,15 @@ class BoosterFlyoutApp(tk.Tk):
         # Loadout tally + composed launch mass follow the selected object.
         self._update_params_display()
 
+    def _current_booster(self):
+        """The current sidebar booster (raw, un-composed), or None — passed to
+        the RO editor so its inline body-mode L/D preview can compose the live
+        object onto the whole airframe."""
+        try:
+            return get_booster(self._booster_var.get())
+        except Exception:
+            return None
+
     def _current_plan_sep(self):
         """The active reentry plan's separation mode ('body' | 'separating_ro'),
         read back from the sidebar Separation control."""
@@ -9953,7 +10040,8 @@ class BoosterFlyoutApp(tk.Tk):
         from the booster's front end so a non-separating plan opens straight
         into the body's nose fields."""
         dlg = ROEditorDialog(self, ro=self._seed_booster_default_ro(),
-                             mass_kg=500.0, plan_sep=self._current_plan_sep())
+                             mass_kg=500.0, plan_sep=self._current_plan_sep(),
+                             booster=self._current_booster())
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -9984,7 +10072,8 @@ class BoosterFlyoutApp(tk.Tk):
         else:
             base = RO_DB[sel]()
         dlg = ROEditorDialog(self, ro=base, mass_kg=base.mass_kg,
-                             plan_sep=self._current_plan_sep())
+                             plan_sep=self._current_plan_sep(),
+                             booster=self._current_booster())
         self.wait_window(dlg)
         if dlg.result is None:
             return
