@@ -3839,6 +3839,17 @@ class ROEditorDialog(tk.Toplevel):
             value=f"{ro.effective_nose_radius_m():.3f}" if ro else "0.050")
         self._nose_entry = _entry(4, self._nose_var, width=10, parent=geo)
 
+        # Body nose length — the forward taper of a NON-SEPARATING body, carved
+        # SUBTRACTIVELY from the airframe (whose length = the last stage's at run
+        # time; see FRONT_END_DESIGN.md).  Active only in body mode, where the
+        # RV's own length above is inherited from the stage; a separating RV uses
+        # that length and ignores this.  0 = the schematic draws a flagged
+        # shape-appropriate default.
+        _lbl(5, "Body nose length (m):", parent=geo)
+        self._body_nose_var = tk.StringVar(
+            value=f"{getattr(ro, 'body_nose_length_m', 0.0):.2f}" if ro else "0")
+        self._body_nose_entry = _entry(5, self._body_nose_var, width=10, parent=geo)
+
         # Biconic (two-cone) body — fore cone + aft frustum.  Only length and
         # break diameter are entered; the half-angles derive from these against
         # the base diameter / length (feeds the two-cone β estimator).  The
@@ -4770,6 +4781,14 @@ class ROEditorDialog(tk.Toplevel):
                     parent=self)
                 return None
 
+        try:
+            body_nose = max(0.0, float(self._body_nose_var.get() or 0.0))
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input", "Body nose length must be a number.",
+                parent=self)
+            return None
+
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
         wing_root = wing_span = wing_sweep = 0.0
@@ -4840,6 +4859,7 @@ class ROEditorDialog(tk.Toplevel):
             biconic=biconic, fore_length_m=fore_len_m,
             break_diameter_m=break_dia_m,
             body_form=body_form, body_span_m=body_span,
+            body_nose_length_m=body_nose,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -5085,6 +5105,11 @@ class ROEditorDialog(tk.Toplevel):
                   getattr(self, '_len_entry', None)):
             if w is not None:
                 w.configure(state=state)
+        # Body nose length is the inverse: meaningful ONLY for a body (it carves
+        # the airframe's nose); a separating RV uses its own length instead.
+        _bn = getattr(self, '_body_nose_entry', None)
+        if _bn is not None:
+            _bn.configure(state='normal' if is_body else 'disabled')
 
     def _ok(self):
         ro = self._build_ro()
