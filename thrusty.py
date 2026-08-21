@@ -3715,8 +3715,14 @@ class ROEditorDialog(tk.Toplevel):
         "half_cone":    "half-cone lifting body",
     }
 
-    def __init__(self, parent, ro=None, mass_kg=500.0):
+    def __init__(self, parent, ro=None, mass_kg=500.0, plan_sep=None):
         super().__init__(parent)
+        # plan_sep: the ACTIVE reentry plan's separation mode ('body' |
+        # 'separating_ro').  Separation is a plan choice, not an object property,
+        # so the editor shows the plan's mode (and thus the body-only front-end
+        # fields) even for a brand-new object — otherwise a non-separating plan
+        # would open the editor in separating mode and hide the nose fields.
+        self._plan_sep_override = plan_sep
         self.title("Edit Reentry Object" if ro is not None else "New Reentry Object")
         self.resizable(False, True)
         self.grab_set()
@@ -3759,8 +3765,11 @@ class ROEditorDialog(tk.Toplevel):
         # Reentry Object section and persisted with the plan.  Shown read-only
         # here so the greyed-out inherited fields below are explicable.
         _lbl(0, "Separation:")
-        self._plan_sep = (getattr(ro, 'separation_mode', 'separating_ro')
-                          if ro else 'separating_ro')
+        # The active plan's separation wins when supplied (it is the run
+        # authority); else fall back to the object's stored mode / the default.
+        self._plan_sep = (self._plan_sep_override
+                          or (getattr(ro, 'separation_mode', 'separating_ro')
+                              if ro else 'separating_ro'))
         _sep_txt = ("Non-separating — body reenters with the final stage"
                     if self._plan_sep == 'body'
                     else "Separates at burnout")
@@ -9905,9 +9914,46 @@ class BoosterFlyoutApp(tk.Tk):
         # Loadout tally + composed launch mass follow the selected object.
         self._update_params_display()
 
+    def _current_plan_sep(self):
+        """The active reentry plan's separation mode ('body' | 'separating_ro'),
+        read back from the sidebar Separation control."""
+        lbl = self._main_sep_var.get() if hasattr(self, '_main_sep_var') else ""
+        for _k, _v in getattr(self, '_SEP_LABELS', {}).items():
+            if _v == lbl:
+                return _k
+        return 'separating_ro'
+
+    def _seed_booster_default_ro(self):
+        """A booster-default reentry object: the booster's front end made into an
+        editable object so a non-separating plan has somewhere to enter the nose
+        shape / taper / β / L-D.  Geometry is inherited (read-only) from the last
+        stage; β and L/D default to 0 = derive."""
+        _sep = self._current_plan_sep()
+        try:
+            bp = get_booster(self._booster_var.get())
+        except Exception:
+            bp = None
+        if _sep == 'body' and bp is not None:
+            _last = bp
+            while getattr(_last, 'stage2', None) is not None:
+                _last = _last.stage2
+            return mm.ROParams(
+                name=f"{self._booster_var.get()} front end",
+                mass_kg=max(float(getattr(_last, 'mass_final', 0.0) or 0.0), 1.0),
+                beta_kg_m2=0.0, shape="cone",
+                diameter_m=float(getattr(_last, 'diameter_m', 0.0) or 0.5),
+                length_m=float(getattr(_last, 'length_m', 0.0) or 2.0),
+                separation_mode='body', glider_enabled=True, glider_LD=0.0)
+        return mm.ROParams(name="New RV", mass_kg=500.0, beta_kg_m2=10000.0,
+                           shape="cone", diameter_m=0.5, length_m=2.0,
+                           separation_mode=_sep)
+
     def _new_ro_main(self):
-        """Create an RV in the editor; on Save, write it to the library."""
-        dlg = ROEditorDialog(self, ro=None, mass_kg=500.0)
+        """Create an RV in the editor; on Save, write it to the library.  Seeds
+        from the booster's front end so a non-separating plan opens straight
+        into the body's nose fields."""
+        dlg = ROEditorDialog(self, ro=self._seed_booster_default_ro(),
+                             mass_kg=500.0, plan_sep=self._current_plan_sep())
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -9924,12 +9970,21 @@ class BoosterFlyoutApp(tk.Tk):
         """Edit the currently selected RV in place; rewrite the library file."""
         sel = self._ro_main_var.get()
         if sel not in RO_DB:
-            messagebox.showinfo("Edit Reentry Object",
-                                "Select a reentry object from the library to edit, "
-                                "or use 'New' to create one.", parent=self)
-            return
-        base = RO_DB[sel]()
-        dlg = ROEditorDialog(self, ro=base, mass_kg=base.mass_kg)
+            if sel == self._RO_DEFAULT_SENTINEL:
+                # No library object selected — seed one from the booster's front
+                # end so the user can enter the nose data (the schematic's
+                # subtractive nose, β/L-D, TPS) instead of hitting a dead end.
+                base = self._seed_booster_default_ro()
+            else:
+                messagebox.showinfo(
+                    "Edit Reentry Object",
+                    "Select a reentry object from the library to edit, "
+                    "or use 'New' to create one.", parent=self)
+                return
+        else:
+            base = RO_DB[sel]()
+        dlg = ROEditorDialog(self, ro=base, mass_kg=base.mass_kg,
+                             plan_sep=self._current_plan_sep())
         self.wait_window(dlg)
         if dlg.result is None:
             return
