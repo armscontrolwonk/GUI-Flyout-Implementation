@@ -320,21 +320,33 @@ carries the nose-first ref-Mach value (or `None` when not derived / tumbling).
 
 ## 11. Phasing (Part II)
 
-Independently shippable, each gated on tests; **not started**.
+Independently shippable, each gated on tests. **P2-A/B/C/D done (2026-08-21).**
 
-- **P2-A — β(Mach) derivation.** Add `_beta_of_mach` for a body with β≤0,
-  mirroring `_ld_of_mach`; wire the drag reads to prefer it; scalar fallback at
-  the ref Mach. Pin byte-identity for separating RVs and for any body with β>0.
-- **P2-B — booster-default RO seeding + editor framing.** Auto-seed the RO on
-  `body` selection; relabel inherited fields "from booster" (read-only) and
-  front-end fields "this airframe's nose"; show β and L/D as derived with an
-  Estimate/preview and `0 = derive`. No physics change beyond P2-A.
-- **P2-C — the derived-vs-entered guard.** One test asserting the §9 matrix: for
-  a body, mass/dia/length/β/L-D are not independently honored (changing the typed
-  value while `0`/inherited does not change the flown result); for a separating
-  RV they are. This is the standing guarantee that emergent quantities stay
-  emergent.
-- **P2-D — docs.** METHODS §6.4/§12 + this doc's status.
+- **P2-A — β(Mach) derivation — DONE.** `_beta_of_mach` for a body with β≤0,
+  mirroring `_ld_of_mach`; the drag reads prefer it via `_beta_eff`; scalar
+  fallback at the ref Mach, surfaced as `result['derived_beta_kg_m2']`. The
+  nose-first table applies only while the body is nose-first — a tumbling body
+  keeps `effective_ro`'s tumbling-cylinder β (§10). `_body_cd0`/`whole_booster_LD`
+  now read the as-flown nose (the RO's shape for a body via `_front_nose_aero`),
+  so β and the L/D build-up reflect the real nose, not the flat Forden fallback —
+  β(M) rises 4300→8000 across M2→M12 instead of a flat 8934.
+  `test_body_beta_derive.py`.
+- **P2-B — editor framing — DONE.** β and L/D default to `0 = derive` in body
+  mode with green hints; inherited mass/diameter/length are labeled
+  "(from booster)" (read-only) — from the last stage's Stage-panel fields, not
+  a fairing-style parallel entry (§8). Separating RVs keep their designed-value
+  defaults and no hint. No physics change.
+- **P2-C — the derived-vs-entered guard — DONE.** `test_front_end_matrix.py`
+  pins the §9 matrix: for a body, mass/dia/length are inherited (the RO's own
+  values are ignored) and β/L-D are derived when 0; for a separating RV those
+  fields are its own honored inputs.
+- **P2-D — docs — DONE.** This doc's status; METHODS §6.4 (Part I) carries the
+  DRAWN ≡ FLOWN note.
+
+Remaining follow-ups (not blocking): surfacing the derived β/L-D in the on-screen
+reports with their Mach range and the screening-Cd₀ caveat, wiring the orphaned
+`_estimate_body_LD` build-up to a sidebar button, and the burnout-vs-full-tank CG
+option (§ end of Part II).
 
 Open question deferred to build time: the CG estimate is *full-tank* (§ Part I,
 `estimate_cg` docstring) but reentry stability wants the *empty/burnout* CG;
