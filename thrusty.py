@@ -9369,6 +9369,52 @@ class BoosterFlyoutApp(tk.Tk):
             f"use the reentry object's own designed L/D instead.",
         )
 
+    def _derived_beta_preview(self, p, ero):
+        """Booster-Parameters preview for a non-separating body whose β is left
+        at 0 = derive: the geometry-derived β at the reference Mach, its M2–12
+        range, and a screening caveat.  None-safe (returns a plain fallback
+        string on any failure)."""
+        try:
+            import glider_ld as _gld
+            import math as _math
+            d = float(getattr(ero, 'diameter_m', 0.0) or 0.0)
+            m = float(getattr(ero, 'mass_kg', 0.0) or 0.0)
+            A = _math.pi * (d / 2.0) ** 2
+            if A <= 0.0 or m <= 0.0:
+                return "derive from geometry"
+
+            def _b(M):
+                cd = float(_gld.body_cd0(p, M))
+                return m / (cd * A) if cd > 0.0 else 0.0
+            b_ref = _b(_gld.GLIDE_MACH_REF)
+            b_lo, b_hi = _b(2.0), _b(12.0)
+            if b_ref <= 0.0:
+                return "derive from geometry"
+            return (f"~{b_ref:,.0f} kg/m² (derived, screening; "
+                    f"{min(b_lo, b_hi):,.0f}–{max(b_lo, b_hi):,.0f} over M2–12)")
+        except Exception:
+            return "derive from geometry"
+
+    def _derived_ld_preview(self, p, ero):
+        """Booster-Parameters preview for a non-separating body whose L/D is left
+        at 0 = derive: the geometry-derived, trim-gated L/D with its static
+        margin (or the tumbling verdict).  None-safe."""
+        try:
+            import glider_ld as _gld
+            import trim_gate as _tg
+            _cg = float(getattr(ero, 'reentry_cg_m', 0.0) or 0.0)
+            g = _tg.trim_gate(p, mach=_gld.GLIDE_MACH_REF,
+                              x_cg_m=(_cg if _cg > 0.0 else None))
+            if g.get('error'):
+                return "derive from geometry"
+            _ach = g['LD_achievable']
+            _sm = g['static_margin_cal']
+            if _ach <= 0.0:
+                return f"tumbles — unstable (SM {_sm:+.1f} cal)  (derived)"
+            return f"~{_ach:.2f}  (derived; SM {_sm:+.1f} cal)"
+        except Exception:
+            return "derive from geometry"
+
     def _rebuild_stage_rows(self):
         """Rebuild inline per-stage pitch rows from the current booster."""
         for w in self._adv_pitch_frame.winfo_children():
@@ -10992,11 +11038,19 @@ class BoosterFlyoutApp(tk.Tk):
                   "Per-object mass:", f"{_ero.mass_kg:,.0f} kg"); r += 1
             _ro_beta = _ero.beta_kg_m2
             _pbv_m   = p.bus_mass_kg
+            # Non-separating body with β left at 0 = derive: preview the
+            # geometry-derived β(Mach) — the value the run will use — at the
+            # reference Mach, with its M2–12 range and a screening caveat.
+            _is_body_ro = (getattr(_ero, 'separation_mode', 'separating_ro')
+                           == 'body')
+            _beta_txt = (f"{_ro_beta:,.0f} kg/m²" if _ro_beta > 0
+                         else (self._derived_beta_preview(p, _ero)
+                               if _is_body_ro else None))
             if _pbv_m > 0:
                 _row2(af, r, "PBV mass:", f"{_pbv_m:,.0f} kg",
-                      "Object β:", f"{_ro_beta:,.0f} kg/m²" if _ro_beta > 0 else "—"); r += 1
-            elif _ro_beta > 0:
-                _row2(af, r, "Object β:", f"{_ro_beta:,.0f} kg/m²"); r += 1
+                      "Object β:", _beta_txt or "—"); r += 1
+            elif _beta_txt:
+                _row2(af, r, "Object β:", _beta_txt); r += 1
             _ro_shape_s = NOSE_SHAPE_LABELS.get(_ero.shape, NOSE_SHAPE_LABELS['cone'])
             _row2(af, r, "Reentry object shape:", _ro_shape_s,
                   "Object diameter:",
@@ -11028,7 +11082,13 @@ class BoosterFlyoutApp(tk.Tk):
             if _glide_on:
                 # glider_LD is the airframe CAPABILITY; a plan's commanded L/D
                 # may fly it lower (never higher), so label it as the ceiling.
-                _row2(af, r, "Glider L/D:", f"{_ero.glider_LD:.2f}  (capability)",
+                # For a non-separating body with L/D=0 = derive, preview the
+                # geometry-derived (trim-gated) value the run will use.
+                _ld_txt = (f"{_ero.glider_LD:.2f}  (capability)"
+                           if _ero.glider_LD > 0
+                           else (self._derived_ld_preview(p, _ero)
+                                 if _is_body_ro else "0.00  (capability)"))
+                _row2(af, r, "Glider L/D:", _ld_txt,
                       "Guidance:", _guid_lbl); r += 1
 
         # ── Shroud ────────────────────────────────────────────────────
