@@ -682,7 +682,13 @@ without editing the object, and any object can be flown on any booster.
 - **Non-separating** (`body`): the last stage *is* the reentering vehicle
   (Hwasong-11 / Pershing-II MaRV class). `effective_ro` inherits the stage's
   burnout mass, diameter, and length; no separate last-stage debris arc is
-  emitted. Attitude (§8.11) then decides trimmed vs. tumbling drag.
+  emitted. Attitude (§8.11) then decides trimmed vs. tumbling drag. Because the
+  airframe is one body, its nose is drawn **subtractively** — the forward
+  `ROParams.body_nose_length_m` is the taper carved from the top of the stage,
+  not a section stacked on it — so the schematic's total height is the airframe
+  length, matching what is flown. This DRAWN ≡ FLOWN invariant (the schematic is
+  the human's oversight surface) is pinned by `test_front_end_consistency.py`;
+  see `FRONT_END_DESIGN.md`.
 
 The legacy `BoosterParams.ro_separates` flag is retained as a **build-time
 descriptor** — it records whether the stored stage masses embed the payload,

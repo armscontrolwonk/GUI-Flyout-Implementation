@@ -5,8 +5,9 @@ non-separating** missile (V-2, Scud, KN-23 / Iskander, Pershing II MaRV) mutuall
 consistent. Companion to `BODY_REENTRY_DESIGN.md` (which established
 `separation_mode` and the run-level loadout) and `GLIDE_CAPTURE_DESIGN.md`.
 
-Status: **proposed**. Decisions settled with the user 2026-08-21; no code
-written yet. Governing rule, as everywhere: derive, don't invent.
+Status: **Phases 0–2 implemented** (2026-08-21); Phase 3 deferred (see §6).
+Decisions settled with the user 2026-08-21. Governing rule, as everywhere:
+derive, don't invent.
 
 ---
 
@@ -121,11 +122,11 @@ For `separation_mode = "body"`:
   independent input exactly as today — separating RVs are unaffected by all of
   this.
 
-Open sub-question for Phase 2 (not blocking the doc): whether the "nose length"
-for a body is a new stored `ROParams` field, or a body-specific reinterpretation
-of an existing one (`nose_radius_m` is unrelated; there is no current RO nose-
-length field). Leaning toward a new optional `body_nose_length_m` that defaults
-to a flagged fraction — additive-free, and separating RVs ignore it.
+Resolved (user, 2026-08-21): the nose length is a **new stored field**,
+`ROParams.body_nose_length_m` — additive-free, separating RVs ignore it, and it
+does not overload `nose_radius_m` (which means something else). It defaults to a
+flagged shape-appropriate fraction when 0, and is bounded to the body length so a
+nose can never exceed the airframe.
 
 ---
 
@@ -157,47 +158,43 @@ stored, flown, and drawn, and the guarantee that those three agree.
 ## 6. Phased plan
 
 Each phase is independently shippable, ends green, and is gated on the invariant.
+Phases 0–2 are **done**; Phase 3 is deferred until a shaped-MaRV physics change is
+actually wanted; Phase 4 is folded into this doc's status.
 
-### Phase 0 — the invariant test (write first, RED)
-A `drawn ≡ flown` test in `test_front_end_consistency.py`: for every library
-booster and a body-mode KN-23 fixture, assert the schematic's total height,
-body diameter, nose shape, and nose length equal what `effective_ro` /
-`_boost_front_geometry` report. It **fails** on today's code (8.46 ≠ 6.7,
-cone ≠ Von Kármán) — that red is the specification.
+### Phase 0 — the invariant test (write first, RED) — DONE
+`test_front_end_consistency.py`. `draw_booster` returns a `front_end`
+dict `{kind, shape, nose_length_m, body_diameter_m}`; the test asserts it equals
+what `effective_ro` flies, for the body-mode KN-23 fixture and every library
+booster. Red on the pre-fix 8.46 ≠ 6.7 / cone ≠ Von Kármán, green after Phase 1.
 
-### Phase 1 — schematic truth (fix A + B)
-1. **A:** when no fairing is declared, the front end is drawn from
-   `effective_ro`/`_boost_front_geometry` — the real body length and nose, not
-   the fabricated 1.6 × ⌀ cone. Total height collapses to the airframe length.
-2. **B:** the corner RO and the stack nose both draw the **declared analytic
-   profile** via `_nose_profile(shape, …)` (the same curve the Blender export
-   revolves — one source of truth), so Von Kármán/ogive/Haack each show their own
-   outline. Retire the shape-blind `_reentry_shape` cone path (or make it honor
-   the shape).
-3. `fairing_fit` checks against the real front end, so the phantom "0.24 m too
-   long" disappears on its own.
-Phase 0's test goes GREEN. No physics change yet.
+### Phase 1 — schematic truth (fix A + B) — DONE
+Body mode draws the last stage with its nose carved subtractively from the top
+(the airframe length is the total height); the corner reentry object and the
+containment check are skipped for a body (nothing contains it); the corner RO and
+the stack nose draw the declared analytic profile (`_nose_profile`) instead of an
+unconditional cone. KN-23: 8.46 m → 6.7 m, Von Kármán, no phantom "too long".
 
-### Phase 2 — data model + editor (fix C, subtractive)
-1. Body length/diameter/mass stay inherited (as today); add the flagged
-   subtractive **nose length** (§4) bounded to the body length.
-2. RO editor: length becomes derived/read-only in body mode (shows the inherited
-   body length); a nose-length/nose-fraction control appears; separating mode
-   unchanged. The human now only sees inputs the code actually honors.
-3. Round-trip (JSON + xlsx) for any new field; legacy files load with the flagged
-   default.
+### Phase 2 — data model + editor — DONE
+`ROParams.body_nose_length_m` (JSON + xlsx round-trip); the RO editor gains a
+"Body nose length (m)" field active only in body mode, while mass/diameter/length
+already grey out there (inherited from the last stage). Legacy files default the
+field to 0 → the schematic's flagged fraction.
 
-### Phase 3 — physics reconciliation (only if body length semantics change)
-If we decide the flown reentry body for a shaped MaRV is the forward taper rather
-than the whole tube, that changes `_boost_front_geometry`'s returned body length
-and therefore drag/heating. Treat as a distinct, measured change: report
-before/after range and heating for the KN-23 and the body-mode library entries,
-keep axisymmetric byte-identity for everything not in body mode, and pin with
-tests. Do **not** fold into Phase 2.
+### Phase 3 — physics reconciliation (deferred, only if body-length semantics change)
+Today the *drawing* uses `body_nose_length_m` (the taper), while the *aero*
+(`_boost_front_geometry`) still treats the whole airframe as the reference body —
+consistent, because the aero consumes only body diameter (for area) and nose
+shape (for Cd), not the taper length. If we later decide the flown reentry body
+for a shaped MaRV is the forward taper rather than the whole tube, that changes
+`_boost_front_geometry`'s returned body length and therefore drag/heating: treat
+it as a distinct, measured change — report before/after range and heating for the
+KN-23 and the body-mode library entries, keep axisymmetric byte-identity for
+everything not in body mode, and pin with tests. Do **not** fold it into the
+drawing work above.
 
-### Phase 4 — docs
-METHODS §2/§6 (front-end geometry) + this doc's status → implemented; note the
-DRAWN ≡ FLOWN invariant and its test as the standing guarantee.
+### Phase 4 — docs — DONE
+This doc's status and §4 resolution updated; the DRAWN ≡ FLOWN invariant and its
+test (`test_front_end_consistency.py`) stand as the guarantee.
 
 ---
 
