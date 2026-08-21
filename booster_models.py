@@ -905,9 +905,16 @@ def compose_loadout(params: 'BoosterParams', ro=None,
     if ro is None:
         return p
     n = max(1, int(num_ros))
-    if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
-        n = 1
     ro_mass = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
+    if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
+        # NON-SEPARATING body: the object IS the last stage, so its mass is
+        # ALREADY in the stage masses — adding it as extra payload double-counts
+        # (a KN-23 seeded with the 2198 kg burnout mass gained 2198 kg and its
+        # range collapsed 574 → 137 km).  Fly the stack as built; effective_ro
+        # inherits the stage's own burnout mass for reentry.  N is forced to 1.
+        p.num_ros = 1
+        p.ro_mass_kg = ro_mass
+        return p
     if ro_mass <= 0:
         return p          # nothing meaningful to compose; fly as built
     bus = float(getattr(p, 'bus_mass_kg', 0.0) or 0.0)
