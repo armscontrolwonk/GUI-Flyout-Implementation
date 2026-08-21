@@ -87,3 +87,35 @@ def test_body_with_entered_beta_does_not_derive():
 def test_separating_rv_never_derives():
     r, _ = _fly(0.0, sep="separating_ro", glider=False)
     assert r["derived_beta_kg_m2"] is None
+
+
+# ── nose-first vs tumbling: the β regime follows the attitude ────────────────
+
+def _fly_attitude(attitude, glider):
+    p = _booster()
+    ro = ROParams(name="b", mass_kg=500.0, beta_kg_m2=0.0, shape="karman",
+                  diameter_m=1.1, length_m=2.0, separation_mode="body",
+                  reentry_attitude=attitude, glider_enabled=glider, glider_LD=0.0,
+                  glider_guidance="damped_glide", body_nose_length_m=2.0)
+    pc = compose_loadout(p, ro, 1)
+    pc.ro = ro
+    return integrate_trajectory(pc, 39.12, 125.67, 90.0,
+                                burnout_angle_deg=-2.0, max_time_s=3600.0)
+
+
+def test_tumbling_body_uses_tumbling_beta_not_the_nose_first_table():
+    """A body that cannot hold nose-first (reentry_attitude='tumbling') is a
+    bluff spinning cylinder with a far LOWER β — the low-drag nose-first table
+    must not apply, and no derived (nose-first) β is reported."""
+    t = _fly_attitude("tumbling", glider=False)
+    assert t["derived_beta_kg_m2"] is None            # no nose-first β for a tumbler
+
+
+def test_nose_first_penetrates_faster_than_tumbling():
+    """The physical distinction (user, 2026-08-21): a body reentering nose-first
+    on its nose+fins has a much higher β than the same body tumbling, so it
+    decelerates far less and strikes much faster."""
+    tumbling = _fly_attitude("tumbling", glider=False)
+    nose_first = _fly_attitude("trim", glider=True)
+    assert nose_first["derived_beta_kg_m2"] > 0.0
+    assert nose_first["impact_speed_ms"] > 2.0 * tumbling["impact_speed_ms"]

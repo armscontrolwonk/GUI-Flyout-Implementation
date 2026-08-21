@@ -1100,9 +1100,16 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # at setup, like _ld_of_mach); falls back to the object's scalar
             # β_kg_m2 when no table is present (separating RVs, and any body with
             # β entered > 0).  See FRONT_END_DESIGN.md §10.
+            # The β(Mach) table is the NOSE-FIRST β (the airframe flying pointed,
+            # stabilised by its nose+fins).  A body that cannot hold that attitude
+            # TUMBLES — a bluff spinning cylinder with a far lower β — so the
+            # tumbling scalar β from effective_ro wins and the nose-first table is
+            # ignored.  The trim gate (which includes the fins) makes the
+            # nose-first-vs-tumbling call; β simply follows it.
             _beta_eff = float(_ero.beta_kg_m2)
             _beta_tab = getattr(params, '_beta_of_mach', None)
-            if _beta_tab is not None and _a_snd > 0.0:
+            if (_beta_tab is not None and _a_snd > 0.0
+                    and getattr(_ero, 'reentry_attitude', 'trim') != 'tumbling'):
                 _beta_eff = _beta_tab(speed / _a_snd)
             drag_mag = q * ro_mass / _beta_eff
             # Glide-phase activation.  The lifting phase begins at APOGEE — the
@@ -2033,6 +2040,7 @@ def integrate_trajectory(params: BoosterParams,
     _bro = params.ro
     if (_bro is not None
             and getattr(_bro, 'separation_mode', 'separating_ro') == 'body'
+            and getattr(_bro, 'reentry_attitude', 'trim') != 'tumbling'
             and float(getattr(_bro, 'beta_kg_m2', 0.0) or 0.0) <= 0.0):
         try:
             import glider_ld as _gld
@@ -2092,8 +2100,13 @@ def integrate_trajectory(params: BoosterParams,
                 params = copy.copy(params)
                 if _g['LD_achievable'] <= 0.0:
                     # Unstable -> tumbles.  effective_ro's tumbling branch will
-                    # derive the ballistic-coefficient and zero the lift.
+                    # derive the ballistic-coefficient and zero the lift.  The
+                    # nose-first β table no longer applies (the body is not
+                    # nose-first): drop it so the tumbling β wins, and clear the
+                    # reported derived-β so the result stays honest.
                     params.ro = _dc.replace(_ro, reentry_attitude='tumbling')
+                    params._beta_of_mach = None
+                    _derived_beta_ref = None
                 else:
                     # Mach-varying (L/D)_max: sample the geometry build-up over
                     # a Mach grid, capped by the control-achievable L/D, and

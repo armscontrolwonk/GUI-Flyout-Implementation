@@ -298,10 +298,25 @@ paths and any non-table read, exactly as L/D does. A separating RV, or any body
 with β entered `> 0`, keeps its scalar untouched — `0 = derive` is opt-in and the
 legacy default (β = 10000) still means "typed".
 
+**Two β regimes — nose-first vs tumbling (user, 2026-08-21).** The derived β
+above is the **nose-first** β: the airframe flying pointed, held there by its
+nose and (especially) fins. A body that *cannot* hold that attitude **tumbles** —
+a bluff spinning cylinder with a far lower β (heavy drag, near-terminal impact),
+which `effective_ro` already derives from `tumbling_cylinder_beta` when
+`reentry_attitude == 'tumbling'`. These are physically distinct — a finned
+KN-23 strikes fast, a bare spent stage flutters down — and the tool already has
+the discriminator: the **trim gate** (which includes the fins in the CP) decides
+nose-first-vs-tumbling, and β simply follows it. So the nose-first β(Mach) table
+is used only while the body is nose-first; the moment the gate (or the user)
+declares tumbling, the table is dropped and the tumbling scalar wins. A separated
+nose leaves the spent stage as its own tumbling debris object — a different case,
+handled by the debris path, not this table.
+
 Honesty caveats to surface (not hide): a Mach-dependent β makes the "ballistic
 coefficient" a curve, so the reports/estimator must show β at the reference Mach
 plus its range, and note it is a screening Cd₀ build-up, not a measured value —
-the same disclosure standard as the L/D estimate.
+the same disclosure standard as the L/D estimate. `result['derived_beta_kg_m2']`
+carries the nose-first ref-Mach value (or `None` when not derived / tumbling).
 
 ## 11. Phasing (Part II)
 
