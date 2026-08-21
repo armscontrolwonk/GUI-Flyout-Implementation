@@ -2051,7 +2051,7 @@ def integrate_trajectory(params: BoosterParams,
             if _bmass > 0.0 and _bAref > 0.0:
                 _bm = np.array([1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 12.0])
                 _bv = np.array([
-                    _bmass / (max(float(_gld._body_cd0(_blast, _M)), 1e-6) * _bAref)
+                    _bmass / (max(float(_gld.body_cd0(params, _M)), 1e-6) * _bAref)
                     for _M in _bm])
                 if np.all(np.isfinite(_bv)) and np.all(_bv > 0.0):
                     params = copy.copy(params)

@@ -139,17 +139,52 @@ def _last_stage(params: BoosterParams) -> BoosterParams:
     return last
 
 
-def _body_cd0(last: BoosterParams, mach: float) -> float:
-    """Body zero-lift drag coefficient (referenced to base area)."""
-    nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
+def _front_nose_aero(params: BoosterParams, last: BoosterParams):
+    """(nose_shape, nose_length_m) of the AS-FLOWN front end for the aero
+    build-up.  For a non-separating body the nose shape lives on the reentry
+    object (the stage carries none), so it is read from there and its taper is
+    body_nose_length_m (flagged default when unset), consistent with the
+    schematic and grid_fin_sizing; otherwise the stage's own nose fields."""
+    from booster_models import effective_ro
+    d = float(last.diameter_m)
+    ro = effective_ro(params)
+    if (ro is not None
+            and getattr(ro, 'separation_mode', 'separating_ro') == 'body'
+            and getattr(ro, 'shape', '')):
+        _bn = float(getattr(ro, 'body_nose_length_m', 0.0) or 0.0)
+        if _bn <= 0.0 and d > 0:
+            _bn = min(3.0 * d, 0.5 * (float(last.length_m) or (2.0 * d)))
+        return (ro.shape, _bn)
+    return (getattr(last, 'nose_shape', '') or '',
+            float(getattr(last, 'nose_length_m', 0.0) or 0.0))
+
+
+def _body_cd0(last: BoosterParams, mach: float,
+              nose_shape: str = None, nose_len: float = None) -> float:
+    """Body zero-lift drag coefficient (referenced to base area).
+
+    nose_shape / nose_len override the stage's own nose fields with the
+    as-flown front end (the RO nose for a non-separating body — see
+    _front_nose_aero); when None the stage fields are used (legacy behaviour)."""
+    _ns = last.nose_shape if nose_shape is None else nose_shape
+    _nl = last.nose_length_m if nose_len is None else nose_len
+    nose = _SHAPE_ALIAS.get(_ns or '', _ns or '')
     d = last.diameter_m
     if nose and nose not in ('', 'forden') and d > 0:
-        ld_nose = last.nose_length_m / d if last.nose_length_m > 0 else 3.0
+        ld_nose = _nl / d if _nl and _nl > 0 else 3.0
         ld_body = last.length_m / d if last.length_m > 0 else None
         return _cd_nose_shape(nose, ld_nose, mach, ld_body=ld_body,
                               aerospike_LD=float(last.aerospike_LD or 0.0),
                               aerospike_dD=float(last.aerospike_dD or 0.0))
     return drag_coefficient(last, mach)
+
+
+def body_cd0(params: BoosterParams, mach: float) -> float:
+    """As-flown body Cd0: resolves the correct front-end nose (the reentry
+    object's for a non-separating body) and evaluates _body_cd0."""
+    last = _last_stage(params)
+    _ns, _nl = _front_nose_aero(params, last)
+    return _body_cd0(last, mach, _ns, _nl)
 
 
 def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
@@ -173,15 +208,18 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     # cylindrical afterbody it underestimates S_plan badly (validated against
     # Digital DATCOM: the triangle drove L/D ~20-30% low, growing with Mach).
     # Build it as nose (shape fill factor x L_nose x d) + cylindrical afterbody.
-    L_nose = float(getattr(last, 'nose_length_m', 0.0) or 0.0)
+    # As-flown front-end nose (the RO's for a non-separating body — the stage
+    # itself carries none), feeding BOTH the planform fill and the Cd0 so the
+    # whole build-up sees the real nose, not a generic fallback.
+    _nose_shape_eff, L_nose = _front_nose_aero(params, last)
     if 0.0 < L_nose < L_body:
-        nose = _SHAPE_ALIAS.get(last.nose_shape or '', last.nose_shape or '')
+        nose = _SHAPE_ALIAS.get(_nose_shape_eff or '', _nose_shape_eff or '')
         fill = _NOSE_PLANFORM_FILL.get(nose, 0.667)   # cone 0.5, ogive ~0.67
         A_p_body = fill * L_nose * d + (L_body - L_nose) * d
     else:
         A_p_body = 0.5 * L_body * d                # pointed-body fallback
 
-    cd0 = _body_cd0(last, mach)
+    cd0 = _body_cd0(last, mach, _nose_shape_eff, L_nose)
 
     # Fins (the pitch-plane lifting pair); body+fin carryover via N-K-P.
     k_sum = 0.0

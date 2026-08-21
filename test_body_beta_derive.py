@@ -59,21 +59,24 @@ def test_derived_beta_matches_hand_computation():
     last = glider_ld._last_stage(pc)
     A = np.pi * (last.diameter_m / 2.0) ** 2
     m = effective_ro(pc).mass_kg
-    cd0 = glider_ld._body_cd0(last, glider_ld.GLIDE_MACH_REF)
+    cd0 = glider_ld.body_cd0(pc, glider_ld.GLIDE_MACH_REF)
     expect = m / (cd0 * A)
     assert abs(r["derived_beta_kg_m2"] - expect) < 1.0
     assert m != 500.0            # inherited burnout mass, not the RO's 500 kg
 
 
-def test_derived_beta_flies_like_that_scalar():
-    """With the airframe Cd0 flat in Mach (Forden fallback), the β(Mach) table
-    is flat, so β=0 flies the SAME as typing that derived scalar — and clearly
-    differently from an arbitrary β."""
-    r0, _ = _fly(0.0)
+def test_derived_beta_is_a_sane_mach_curve():
+    """The derived β is the airframe Cd0 build-up over Mach (not a flat
+    fallback): the ref-Mach value sits in a physical band for a slender dense
+    body, and β=0 flies clearly differently from an arbitrary constant β."""
+    r0, pc = _fly(0.0)
     beta_ref = r0["derived_beta_kg_m2"]
-    r_same, _ = _fly(beta_ref)
+    assert 3000.0 < beta_ref < 12000.0
+    # Cd0 falls with Mach, so β RISES with Mach — the table is not flat.
+    lo = glider_ld.body_cd0(pc, 2.0)
+    hi = glider_ld.body_cd0(pc, 12.0)
+    assert lo > hi > 0.0                                         # genuine Mach curve
     r_diff, _ = _fly(2000.0)
-    assert abs(r0["range_km"] - r_same["range_km"]) < 2.0        # ≈ same
     assert abs(r0["range_km"] - r_diff["range_km"]) > 20.0       # ≠ arbitrary β
 
 
