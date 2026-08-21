@@ -346,6 +346,16 @@ class ROParams:
     # revolution has none.
     body_span_m: float = 0.0
 
+    # Forward-taper (nose) length of a NON-SEPARATING body, in metres.  A
+    # unitary missile (V-2 / Scud / KN-23) is one airframe whose length is the
+    # last stage's length_m; this field is the forward portion of that length
+    # that tapers into the nose (shape = self.shape), carved SUBTRACTIVELY from
+    # the top — never a section stacked on top (see FRONT_END_DESIGN.md §4).
+    # 0 = unset → the schematic draws a flagged shape-appropriate default and
+    # says so.  Meaningful only for separation_mode == "body"; a separating RV
+    # carries its own independent length_m instead and ignores this field.
+    body_nose_length_m: float = 0.0
+
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
@@ -691,6 +701,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'break_diameter_m':      ro.break_diameter_m,
         'body_form':             ro.body_form,
         'body_span_m':           ro.body_span_m,
+        'body_nose_length_m':    ro.body_nose_length_m,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -761,6 +772,7 @@ def ro_from_dict(d: dict) -> ROParams:
                    if str(d.get('body_form', '') or '') in BODY_FORMS
                    else 'axisymmetric'),
         body_span_m=float(d.get('body_span_m', 0.0) or 0.0),
+        body_nose_length_m=float(d.get('body_nose_length_m', 0.0) or 0.0),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),

@@ -255,7 +255,15 @@ def _draw_reentry_object(ax, ro, view_right, yl, veh_right=0.0):
     elif bic is not None:
         _biconic_shape(ax, x0, 0.0, D, L, bic[1], bic[0], rn, NOSE, BODY_E)
     else:
-        _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
+        # Draw the DECLARED nose profile (Von Kármán / ogive / Haack / parabola)
+        # — the same analytic curve the 3-D export revolves — not a generic
+        # cone.  A plain cone (or unset shape) keeps _reentry_shape, which also
+        # honours the spherical nose-radius blunting.
+        _shape = (getattr(ro, "shape", "") or "").lower()
+        if _shape and _shape != "cone":
+            _nose_patch(ax, x0, 0.0, D, L, NOSE, BODY_E, _shape)
+        else:
+            _reentry_shape(ax, x0, 0.0, D, L, rn, NOSE, BODY_E)
 
     if planform:
         # Faithful panel: root follows the flank from the base to the root
@@ -365,13 +373,58 @@ def draw_booster(ax, p, title=None):
         (s for s in stages
          if (getattr(s, "shroud_length_m", 0.0) or 0.0) > 0.0), None)
 
+    # DRAWN ≡ FLOWN (FRONT_END_DESIGN.md §3): the front end is read from the
+    # SAME object the physics flies, effective_ro(p).  For a NON-SEPARATING
+    # body (V-2/Scud/KN-23) the reentering vehicle IS the last stage, so its
+    # nose is carved SUBTRACTIVELY from the top of that stage (body length
+    # unchanged) — never a cone stacked on top, and never a separate corner
+    # object.  front_end records what was actually drawn, so the invariant is
+    # machine-checkable.
+    from booster_models import effective_ro as _effective_ro
+    _eff_ro = _effective_ro(p)
+    _sep = (getattr(_eff_ro, "separation_mode", "separating_ro")
+            if _eff_ro is not None else None)
+    _body_mode = (_eff_ro is not None and _sep == "body"
+                  and float(getattr(_eff_ro, "diameter_m", 0.0) or 0.0) > 0.0
+                  and shroud_stage is None)
+    front_end = {"kind": "none", "shape": "", "nose_length_m": 0.0,
+                 "body_diameter_m": 0.0}
+    _bn_len = 0.0
+    _bn_shape = ""
+    if _body_mode:
+        _ls = stages[-1]
+        _ls_d = float(getattr(_ls, "diameter_m", 0.0) or 0.6)
+        _ls_L = float(getattr(_ls, "length_m", 0.0) or 1.0)
+        _bn_len = float(getattr(_eff_ro, "body_nose_length_m", 0.0) or 0.0)
+        _bn_shape = getattr(_eff_ro, "shape", "") or ""
+        if _bn_len <= 0.0:
+            _bn_len = min(3.0 * _ls_d, 0.5 * _ls_L)   # flagged default fraction
+            flags.append(f"body nose length unset — {_bn_len:.2g} m used "
+                         "(3⌀, capped at ½ body)")
+        _bn_len = max(0.0, min(_bn_len, _ls_L))        # carved from the body
+        if not _bn_shape:
+            flags.append("body nose shape unset — cone shown")
+
     y = 0.0
     for i, s in enumerate(stages):
         d = float(getattr(s, "diameter_m", 0.0) or 0.6)
         L = float(getattr(s, "length_m", 0.0) or 1.0)
         R = d / 2.0
         d_top = _stage_top_diameter(s)                 # equals d unless conical
-        _body_patch(ax, x0, y, d, d_top, L, BODY, BODY_E)
+        if (i == len(stages) - 1) and _body_mode and _bn_len > 0.0:
+            # Non-separating body: the forward _bn_len of this (last) stage is
+            # the nose taper, carved from the body — cylinder below, the
+            # declared analytic nose profile above.  Total height unchanged.
+            _cyl = L - _bn_len
+            if _cyl > 1e-9:
+                _body_patch(ax, x0, y, d, d_top, _cyl, BODY, BODY_E)
+            _nose_patch(ax, x0, y + max(_cyl, 0.0), d_top, _bn_len,
+                        BODY, BODY_E, _bn_shape or "cone")
+            front_end = {"kind": "body_nose", "shape": _bn_shape or "cone",
+                         "nose_length_m": _bn_len,
+                         "body_diameter_m": float(_eff_ro.diameter_m)}
+        else:
+            _body_patch(ax, x0, y, d, d_top, L, BODY, BODY_E)
         _lbl = (f"S{i+1}: ⌀{d:g}→{d_top:g}×{L:g} m" if d_top != d
                 else f"S{i+1}: ⌀{d:g}×{L:g} m")
         ax.text(x0 + R + 0.15, y + L / 2, _lbl,
@@ -430,11 +483,21 @@ def draw_booster(ax, p, title=None):
                 va="center", ha="right", fontsize=8, color=SHROUD_E)
         if flag:
             flags.append("fairing" + flag)
+        front_end = {"kind": "fairing", "shape": shape or "cone",
+                     "nose_length_m": nose, "body_diameter_m": sd}
         nose_base_d = sd
         y += sl
+    elif _body_mode:
+        # The nose was carved into the last stage above (subtractive); nothing
+        # is stacked on top.  nose_base_d for the aerospike is the body ⌀.
+        nose_base_d = top_surface_d or float(_eff_ro.diameter_m) or 1.0
     else:
         nd = top_surface_d or 1.0
-        shape = getattr(top, "nose_shape", "") or ""
+        # Shape from the composed reentry object when one is present (a
+        # separating RV shows its OWN declared profile, not a generic cone);
+        # else the top stage's stored nose shape.
+        shape = ((getattr(_eff_ro, "shape", "") if _eff_ro is not None else "")
+                 or getattr(top, "nose_shape", "") or "")
         nl = float(getattr(top, "nose_length_m", 0.0) or 0.0)
         flag = ""
         if nl <= 0.0:
@@ -448,6 +511,9 @@ def draw_booster(ax, p, title=None):
                 va="center", ha="right", fontsize=8, color=LABEL_MUT)
         if flag:
             flags.append("nose" + flag)
+        front_end = {"kind": "declared_nose" if nl and flag == "" else "fallback",
+                     "shape": shape or "cone", "nose_length_m": nl,
+                     "body_diameter_m": nd}
         nose_base_d = nd
         y += nl
 
@@ -534,9 +600,13 @@ def draw_booster(ax, p, title=None):
     xl, yl = ax.get_xlim(), ax.get_ylim()
     _new_left, _view_right = _draw_scale_reference(ax, xl, yl)
     # A to-scale reentry object in the lower-right corner (when a loadout object
-    # is composed onto the stack); drawn from its own geometry.
+    # is composed onto the stack); drawn from its own geometry.  A NON-
+    # separating body is NOT a separate object — it was drawn in place as the
+    # last stage's nose above — so it gets neither the corner callout nor a
+    # containment check (there is nothing for it to be contained in).
     _ro = getattr(p, "ro", None)
-    if _ro is not None and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0:
+    if (_ro is not None and not _body_mode
+            and float(getattr(_ro, "diameter_m", 0.0) or 0.0) > 0):
         _draw_reentry_object(ax, _ro, _view_right, yl, veh_right=xl[1])
         # Containment check: does this RO actually fit inside the drawn
         # front end (fairing / nose region)?  The SWERVE-on-STARS-1 case —
@@ -555,7 +625,7 @@ def draw_booster(ax, p, title=None):
     if title:
         ax.set_title(title, fontsize=11, weight="bold")
     ax.axis("off")
-    return {"total_height_m": y, "flags": flags}
+    return {"total_height_m": y, "flags": flags, "front_end": front_end}
 
 
 def _draw_cg_marker(ax, p, total_h):

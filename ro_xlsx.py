@@ -107,6 +107,8 @@ _R: dict[str, int] = {
     # wing geometry for the 3-D Blender export (not the polar)
     'wing_thick': 67,
     'n_wings':    68,
+    # non-separating body: forward-taper (nose) length carved from the body
+    'body_nose':  70,
 }
 
 _VAL_COL = 4   # column D
@@ -261,6 +263,10 @@ def _build_ro_sheet(ws, ro) -> None:
     put('fore_len', getattr(ro, 'fore_length_m', 0.0))
     put('break_dia', getattr(ro, 'break_diameter_m', 0.0))
     put('body_span', getattr(ro, 'body_span_m', 0.0))
+    _label(ws, _R['body_nose'], 'Body nose length', 'm',
+           'non-separating body only: forward taper carved from the body '
+           '(0 = auto); separating RVs use their own length instead')
+    put('body_nose', getattr(ro, 'body_nose_length_m', 0.0))
 
     # Wings (appended rows).  The planform (root chord + exposed span + sweep)
     # is the PRIMARY data: when present, S and AR are DERIVED from it by
@@ -375,6 +381,7 @@ def import_ro_xlsx(path: str):
         fore_length_m=_rnum(ws, _R['fore_len'], _VAL_COL),
         break_diameter_m=_rnum(ws, _R['break_dia'], _VAL_COL),
         body_span_m=_rnum(ws, _R['body_span'], _VAL_COL),
+        body_nose_length_m=_rnum(ws, _R['body_nose'], _VAL_COL),
         wing_area_m2=_rnum(ws, _R['wing_area'], _VAL_COL),
         wing_aspect_ratio=_rnum(ws, _R['wing_ar'], _VAL_COL),
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),
