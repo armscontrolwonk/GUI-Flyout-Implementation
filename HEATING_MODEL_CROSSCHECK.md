@@ -523,8 +523,8 @@ right choice for a production Mars convective mode** (it needs only freestream �
 using it does **not** invalidate Murbach as a peak/structural benchmark.
 
 **Status:** structural corroboration now (load-vs-flux, multi-probe, material ladder/charring
-response, second long-glide anchor). A future **Mars heating mode** (the repo already runs
-Mars *trajectories* via `mars_smoke_test.py`) with `k_SG = 1.83e-4` (CO₂, §9) would make
+response, second long-glide anchor). A future **Mars heating mode** (the atmosphere
+config interface already accepts Martian parameters) with `k_SG = 1.83e-4` (CO₂, §9) would make
 AEOLUS Table 1 a direct numeric validation target; pairs naturally with adding a
 `SWERVE-Mars/AEOLUS` RV variant alongside `SWERVE` and `AHW`.
 

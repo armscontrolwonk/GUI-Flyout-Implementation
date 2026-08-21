@@ -529,10 +529,9 @@ where `a = √(γ R T)` is the speed of sound and `γ = 1.4`.
 ### 4.4 Other atmosphere models
 
 The atmosphere module is structured around a fixed signature
-(`atmosphere(altitude_m) → (T, P, ρ, a)`) and a configuration dictionary.
-Two test scripts in the repo, `mars_smoke_test.py` and `mars_smoke_test2.py`,
-exercise the configuration interface with Martian parameters, but the Mars
-atmosphere is not a documented capability of the production code path.
+(`atmosphere(altitude_m) → (T, P, ρ, a)`) and a configuration dictionary. The
+configuration interface has been exercised with Martian parameters, but the
+Mars atmosphere is not a documented capability of the production code path.
 Treat the Mars files as exploratory tests rather than a supported feature.
 
 ---
@@ -4546,13 +4545,13 @@ Three secondary dialogs supplement the main trajectory view:
 
 ## 15. Validation and built-in missile definitions
 
-Thrusty does not ship with a formal regression-test suite — the only
-automated tests in the repository are the two Mars-atmosphere smoke
-scripts (`mars_smoke_test.py`, `mars_smoke_test2.py`) noted in §4.4.
-Validation has instead been performed informally by reproducing
-published trajectory parameters from the open arms-control literature
-and confirming that the simulator's output matches the published flight
-profiles within the modelling fidelity of a 3-DOF point-mass code.
+Thrusty ships with a `pytest` regression suite (the `test_*.py` files in
+the repository) covering the aerodynamics, mass/staging, guidance, glide,
+heating, schematic, and reentry-body models. On top of that, validation
+against reality is performed by reproducing published trajectory parameters
+from the open arms-control literature and confirming that the simulator's
+output matches the published flight profiles within the modelling fidelity
+of a 3-DOF point-mass code.
 
 The twelve builder functions in `booster_models.py` represent the
 qualitative validation set. Each is documented in code comments with
