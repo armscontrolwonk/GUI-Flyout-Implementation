@@ -2850,43 +2850,57 @@ defaults to a numerical mode that reads β as zero-lift directly.
 `test_acton_beta.py` pins the Acton reproduction, the plausible polar point,
 the untouched fleet, and that the analytic run actually uses the halved β.
 
-### 12.1 The pierce-altitude latch and glide-mode state machine
+### 12.1 Glide activation — the apogee transition
 
-Glide-mode aero forces are *not* active throughout the flight; they
-activate only when a specific re-entry condition is met. The latch is the
-`_gl_above_pierce` flag and the `_glider_active` gate, both evaluated each
-step inside the EOM (`trajectory.py`); `effective_ro()` (`booster_models.py`)
-separately selects *which* RV is the terminal vehicle (glider, separating
-warhead, or maneuvering body):
-
-```
-glide_mode = ( RV has separated
-            ∧ glider_enabled
-            ∧ glider_LD > 0
-            ∧ has-crossed-up-then-down-through ACTON_PIERCE_ALT_M )
-```
-
-The pierce altitude is
+Glide-mode aero forces are *not* active throughout the flight; the lifting
+phase begins at **apogee** — the physical start of the descending glide.
+The integrator makes this concrete by splitting every glider run at apogee:
+Phase 1 (launch → apogee) is flown with the glider **off**, so the ascent
+arc is purely ballistic and mode-independent; Phase 2 (apogee → ground)
+is flown with the glider **on**. The pre-apogee flag `_glider_phase1`
+records which phase is active, and the EOM gate is simply
 
 ```
-ACTON_PIERCE_ALT_M = 100_000.0          # trajectory.py
+glide_active = ( RV is the terminal vehicle       # effective_ro()
+               ∧ glider_enabled ∧ glider_LD > 0
+               ∧ past apogee (not _glider_phase1)   # Phase 2
+               ∧ q > 0 )                            # dynamic pressure present
 ```
 
-— the conventional 100 km Kármán-line value used by Acton 2015 (p. 204) as
-the start of his Phase 3 (direct re-entry). The latch (`_gl_above_pierce`
-at `trajectory.py`) requires the vehicle to have first crossed *up*
-through 100 km, then *back down* through 100 km on descent. Until both
-crossings have occurred, the active "RV" exposed to the EOM is the
-non-glider RV (high-β, zero-lift), so a depressed-trajectory ballistic
-flight that never exceeds 100 km is never mistreated as an HGV re-entry.
+`effective_ro()` (`booster_models.py`) separately selects *which* RV is the
+terminal vehicle (glider, separating warhead, or maneuvering body).
 
-This is a deliberate design choice. Many real boost-glide concepts (e.g.
-the AHW endo-atmospheric profile noted in Acton 2015 p. 194) launch on a
-highly depressed trajectory that never crosses 100 km, and Acton's
-analytic model genuinely does not apply to those trajectories — they need
-a different (direct-injection) treatment. Forcing the user to model these
-explicitly rather than auto-classifying any descending RV as a glider
-prevents silent misuse.
+Whether an armed glider then **captures** (settles onto a sustained glide),
+**skips** (re-climbs), or **plunges** is decided by the equilibrium-glide
+dynamics of the selected law (§12.3, `glide_regime.py`), not by any altitude
+threshold: the vehicle catches when it descends into air dense enough that
+the trimmed lift `q·A·C_L` can arrest the sink toward the equilibrium
+flight-path angle `γ* = −2·H_ρ·g/(V²·cosσ·(L/D))`. This is a dynamic-pressure
+condition, so it holds wherever the glide physically occurs — including a
+depressed quasi-ballistic trajectory whose apogee is only ~40–60 km.
+
+**The 100 km pierce is Acton-specific.** `ACTON_PIERCE_ALT_M = 100_000.0`
+(the Kármán line, Acton 2015 p. 204 — the start of his Phase 3 direct
+re-entry) is used **only** by the analytic Acton skip-glide / equilibrium
+family (`equilibrium_glide_acton` and the analytic handoff), whose closed
+form is genuinely an exo-atmospheric re-entry model and is undefined below
+its entry interface. That family keeps the 100 km handoff on its own
+analytic path (the `_glider_pierce_atmosphere` event, §14). The numerical
+EOM laws — phugoid / skip-glide, damped-phugoid, and dynamic-equilibrium
+glide — do **not** use it; they arm on the apogee transition above.
+
+*History (2026-08-21).* The numerical laws previously shared the Acton
+100 km gate through a `_gl_above_pierce` latch that required the vehicle to
+climb above 100 km and descend back through it before any lift was allowed.
+For an exo-atmospheric entry this is identical to the apogee rule — the
+vehicle is post-apogee *and* below 100 km at the same instant — but it
+silently disabled lift for any vehicle whose apogee never reached 100 km. A
+KN-23-class quasi-ballistic missile (apogee ~50 km, a commanded pull-up at
+~40 km) therefore could not glide *at all*: turning the glider on changed
+its range by < 1 km. Gating the numerical laws on the apogee transition
+instead fixes this while leaving every exo-atmospheric benchmark
+byte-identical (the Minotaur-IV + HTV-2 and Tracy/Wright/Acton cases are
+unchanged).
 
 ### 12.2 Aerodynamic models
 

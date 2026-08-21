@@ -1056,15 +1056,6 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     # Active stage (needed for drag and mass; guidance uses top-level params)
     astage, _ = active_stage_and_t(params, t)
 
-    # Latch "vehicle has been above the 100 km pierce altitude at least
-    # once."  Reentry-phase aero modes (lift, polar drag override) are
-    # only allowed to activate after this latches AND alt drops back
-    # below 100 km — i.e. the vehicle has crossed the pierce altitude
-    # going down.  Sub-100 km depressed trajectories therefore never
-    # trigger glide; they fly purely ballistic with β drag.
-    _gl_above = getattr(params, '_gl_above_pierce', None)
-    if _gl_above is not None and not _gl_above[0] and alt > ACTON_PIERCE_ALT_M:
-        _gl_above[0] = True
 
     # Shroud heating-jettison latch (heating mode only: shroud_jettison_alt_km<=0).
     # Free-molecular flux q_dot = 1/2 rho V^3 arms above SHROUD_Q_FAIRING (past
@@ -1106,15 +1097,24 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             if _ld_tab is not None and _a_snd > 0.0:
                 _ld_eff = _ld_tab(speed / _a_snd)
             drag_mag = q * ro_mass / _ero.beta_kg_m2
-            # Reentry-phase activation: glider lift / polar drag override
-            # are allowed only after the vehicle has crossed the 100 km
-            # pierce altitude going down.  The _gl_above_pierce latch
-            # (set in the EOM preamble) records whether alt has been
-            # above 100 km at any point in this integration; combined
-            # with the existing alt < 100 km gate below, this enforces
-            # "reentry modes operate only after reentry at 100 km."
-            _glider_active = (bool(_gl_above is not None and _gl_above[0])
-                              and not getattr(params, '_glider_phase1', False))
+            # Glide-phase activation.  The lifting phase begins at APOGEE — the
+            # physical start of the descending glide — which the pre-/post-apogee
+            # integration split already encodes in _glider_phase1 (True on the
+            # ballistic ascent, False from apogee on).  So the numerical
+            # phugoid / damped-phugoid / dynamic-equilibrium laws arm on that
+            # physical transition, NOT on a fixed 100 km "reentry pierce".
+            #
+            # The 100 km pierce (ACTON_PIERCE_ALT_M) belongs to the exo-
+            # atmospheric Acton skip-glide entry only, and lives on its own
+            # analytic path (the _glider_pierce_atmosphere event).  Requiring it
+            # HERE silently disabled lift for any vehicle whose apogee never
+            # reaches 100 km — a KN-23-class quasi-ballistic missile that pulls
+            # up at ~40–50 km could not glide at all (the _gl_above_pierce latch
+            # never armed).  Dropping that requirement is byte-identical for an
+            # exo-atmospheric entry: there the vehicle is post-apogee AND below
+            # 100 km at the same instant (the alt < 100 km gate below still holds
+            # lift off through the thin near-apogee air on the way down).
+            _glider_active = not getattr(params, '_glider_phase1', False)
             v_hat    = vel / speed
             f_drag   = -drag_mag * v_hat
             # Gate all glider activity (lift, polar drag-override) on being
@@ -2088,20 +2088,8 @@ def integrate_trajectory(params: BoosterParams,
     if cutoff_time_s is None:
         cutoff_time_s = total_burn
 
-    # Per-integration latch: enforces the rule "reentry modes only
-    # operate after the vehicle has been above 100 km and is now below
-    # it."  Without this, depressed trajectories whose apogee is in the
-    # atmosphere see mode-dependent lift on the way up, and polar /
-    # constant_LD / equilibrium / skip glide modes each yield a different
-    # apogee — which violates the user-facing model that reentry-phase
-    # aero only operates after the 100 km pierce.  For sub-100 km
-    # ballistic trajectories the latch never arms and the glider stays
-    # off for the entire flight.  Stashed on params so the EOM (a top-
-    # level function) can find it without changing the eom_args tuple
-    # shape used by many call sites.
     if not hasattr(params, '__dict__'):
         params = copy.copy(params)
-    params._gl_above_pierce = [False]   # set once alt > 100 km
     # Angle-of-attack envelope for the boost guidance (SP-8099).  Stashed on
     # params (like the latches below) so _commanded_thrust_dir — shared by the
     # EOM and the guidance-program plot — sees it without changing the
