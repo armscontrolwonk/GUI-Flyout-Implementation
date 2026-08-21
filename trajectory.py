@@ -1096,7 +1096,15 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             _ld_tab = getattr(params, '_ld_of_mach', None)
             if _ld_tab is not None and _a_snd > 0.0:
                 _ld_eff = _ld_tab(speed / _a_snd)
-            drag_mag = q * ro_mass / _ero.beta_kg_m2
+            # Mach-varying β for a derived-β no-sep body (β(Mach) table stashed
+            # at setup, like _ld_of_mach); falls back to the object's scalar
+            # β_kg_m2 when no table is present (separating RVs, and any body with
+            # β entered > 0).  See FRONT_END_DESIGN.md §10.
+            _beta_eff = float(_ero.beta_kg_m2)
+            _beta_tab = getattr(params, '_beta_of_mach', None)
+            if _beta_tab is not None and _a_snd > 0.0:
+                _beta_eff = _beta_tab(speed / _a_snd)
+            drag_mag = q * ro_mass / _beta_eff
             # Glide-phase activation.  The lifting phase begins at APOGEE — the
             # physical start of the descending glide — which the pre-/post-apogee
             # integration split already encodes in _glider_phase1 (True on the
@@ -1229,7 +1237,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                         lift_mag = q * _polp.A_ref * _C_L
                                         drag_mag = q * _polp.A_ref * _polar_cd(_C_L, _polp)
                                     else:
-                                        _drag_b = (q / float(_ero.beta_kg_m2)) * ro_mass
+                                        _drag_b = (q / _beta_eff) * ro_mass
                                         lift_mag = min(_L_struct, _drag_b * _ld_eff)
                                         drag_mag = max(_drag_b,
                                                        lift_mag / max(_ld_eff, 1e-6))
@@ -1264,7 +1272,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     _CLstar=min(_pol.C_L_star, _pol.C_L_max)
                                     _L_nom=q*_pol.A_ref*_CLstar
                                 else:
-                                    _drag_beta=(q/float(_ero.beta_kg_m2))*ro_mass
+                                    _drag_beta=(q/_beta_eff)*ro_mass
                                     _L_nom=_drag_beta*_ld_eff
                                 if _g_eff > 1e-3:
                                     _dh=200.0
@@ -1344,7 +1352,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                     # zoom-climbing on the growing m·g_eff term
                                     # (the lumped model has no aerodynamic C_L,max
                                     # ceiling to do this on its own).
-                                    _beta_cap = (q / float(_ero.beta_kg_m2)) * ro_mass * _ld_eff
+                                    _beta_cap = (q / _beta_eff) * ro_mass * _ld_eff
                                     lift_mag = min(max(_L_target, 0.0), _beta_cap, _L_max)
                                     drag_mag = lift_mag / max(_ld_eff, 1e-6)
                                 f_drag = -drag_mag * v_hat
@@ -1373,7 +1381,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                                 # the analytic m·g_perp term grows as v decreases
                                 # (g_perp = g − v²/r increases), driving a zoom
                                 # climb instead of a descending equilibrium glide.
-                                _drag_beta  = (q / float(_ero.beta_kg_m2)) * ro_mass
+                                _drag_beta  = (q / _beta_eff) * ro_mass
                                 _lift_beta_cap = _drag_beta * _ld_eff
                                 _L_total = min(ro_mass * _g_perp / _cos_b,
                                               _lift_beta_cap,
@@ -2013,6 +2021,42 @@ def integrate_trajectory(params: BoosterParams,
             params.burnout_angle_deg = burnout_angle_deg
         if launch_elevation_deg is not None:
             params.launch_elevation_deg = launch_elevation_deg
+
+    # Auto-derive the no-separation (body) ballistic coefficient β from geometry
+    # when left at the sentinel 0.  For a body the WHOLE airframe sets the drag,
+    # so β = m / (Cd0_body(M)·A_base) is a β(Mach) TABLE — like the L/D table
+    # below — not a scalar: there is no single-Mach β for a Mach-varying body
+    # Cd0 (FRONT_END_DESIGN.md §10).  Independent of the glide settings (β
+    # governs any body's drag, gliding or ballistic).  A separating RV, or a
+    # body with β entered > 0, keeps its scalar β untouched.
+    _derived_beta_ref = None      # ref-Mach derived β for the result/report
+    _bro = params.ro
+    if (_bro is not None
+            and getattr(_bro, 'separation_mode', 'separating_ro') == 'body'
+            and float(getattr(_bro, 'beta_kg_m2', 0.0) or 0.0) <= 0.0):
+        try:
+            import glider_ld as _gld
+            import dataclasses as _dcb
+            _blast = _gld._last_stage(params)
+            _bmass = float(effective_ro(params).mass_kg)
+            _bAref = np.pi * (float(_blast.diameter_m) / 2.0) ** 2
+            if _bmass > 0.0 and _bAref > 0.0:
+                _bm = np.array([1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 12.0])
+                _bv = np.array([
+                    _bmass / (max(float(_gld._body_cd0(_blast, _M)), 1e-6) * _bAref)
+                    for _M in _bm])
+                if np.all(np.isfinite(_bv)) and np.all(_bv > 0.0):
+                    params = copy.copy(params)
+                    params._beta_of_mach = (lambda M, _x=_bm, _y=_bv:
+                                            float(np.interp(M, _x, _y)))
+                    # Scalar fallback at the reference Mach (analytic paths /
+                    # any non-table read / the reports).
+                    _derived_beta_ref = float(
+                        np.interp(_gld.GLIDE_MACH_REF, _bm, _bv))
+                    params.ro = _dcb.replace(_bro,
+                                             beta_kg_m2=_derived_beta_ref)
+        except Exception:
+            pass
 
     # Auto-derive the no-separation (body) glider L/D from geometry when it was
     # left at the sentinel 0.  For a no-sep body the airframe IS the glider, so
@@ -3851,6 +3895,7 @@ def integrate_trajectory(params: BoosterParams,
 
     return {
         'reentry_trim':       _reentry_trim,   # static-margin / trim-gate verdict, or None
+        'derived_beta_kg_m2': _derived_beta_ref,  # β derived from body geometry (ref Mach), or None
         't':                  t_arr,
         'lat':                lats,
         'lon':                lons,

@@ -230,10 +230,16 @@ doctrine; a non-separating plan auto-seeds a booster-default RO.** When
 must invent — it is seeded as *this booster's front end* and presented as such:
 
 - **Inherited-from-booster fields** (mass, diameter, length) are shown
-  **read-only**, labeled "from booster", because `effective_ro` already takes
-  them from the last stage at run time. The editor stops offering an input the
-  code discards (the Part I complaint, now structural rather than per-field
-  greying).
+  **read-only**, labeled "from booster" — meaning **from the last stage's own
+  Stage-panel fields** (`diameter_m`, `length_m`, and the burnout mass
+  `mass_final`), which the user already enters there. This is NOT a
+  fairing-style parallel entry: a fairing is separate, jettisonable hardware
+  with its own `shroud_mass_kg`/`shroud_length_m`/`shroud_diameter_m` (additive,
+  sits on top), whereas a unitary body's front end adds no mass and no length —
+  the airframe *is* the last stage, and the nose is the forward taper carved
+  from it (subtractive). So there is no new "front-end mass/diameter/length"
+  box to add; `effective_ro` already inherits those, and the editor only
+  surfaces them read-only so the inheritance is visible.
 - **Front-end fields** (nose shape, `body_nose_length_m`, nose radius, TPS
   material) are editable and labeled **"this airframe's nose"** — they are the
   only geometry a unitary body actually adds, and they live here rather than in
