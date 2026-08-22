@@ -115,21 +115,31 @@ def test_capture_altitude_decouples_from_zeta():
     assert pull_spread < base_spread
 
 
-@pytest.mark.xfail(reason=(
-    "Re-anchor needed: this compares two reentry troughs on the SAME boosted "
-    "trajectory, and its margin was always ~1% (before the power-on base-drag "
-    "correction: 90km=24416 m vs 40km=24674 m, +258 m).  The Strypi fixture has "
-    "real nozzle data, so base bleed correctly raised its burnout energy ~4%, "
-    "shifting both troughs and flipping the fragile ordering (now 90km=24679 vs "
-    "40km=24158).  The trough-vs-trigger-altitude relation is non-monotonic "
-    "(35km gives 19534 m), so the 'well-placed 40km beats too-high 90km' premise "
-    "was calibrated to one boost energy.  Left xfail (not silently re-fitted) "
-    "pending a boost-energy-independent re-anchoring of the no-conjured-lift "
-    "guard.  See test_base_bleed.py + METHODS §8.4."), strict=False)
-def test_triggering_too_high_undershoots_honestly():
-    """At 90 km there is no q to pull with — the pull must NOT conjure lift,
-    so the capture is worse (deeper trough) than a well-placed 40 km trigger."""
-    assert _first_trough_m(_fly(90.0)) < _first_trough_m(_fly(40.0))
+def test_triggering_too_high_conjures_no_lift():
+    """A pull-up commanded at 90 km — far above usable dynamic pressure — must
+    generate NO lift: through the thin-air descent band the trajectory is
+    indistinguishable from a no-pull-up run (the modifier does nothing where
+    q ~ 0), and the two diverge only once real air returns lower down, where the
+    pull legitimately bites.  This is the honest form of the "does not conjure
+    lift in vacuum" guard.
+
+    It replaces a former trough-depth comparison (`trough(90) < trough(40)`)
+    whose metric was CONFOUNDED — the first-trough altitude mostly tracks the
+    trigger altitude itself (trigger lower -> you have already fallen further ->
+    you bottom out lower), not how effective the pull was — and whose ~1% margin
+    flipped under any small legitimate energy change (e.g. the power-on base-drag
+    correction).  Speed-vs-altitude in the thin-air band is boost-energy-robust:
+    both runs shift together, so their difference stays ~0.
+    """
+    hi   = _fly(90.0)
+    base = _fly(0.0)          # no commanded pull-up (modifier off)
+    # Inert in the thin-air band: speeds match to a hair (~0.05 m/s observed).
+    for alt in (60e3, 50e3, 40e3):
+        assert abs(_v_at(hi, alt) - _v_at(base, alt)) < 2.0, (
+            f"90 km pull-up perturbed the ballistic descent at {alt/1e3:.0f} km")
+    # Active once real air returns: by 25 km the pull has clearly changed the
+    # state (hundreds of m/s), so the modifier is not a global no-op.
+    assert abs(_v_at(hi, 25e3) - _v_at(base, 25e3)) > 100.0
 
 
 def test_modifier_composes_with_dynamic_equilibrium_glide():

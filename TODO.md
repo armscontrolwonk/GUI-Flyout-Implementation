@@ -510,11 +510,14 @@ The one phase that touches trajectory physics, gated to lifting forms
   (gated on _eff_burn + global cutoff); coast/reentry and no-nozzle-data
   vehicles are byte-identical; only the decomposed _cd_nose_shape path (not
   the Forden table) gets it.  Isolated effect +~4% range on a solid-motor
-  body with A_exit/A_base≈0.5.  test_base_bleed.py; METHODS §8.4.  Follow-up:
-  test_pullup.py::test_triggering_too_high_undershoots_honestly is xfail —
-  its ~1% trough margin was boost-energy-calibrated and the (correct) energy
-  bump flipped it; needs a boost-energy-independent re-anchoring of the
-  no-conjured-lift guard.
+  body with A_exit/A_base≈0.5.  test_base_bleed.py; METHODS §8.4.  Side effect
+  RESOLVED: the base-bleed energy bump flipped test_pullup's fragile ~1% trough
+  comparison, which investigation showed was a CONFOUNDED metric (first-trough
+  altitude tracks the trigger altitude itself, not pull effectiveness).
+  Re-anchored to the honest guard — a 90 km trigger is inert in the thin-air
+  band (speed identical to no-pull-up to ~0.05 m/s) and active only once real
+  air returns — which is boost-energy-robust.  test_triggering_too_high_
+  conjures_no_lift.
 - Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).
 - Interstage / conical-stage drag (Phase 2 of interstage work; geometry+mass
   shipped, drag-neutral by design).
