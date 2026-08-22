@@ -667,11 +667,20 @@ re-entry vehicle (Section 8.2).
 ### 6.4 Reentry vehicle separation
 
 Whether the reentry object separates from the final-stage body at burnout is a
-**run-level mission choice**, not a stored property of the object or a fixed
-attribute of the booster. It is set by the sidebar **Separation** control and
-persisted on the reentry plan as `separation_mode ∈ {separating_ro, body}`
-(§8.11); the same aeroshell can therefore be flown separating or integrated
-without editing the object, and any object can be flown on any booster.
+**run-level mission choice**, not a stored property of the object. It is set by
+the sidebar **Separation** control and persisted on the reentry plan as
+`separation_mode ∈ {separating_ro, body}` (§8.11); the same aeroshell can
+therefore be flown separating or integrated without editing the object, and any
+object can be flown on any booster.
+
+For a vehicle whose front end *never* separates — Scud / KN-23 / Hwasong class —
+that is a property of the missile, not the flight. `BoosterParams.body_reenters`
+(a checkbox in the booster editor) makes the vehicle the **master**: when set,
+the sidebar locks the plan's Separation to `body` and greys the control, so the
+choice lives with the missile; the reentry mode still defaults to ballistic and
+stays switchable. It is a pure-physics no-op — the run reads the plan's
+`separation_mode` — driving only the editor lock. Default off leaves the plan in
+control as above.
 
 - **Separating** (`separating_ro`): the object departs at burnout and reenters
   on its own geometry/β; the spent final stage tumbles away as debris (§14.3).
@@ -687,7 +696,13 @@ without editing the object, and any object can be flown on any booster.
   not a section stacked on it — so the schematic's total height is the airframe
   length, matching what is flown. This DRAWN ≡ FLOWN invariant (the schematic is
   the human's oversight surface) is pinned by `test_front_end_consistency.py`;
-  see `FRONT_END_DESIGN.md`.
+  see `FRONT_END_DESIGN.md`. The airframe mass is inherited, but the front end
+  owns an explicit **added payload** (`ROParams.payload_kg` — warhead / bus /
+  guidance): `compose_loadout` adds it to the boosted stack and keeps it fused
+  through burnout (a tracked-baseline delta makes composing idempotent), so the
+  reentry mass is airframe-burnout + payload. The object's own `mass_kg` is
+  never added for a body (that was a range-halving double-count); default
+  `payload_kg = 0` leaves existing files byte-identical. `test_body_payload.py`.
 
 The legacy `BoosterParams.ro_separates` flag is retained as a **build-time
 descriptor** — it records whether the stored stage masses embed the payload,
@@ -1867,11 +1882,30 @@ two free inputs (`fore_length_m`, `break_diameter_m`) and returns
 radius.  Two exact single-cone reductions anchor it as regression tests:
 `break_ratio → 1` collapses the aft annulus and returns
 `cd_cone_hypersonic(θ1)` component-for-component, and a sharp θ2 = θ1
-biconic equals the single cone for any break location.  The reentry
-trajectory model is unchanged — β and L/D remain the canonical carriers;
-the biconic geometry only sharpens the β *estimate* and the depiction.
+biconic equals the single cone for any break location.
 `test_biconic_estimator.py` pins the reductions, the component and geometry
 identities, and a slender-RV β band.
+
+**As-flown biconic (not just the estimate).** A declared biconic is a
+first-class shape through the whole flown build-up, not only the manual β
+dialog. `biconic_nose_geometry(params)` is the single shared resolver;
+`cd0_biconic_body()` composes the two-cone build-up above **plus** the
+cylindrical afterbody friction into the body Cd0 that drives the derived
+β(Mach) and the whole-airframe L/D (§8.10), and `biconic_nose_cp_fraction()`
+gives the trim gate (§8.9) an area-weighted two-cone centre of pressure
+(fore cone at 2⁄3 of its length, aft frustum by the Barrowman transition
+formula) rather than a single-cone fraction — so the break ratio moves the
+static margin. The subtractive schematic (§6.4) draws the two cones to
+match. This closes a DRAWN ≡ FLOWN gap one level below the schematic: the
+biconic fields used to be read *only* by the β dialog, so a user could
+declare a biconic, type a biconic β, and unknowingly fly a single cone with
+a single-cone CP. `test_biconic_front_end.py` pins all four consumers moving
+together and the two reduction identities. Framework note: the flown biconic
+Cd0 is the hypersonic Newtonian two-cone model (M ≥ 3), distinct from the
+Chin/NACA single-nose build-up (§8.2) — comparable but not identical at a
+shared Mach; single-profile noses (cone, ogive, Von Kármán, LV-Haack,
+parabola) were already end-to-end because every consumer keys on the shared
+shape string.
 
 For blunted cones the pressure drag is the **exact closed form**
 

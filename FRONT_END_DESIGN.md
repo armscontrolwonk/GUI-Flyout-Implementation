@@ -361,3 +361,113 @@ Open question deferred to build time: the CG estimate is *full-tank* (§ Part I,
 with a near-neutral body (the KN-23 came out SM ≈ 0) that difference can flip the
 verdict. Worth a burnout-CG option, but it is a separate correctness item from
 the ownership/β framing here.
+
+---
+
+# Part III — Biconic, payload ownership, and the vehicle-level switch
+
+**All done (2026-08-22).** Three gaps surfaced once the body was being driven
+in earnest: a declared biconic was drawn and flown as a single cone, a body's
+payload had no home but the stage's dry mass, and separation lived only on the
+flight plan. Each is closed below.
+
+## 12. Biconic end-to-end (declared ≡ modeled)
+
+The DRAWN ≡ FLOWN invariant (§3) was holding in the grimmest way for a biconic:
+the schematic drew one cone because the physics *flew* one cone. The break
+fields (`fore_length_m`, `break_diameter_m`) were stored but read by **only** the
+manual β-estimate dialog (`cd_biconic_hypersonic`); every other consumer — the
+flown drag, the trim gate's CP, the L/D build-up, the schematic — keyed on the
+shape *string*, which for a biconic is `'cone'`. So the user could declare a
+biconic, type a biconic β, and unknowingly fly a single cone with a
+single-cone CP. That is exactly the declared-vs-modeled mismatch the invariant
+exists to prevent — it just sat one level below "schematic vs physics."
+
+The fix promotes the biconic to a first-class shape through all four consumers
+from **one shared resolver** so they cannot drift:
+
+- `booster_models.biconic_nose_geometry(params)` — the as-flown two-cone
+  geometry (θ₁, θ₂, break ratio, ε, segment lengths), or `None` when the break
+  fields are unset/invalid (so callers keep the single-cone path — biconic
+  activates only once fully specified). For a body the biconic occupies the
+  subtractive `body_nose_length_m`; total height is unchanged.
+- `cd0_biconic_body()` — body Cd0 = `cd_biconic_hypersonic` (two-cone Newtonian)
+  + the cylindrical-afterbody friction. Feeds the flown β(M) and the L/D
+  denominator via `glider_ld.body_cd0` / `whole_booster_LD`.
+- `biconic_nose_cp_fraction()` — the area-weighted Barrowman CP of the fore cone
+  + aft frustum; feeds the trim gate through `grid_fin_sizing`.
+- planform in `whole_booster_LD` — fore triangle + aft trapezoid + afterbody,
+  not one fill fraction.
+- `booster_schematic` — the body-nose path draws the two cones (`_biconic_shape`)
+  and records `front_end` kind `body_biconic`.
+
+**Two exact reduction identities anchor it** (`test_biconic_front_end.py`): a
+biconic with θ₂ = θ₁, sharp, is a single hypersonic cone (Cd0 matches to machine
+precision); and a break lying on a straight cone recovers the single-cone CP
+fraction 2/3. The break ratio is the CP lever — a slender break throws area onto
+the aft frustum and moves the CP aft, a fat break moves it forward.
+
+**Framework note (documented in `cd0_biconic_body`).** A biconic uses the
+hypersonic Newtonian two-cone build-up (valid M ≥ 3), distinct from the
+Chin/NACA single-nose build-up (`_cd_nose_shape`) used for single-profile noses.
+Toggling biconic therefore shifts frameworks — comparable but not identical at a
+shared Mach — by design. Single-profile noses (cone, tangent ogive, Von Kármán,
+LV-Haack, parabola) were **already** end-to-end: every consumer keys on the same
+shape string, so only the biconic (a flag, not a string) was second-class.
+
+## 13. Payload ownership — A2 (the front end owns its payload)
+
+A non-separating body IS the last stage, so its structural + residual burnout
+mass is inherited (§ Part I). The remaining question — *where does the warhead /
+bus / guidance mass go?* — had no good answer: it was folded silently into the
+stage's dry mass, with no distinct knob. **A2** gives the front end an explicit
+added payload:
+
+- `ROParams.payload_kg` — the added body payload, on top of the inherited
+  airframe burnout mass. Round-trips through JSON and the `.xlsx` sheet.
+- `compose_loadout` (body branch) adds it to the boosted stack and to the last
+  stage's burnout mass (fused through burnout), via a **tracked-baseline delta**
+  so composing twice adds it once. The RO's own `mass_kg` is still **never**
+  added for a body — the 574 → 137 km double-count guard holds; only
+  `payload_kg` is.
+- `BoosterParams.body_payload_kg` — the idempotency baseline, kept **separate**
+  from `payload_kg`. `payload_kg`'s baseline is the separating design payload;
+  reusing it made a body *subtract* the booster's baked warhead (a Scud-B bakes
+  1000 kg). Runtime bookkeeping, not serialised.
+- No reentry-side code: `effective_ro` / `_mass_at_time` already derive the
+  body's reentry mass from `mass_initial − propellant`, so both pick up the
+  payload automatically.
+
+Default 0 → every existing file flies byte-identical. With payload set, the
+boost mass and the reentry mass both rise by it and the flyout lands short
+(+500 kg: 466 → 261 km). The editor shows an editable "+ payload" beside the
+read-only airframe mass and a live "= N kg reentry (airframe + payload)" line.
+`test_body_payload.py`.
+
+Why A2 over A1 (a stage-level warhead field): the user chose it so the front end
+is the single console where its own properties are overseen — "there is no reason
+it can't live inside the reentry object." The idempotent-compose discipline (the
+separate baseline) is what makes A2 safe.
+
+## 14. Separation is a vehicle property — `body_reenters`
+
+Separation used to live only on the reentry plan (chosen so one aeroshell could
+be A/B'd separating vs. integrated). But for a Scud / KN-23 the body reenters —
+full stop; that is a fact about the missile, not the flight. `BoosterParams.
+body_reenters` (a checkbox in the booster editor's Payload / Front End section)
+makes the vehicle the master: when set, the sidebar locks the reentry-plan
+Separation to "body" and greys the combo; the reentry Mode still defaults to
+ballistic and stays switchable. Unchecked, the plan owns separation exactly as
+before. A pure-physics no-op — the run reads the plan's `separation_mode`; the
+flag only drives the editor lock. Default off → existing boosters unchanged.
+`test_body_payload.py` (round-trip + physics-noop).
+
+## 15. Acceptance (Part III)
+
+- A biconic KN-23 shows a different Cd0, CP/static margin, L/D and flyout range
+  than the single-cone control, and the schematic matches. ✓ (15 tests)
+- Reduction identities exact (Cd0 to machine precision, CP to 2/3). ✓
+- Payload 0 = byte-identical; +N raises boost and reentry mass and shortens
+  range; compose is idempotent; `mass_kg` never added for a body. ✓ (9 tests)
+- `body_reenters` round-trips and is a physics no-op. ✓
+- Suite 479 → 503.
