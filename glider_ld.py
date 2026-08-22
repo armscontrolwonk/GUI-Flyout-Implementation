@@ -181,8 +181,19 @@ def _body_cd0(last: BoosterParams, mach: float,
 
 def body_cd0(params: BoosterParams, mach: float) -> float:
     """As-flown body Cd0: resolves the correct front-end nose (the reentry
-    object's for a non-separating body) and evaluates _body_cd0."""
+    object's for a non-separating body) and evaluates _body_cd0.
+
+    A DECLARED BICONIC flies the two-cone build-up (cd0_biconic_body): fore
+    cone + aft frustum + cylindrical afterbody, so the flown β / L-D see the
+    real shape, not a single cone (FRONT_END_DESIGN.md).  Falls through to the
+    single-nose path when the biconic geometry is absent or invalid."""
+    from booster_models import biconic_nose_geometry, cd0_biconic_body
     last = _last_stage(params)
+    _bic = biconic_nose_geometry(params)
+    if _bic is not None:
+        d = float(last.diameter_m)
+        ld_body = (last.length_m / d) if (d > 0 and last.length_m > 0) else 5.0
+        return cd0_biconic_body(_bic, ld_body, mach)
     _ns, _nl = _front_nose_aero(params, last)
     return _body_cd0(last, mach, _ns, _nl)
 
@@ -211,15 +222,29 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     # As-flown front-end nose (the RO's for a non-separating body — the stage
     # itself carries none), feeding BOTH the planform fill and the Cd0 so the
     # whole build-up sees the real nose, not a generic fallback.
+    # A declared biconic is two cones: its planform is the fore triangle + the
+    # aft trapezoid (not one fill fraction), and its Cd0 is the two-cone
+    # build-up — so the L/D denominator and the crossflow planform see the real
+    # shape.  Falls through to the single-nose path when not a valid biconic.
+    from booster_models import biconic_nose_geometry, cd0_biconic_body
+    _bic = biconic_nose_geometry(params)
     _nose_shape_eff, L_nose = _front_nose_aero(params, last)
-    if 0.0 < L_nose < L_body:
-        nose = _SHAPE_ALIAS.get(_nose_shape_eff or '', _nose_shape_eff or '')
-        fill = _NOSE_PLANFORM_FILL.get(nose, 0.667)   # cone 0.5, ogive ~0.67
-        A_p_body = fill * L_nose * d + (L_body - L_nose) * d
+    if _bic is not None:
+        _Lf, _La = _bic['fore_len_m'], _bic['aft_len_m']
+        _bd = _bic['break_diameter_m']
+        _Ln = _bic['nose_len_m']
+        # fore triangle (tip→break) + aft trapezoid (break→base) + afterbody
+        A_p_body = (0.5 * _Lf * _bd + 0.5 * (_bd + d) * _La
+                    + max(0.0, L_body - _Ln) * d)
+        cd0 = cd0_biconic_body(_bic, (L_body / d) if d > 0 else 5.0, mach)
     else:
-        A_p_body = 0.5 * L_body * d                # pointed-body fallback
-
-    cd0 = _body_cd0(last, mach, _nose_shape_eff, L_nose)
+        if 0.0 < L_nose < L_body:
+            nose = _SHAPE_ALIAS.get(_nose_shape_eff or '', _nose_shape_eff or '')
+            fill = _NOSE_PLANFORM_FILL.get(nose, 0.667)   # cone 0.5, ogive ~0.67
+            A_p_body = fill * L_nose * d + (L_body - L_nose) * d
+        else:
+            A_p_body = 0.5 * L_body * d                # pointed-body fallback
+        cd0 = _body_cd0(last, mach, _nose_shape_eff, L_nose)
 
     # Fins (the pitch-plane lifting pair); body+fin carryover via N-K-P.
     k_sum = 0.0

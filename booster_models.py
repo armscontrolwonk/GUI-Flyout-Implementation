@@ -2906,6 +2906,112 @@ def biconic_angles(diameter_m: float, length_m: float, fore_length_m: float,
     return theta1, theta2, r_1 / r_b, eps
 
 
+def biconic_nose_geometry(params: 'BoosterParams'):
+    """As-flown biconic-nose geometry for the front end, or None when it is not
+    a valid biconic.
+
+    ONE source of truth so a declared biconic FLIES (glider_ld Cd0 + planform),
+    TRIMS (grid_fin_sizing CP) and DRAWS (booster_schematic) as two cones — the
+    DRAWN ≡ FLOWN contract (FRONT_END_DESIGN.md).  For a non-separating body the
+    biconic occupies the forward ``body_nose_length_m`` of the airframe (the nose
+    carved subtractively from the last stage); a separating biconic RV uses its
+    own ``length_m``.  The break geometry (``fore_length_m``, ``break_diameter_m``)
+    must be set and valid, else this returns None and callers keep the single-
+    cone path — so biconic activates only once the two extra fields are entered.
+
+    Returns {theta1_deg, theta2_deg, break_ratio, eps, fore_len_m, aft_len_m,
+    nose_len_m, base_diameter_m, break_diameter_m} — all as-flown.
+    """
+    ro = effective_ro(params)
+    if ro is None or not bool(getattr(ro, 'biconic', False)):
+        return None
+    body = getattr(ro, 'separation_mode', 'separating_ro') == 'body'
+    base_d = float(getattr(ro, 'diameter_m', 0.0) or 0.0)
+    if base_d <= 0.0:
+        return None
+    if body:
+        # The nose is carved from the last stage: the biconic IS the forward
+        # body_nose_length_m (same subtractive taper the schematic/CG use).
+        last = params
+        while getattr(last, 'stage2', None) is not None:
+            last = last.stage2
+        nose_len = float(getattr(ro, 'body_nose_length_m', 0.0) or 0.0)
+        if nose_len <= 0.0:
+            nose_len = min(3.0 * base_d,
+                           0.5 * float(last.length_m or (2.0 * base_d)))
+        nose_len = max(0.0, min(nose_len, float(last.length_m or nose_len)))
+    else:
+        nose_len = float(getattr(ro, 'length_m', 0.0) or 0.0)
+    fore_len = float(getattr(ro, 'fore_length_m', 0.0) or 0.0)
+    break_d  = float(getattr(ro, 'break_diameter_m', 0.0) or 0.0)
+    nose_rn  = float(getattr(ro, 'nose_radius_m', 0.0) or 0.0)
+    ang = biconic_angles(base_d, nose_len, fore_len, break_d, nose_rn)
+    if ang is None:
+        return None
+    theta1, theta2, br, eps = ang
+    return dict(theta1_deg=theta1, theta2_deg=theta2, break_ratio=br, eps=eps,
+                fore_len_m=fore_len, aft_len_m=nose_len - fore_len,
+                nose_len_m=nose_len, base_diameter_m=base_d,
+                break_diameter_m=break_d)
+
+
+def cd0_biconic_body(geom: dict, ld_body: float, mach: float,
+                     cf: float = CONE_CF_TURBULENT,
+                     wing_area_ratio: float = 0.0) -> float:
+    """Zero-lift body Cd0 (base-area referenced) for a biconic-nosed body: the
+    two-cone hypersonic build-up (cd_biconic_hypersonic) plus the cylindrical
+    afterbody friction aft of the nose.  ``geom`` is a biconic_nose_geometry()
+    dict; ``ld_body`` is the full-body fineness (body_length / diameter).
+
+    Framework note: this is the hypersonic Newtonian two-cone model (valid
+    M ≥ 3), distinct from the Chin/NACA single-nose build-up (_cd_nose_shape)
+    used for single-profile noses; toggling biconic therefore shifts frameworks,
+    comparable but not identical at a shared Mach.  Reduces to a single hyper-
+    sonic cone (cd_cone_hypersonic + the same afterbody term) when θ2 = θ1,
+    sharp — the regression anchor cd_biconic_hypersonic already guarantees.
+    """
+    base_d = float(geom['base_diameter_m'])
+    ld_nose = geom['nose_len_m'] / base_d if base_d > 0.0 else 0.0
+    r = cd_biconic_hypersonic(geom['theta1_deg'], geom['theta2_deg'],
+                              geom['break_ratio'], geom['eps'], mach=mach,
+                              cf=cf, wing_area_ratio=wing_area_ratio)
+    swet_cyl = 4.0 * max(0.0, float(ld_body) - ld_nose)      # base-area ref
+    return float(r['total'] + cf * swet_cyl)
+
+
+def biconic_nose_cp_fraction(break_ratio: float, fore_len_m: float,
+                             aft_len_m: float) -> float:
+    """Barrowman centre-of-pressure of a biconic nose, as a fraction of the total
+    nose length from the tip.  The area-weighted CP of the fore cone (tip →
+    break) and the aft frustum (break → base), each weighted by its Barrowman
+    normal-force slope CNα ∝ Δ(r²)/r_base².  A function of the break ratio and
+    the two segment lengths only (the half-angles are redundant — fixed by those
+    plus the base diameter).  Reduces to 2/3 (the single-cone value) when the
+    break lies on a straight cone (break_ratio = fore_len/nose_len); a slender
+    break (smaller ratio) throws more area onto the aft frustum and moves the CP
+    aft, a fat break moves it forward — the two-cone stability a single-cone
+    fraction cannot show.
+    """
+    br = max(1e-6, min(float(break_ratio), 1.0 - 1e-9))
+    Lf = max(0.0, float(fore_len_m))
+    La = max(0.0, float(aft_len_m))
+    nose_len = Lf + La
+    if nose_len <= 0.0:
+        return 0.666
+    cn_fore = br * br                        # (r_break² − 0) / r_base²
+    cn_aft  = 1.0 - br * br                  # (r_base² − r_break²) / r_base²
+    x_fore = (2.0 / 3.0) * Lf                # cone (dr = 0): 2/3 of its length
+    if La > 0.0:
+        # frustum CP from its front, transition dr = d_break/d_base = br
+        x_aft = Lf + (La / 3.0) * (1.0 + (1.0 - br) / (1.0 - br * br))
+    else:
+        x_aft = Lf
+    cn = cn_fore + cn_aft
+    if cn <= 0.0:
+        return 0.666
+    return (cn_fore * x_fore + cn_aft * x_aft) / cn / nose_len
+
+
 def tumbling_cylinder_beta(mass_kg: float, diameter_m: float, length_m: float,
                            cd: float = 1.0, mach: float = None) -> float:
     """

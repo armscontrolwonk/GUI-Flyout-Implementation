@@ -391,6 +391,11 @@ def draw_booster(ax, p, title=None):
                  "body_diameter_m": 0.0}
     _bn_len = 0.0
     _bn_shape = ""
+    # A declared biconic body draws its two cones (fore cone + aft frustum),
+    # the same geometry the physics flies — biconic_nose_geometry is the ONE
+    # source shared with the drag / CP paths, so DRAWN ≡ FLOWN holds.
+    from booster_models import biconic_nose_geometry as _bic_geom
+    _body_bic = _bic_geom(p) if _body_mode else None
     if _body_mode:
         _ls = stages[-1]
         _ls_d = float(getattr(_ls, "diameter_m", 0.0) or 0.6)
@@ -418,11 +423,23 @@ def draw_booster(ax, p, title=None):
             _cyl = L - _bn_len
             if _cyl > 1e-9:
                 _body_patch(ax, x0, y, d, d_top, _cyl, BODY, BODY_E)
-            _nose_patch(ax, x0, y + max(_cyl, 0.0), d_top, _bn_len,
-                        BODY, BODY_E, _bn_shape or "cone")
-            front_end = {"kind": "body_nose", "shape": _bn_shape or "cone",
-                         "nose_length_m": _bn_len,
-                         "body_diameter_m": float(_eff_ro.diameter_m)}
+            if _body_bic is not None:
+                # Two cones carved from the top: aft frustum then fore cone.
+                _biconic_shape(ax, x0, y + max(_cyl, 0.0), d_top,
+                               _body_bic['nose_len_m'],
+                               _body_bic['break_diameter_m'],
+                               _body_bic['fore_len_m'],
+                               float(getattr(_eff_ro, 'nose_radius_m', 0.0) or 0.0),
+                               BODY, BODY_E)
+                front_end = {"kind": "body_biconic", "shape": "biconic",
+                             "nose_length_m": _body_bic['nose_len_m'],
+                             "body_diameter_m": float(_eff_ro.diameter_m)}
+            else:
+                _nose_patch(ax, x0, y + max(_cyl, 0.0), d_top, _bn_len,
+                            BODY, BODY_E, _bn_shape or "cone")
+                front_end = {"kind": "body_nose", "shape": _bn_shape or "cone",
+                             "nose_length_m": _bn_len,
+                             "body_diameter_m": float(_eff_ro.diameter_m)}
         else:
             _body_patch(ax, x0, y, d, d_top, L, BODY, BODY_E)
         _lbl = (f"S{i+1}: ⌀{d:g}→{d_top:g}×{L:g} m" if d_top != d

@@ -198,7 +198,17 @@ def _stack_layout(params: BoosterParams):
     # One source of truth for the as-flown nose (handles the non-separating
     # body's subtractive taper), so the CP layout and the CG estimate agree.
     nshape, nlen, nd = _front_nose(params)
-    nose_x_cp = _nose_cp_fraction(nshape) * nlen
+    # A declared biconic trims on its two-cone CP (area-weighted fore cone + aft
+    # frustum), not a single-cone fraction — so the static margin sees the real
+    # shape (FRONT_END_DESIGN.md).  Falls through when not a valid biconic.
+    from booster_models import biconic_nose_geometry, biconic_nose_cp_fraction
+    _bic = biconic_nose_geometry(params)
+    if _bic is not None:
+        nose_x_cp = biconic_nose_cp_fraction(
+            _bic['break_ratio'], _bic['fore_len_m'],
+            _bic['aft_len_m']) * _bic['nose_len_m']
+    else:
+        nose_x_cp = _nose_cp_fraction(nshape) * nlen
     L_total = max(params.length_m, nlen + 0.5)
 
     chain = []
