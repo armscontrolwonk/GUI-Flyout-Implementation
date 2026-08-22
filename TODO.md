@@ -505,6 +505,16 @@ The one phase that touches trajectory physics, gated to lifting forms
   burn — with nozzle exit area + count now stored per stage, a power-on
   annulus correction (ratio = 1 − A_exit/A_base, floored at 0) is
   derivable from stored fields, and is a larger error than any boattail.
+  POWER-ON BASE BLEED: DONE (2026-08-22).  base_bleed_ratio = max(0, 1 −
+  A_exit/A_base) scales the base-drag term while the active stage fires
+  (gated on _eff_burn + global cutoff); coast/reentry and no-nozzle-data
+  vehicles are byte-identical; only the decomposed _cd_nose_shape path (not
+  the Forden table) gets it.  Isolated effect +~4% range on a solid-motor
+  body with A_exit/A_base≈0.5.  test_base_bleed.py; METHODS §8.4.  Follow-up:
+  test_pullup.py::test_triggering_too_high_undershoots_honestly is xfail —
+  its ~1% trough margin was boost-energy-calibrated and the (correct) energy
+  bump flipped it; needs a boost-energy-independent re-anchoring of the
+  no-conjured-lift guard.
 - Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).
 - Interstage / conical-stage drag (Phase 2 of interstage work; geometry+mass
   shipped, drag-neutral by design).

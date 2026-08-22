@@ -91,6 +91,7 @@ from coordinates import (
 from booster_models import (
     BoosterParams, booster_mass, drag_force_vector, thrust_force,
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
+    _eff_burn,
     booster_drag_vector, effective_ro, booster_separation_time,
     booster_area,
     wing_geometry, wedge_planform_area,
@@ -1054,7 +1055,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
     g = gravity_ecef(pos)
 
     # Active stage (needed for drag and mass; guidance uses top-level params)
-    astage, _ = active_stage_and_t(params, t)
+    astage, _t_since_ign = active_stage_and_t(params, t)
 
 
     # Shroud heating-jettison latch (heating mode only: shroud_jettison_alt_km<=0).
@@ -1448,7 +1449,13 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             f_drag = np.zeros(3)
         _in_boost_drag = False
     else:
-        f_drag = drag_force_vector(astage, vel, alt, top_params=params, t_s=t)
+        # Powered = the active stage is within its effective burn (per-stage
+        # cutoff honoured by _eff_burn) and before any global cutoff.  Gates the
+        # power-on base-bleed drag reduction; coast phases (t_since = 0) and
+        # post-cutoff are unpowered, so base drag stays at its power-off value.
+        _powered = (0.0 < _t_since_ign < _eff_burn(astage)) and (t <= cutoff_time)
+        f_drag = drag_force_vector(astage, vel, alt, top_params=params, t_s=t,
+                                   powered=_powered)
         if params.n_boosters > 0 and t <= booster_separation_time(params):
             f_drag = f_drag + booster_drag_vector(params, vel, alt)
         _in_boost_drag = True

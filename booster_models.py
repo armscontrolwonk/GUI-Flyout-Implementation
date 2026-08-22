@@ -1387,6 +1387,50 @@ def _cd_friction(re_l: float, mach: float, s_wet_ratio: float) -> float:
     return cf_mix * fv * 1.10 * s_wet_ratio                # +10% roughness
 
 
+def _total_nozzle_exit_area(s: 'BoosterParams') -> float:
+    """Total nozzle exit area (m²) of a stage.  Prefers the authoritative
+    ``nozzle_exit_area_m2`` (the value the thrust pressure-correction uses);
+    falls back to per-nozzle area × count when only the geometry fields are
+    set.  0 when no nozzle data is stored."""
+    if s is None:
+        return 0.0
+    tot = float(getattr(s, 'nozzle_exit_area_m2', 0.0) or 0.0)
+    if tot > 0.0:
+        return tot
+    each = float(getattr(s, 'nozzle_area_each_m2', 0.0) or 0.0)
+    n    = int(getattr(s, 'n_nozzles', 1) or 1)
+    return each * max(1, n)
+
+
+def base_bleed_ratio(stage: 'BoosterParams', base_diameter_m: float) -> float:
+    """Power-on base-drag fraction (0–1) for a firing stage.
+
+    A running engine's exhaust plume fills the nozzle exit, so base drag acts
+    only over the ANNULUS of the aft face outside the exit:
+    ``ratio = 1 − A_exit / A_base`` (floored at 0), with A_base the stage's own
+    aft cross-section π(d/2)² and A_exit its total nozzle exit area.  Multiplied
+    into the base-drag term, it removes the nozzle-covered share of the
+    power-off base drag the build-up would otherwise charge during burn.
+
+    Returns 1.0 (full power-off base drag, unchanged) when no nozzle area is
+    stored or the diameter is unknown — so vehicles without nozzle data, and
+    coast/reentry (unpowered) evaluations, are byte-identical.
+
+    This is a screening midpoint: a full-flowing supersonic nozzle typically
+    suppresses base drag almost entirely (power-on base drag ≈ 0), while the
+    annulus form keeps the conservative geometric share outside the exit.
+    """
+    import math
+    d = float(base_diameter_m or 0.0)
+    if d <= 0.0:
+        return 1.0
+    A_base = math.pi * (d / 2.0) ** 2
+    A_exit = _total_nozzle_exit_area(stage)
+    if A_exit <= 0.0 or A_base <= 0.0:
+        return 1.0
+    return max(0.0, 1.0 - A_exit / A_base)
+
+
 def _cd_base(mach: float, base_area_ratio: float = 1.0) -> float:
     """Base drag coefficient (ref. base area), power-off.
 
@@ -1840,7 +1884,8 @@ def _cl_alpha_gridfins(n_fins: int, width_m: float, height_m: float,
 def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
                    re_l: float = 5e6, ld_body: float = None,
                    aerospike_LD: float = 0.0,
-                   aerospike_dD: float = 0.0) -> float:
+                   aerospike_dD: float = 0.0,
+                   base_area_ratio: float = 1.0) -> float:
     """
     Total zero-lift drag coefficient (Cd_wave + Cd_friction + Cd_base).
     Source: Chin (1961) *Booster Configuration Design*; NACA TN 4201; Crowell (1996).
@@ -1906,7 +1951,10 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
     cd_fric  = _cd_friction(re_l, mach, nose_swet + cyl_swet)
 
     # ── Base drag ─────────────────────────────────────────────────────────────
-    cd_base = _cd_base(mach)
+    # base_area_ratio < 1 during powered flight: the plume fills the nozzle
+    # exit, so the base drag is charged only over the annulus outside it
+    # (base_bleed_ratio).  1.0 (default) = full power-off base drag, unchanged.
+    cd_base = _cd_base(mach, base_area_ratio)
 
     return cd_wave + cd_fric + cd_base
 
@@ -3409,7 +3457,7 @@ def _ro_length(p: BoosterParams) -> float:
 
 def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
                       top_params: 'BoosterParams' = None,
-                      t_s: float = None) -> np.ndarray:
+                      t_s: float = None, powered: bool = False) -> np.ndarray:
     """
     Aerodynamic drag force vector (N) opposing velocity.
 
@@ -3444,14 +3492,22 @@ def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
     if top_params is not None and _shape not in ('', 'forden') and _diam > 0:
         _ld = (_nose_len / _diam if _nose_len > 0 and _diam > 0 else 3.0)
         _ld_body = (_body_len / _diam if _body_len > 0 and _diam > 0 else None)
+        # Power-on base bleed: while `params` (the active stage) is firing, its
+        # plume fills the nozzle exit and suppresses the nozzle-covered share of
+        # base drag.  Referenced to the stage's own aft area; 1.0 (no change)
+        # when unpowered or no nozzle area stored.  Only the decomposed build-up
+        # separates base drag — the Forden table (else branch below) bakes it in.
+        _bar = base_bleed_ratio(params, params.diameter_m) if powered else 1.0
         if _is_shroud:
             cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
                                 aerospike_LD=top_params.aerospike_LD,
-                                aerospike_dD=top_params.aerospike_dD)
+                                aerospike_dD=top_params.aerospike_dD,
+                                base_area_ratio=_bar)
         else:
             # Aerospike is attached to the shroud, so it stops working once
             # the shroud is jettisoned — no aerospike effect on this branch.
-            cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body)
+            cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
+                                base_area_ratio=_bar)
     else:
         cd = drag_coefficient(params, mach)
 

@@ -1404,23 +1404,41 @@ M ≥ 1:        C_D,base ≈ 0.12 / M
 
 agreeing with the tabulated values to ~10 % over M = 1–3.
 
-**Power-on behaviour — not modelled.** Chin's Fig. 3-15 data is
+**Power-on base bleed — modelled (screening).** Chin's Fig. 3-15 data is
 explicitly power-off: the engine is not firing, so the entire base area
 sees atmospheric back-pressure, producing the suction (negative `C_pb`)
-that drives the drag. When the engine is firing, the exhaust plume
-pressurises the region behind the nozzle and reduces the base suction;
-power-on base drag is therefore *lower* in magnitude than power-off.
-Thrusty does **not** make this distinction — `_cd_base(mach)` is called
-unconditionally in every boost-phase drag evaluation
-(`booster_models.py`), so powered flight sees the same `C_pb(M)` as
-coast. The result is a small but consistent over-estimate of drag
-(under-estimate of range) during boost. Modelling the power-on
-correction properly would require nozzle exit conditions and plume CFD,
-which is outside the scope of a preliminary 3-DOF tool. For the
-operational class of vehicle this tool targets — solid and
-storable-liquid ballistic missiles and SLV boosters — the power-off
-treatment is conservative and consistent with Forden's original
-approach.
+that drives the drag. When the engine is firing, the exhaust plume fills
+the nozzle exit and suppresses the base suction over that area, so power-on
+base drag is *lower* than power-off. Thrusty applies a geometric annulus
+correction (`base_bleed_ratio`, `booster_models.py`): while the active
+stage is producing thrust, the base-drag term is scaled by
+
+```
+ratio = max(0, 1 − A_exit / A_base)          A_base = π(d_stage/2)²
+```
+
+where `A_exit` is the stage's total nozzle exit area (the same field the
+thrust pressure-correction uses) and `A_base` its own aft cross-section.
+The EOM gates this on the powered window (`_eff_burn`, honouring per-stage
+cutoff, and the global cutoff); coast and reentry evaluate at `ratio = 1`
+(full power-off base drag), and a stage with no stored nozzle area is
+unchanged — so every vehicle without nozzle data, and every unpowered
+phase, is byte-identical. Only the decomposed nose-shape build-up
+(`_cd_nose_shape`) separates base drag and receives the correction; the
+Forden mach-table path bakes base drag into the total and is untouched.
+
+This is a screening midpoint, not a plume solution: a full-flowing
+supersonic nozzle typically suppresses base drag almost entirely
+(power-on base drag ≈ 0), while the annulus form keeps the conservative
+geometric share of the aft face outside the exit. Removing the previous
+full power-off charge during burn recovers a real drag over-estimate —
+larger than any boattail term (which is why the boattail geometry was not
+worth modelling): for a solid-motor body with A_exit/A_base ≈ 0.5 it is a
+few percent of range. `test_base_bleed.py` pins the ratio math, the
+base-only Cd reduction, the isolated range gain (thrust held constant),
+and the no-nozzle-data no-op. Modelling the residual plume physics
+(pressurised near-wake, altitude-varying exit flow) would require nozzle
+exit conditions and plume CFD, outside a preliminary 3-DOF tool.
 
 The same simplification applies in the presence of strap-on boosters
 (Section 6.5): the booster cluster around the rear of the core would,
