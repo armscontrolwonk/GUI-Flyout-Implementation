@@ -4081,13 +4081,16 @@ class ROEditorDialog(tk.Toplevel):
                                    foreground="#2a7", justify=tk.LEFT)
         self._trim_lbl.grid(row=1, column=0, columnspan=2, sticky=tk.W)
         self._sync_trim_label()
-        ttk.Label(self._glider_frm,
-                  text="Wings (in Geometry) anchor the drag polar: enter the "
-                       "planform and S / AR derive; without one, type S / AR "
-                       "directly (flagged tab).  Pull-up g-limit and re-entry "
-                       "βₛ are in the Reentry Plan editor.",
-                  foreground="#888888", justify=tk.LEFT, wraplength=340).grid(
-                      row=2, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+        # Wing hint — body-aware (set in _update_separation_state): for a
+        # SEPARATING RV the wing planform anchors the drag polar; for a
+        # non-separating BODY the derived L/D comes from the whole airframe and
+        # its STAGE FINS (booster Fins panel), and these wing fields affect
+        # depiction only — so the hint must not tell a body user to enter wings.
+        self._wing_hint_lbl = ttk.Label(
+            self._glider_frm, text="",
+            foreground="#888888", justify=tk.LEFT, wraplength=340)
+        self._wing_hint_lbl.grid(row=2, column=0, columnspan=2, sticky=tk.W,
+                                 pady=(2, 0))
 
         self._sync_wing_derived()
         self._update_glider_state()
@@ -5309,6 +5312,23 @@ class ROEditorDialog(tk.Toplevel):
                 _ll.grid_remove()
         if is_body:
             self._refresh_ld_preview()
+        # Wing hint is body-aware: for a body the STAGE FINS anchor the derived
+        # L/D (glider_ld reads the booster's fin panel, not these wing fields),
+        # so tell the user that rather than "enter the planform".
+        _wh = getattr(self, '_wing_hint_lbl', None)
+        if _wh is not None:
+            if is_body:
+                _wh.config(text=(
+                    "Non-separating body: the derived L/D comes from the whole "
+                    "airframe + its STAGE FINS (booster Fins panel).  These wing "
+                    "fields set the 3-D depiction only.  Pull-up g-limit and "
+                    "re-entry βₛ are in the Reentry Plan editor."))
+            else:
+                _wh.config(text=(
+                    "Wings (in Geometry) anchor the drag polar: enter the "
+                    "planform and S / AR derive; without one, type S / AR "
+                    "directly (flagged tab).  Pull-up g-limit and re-entry "
+                    "βₛ are in the Reentry Plan editor."))
 
     def _preview_ro(self):
         """A lightweight ROParams from the LIVE editor fields (no validation

@@ -7,6 +7,44 @@ invent.
 
 ## New — not yet planned
 
+### 8. Canards / lifting surfaces on a non-separating body — DEFERRED (2026-08-22)
+Deferred with the user's agreement: "for a KN-23 the current approach is
+fine.  But at some point we have to deal with canards."
+
+Current state (verified this session).  `glider_ld.whole_booster_LD` — the
+derived body L/D — reads exactly ONE lifting surface: the booster last
+stage's TAIL FINS (`has_fins`, `fin_span_m`, `fin_root_chord_m`,
+`fin_tip_chord_m`, `fin_sweep_deg`), carried over the body by Nielsen-
+Kaattari-Pitts (`k_sum = (1+r/s)²`).  The body's potential normal-force
+slope is the slender-body `2·(A_b/A_ref)` — always 2.0/rad, shape-
+independent; only fins raise it.  The reentry object's OWN wing fields
+(`wing_area_m2`, `wing_root_chord_m`, `wing_span_exposed_m`,
+`wing_aspect_ratio`, `wing_sweep_deg`) are NOT read by this path — they
+feed only the 3-D depiction and (for a SEPARATING RV) the trajectory drag
+polar.  So a KN-23, whose control surfaces are stage-level tail fins, is
+modeled correctly; a body with its OWN lifting surfaces cannot express
+them in the derived L/D.  (The body-mode wing hint now says this, rather
+than telling a body user to "enter the planform" — 2026-08-22.)
+
+What a canard build needs (its own design pass):
+  - A second lifting surface on the body (canards forward of the CG), with
+    its own N-K-P carryover AND the right SIGN in the static-margin / trim
+    gate (grid_fin_sizing): a canard ahead of the CG is DEstabilising and
+    moves the CP forward — the opposite of a tail fin.  Getting the CP
+    right matters more than the small L/D bump.
+  - Decide whether a body's RO wing planform should feed
+    `whole_booster_LD` as a lifting surface (so the editor's wing fields
+    mean what they appear to), and how stage fins + RO wings + canards
+    combine (sum vs. mutually-exclusive roles: tail vs. canard vs. wing).
+  - Downwash / surface-to-surface interference between a forward canard and
+    an aft fin (the KN-23 has only the tail set, so this is untested).
+  - Schematic: draw canards forward of the CG, distinct from tail fins, so
+    DRAWN ≡ FLOWN holds for the two-surface layout.
+Not needed for the ballistic / tail-fin-controlled quasi-ballistic bodies
+Thrusty models today; revisit when a canard-controlled MaRV or a winged
+body is the subject.
+
+
 ### 7. Vehicle-derived structural α / q·α capacity — SHELVED (2026-08-20)
 Prototyped and deliberately parked while building the ascent q·α load
 model (METHODS §9.6).  The SHIPPED feature is: (a) q·α reporting + a
