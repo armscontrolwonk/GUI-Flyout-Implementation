@@ -4023,7 +4023,7 @@ class ROEditorDialog(tk.Toplevel):
         # nose), so the estimate composes the live object onto the current
         # booster; a 0 in the field then reads as "0 → derives ~2.57".
         self._LD_est_btn = ttk.Button(self._glider_frm, text="Estimate",
-                                      width=9, command=self._refresh_ld_preview)
+                                      width=9, command=self._show_ld_estimate)
         self._LD_derive_lbl = ttk.Label(
             self._glider_frm, text="", foreground="#2a7",
             wraplength=340, justify=tk.LEFT)
@@ -5239,15 +5239,31 @@ class ROEditorDialog(tk.Toplevel):
                 return float(var.get() or 0.0)
             except (ValueError, tk.TclError):
                 return d
-        _bn = getattr(self, '_body_nose_var', None)
-        _cg = getattr(self, '_reentry_cg_var', None)
+        def _fv(name):
+            var = getattr(self, name, None)
+            return _f(var) if var is not None else 0.0
+        # Mirror _build_ro's shape resolution: the merged dropdown stores a
+        # biconic as shape='cone' + the biconic flag (axisymmetric only), and
+        # the wing planform rides along so the trim gate judges the object as
+        # built, not a stripped stand-in.
+        _bic = (bool(getattr(self, '_biconic_var', None)
+                     and self._biconic_var.get())
+                and self._body_form_key() == "axisymmetric")
         return mm.ROParams(
             name="preview", mass_kg=max(_f(self._mass_var, 1.0), 1.0),
             beta_kg_m2=0.0, shape=self._shape_key(),
             diameter_m=_f(self._dia_var), length_m=_f(self._len_var),
             nose_radius_m=_f(self._nose_var, 0.0),
-            body_nose_length_m=(_f(_bn) if _bn is not None else 0.0),
-            reentry_cg_m=(_f(_cg) if _cg is not None else 0.0),
+            biconic=_bic,
+            fore_length_m=_fv('_fore_len_var'),
+            break_diameter_m=_fv('_break_dia_var'),
+            wing_area_m2=_fv('_wing_area_var'),
+            wing_aspect_ratio=_fv('_wing_ar_var'),
+            wing_sweep_deg=_fv('_wing_sweep_var'),
+            wing_root_chord_m=_fv('_wing_root_var'),
+            wing_span_exposed_m=_fv('_wing_span_var'),
+            body_nose_length_m=_fv('_body_nose_var'),
+            reentry_cg_m=_fv('_reentry_cg_var'),
             separation_mode='body', glider_enabled=True, glider_LD=0.0)
 
     def _refresh_ld_preview(self):
@@ -5281,7 +5297,14 @@ class ROEditorDialog(tk.Toplevel):
                 return
             _sm = g['static_margin_cal']
             if g['LD_achievable'] <= 0.0:
-                lbl.config(text=f"0 → tumbles — unstable (SM {_sm:+.1f} cal)")
+                # Unstable → the run tumbles, but still report the aero
+                # (L/D)_max the shape could reach if trimmed — the estimate
+                # must always return a value, plus the lever that unlocks it.
+                _lm = float(g.get('LD_max', 0.0) or 0.0)
+                _tail = (f" — aero max ~{_lm:.2f} if trimmed; "
+                         f"set Reentry CG forward" if _lm > 0.0 else "")
+                lbl.config(text=f"0 → tumbles — unstable "
+                                f"(SM {_sm:+.1f} cal){_tail}")
             else:
                 lbl.config(text=f"0 → derives ~{g['LD_achievable']:.2f} "
                                 f"(SM {_sm:+.1f} cal, M{_gld.GLIDE_MACH_REF:.0f})")
@@ -5356,6 +5379,61 @@ class ROEditorDialog(tk.Toplevel):
                             f"over M2–12)")
         except Exception:
             lbl.config(text="  0 = derive β(Mach) from geometry")
+
+    def _show_ld_estimate(self):
+        """The L/D Estimate button (body mode): the full whole-airframe
+        build-up in a dialog — Cd0, C_Nα, (L/D)_max, best-glide α — plus the
+        trim-gate verdict.  Unlike the passive inline label this ALWAYS
+        returns a value (the aero maximum), even when a typed L/D sits in the
+        field or the gate says the body tumbles; the verdict line then says
+        why the run won't reach it.  (The former sidebar "Estimate body
+        L/D…" dialog, moved next to the field it informs.)"""
+        self._refresh_ld_preview()          # keep the inline label in step
+        if self._booster is None:
+            messagebox.showinfo(
+                "L/D Estimate",
+                "No booster in context — the body L/D is derived from the "
+                "whole airframe (stage + nose + fins).", parent=self)
+            return
+        try:
+            import glider_ld as _gld
+            import trim_gate as _tg
+            ro = self._preview_ro()
+            p = mm.compose_loadout(self._booster, ro, 1)
+            p.ro = ro
+            r = _gld.whole_booster_LD(p, mach=_gld.GLIDE_MACH_REF)
+        except Exception as exc:
+            messagebox.showerror("L/D Estimate",
+                                 f"Estimate failed:\n{exc}", parent=self)
+            return
+        if r.get("error"):
+            messagebox.showinfo("L/D Estimate", r["error"], parent=self)
+            return
+        fins = (f" + fins {r['c_na_fin']:.2f}" if r["fin_planform_m2"] > 0
+                else " (body only)")
+        # Trim-gate verdict: whether the run can actually FLY that L/D.
+        _verdict = ""
+        try:
+            _cg = float(getattr(ro, 'reentry_cg_m', 0.0) or 0.0)
+            g = _tg.trim_gate(p, mach=_gld.GLIDE_MACH_REF,
+                              x_cg_m=(_cg if _cg > 0.0 else None))
+            if not g.get('error'):
+                _verdict = (f"\nTrim gate (SM {g['static_margin_cal']:+.1f} "
+                            f"cal): {g['verdict']}")
+        except Exception:
+            pass
+        messagebox.showinfo(
+            "Whole-body L/D estimate (Jorgensen + Allen-Perkins + N-K-P)",
+            f"Mach {_gld.GLIDE_MACH_REF:.0f}   |   body Cd₀ = {r['cd0']:.3f}\n"
+            f"C_Nα (potential) = {r['c_na_pot']:.2f} /rad  "
+            f"(body {r['c_na_body']:.2f}{fins})\n"
+            f"wing-body factor (1+r/s)² = {r['k_sum']:.2f}\n"
+            f"\n"
+            f"Max L/D ≈ {r['ld_max']:.2f}   at α ≈ {r['alpha_deg']:.0f}°\n"
+            f"{_verdict}\n"
+            f"\n"
+            f"Leave the L/D field at 0 to fly the derived, trim-gated value.",
+            parent=self)
 
     def _ok(self):
         ro = self._build_ro()
