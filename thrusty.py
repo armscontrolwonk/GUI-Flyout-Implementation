@@ -4210,7 +4210,18 @@ class ROEditorDialog(tk.Toplevel):
                 row=row, column=0, sticky=tk.W, padx=(0, 8), pady=3)
 
         _lbl(0, "Object mass (kg):")
-        mass_var = tk.StringVar(value=self._mass_var.get())
+        # For a non-separating body the reentering mass is the inherited airframe
+        # burnout PLUS the added payload (§A2); β = m/(Cd·A) must use that total,
+        # not the airframe alone.  A separating RV owns its whole mass in _mass_var.
+        _seed_mass = self._mass_var.get()
+        if self._plan_sep == 'body':
+            try:
+                _total = (float(self._mass_var.get() or 0.0)
+                          + float(self._payload_var.get() or 0.0))
+                _seed_mass = f"{_total:.0f}"
+            except (ValueError, tk.TclError):
+                pass
+        mass_var = tk.StringVar(value=_seed_mass)
         ttk.Entry(frm, textvariable=mass_var, width=10).grid(row=0, column=1, sticky=tk.W)
 
         _lbl(1, "Reentry object base diameter (m):")
@@ -4434,7 +4445,15 @@ class ROEditorDialog(tk.Toplevel):
                           foreground="gray50").pack(side=tk.LEFT)
             return var
 
-        mass_var = _entry_row(0, "Object mass (kg):", self._mass_var.get())
+        # Body: seed with the total reentry mass (airframe burnout + payload),
+        # not the airframe alone — β = m/(Cd·A) uses the mass that reenters.
+        _seed_mass = self._mass_var.get()
+        if self._plan_sep == 'body':
+            try:
+                _seed_mass = f"{float(self._mass_var.get() or 0.0) + float(self._payload_var.get() or 0.0):.0f}"
+            except (ValueError, tk.TclError):
+                pass
+        mass_var = _entry_row(0, "Object mass (kg):", _seed_mass)
         len_var = _entry_row(1, "Length (m):", self._len_var.get() or "0")
         if form == "wedge":
             # ⌀ field = base depth for the wedge (editor labels carry this).
@@ -9501,7 +9520,17 @@ class BoosterFlyoutApp(tk.Tk):
         # the main-panel combobox at it.  Otherwise leave the user's current
         # selection (or the sentinel) alone — they may want the same RV across
         # different boosters.
-        if (hasattr(self, '_ro_main_cb') and _p_ero is not None
+        if (hasattr(self, '_ro_main_cb')
+                and bool(getattr(p, 'body_reenters', False))
+                and not self._ro_is_body_compatible(self._ro_main_var.get())):
+            # Non-separating vehicle carrying an incompatible (separating)
+            # object: fall back to the booster default BEFORE the active object
+            # is read.  A separating HGV on a body drew a body AND a corner RV
+            # at once — a category error.  Body-mode library objects (the
+            # booster-default front end, saved) are compatible and kept.
+            self._ro_main_var.set(self._RO_DEFAULT_SENTINEL)
+            self._ro_del_btn.config(state=tk.DISABLED)
+        elif (hasattr(self, '_ro_main_cb') and _p_ero is not None
                 and _p_ero.name and _p_ero.name in RO_DB
                 and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
             self._ro_main_var.set(_p_ero.name)
@@ -9566,7 +9595,14 @@ class BoosterFlyoutApp(tk.Tk):
     def _update_loadout_state(self):
         """Loadout N is a separating-run concept: a non-separating (body)
         vehicle IS its single warhead, so body mode pins N = 1 and greys
-        the spinbox.  compose_loadout enforces the same rule model-side."""
+        the spinbox.  compose_loadout enforces the same rule model-side.
+
+        The reentry-object selector is scoped the same way: for a body run the
+        dropdown offers only body-compatible entries (the booster default plus
+        any body-mode library objects), and a separating object left selected
+        from a previous booster falls back to the booster default.  Otherwise
+        the schematic draws a body AND a corner RV, and the run flies a front
+        end the airframe does not have."""
         if not hasattr(self, '_loadout_spin'):
             return
         body = (getattr(self, '_main_sep_var', None) is not None
@@ -9576,6 +9612,24 @@ class BoosterFlyoutApp(tk.Tk):
             self._loadout_spin.config(state="disabled")
         else:
             self._loadout_spin.config(state="normal")
+        # Re-scope the reentry-object dropdown to the current separation.
+        if hasattr(self, '_ro_main_cb'):
+            _sel = self._ro_main_var.get()
+            self._ro_main_cb.configure(values=self._ro_combo_values())
+            if (body and not self._ro_is_body_compatible(_sel)
+                    and not getattr(self, '_ro_rescoping', False)):
+                # Drop the incompatible object and re-sync the panel from the
+                # booster default.  The guard stops the re-sync from recursing
+                # back into here (_on_ro_selected_main -> _populate_glider_panel
+                # -> _update_loadout_state); one pass is enough because the
+                # sentinel it lands on is always compatible.
+                self._ro_rescoping = True
+                try:
+                    self._ro_main_var.set(self._RO_DEFAULT_SENTINEL)
+                    self._ro_del_btn.config(state=tk.DISABLED)
+                    self._on_ro_selected_main()
+                finally:
+                    self._ro_rescoping = False
 
     def _refresh_glider_status_line(self):
         """Update the Glider/HGV status label.  The reentry-mode combobox is
@@ -10176,9 +10230,45 @@ class BoosterFlyoutApp(tk.Tk):
     # ------------------------------------------------------------------
     _RO_DEFAULT_SENTINEL = "(booster default)"
 
+    def _ro_is_body_compatible(self, name):
+        """Can this reentry-object name be the front end of a NON-SEPARATING
+        vehicle?  The booster default always can (it IS the body).  A library
+        object can only if it is itself body-mode: a separating RV/HGV grafted
+        onto a body is a category error — the schematic then draws a body AND a
+        corner object, and the run flies a front end the airframe doesn't have.
+        """
+        if name == self._RO_DEFAULT_SENTINEL or name not in RO_DB:
+            return True
+        try:
+            return (getattr(RO_DB[name](), 'separation_mode',
+                            'separating_ro') == 'body')
+        except Exception:
+            return True          # unreadable entry: don't hide it
+
+    def _run_is_non_separating(self):
+        """True when the current run reenters as a body — either the booster is
+        marked non-separating (the vehicle-level master) or the reentry plan's
+        Separation control says so."""
+        try:
+            if bool(getattr(get_booster(self._booster_var.get()),
+                            'body_reenters', False)):
+                return True
+        except Exception:
+            pass
+        return (getattr(self, '_main_sep_var', None) is not None
+                and self._main_sep_var.get() == self._SEP_LABELS['body'])
+
     def _ro_combo_values(self):
-        """Combobox values: the sentinel plus every name in RO_DB."""
-        return [self._RO_DEFAULT_SENTINEL] + sorted(RO_DB.keys())
+        """Combobox values: the sentinel plus every name in RO_DB — filtered to
+        the body-compatible entries when the run is non-separating, so a
+        separating object cannot be selected onto a body in the first place."""
+        names = sorted(RO_DB.keys())
+        try:
+            if self._run_is_non_separating():
+                names = [n for n in names if self._ro_is_body_compatible(n)]
+        except Exception:
+            pass
+        return [self._RO_DEFAULT_SENTINEL] + names
 
     def _refresh_ro_list(self, select_name=None):
         """Rebuild the RV combobox after a library change."""
