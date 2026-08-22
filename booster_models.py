@@ -96,6 +96,14 @@ class BoosterParams:
     ro_mass_kg:    float = 0.0   # per-object mass, for the throw-weight breakdown
     bus_mass_kg:   float = 0.0
     num_ros:       int   = 1
+    # Body-payload idempotency baseline: how much non-separating-body payload
+    # (ro.payload_kg) compose_loadout has ALREADY folded into this chain.  A
+    # fresh booster carries 0 (no added body payload); compose adds the delta to
+    # the target payload and updates this, so composing twice adds it once.
+    # Kept SEPARATE from payload_kg, whose baseline is the separating design
+    # payload — reusing that made a body subtract the booster's baked warhead.
+    # Runtime bookkeeping only; not serialised (a loaded booster starts at 0).
+    body_payload_kg: float = 0.0
 
     # DEPRECATED build-era record: True means the stage masses were entered
     # stack-only (payload kept separate; mass_final = dry), False means the
@@ -365,6 +373,18 @@ class ROParams:
     # 0 = auto (uniform-airframe centroid, grid_fin_sizing.estimate_cg); a
     # positive value overrides it.  Meaningful only for separation_mode=="body".
     reentry_cg_m: float = 0.0
+
+    # Payload mass (kg) carried by a NON-SEPARATING body, ON TOP of the
+    # airframe's own last-stage burnout mass.  A body (V-2 / Scud / KN-23) IS
+    # the last stage, so its structural + residual burnout mass comes from the
+    # booster (effective_ro inherits it); this field is the ADDED payload the
+    # front end owns — warhead, bus, guidance — that the modeller enters here
+    # rather than folding into the stage's dry mass.  compose_loadout adds it to
+    # the boosted stack and keeps it fused through burnout, so the reentry mass
+    # is airframe_burnout + payload.  0 = none (every existing file flies
+    # unchanged); meaningful only for separation_mode=="body".  A SEPARATING RV
+    # carries its mass in mass_kg instead — this field is ignored there.
+    payload_kg: float = 0.0
 
     # Separation mode — does the terminal vehicle separate from the booster
     # body, or IS the booster body the terminal vehicle?
@@ -713,6 +733,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'body_span_m':           ro.body_span_m,
         'body_nose_length_m':    ro.body_nose_length_m,
         'reentry_cg_m':          ro.reentry_cg_m,
+        'payload_kg':            ro.payload_kg,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -785,6 +806,7 @@ def ro_from_dict(d: dict) -> ROParams:
         body_span_m=float(d.get('body_span_m', 0.0) or 0.0),
         body_nose_length_m=float(d.get('body_nose_length_m', 0.0) or 0.0),
         reentry_cg_m=float(d.get('reentry_cg_m', 0.0) or 0.0),
+        payload_kg=float(d.get('payload_kg', 0.0) or 0.0),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
@@ -907,13 +929,32 @@ def compose_loadout(params: 'BoosterParams', ro=None,
     n = max(1, int(num_ros))
     ro_mass = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
     if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
-        # NON-SEPARATING body: the object IS the last stage, so its mass is
-        # ALREADY in the stage masses — adding it as extra payload double-counts
-        # (a KN-23 seeded with the 2198 kg burnout mass gained 2198 kg and its
-        # range collapsed 574 → 137 km).  Fly the stack as built; effective_ro
-        # inherits the stage's own burnout mass for reentry.  N is forced to 1.
+        # NON-SEPARATING body: the airframe IS the last stage, so its structural
+        # + residual burnout mass is ALREADY in the stage masses — adding the
+        # RO's mass_kg would double-count (a KN-23 seeded with the 2198 kg
+        # burnout mass gained 2198 kg and its range collapsed 574 → 137 km), so
+        # mass_kg is NEVER added for a body.  What the front end DOES own is an
+        # explicit ADDED payload (ro.payload_kg: warhead / bus / guidance), which
+        # rides the boosted stack and stays fused through burnout.  Add it with
+        # the same tracked-baseline delta the separating path uses so composing
+        # twice is idempotent: delta = payload − the already-baked body payload
+        # (p.payload_kg).  Default 0 → every existing file flies byte-identical.
+        payload = float(getattr(ro, 'payload_kg', 0.0) or 0.0)
+        delta = payload - float(getattr(p, 'body_payload_kg', 0.0) or 0.0)
+        if delta != 0.0:
+            _node = p
+            _last = p
+            while _node is not None:
+                _node.mass_initial += delta      # whole stack above carries it
+                _last = _node
+                _node = _node.stage2
+            # Fused through burnout: the payload must sit in the last stage's
+            # burnout mass so _mass_at_time (mass_initial − propellant) and
+            # effective_ro inherit it for the reentry body.
+            _last.mass_final += delta
+        p.body_payload_kg = payload
         p.num_ros = 1
-        p.ro_mass_kg = ro_mass
+        p.ro_mass_kg = payload
         return p
     if ro_mass <= 0:
         return p          # nothing meaningful to compose; fly as built

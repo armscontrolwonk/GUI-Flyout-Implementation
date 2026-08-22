@@ -110,6 +110,7 @@ _R: dict[str, int] = {
     # non-separating body: forward-taper (nose) length carved from the body
     'body_nose':  70,
     'reentry_cg':  71,
+    'payload':    72,   # non-separating body: added payload on top of airframe
 }
 
 _VAL_COL = 4   # column D
@@ -272,6 +273,11 @@ def _build_ro_sheet(ws, ro) -> None:
            'non-separating body only: CG aft of nose for reentry stability '
            '(0 = auto, uniform-airframe centroid)')
     put('reentry_cg', getattr(ro, 'reentry_cg_m', 0.0))
+    _label(ws, _R['payload'], 'Payload mass', 'kg',
+           'non-separating body only: added payload (warhead / bus) on top of '
+           'the airframe burnout mass (0 = none); separating RVs use mass '
+           'instead')
+    put('payload', getattr(ro, 'payload_kg', 0.0))
 
     # Wings (appended rows).  The planform (root chord + exposed span + sweep)
     # is the PRIMARY data: when present, S and AR are DERIVED from it by
@@ -388,6 +394,7 @@ def import_ro_xlsx(path: str):
         body_span_m=_rnum(ws, _R['body_span'], _VAL_COL),
         body_nose_length_m=_rnum(ws, _R['body_nose'], _VAL_COL),
         reentry_cg_m=_rnum(ws, _R['reentry_cg'], _VAL_COL),
+        payload_kg=_rnum(ws, _R['payload'], _VAL_COL),
         wing_area_m2=_rnum(ws, _R['wing_area'], _VAL_COL),
         wing_aspect_ratio=_rnum(ws, _R['wing_ar'], _VAL_COL),
         wing_root_chord_m=_rnum(ws, _R['wing_root'], _VAL_COL),
