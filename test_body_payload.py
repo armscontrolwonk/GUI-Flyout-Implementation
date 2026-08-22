@@ -17,7 +17,7 @@ import pytest
 
 from booster_models import (get_booster, load_booster_library, ROParams,
                             compose_loadout, effective_ro, ro_to_dict,
-                            ro_from_dict)
+                            ro_from_dict, booster_to_dict, booster_from_dict)
 from trajectory import integrate_trajectory
 
 load_booster_library()
@@ -106,3 +106,40 @@ def test_separating_rv_ignores_payload_kg():
                    payload_kg=0.0)
     without = compose_loadout(p, ro2, 1).mass_initial
     assert with_field == pytest.approx(without, abs=1e-9)
+
+
+# ── booster body_reenters flag (the non-separating master switch) ───────────
+
+def test_body_reenters_defaults_false_and_round_trips():
+    """The booster's non-separating flag defaults off (existing files unchanged)
+    and survives a to_dict/from_dict round-trip."""
+    assert get_booster("Scud-B (R-17)").body_reenters is False
+    p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
+    assert booster_from_dict(booster_to_dict(p)).body_reenters is True
+
+
+def test_body_reenters_is_a_physics_noop():
+    """The flag only drives the editor lock — the run reads the plan's
+    separation_mode, so flipping the flag alone changes no trajectory."""
+    p0 = get_booster("Scud-B (R-17)")
+    p0.diameter_m = 1.1
+    p0.length_m = 6.7
+    p1 = get_booster("Scud-B (R-17)")
+    p1.diameter_m = 1.1
+    p1.length_m = 6.7
+    p1.body_reenters = True
+    ro = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
+                  diameter_m=1.1, length_m=6.7, separation_mode="body",
+                  body_nose_length_m=2.0)
+    r0 = integrate_trajectory(_bind(p0, ro), 39.12, 125.67, 90.0,
+                              burnout_angle_deg=-2.0, max_time_s=3600.0)
+    r1 = integrate_trajectory(_bind(p1, ro), 39.12, 125.67, 90.0,
+                              burnout_angle_deg=-2.0, max_time_s=3600.0)
+    assert r0["range_km"] == pytest.approx(r1["range_km"], rel=1e-9)
+
+
+def _bind(p, ro):
+    c = compose_loadout(p, ro, 1)
+    c.ro = ro
+    return c

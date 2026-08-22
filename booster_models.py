@@ -115,6 +115,17 @@ class BoosterParams:
     # mass_initial − mass_propellant instead of trusting this flag.
     ro_separates:  bool  = False
 
+    # Non-separating vehicle: True marks this booster as one whose front end
+    # does NOT separate — the last stage IS the reentry body (Hwasong-11 /
+    # Iskander / Scud / KN-23 class).  Unlike ro_separates (a build-era mass-
+    # bookkeeping record) this is a VEHICLE property the modeller sets: when it
+    # is on, the GUI locks the reentry plan's separation to "body" (the run
+    # authority), so the separation choice lives with the missile, not the
+    # flight plan.  Default False → the reentry plan owns the separation choice
+    # exactly as before.  A pure-physics no-op (effective_ro / the run read the
+    # plan's separation_mode); it only drives the editor lock.
+    body_reenters: bool  = False
+
     # When True this stage uses a solid rocket motor that cannot be shut off.
     # Orbital insertion guidance runs the engine to natural burnout and reports
     # the resulting orbit rather than commanding a cutoff at the target energy.
@@ -2004,6 +2015,7 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
         'ro_separates':          p.ro_separates,
+        'body_reenters':         p.body_reenters,
         'bus_mass_kg':           p.bus_mass_kg,
         'num_ros':               p.num_ros,
         'shroud_mass_kg':         p.shroud_mass_kg,
@@ -2117,6 +2129,7 @@ def booster_from_dict(d: dict) -> BoosterParams:
         stage2=stage2,
         payload_kg=float(d.get('payload_kg', 0.0)),
         ro_separates=bool(d.get('ro_separates', d.get('rv_separates', False))),
+        body_reenters=bool(d.get('body_reenters', False)),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
         num_ros=int(d.get('num_ros', d.get('num_rvs', 1))),
         ro_mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))),

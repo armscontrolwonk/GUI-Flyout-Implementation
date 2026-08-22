@@ -1663,6 +1663,25 @@ class BoosterDialog(tk.Toplevel):
             self._aerospike_section, "Aerodisk diameter (d/D):", 1, "0.0", "",
             pady=(2, 4))
 
+        # ── Non-separating vehicle (body reenters) ──────────────────────────
+        # A whole-vehicle property: the last stage IS the reentry body
+        # (Hwasong-11 / Iskander / Scud / KN-23 class).  When ticked, the
+        # sidebar locks the reentry-plan separation to "body" so the separation
+        # choice lives with the missile, not the flight plan (the reentry mode
+        # still defaults to ballistic and stays switchable).
+        ttk.Separator(pl, orient="horizontal").grid(
+            row=8, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=(6, 2))
+        self._body_reenters_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            pl, text="Non-separating — the body reenters (Scud / KN-23 class)",
+            variable=self._body_reenters_var).grid(
+            row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
+        ttk.Label(pl, foreground="gray", wraplength=340,
+                  text="Locks the reentry plan to non-separating; the last "
+                       "stage is the reentry body.").grid(
+            row=10, column=0, columnspan=2, sticky=tk.W, padx=(24, 2),
+            pady=(0, 4))
+
         # ── Fins ─────────────────────────────────────────────────────────
         ff = ttk.LabelFrame(body, text="Fins")
         ff.pack(fill=tk.X, padx=8, pady=4)
@@ -2307,6 +2326,7 @@ class BoosterDialog(tk.Toplevel):
         has_pbv = p.bus_mass_kg > 0
         self._has_pbv_var.set(has_pbv)
         self._pbv_mass_var.set(f"{p.bus_mass_kg:.0f}" if has_pbv else "0")
+        self._body_reenters_var.set(bool(getattr(p, 'body_reenters', False)))
         self._pbv_diameter_var.set(f"{getattr(p, 'pbv_diameter_m', 0.0):.2f}")
         self._pbv_length_var.set(f"{getattr(p, 'pbv_length_m', 0.0):.2f}")
 
@@ -2555,6 +2575,7 @@ class BoosterDialog(tk.Toplevel):
         node.num_ros                = num_ros
         node.ro_mass_kg             = ro_mass
         node.ro_separates           = ro_separates
+        node.body_reenters          = bool(self._body_reenters_var.get())
         node.nose_shape             = nose_shape
         node.nose_length_m          = nose_length_m
         node.payload_diameter_m     = payload_diameter_m
@@ -10560,10 +10581,26 @@ class BoosterFlyoutApp(tk.Tk):
         reentry-object/plan-change population so all paths agree."""
         self._ro = ro           # _refresh_glider_status_line picks this up
         if hasattr(self, '_main_sep_var'):
-            self._main_sep_var.set(self._SEP_LABELS[
-                'body' if getattr(ro, 'separation_mode',
-                                  'separating_ro') == 'body'
-                else 'separating_ro'])
+            # A booster marked non-separating (body_reenters) is the master: it
+            # locks the reentry-plan separation to "body" and greys the combo,
+            # so the separation choice lives with the missile.  Otherwise the
+            # plan/RO owns it as before.
+            _locked = False
+            try:
+                _b = self._current_booster()
+                _locked = bool(getattr(_b, 'body_reenters', False)) if _b else False
+            except Exception:
+                _locked = False
+            if _locked:
+                self._main_sep_var.set(self._SEP_LABELS['body'])
+            else:
+                self._main_sep_var.set(self._SEP_LABELS[
+                    'body' if getattr(ro, 'separation_mode',
+                                      'separating_ro') == 'body'
+                    else 'separating_ro'])
+            if hasattr(self, '_main_sep_cb'):
+                self._main_sep_cb.configure(
+                    state='disabled' if _locked else 'readonly')
             self._update_loadout_state()
         _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
         # skip_to_equilibrium is retired (aliased to damped_glide on load), so
