@@ -3790,11 +3790,32 @@ class ROEditorDialog(tk.Toplevel):
         # Mass.  Inherited (read-only) from the booster's last stage in body
         # mode — the airframe IS that stage — so the label says so; a separating
         # RV owns its mass.  (Separation is fixed for the life of this dialog.)
+        # For a body the front end ALSO owns an ADDED payload (warhead / bus)
+        # that rides on top of the inherited airframe burnout mass — entered
+        # inline here, with a live "total reentry mass" truth line below.
         _from_booster = " (from booster)" if self._plan_sep == 'body' else ""
         _lbl(2, "Mass (kg):" + _from_booster)
+        _mass_row = ttk.Frame(frm)
+        _mass_row.grid(row=2, column=1, sticky=tk.W, pady=3)
         self._mass_var = tk.StringVar(
             value=f"{ro.mass_kg:.0f}" if ro else f"{mass_kg:.0f}")
-        self._mass_entry = _entry(2, self._mass_var, width=10)
+        self._mass_entry = ttk.Entry(_mass_row, textvariable=self._mass_var,
+                                     width=10)
+        self._mass_entry.pack(side=tk.LEFT)
+        # Payload (body only) — packed/hidden in _update_separation_state.
+        self._payload_lbl = ttk.Label(_mass_row, text="   + payload:")
+        self._payload_var = tk.StringVar(
+            value=f"{ro.payload_kg:.0f}" if (ro and ro.payload_kg > 0) else "0")
+        self._payload_entry = ttk.Entry(_mass_row, textvariable=self._payload_var,
+                                        width=8)
+        self._payload_unit = ttk.Label(_mass_row, text="kg")
+        # Live total-reentry-mass truth line (airframe burnout + payload),
+        # packed inline after the payload so the sum the run flies is visible
+        # where it is entered.
+        self._payload_total_lbl = ttk.Label(_mass_row, text="",
+                                            foreground="#2a7")
+        self._payload_var.trace_add(
+            "write", lambda *_a: self._refresh_payload_total())
 
         # β with Estimate button.  For a non-separating body β is emergent from
         # the whole airframe (derived β(Mach) at run time), so it defaults to the
@@ -4867,6 +4888,13 @@ class ROEditorDialog(tk.Toplevel):
                 "Invalid input", "Reentry CG must be a number.", parent=self)
             return None
 
+        try:
+            payload = max(0.0, float(self._payload_var.get() or 0.0))
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input", "Payload mass must be a number.", parent=self)
+            return None
+
         glider_on = bool(self._glider_var.get())
         wing_area = wing_ar = 0.0
         wing_root = wing_span = wing_sweep = 0.0
@@ -4938,6 +4966,7 @@ class ROEditorDialog(tk.Toplevel):
             break_diameter_m=break_dia_m,
             body_form=body_form, body_span_m=body_span,
             body_nose_length_m=body_nose, reentry_cg_m=reentry_cg,
+            payload_kg=payload,
             glider_enabled=glider_on,
             glider_LD=LD,
             wing_area_m2=wing_area,
@@ -5183,6 +5212,18 @@ class ROEditorDialog(tk.Toplevel):
                   getattr(self, '_len_entry', None)):
             if w is not None:
                 w.configure(state=state)
+        # Payload (body only): the added warhead/bus mass the front end owns,
+        # on top of the inherited airframe burnout mass.  Shown just for a body,
+        # where the mass field is the read-only airframe; a separating RV owns
+        # its whole mass in the mass field, so the payload widgets stay hidden.
+        for w in (getattr(self, '_payload_lbl', None),
+                  getattr(self, '_payload_entry', None),
+                  getattr(self, '_payload_unit', None),
+                  getattr(self, '_payload_total_lbl', None)):
+            if w is not None:
+                w.pack(side=tk.LEFT) if is_body else w.pack_forget()
+        if is_body:
+            self._refresh_payload_total()
         # Body nose length is the inverse: meaningful ONLY for a body (it carves
         # the airframe's nose); a separating RV uses its own length instead.
         _bn = getattr(self, '_body_nose_entry', None)
@@ -5264,6 +5305,7 @@ class ROEditorDialog(tk.Toplevel):
             wing_span_exposed_m=_fv('_wing_span_var'),
             body_nose_length_m=_fv('_body_nose_var'),
             reentry_cg_m=_fv('_reentry_cg_var'),
+            payload_kg=_fv('_payload_var'),
             separation_mode='body', glider_enabled=True, glider_LD=0.0)
 
     def _refresh_ld_preview(self):
@@ -5379,6 +5421,26 @@ class ROEditorDialog(tk.Toplevel):
                             f"over M2–12)")
         except Exception:
             lbl.config(text="  0 = derive β(Mach) from geometry")
+
+    def _refresh_payload_total(self):
+        """Live total-reentry-mass line for a body: airframe burnout (the
+        inherited, read-only mass field) + the added payload = what the run
+        actually reenters with."""
+        lbl = getattr(self, '_payload_total_lbl', None)
+        if lbl is None or self._plan_sep != 'body':
+            return
+        def _f(var):
+            try:
+                return max(0.0, float(var.get() or 0.0))
+            except (ValueError, tk.TclError):
+                return 0.0
+        airframe = _f(self._mass_var)
+        payload = _f(self._payload_var)
+        if payload > 0.0:
+            lbl.config(text=f"  = {airframe + payload:,.0f} kg reentry "
+                            f"({airframe:,.0f} airframe + {payload:,.0f})")
+        else:
+            lbl.config(text=f"  = {airframe:,.0f} kg reentry (airframe only)")
 
     def _show_ld_estimate(self):
         """The L/D Estimate button (body mode): the full whole-airframe
