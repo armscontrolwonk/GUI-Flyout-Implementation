@@ -115,7 +115,7 @@ def test_model_options_entry():
     """The GUI's Analysis ▸ Reference Data menu builds itself from
     MODEL_OPTIONS; the terrain entry must be present and wired through."""
     spec = mm.MODEL_OPTIONS["terrain"]
-    assert set(spec["choices"]) == {"terrarium", "coarse"}
+    assert set(spec["choices"]) == {"terrarium", "glo30", "coarse"}
     orig = mm.get_model_option("terrain")
     try:
         mm.set_model_option("terrain", "coarse")
@@ -129,6 +129,63 @@ def test_hires_always_returns_a_value():
     can never raise or return None (offline runs included)."""
     v = terrain.elevation(39.74, -104.99, hi_res=True)
     assert np.isfinite(v) and 1400.0 <= v <= 1900.0
+
+
+# ── GLO-30 (Copernicus 30 m) source ─────────────────────────────────────────
+
+def test_glo30_is_a_valid_source():
+    orig = terrain.terrain_source()
+    try:
+        terrain.configure_terrain("glo30")
+        assert terrain.terrain_source() == "glo30"
+    finally:
+        terrain.configure_terrain(orig)
+
+
+@pytest.mark.parametrize("lat,lon,want", [
+    (39.5, 125.7, ("N", 39, "E", 125)),     # N/E
+    (-3.2, 125.7, ("S",  4, "E", 125)),     # floor(-3.2) = -4 -> S04 tile (4S..3S)
+    (39.5, -70.4, ("N", 39, "W",  71)),     # W: floor(-70.4) = -71
+    (0.0,   0.0,  ("N",  0, "E",   0)),
+])
+def test_glo30_tile_name(lat, lon, want):
+    assert terrain._glo30_tile_name(lat, lon) == want
+
+
+def test_glo30_bilinear_mapping_from_geotags(monkeypatch):
+    """A synthetic 1x1-deg tile: lat/lon -> pixel via the ModelPixelScale /
+    ModelTiepoint tags, bilinearly sampled — no network."""
+    # 4x4 tile, NW corner (125E, 40N), 0.25-deg pixels, elevation = 100*row + col
+    arr = np.array([[100*r + c for c in range(4)] for r in range(4)], np.float32)
+    tile = (arr, 125.0, 40.0, 0.25, 0.25)
+    monkeypatch.setattr(terrain, "_load_glo30_tile", lambda k: tile)
+    # NW-corner pixel centre is at (lon 125.125, lat 39.875) -> arr[0,0] = 0
+    assert terrain._glo30_elevation(39.875, 125.125) == pytest.approx(0.0, abs=1e-4)
+    # one pixel east (+0.25 lon) -> arr[0,1] = 1
+    assert terrain._glo30_elevation(39.875, 125.375) == pytest.approx(1.0, abs=1e-4)
+    # one pixel south (-0.25 lat) -> arr[1,0] = 100
+    assert terrain._glo30_elevation(39.625, 125.125) == pytest.approx(100.0, abs=1e-4)
+
+
+def test_glo30_missing_tile_returns_none(monkeypatch):
+    """Ocean / no network -> the tile loads as None -> _glo30_elevation is None
+    so `elevation` can fall back."""
+    monkeypatch.setattr(terrain, "_load_glo30_tile", lambda k: None)
+    assert terrain._glo30_elevation(10.0, 10.0) is None
+
+
+def test_glo30_source_falls_back_offline(monkeypatch):
+    """With glo30 selected but no tile available, the public call still returns
+    a finite value (Terrarium miss -> coarse grid)."""
+    monkeypatch.setattr(terrain, "_load_glo30_tile", lambda k: None)
+    monkeypatch.setattr(terrain, "_hires_elevation", lambda lat, lon: None)
+    orig = terrain.terrain_source()
+    try:
+        terrain.configure_terrain("glo30")
+        v = terrain.elevation(39.74, -104.99)
+        assert np.isfinite(v) and 1400.0 <= v <= 1900.0
+    finally:
+        terrain.configure_terrain(orig)
 
 
 # ── 3. trajectory integration ───────────────────────────────────────────────

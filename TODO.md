@@ -304,10 +304,21 @@ Upgrade path, in effort order:
       rasterio/GDAL, and Terrarium's blend has no 60°N cutoff
       (GMTED2010 covers Plesetsk).  GLO-30 (uniform 30 m TanDEM-X,
       ~2–4 m vertical, better void handling — the stronger source
-      over African/high-relief terrain) remains the documented
-      upgrade path: it would slot in as a third Reference Data
-      radiobutton behind a COG reader if sub-100 m terminal-glide
-      terrain ever matters.  As shipped: trajectories START at the
+      over African/high-relief terrain) SHIPPED as the third Reference
+      Data source (2026-08-23).  The COG-reader blocker was DISPROVEN:
+      the copernicus-dem-30m AWS bucket is proxy-reachable (the
+      2026-08-20 "unavailable" call was wrong) and its float32 1°×1°
+      COGs read with Pillow ALONE — no rasterio/GDAL — lat/lon→pixel
+      from the ModelPixelScale/ModelTiepoint tags (poleward thinning
+      handled, Plesetsk included).  terrain.py 'glo30' source: whole-
+      tile fetch ~40 MB, disk-cached + in-process LRU, miss→Terrarium→
+      coarse fallback; wired through MODEL_OPTIONS + Analysis ▸ Reference
+      Data.  Governs GUI-side hi-res sampling only; the integrator keeps
+      the deterministic offline coarse grid, so every benchmark is
+      byte-identical.  test_terrain_dem.py, METHODS §2.5.  Follow-up only
+      if 40 MB/tile bites over wide terminal glides: a COG range-reader
+      fetching just the ~KB internal tile around a point.
+      As shipped: trajectories START at the
       launch site's real altitude and TERMINATE on real ground height
       (integrate_trajectory(terrain_dem=True, launch_elev_m=…);
       "Use terrain (DEM)" checkbox + live pad readout in the Launch

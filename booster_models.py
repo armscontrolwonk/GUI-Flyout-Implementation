@@ -1084,8 +1084,9 @@ MODEL_OPTIONS = {
     },
     "terrain": {
         "label":   "Terrain (DEM)",
-        "choices": ("terrarium", "coarse"),
+        "choices": ("terrarium", "glo30", "coarse"),
         "labels":  {"terrarium": "Terrarium z11 tiles (network, cached)",
+                    "glo30":     "Copernicus GLO-30 (30 m TanDEM-X, network)",
                     "coarse":    "Bundled 0.05° grid (offline)"},
         "default": "terrarium",
         # Governs GUI-side pad-elevation sampling (terrain.py); the trajectory

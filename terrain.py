@@ -56,9 +56,9 @@ _SOURCE = "terrarium"
 
 
 def configure_terrain(source):
-    """Select the default elevation source: 'terrarium' or 'coarse'."""
+    """Select the default elevation source: 'terrarium', 'glo30', or 'coarse'."""
     global _SOURCE
-    if source not in ("terrarium", "coarse"):
+    if source not in ("terrarium", "glo30", "coarse"):
         raise ValueError(f"unknown terrain source '{source}'")
     _SOURCE = source
 
@@ -171,6 +171,102 @@ def _hires_elevation(lat, lon):
         return None
 
 
+# ── Copernicus GLO-30 (opt-in, on demand) ───────────────────────────────────
+# Uniform 30 m TanDEM-X (~2-4 m vertical, better void handling than the
+# Terrarium SRTM/GMTED/ETOPO blend), read straight from the public AWS Open
+# Data COGs with Pillow alone — no rasterio/GDAL.  Each 1x1-deg tile is a
+# float32 GeoTIFF; lat/lon -> pixel comes from the ModelPixelScale /
+# ModelTiepoint tags, so poleward longitude-thinning is handled automatically.
+# Whole-tile cache (disk .tif + a small in-process LRU): one ~40 MB fetch per
+# 1-deg cell, then every point in it is free.  Ocean (no tile / 404) returns
+# None so `elevation` falls back to the coarse grid (floored to sea level).
+_GLO30_URL = ("https://copernicus-dem-30m.s3.amazonaws.com/"
+              "Copernicus_DSM_COG_10_{sn}{la:02d}_00_{ew}{lo:03d}_00_DEM/"
+              "Copernicus_DSM_COG_10_{sn}{la:02d}_00_{ew}{lo:03d}_00_DEM.tif")
+_GLO30_DIR = os.path.join(_CACHE_DIR, "glo30")
+_glo30_cache = {}            # name -> (arr, lon0, lat0, sx, sy) | None (no tile)
+_GLO30_LRU  = 4              # in-process tiles kept (~52 MB float32 each)
+
+
+def _glo30_tile_name(lat, lon):
+    """1x1-deg tile id from the SW-corner integer degrees (S/W for negatives)."""
+    la = int(math.floor(lat)); lo = int(math.floor(lon))
+    sn = "N" if la >= 0 else "S"
+    ew = "E" if lo >= 0 else "W"
+    return sn, abs(la), ew, abs(lo)
+
+
+def _load_glo30_tile(name_key):
+    """(arr, lon0, lat0, sx, sy) for a GLO-30 tile, or None if there is no tile
+    (ocean / 404).  Disk-cached raw .tif, then an in-process LRU of arrays."""
+    if name_key in _glo30_cache:
+        return _glo30_cache[name_key]
+    sn, la, ew, lo = name_key
+    fname = f"Copernicus_DSM_COG_10_{sn}{la:02d}_00_{ew}{lo:03d}_00_DEM.tif"
+    path = os.path.join(_GLO30_DIR, fname)
+    from PIL import Image                        # local import: optional at runtime
+    data = None
+    if os.path.exists(path):
+        try:
+            data = open(path, "rb").read()
+        except Exception:
+            data = None
+    if data is None:
+        url = _GLO30_URL.format(sn=sn, la=la, ew=ew, lo=lo)
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                data = r.read()
+        except Exception:
+            _glo30_cache[name_key] = None        # no tile here (ocean) — remember it
+            return None
+        try:
+            os.makedirs(_GLO30_DIR, exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+        except Exception:
+            pass
+    try:
+        im = Image.open(io.BytesIO(data))
+        arr = np.asarray(im, dtype=np.float32)
+        tags = im.tag_v2
+        sx, sy = float(tags[33550][0]), float(tags[33550][1])   # ModelPixelScale
+        tie = tags[33922]                                       # ModelTiepoint
+        lon0, lat0 = float(tie[3]), float(tie[4])               # NW corner (i=j=0)
+        result = (arr, lon0, lat0, sx, sy)
+    except Exception:
+        _glo30_cache[name_key] = None
+        return None
+    with _lock:
+        if len(_glo30_cache) >= _GLO30_LRU:
+            # drop an arbitrary existing entry (simple bound, not strict LRU)
+            for k in list(_glo30_cache):
+                if _glo30_cache[k] is not None:
+                    del _glo30_cache[k]; break
+        _glo30_cache[name_key] = result
+    return result
+
+
+def _glo30_elevation(lat, lon):
+    """Bilinear GLO-30 sample; None on any failure (missing tile, no network)."""
+    try:
+        tile = _load_glo30_tile(_glo30_tile_name(lat, lon))
+        if tile is None:
+            return None
+        arr, lon0, lat0, sx, sy = tile
+        H, W = arr.shape
+        fc = (float(lon) - lon0) / sx - 0.5      # pixel-centre fractional col
+        fr = (lat0 - float(lat)) / sy - 0.5      # row increases southward
+        c0 = int(math.floor(fc)); r0 = int(math.floor(fr))
+        dc = fc - c0; dr = fr - r0
+        c0 = min(max(c0, 0), W - 1); c1 = min(c0 + 1, W - 1)
+        r0 = min(max(r0, 0), H - 1); r1 = min(r0 + 1, H - 1)
+        top = float(arr[r0, c0]) * (1 - dc) + float(arr[r0, c1]) * dc
+        bot = float(arr[r1, c0]) * (1 - dc) + float(arr[r1, c1]) * dc
+        return top * (1 - dr) + bot * dr
+    except Exception:
+        return None
+
+
 # ── public API ──────────────────────────────────────────────────────────────
 
 def elevation(lat, lon, hi_res=None):
@@ -178,10 +274,21 @@ def elevation(lat, lon, hi_res=None):
 
     hi_res=True tries a network Terrarium tile first (cached), falling back to
     the bundled coarse grid on any failure so the call always returns a value.
-    hi_res=None (default) follows the configured source (configure_terrain);
+    hi_res=None (default) follows the configured source (configure_terrain):
+    'glo30' samples a Copernicus GLO-30 tile (then Terrarium, then coarse on a
+    miss), 'terrarium' a Terrarium tile (then coarse), 'coarse' the offline grid;
     hi_res=False forces the offline coarse grid.
     """
     if hi_res is None:
+        # 'glo30' and 'terrarium' are both hi-res network sources; 'coarse' is
+        # the offline grid.  A GLO-30 miss (ocean/no network) falls through to
+        # the Terrarium tile, then the coarse grid — always returns a value.
+        if _SOURCE == "glo30":
+            v = _glo30_elevation(lat, lon)
+            if v is not None:
+                return v
+            v = _hires_elevation(lat, lon)
+            return v if v is not None else _coarse_elevation(lat, lon)
         hi_res = (_SOURCE == "terrarium")
     if hi_res:
         v = _hires_elevation(lat, lon)

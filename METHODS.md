@@ -259,10 +259,23 @@ PNG-encoded as `h = 256R + G + B/256 − 32768` metres):
   bilinearly. Any failure — offline, timeout, missing tile — silently falls
   back to the coarse grid, so an elevation query always returns a value.
 
+* **Copernicus GLO-30 (on demand, opt-in)** — the higher-accuracy source:
+  uniform 30 m TanDEM-X (~2–4 m vertical, better void handling than the
+  Terrarium SRTM/GMTED/ETOPO blend). Each 1°×1° tile is a float32
+  Cloud-Optimized GeoTIFF on the public AWS Open Data bucket
+  (`copernicus-dem-30m`), read with **Pillow alone — no rasterio/GDAL**; the
+  lat/lon→pixel mapping comes straight from the file's `ModelPixelScale` /
+  `ModelTiepoint` tags, so the poleward longitude-thinning is handled
+  automatically (Plesetsk at 62° N included). Whole 1°-tile fetch (~40 MB),
+  disk-cached, then a small in-process array cache; a missing tile (ocean /
+  404) or any network failure falls through to the Terrarium tile and then
+  the coarse grid, so the query still always returns a value.
+
 The active source for default lookups is selectable under **Analysis ▸
 Reference Data ▸ Terrain (DEM)** (the same `MODEL_OPTIONS` registry as the
 atmosphere and drag sources, Section 4): *Terrarium z11 tiles* (network,
-cached) or *Bundled 0.05° grid* (offline). The choice governs GUI-side
+cached), *Copernicus GLO-30* (30 m TanDEM-X, network), or *Bundled 0.05°
+grid* (offline). The choice governs GUI-side
 sampling — the pad-elevation readout and site baking. **The trajectory
 integrator itself always uses the offline coarse grid** (`hi_res=False`),
 so a run never blocks on the network and results are deterministic and
