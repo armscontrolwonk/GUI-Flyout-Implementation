@@ -73,7 +73,7 @@ def _ballistic():
 
 
 def _glider():
-    return _run("g", "C-HGB", "AUR+HGB")
+    return _run("g", "C-HGB", "AUR")
 
 
 def _render(app, result):
@@ -146,12 +146,12 @@ def test_blocks_follow_their_own_triggers_in_the_rendered_tab(app):
     assert "Maneuver-load anchors" in txt
     assert "Terminal-dive transient" not in txt
 
-    txt = _render(app, _fly("C-HGB", "AUR+HGB", terminal_alt_km=15.0))
+    txt = _render(app, _fly("C-HGB", "AUR", terminal_alt_km=15.0))
     assert "Terminal-dive transient" in txt
 
 
 def test_headline_descriptors_reach_the_widget(app):
-    txt = _render(app, _fly("C-HGB", "AUR+HGB", banking=True,
+    txt = _render(app, _fly("C-HGB", "AUR", banking=True,
                             terminal_alt_km=15.0))
     head = txt.splitlines()[0]
     assert "glide · banking · terminal dive" in head
@@ -169,8 +169,8 @@ def test_sweep_context_is_ballistic_only(app):
     app._booster_var.set("Generic ICBM")
     assert "Sweep context" in _render(app, _ballistic())
 
-    app._last_heating_sweep = dict(sweep, booster="AUR+HGB")
-    app._booster_var.set("AUR+HGB")
+    app._last_heating_sweep = dict(sweep, booster="AUR")
+    app._booster_var.set("AUR")
     assert "Sweep context" not in _render(app, _glider())
 
     app._last_heating_sweep = None
@@ -205,7 +205,7 @@ def test_front_end_guidance_tracks_reentry_plan_not_object_default(app):
     """The Front End "Guidance:" row is a reentry-PLAN choice, so switching the
     sidebar glide law must change the Booster Parameters panel — it must not be
     pinned to the object's baked-in glider_guidance."""
-    app._booster_var.set("AUR+HGB")
+    app._booster_var.set("AUR")
     app._on_booster_changed()
     # Compose a glider reentry object via the sidebar loadout (boosters no
     # longer embed one), so the Front End has a glide row to source.

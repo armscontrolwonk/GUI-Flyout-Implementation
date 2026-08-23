@@ -3447,7 +3447,7 @@ that the vehicle commits to the dive with enough horizontal room to reach
 the ground *before* it crosses the circle, but not so large that it commits
 far short of the target. The dependence is **non-monotonic** — both too-small
 and too-large miss — with three regimes (illustrated with a C-HGB glider off
-the AUR-HGB stack, diving from ≈29 km at ≈Mach 4–5; the numbers are
+the AUR stack, diving from ≈29 km at ≈Mach 4–5; the numbers are
 vehicle- and speed-specific, the *shape* is general):
 
 | radius | behaviour | impact miss |
@@ -4689,14 +4689,17 @@ The `_aur` builder (`booster_models.py`) and its variant
 contribution by the author of this document. AUR is a hypothetical
 two-stage solid-propellant ballistic missile assembled from
 open-source body-dimension and propulsion-class data; it is *not* a
-reconstruction of a specific named vehicle from the literature. The
-HGB variant (`_aur_hgb`) carries a hypersonic glide body in place of a
-conventional warhead and uses the constant-L/D guidance modes of
-Section 12.
+reconstruction of a specific named vehicle from the literature. To
+fly it as a boost-glide vehicle, the AUR carries a hypersonic glide
+body (a reentry object with the constant-L/D guidance modes of
+Section 12) in place of a conventional warhead — chosen at run time
+from the sidebar, since the front-end loadout is a run-level choice and
+no longer a separate booster variant.
 
-The AUR/HGB combination is registered in the runtime `BOOSTER_DB` as
-`"AUR+HGB"`, alongside the Minotaur-IV + HTV-2 reproduction. These
-two are the GUI's default "Missile" dropdown entries.
+The AUR booster is registered in the runtime `BOOSTER_DB` as `"AUR"`,
+alongside the Minotaur-IV + HTV-2 reproduction. (A former `"AUR+HGB"`
+variant that baked the glide body into the booster JSON was removed once
+loadout became a run-level choice.)
 
 ### 15.4 Reproducibility caveats
 

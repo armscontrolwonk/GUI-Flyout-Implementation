@@ -30,7 +30,7 @@ BETA, LD = CHGB.beta_kg_m2, CHGB.glider_LD
 
 
 def glide_states():
-    p = get_booster("AUR+HGB")
+    p = get_booster("AUR")
     p.burnout_angle_deg = KICK; p.stage_burnout_angle_deg = KICK
     if p.stage2: p.stage2.stage_burnout_angle_deg = KICK
     ro = copy.deepcopy(CHGB)

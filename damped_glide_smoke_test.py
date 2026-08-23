@@ -43,7 +43,7 @@ from booster_models import apply_reentry_plan as _arp, load_reentry_plan as _lrp
 _rp = _lrp("C-HGB")
 if _rp is not None:
     _CHGB = _arp(_CHGB, _rp)
-# The AUR+HGB flew a distinct "HGB" glide body (⌀0.8, L 2.0, L/D 1.8) that used
+# The former AUR+HGB variant flew a distinct "HGB" glide body (⌀0.8, L 2.0, L/D 1.8) that used
 # to be embedded in the booster JSON.  Boosters no longer embed reentry objects,
 # so reconstruct it here as a test fixture (same β and mass as C-HGB; only the
 # glide-relevant geometry / L/D differ) for the AUR capture cases below.
@@ -75,7 +75,7 @@ def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
 def _fly_aur_shallow(mode, zeta=None, aero="polar", terminal_alt_km=30.0):
     """AUR on a depressed (shallow) insertion — capturable (adv-pitch program:
     stage 1 → 27°, stage 2 → 0° flat, launch elev 80°, az 103°, cutoff 117 s)."""
-    p = copy.deepcopy(get_booster("AUR+HGB"))
+    p = copy.deepcopy(get_booster("AUR"))
     p.stage_turn_start_s, p.stage_turn_stop_s, p.stage_burnout_angle_deg = 1.0, 30.0, 27.0
     if getattr(p, "stage2", None) is not None:
         p.stage2.stage_turn_start_s = 54.0

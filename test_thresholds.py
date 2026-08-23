@@ -169,7 +169,7 @@ def _fly_glider():
     _rp = load_reentry_plan("C-HGB")
     if _rp is not None:
         chgb = apply_reentry_plan(chgb, _rp)
-    p = get_booster("AUR+HGB")
+    p = get_booster("AUR")
     p.ro = copy.deepcopy(chgb)
     return integrate_trajectory(p, 0.0, 0.0, 90.0, max_time_s=6000.0,
                                 dt_output=2.0)

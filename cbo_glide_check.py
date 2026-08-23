@@ -20,7 +20,7 @@ if _rp is not None:
 
 
 def fly(zeta, burnout_deg, mode="damped_glide", aero="constant_LD"):
-    p = get_booster("AUR+HGB")
+    p = get_booster("AUR")
     p.burnout_angle_deg = burnout_deg
     p.stage_burnout_angle_deg = burnout_deg
     if p.stage2:

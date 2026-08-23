@@ -832,7 +832,6 @@ published boost-phase pitch programs; the Minotaur-IV stack uses
 
 | Booster | Stages | Reentry object | Guidance |
 |---|---|---|---|
-| AUR+HGB | 2 | HGB (glider) | pitch program |
 | Minotaur-IV + HTV-2 | 3 | HTV-2 (glider) | true gravity turn |
 | Strypi VIII R | 2 (+ Castor I strap-on) | SWERVE (glider) | pitch program |
 | Strypi VIII R (Castor II) | 2 (+ Castor II strap-on) | SWERVE (glider) | pitch program |

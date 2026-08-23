@@ -47,12 +47,12 @@ def _plan():
 def test_dialog_defaults_alpha_limit_to_10(root):
     """A plan that never set alpha_limit_deg opens with the 10° default; a
     plan that stored None (user cleared it) stays blank."""
-    b = get_booster("AUR+HGB")
-    d1 = thrusty.FlightPlanDialog(root, "AUR+HGB",
+    b = get_booster("AUR")
+    d1 = thrusty.FlightPlanDialog(root, "AUR",
                                   {'guidance': 'pitch_program', 'stages': [{}, {}]}, b)
     assert d1._alpha_limit_var.get() == "10"
     d1.destroy()
-    d2 = thrusty.FlightPlanDialog(root, "AUR+HGB",
+    d2 = thrusty.FlightPlanDialog(root, "AUR",
                                   {'guidance': 'pitch_program', 'stages': [{}, {}],
                                    'alpha_limit_deg': None}, b)
     assert d2._alpha_limit_var.get() == ""
@@ -60,8 +60,8 @@ def test_dialog_defaults_alpha_limit_to_10(root):
 
 
 def test_dialog_saves_alpha_fields(root):
-    b = get_booster("AUR+HGB")
-    dlg = thrusty.FlightPlanDialog(root, "AUR+HGB", _plan(), b)
+    b = get_booster("AUR")
+    dlg = thrusty.FlightPlanDialog(root, "AUR", _plan(), b)
     dlg._alpha_limit_var.set("8")
     dlg._alpha_induced_var.set(True)
     dlg._save()
@@ -73,22 +73,22 @@ def test_dialog_saves_alpha_fields(root):
 
 
 def test_dialog_reopen_repopulates_fields(root):
-    b = get_booster("AUR+HGB")
-    dlg = thrusty.FlightPlanDialog(root, "AUR+HGB", _plan(), b)
+    b = get_booster("AUR")
+    dlg = thrusty.FlightPlanDialog(root, "AUR", _plan(), b)
     dlg._alpha_limit_var.set("6.5")
     dlg._alpha_induced_var.set(True)
     dlg._save()
     saved = dlg.result
 
-    dlg2 = thrusty.FlightPlanDialog(root, "AUR+HGB", saved, b)
+    dlg2 = thrusty.FlightPlanDialog(root, "AUR", saved, b)
     assert float(dlg2._alpha_limit_var.get()) == 6.5
     assert dlg2._alpha_induced_var.get() is True
     dlg2.destroy()
 
 
 def test_dialog_blank_limit_saves_none(root):
-    b = get_booster("AUR+HGB")
-    dlg = thrusty.FlightPlanDialog(root, "AUR+HGB", _plan(), b)
+    b = get_booster("AUR")
+    dlg = thrusty.FlightPlanDialog(root, "AUR", _plan(), b)
     dlg._alpha_limit_var.set("")            # blank = no limit
     dlg._alpha_induced_var.set(False)
     dlg._save()
