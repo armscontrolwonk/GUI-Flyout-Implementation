@@ -11664,6 +11664,23 @@ class BoosterFlyoutApp(tk.Tk):
         if parent is None:
             parent = self
 
+        def _commit_pick(_la, _lo):
+            """Write picked coordinates into the caller's fields.  When those
+            fields are the LAUNCH pad's, a hand-picked point is not one of the
+            named library sites, so clear the (now stale) site-combobox
+            selection and refresh the terrain-elevation readout — otherwise the
+            combobox keeps claiming a site the pad is no longer at, which reads
+            as the location silently reverting on the next run."""
+            lat_var.set(f"{_la:.4f}")
+            lon_var.set(f"{_lo:.4f}")
+            if lat_var is getattr(self, '_launch_lat', None):
+                if hasattr(self, '_site_var'):
+                    self._site_var.set("")
+                    if hasattr(self, '_site_del_btn'):
+                        self._site_del_btn.config(state=tk.DISABLED)
+                if hasattr(self, '_on_terrain_toggled'):
+                    self._on_terrain_toggled()
+
         dlg = tk.Toplevel(parent)
         dlg.title("Find Location")
         dlg.resizable(True, False)
@@ -11885,8 +11902,7 @@ class BoosterFlyoutApp(tk.Tk):
                 map_win.after(350, lambda: _confirm_map(lat_c, lon_c))
 
             def _confirm_map(lat_c, lon_c):
-                lat_var.set(f"{lat_c:.4f}")
-                lon_var.set(f"{lon_c:.4f}")
+                _commit_pick(lat_c, lon_c)
                 ns = 'N' if lat_c >= 0 else 'S'
                 ew = 'E' if lon_c >= 0 else 'W'
                 status_var.set(
@@ -11920,8 +11936,7 @@ class BoosterFlyoutApp(tk.Tk):
                                     parent=dlg)
                 return
             _, lat, lon = _rows[sel[0]]
-            lat_var.set(f"{lat:.4f}")
-            lon_var.set(f"{lon:.4f}")
+            _commit_pick(lat, lon)
             dlg.destroy()
 
         lb.bind("<<ListboxSelect>>", _on_select)
