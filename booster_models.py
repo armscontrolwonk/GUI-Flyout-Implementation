@@ -3478,6 +3478,64 @@ def _ro_length(p: BoosterParams) -> float:
     return ro.length_m if ro is not None else getattr(p, 'ro_length_m', 0.0)
 
 
+def _flare_cd(d_aft: float, d_fwd: float, L: float, mach: float,
+              A_ref: float) -> float:
+    """Screening wave-drag increment (ref A_ref) of a single conical transition.
+
+    A flare — the body WIDER at its aft (downstream) end than its forward end —
+    presents a forward-facing conical surface to the nose-first flow, so it adds
+    pressure drag: the cone-pressure coefficient at the flare half-angle
+    (`_cd_wave_cone`, the same Chin primitive the nose and the biconic aft
+    frustum use) times the frontal-area INCREASE, referenced to A_ref.  A
+    boattail (narrower aft) or a same-diameter section returns 0 — conservative,
+    and a boattail's small base-drag credit is below screening granularity.
+    A near-zero length (a bare step) floors the fineness at 0.5 (blunt)."""
+    import math
+    r_aft, r_fwd = float(d_aft) / 2.0, float(d_fwd) / 2.0
+    dA = math.pi * (r_aft * r_aft - r_fwd * r_fwd)
+    if dA <= 0.0 or A_ref <= 0.0:
+        return 0.0
+    theta = math.atan((r_aft - r_fwd) / max(float(L), 1e-6))
+    ld = 1.0 / (2.0 * math.tan(theta)) if theta > 1e-6 else 0.5
+    return _cd_wave_cone(ld, mach) * (dA / A_ref)
+
+
+def _transition_wave_drag(params: BoosterParams, active_stage: BoosterParams,
+                          mach: float, A_ref: float) -> float:
+    """Total flare wave-drag increment (ref A_ref) from the ATTACHED stack's
+    conical stages and interstages (Phase 2 of the interstage/conical work,
+    METHODS §6.7).  Walks from the active stage upward — stages below it have
+    separated — and sums `_flare_cd` for each opt-in feature:
+
+      * conical stage — frustum from `diameter_m` (base, aft) to
+        `top_diameter_m` (top, forward); a flare when the base is wider.
+      * interstage — frustum from this stage's top diameter (aft) to the next
+        stage's base diameter (forward); a flare when this stage is fatter.
+
+    Zero unless a stage sets `conical` or `has_interstage`, so a plain stack is
+    byte-identical.  Lean by design: friction over the added wetted length is
+    below the front-end drag model's granularity (it already counts only the
+    front-end body), and contractions are not credited."""
+    if A_ref <= 0.0:
+        return 0.0
+    total = 0.0
+    s = active_stage
+    while s is not None:
+        if getattr(s, 'conical', False) and float(getattr(s, 'top_diameter_m', 0.0)) > 0.0:
+            total += _flare_cd(s.diameter_m, s.top_diameter_m,
+                               s.length_m, mach, A_ref)
+        if (getattr(s, 'has_interstage', False)
+                and float(getattr(s, 'interstage_length_m', 0.0)) > 0.0
+                and s.stage2 is not None):
+            d_aft = (s.top_diameter_m if (getattr(s, 'conical', False)
+                                          and s.top_diameter_m > 0.0)
+                     else s.diameter_m)
+            total += _flare_cd(d_aft, s.stage2.diameter_m,
+                               s.interstage_length_m, mach, A_ref)
+        s = s.stage2
+    return total
+
+
 def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
                       top_params: 'BoosterParams' = None,
                       t_s: float = None, powered: bool = False) -> np.ndarray:
@@ -3545,6 +3603,12 @@ def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
         cd = drag_coefficient(params, mach)
 
     area = booster_area(params, altitude_m=altitude_m, top_params=top_params)
+    # Interstage / conical flare wave drag (additive, ref same `area`): a
+    # declared flare adds forward-facing pressure drag the front-end nose model
+    # misses.  0 unless a stage opts into `conical`/`has_interstage`, so a plain
+    # stack is byte-identical.  (METHODS §6.7 Phase 2.)
+    cd += _transition_wave_drag(top_params if top_params is not None else params,
+                                params, mach, area)
     q    = 0.5 * rho * speed**2
     drag_mag = cd * q * area
 

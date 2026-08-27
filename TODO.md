@@ -536,8 +536,13 @@ The one phase that touches trajectory physics, gated to lifting forms
   biconic_nose_geometry resolver.  Reduces exactly to the single cone at
   θ2=θ1; non-biconic and shrouded vehicles byte-identical.
   test_biconic_front_end.py, METHODS §8.2.
-- Interstage / conical-stage drag (Phase 2 of interstage work; geometry+mass
-  shipped, drag-neutral by design).
+- Interstage / conical-stage flare drag — DONE (2026-08-23).  A conical
+  stage or interstage that widens toward the aft (a flare) now adds a
+  screening wave-drag increment (_flare_cd / _transition_wave_drag: cone-
+  pressure Cp at the flare half-angle × frontal-area step / A_ref, Chin
+  framework).  Boattails/same-diameter and plain stacks byte-identical;
+  friction not separately counted (front-end model granularity).
+  test_transition_drag.py, METHODS §6.7.
 - Through-deck central upper stage (D5-style) and hammerhead /
   stage-enclosing fairing geometry.
 - Descent-regime grid fins (Falcon-9-style forward fins; ascent-only today

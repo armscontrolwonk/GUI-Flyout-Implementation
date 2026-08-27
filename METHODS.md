@@ -942,23 +942,36 @@ so the stored stage masses are unchanged and a vehicle with no interstage
 gets `+0`. The interstage is a booster-side adapter, never part of
 `payload_kg` / the throw-weight tally.
 
-*Drag.* **Phase 1 is drag-neutral** — declaring an interstage carries its
-mass but does not change the boost reference area or `C_D`. The
-step/flare drag increment is deferred to Phase 2.
+*Drag.* **Phase 2 adds a flare wave-drag increment** (`_transition_wave_drag`,
+`booster_models.py`). An interstage that steps DOWN to a narrower upper stage
+— wider at its aft end than its forward end — is a flare: it presents a
+forward-facing conical surface to the nose-first flow and adds pressure drag,
+the cone-pressure coefficient at the flare half-angle (`_cd_wave_cone`, the
+same Chin primitive as the nose and biconic terms) times the frontal-area
+increase, referenced to the boost area. A same-diameter interstage adds
+nothing. The reference area is unchanged (still the widest front-end body).
 
 **Conical (tapered) stage.** `conical = True` with `top_diameter_m > 0`
 makes the stage body a frustum from `diameter_m` (base) to `top_diameter_m`
-(top), a cylinder otherwise. As with the interstage, Phase 1 draws and
-carries the taper but leaves the aerodynamics unchanged: the boost
-reference area still uses the base diameter. Distinct from an interstage —
+(top), a cylinder otherwise. A tapered stage (base wider than top) is a flare
+in the flow: it is charged the same `_flare_cd` increment as an interstage,
+referenced to the base diameter (the reference area is unchanged). Distinct
+from an interstage —
 a conical stage is load-bearing structure that stays; an interstage is a
 jettisonable adapter.
 
 Both are drawn to scale in the **Schematic** tab (a conical stage as a
 trapezoid; an interstage as its derived-diameter frustum, labelled with
 length, mass, and jettison), so a mis-sized adapter or taper is visible at
-a glance. Phase 2 will add the aerodynamic coupling (interstage step/flare
-drag, conical wave-drag refinement).
+a glance.
+
+*Screening scope.* Only FLARES are charged (forward-facing area growth);
+boattails / tapers narrowing aft are not credited (their small base-drag
+benefit is below screening granularity), and the added skin friction of an
+interstage is not separately counted because the front-end drag model already
+resolves only the front-end body — adding one interstage's friction would be
+inconsistent granularity. A plain stack (no `conical`, no `has_interstage`)
+is byte-identical. `test_transition_drag.py`.
 
 ---
 
