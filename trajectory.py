@@ -4328,13 +4328,49 @@ def maximize_range(params: BoosterParams,
         else:
             ts_candidates = [gt_turn_stop_s]
 
-        # ── Phase 1: parallel coarse 2-D grid over (burnout_angle, turn_stop) ──
-        coarse_grid = [(float(ba), ts)
-                       for ba in np.arange(_angle_lo, _angle_hi + 1.0, 2.0)
-                       for ts in ts_candidates]
-        for la, ts, rng in _run_parallel(coarse_grid):
-            if rng > best_range:
-                best_range, best_la, best_ts = rng, la, ts
+        # ── Phase 1: coordinate-descent over (burnout_angle, turn_stop) ──
+        # The full 2-D grid is len(angles) × len(ts) trajectories, and with the
+        # EOM holding the GIL the ThreadPool gives little real parallelism, so
+        # that product was the whole "runs forever" cost.  Burnout angle and
+        # turn-stop are only mildly coupled, so a coordinate descent recovers
+        # the same optimum in ~1/4 the trajectories — provided it STARTS from a
+        # good line rather than an arbitrary corner.  The Wheelon estimate
+        # _gamma_opt is exactly that: a physics-based near-optimal burnout
+        # angle, so the descent seeds the angle there, sweeps the turn-stop
+        # along it, then sweeps the angle at the winning turn-stop, then re-
+        # sweeps the turn-stop at the winning angle.  Phase 2's minimize_scalar
+        # polishes the angle.  Validated against the full grid in
+        # test_max_range_search.py.
+        _angles = [float(ba)
+                   for ba in np.arange(_angle_lo, _angle_hi + 1.0, 2.0)]
+        # Angle nearest the Wheelon optimum seeds the first turn-stop sweep.
+        _seed_angle = min(_angles, key=lambda a: abs(a - _gamma_opt))
+
+        def _absorb(results):
+            nonlocal best_range, best_la, best_ts
+            for la, ts, rng in results:
+                if rng > best_range:
+                    best_range, best_la, best_ts = rng, la, ts
+
+        if len(ts_candidates) > 1:
+            # Round 1 — turn-stop sweep along the Wheelon-optimal angle.
+            _absorb(_run_parallel([(_seed_angle, ts) for ts in ts_candidates],
+                                  label="turn-stop"))
+            _ts0 = best_ts
+            # Round 2 — angle sweep at the best turn-stop.
+            _absorb(_run_parallel([(ba, best_ts) for ba in _angles],
+                                  label="angle"))
+            # Round 3 — turn-stop re-sweep at the best angle, only if the angle
+            # moved (else Round 1 already covered this line).  This is the step
+            # that recovers a coupled optimum whose best turn-stop shifts with
+            # the angle.
+            if best_la != _seed_angle:
+                _absorb(_run_parallel([(best_la, ts) for ts in ts_candidates],
+                                      label="turn-stop₂"))
+        else:
+            # A single (user-fixed) turn-stop: just sweep the angle along it.
+            _absorb(_run_parallel([(ba, ts_candidates[0]) for ba in _angles],
+                                  label="angle"))
 
         # ── Phase 2: single minimize_scalar at the coarse-best turn_stop ──
         # The coarse grid already found the best ts; running minimize_scalar
