@@ -2626,16 +2626,30 @@ finishes in seconds for typical missiles.
 `maximize_range` (`trajectory.py`) is a two-phase search over
 (burnout angle, turn-stop time):
 
-1. **Coarse parallel grid.** A grid of candidate `(γ, t_stop)` pairs
-   is evaluated on a thread pool (up to 8 workers, capped to avoid
-   hyperthreading thrash). The angle window is bounded by Wheelon
-   (Section 10.2). The turn-stop window covers the powered-flight
-   duration, with a 3600 s outer cap to bail out on degenerate cases
-   that never impact.
+1. **Coarse coordinate descent.** Burnout angle and turn-stop are only
+   mildly coupled, so rather than the full Cartesian product of the two
+   candidate lists (angle window × turn-stop window ≈ 200 trajectories,
+   which with the GIL-bound EOM ran essentially serially on the thread
+   pool), the search descends one axis at a time from a good starting
+   line. The angle window is bounded by Wheelon (Section 10.2); the
+   turn-stop window covers the powered-flight duration, with a 3600 s
+   outer cap to bail out on degenerate cases that never impact. Seeded at
+   the Wheelon-optimal angle `γ_opt`, it (a) sweeps the turn-stop along
+   `γ_opt`, (b) sweeps the angle at the winning turn-stop, then (c) — only
+   if the angle moved — re-sweeps the turn-stop at the winning angle. Each
+   sweep runs on a thread pool (up to 8 workers, capped to avoid
+   hyperthreading thrash). This evaluates ≈ ¼ of the trajectories of the
+   full grid and, validated against it (`test_max_range_search.py`),
+   lands on the same optimum to within the grid's own 2° / 2 s
+   granularity — including the coupled case of a lofted non-separating
+   body glider, whose optimum sits at a long turn-stop that a
+   short-turn-stop seed would miss. Seeding the descent at the physics-
+   based angle (not an arbitrary grid corner) is what makes one descent
+   pass sufficient.
 2. **Bounded polish.** The best coarse candidate is refined by a single
    `scipy.optimize.minimize_scalar(method='bounded')` pass (bounded Brent
    over an interval) on the burnout angle, with the turn-stop fixed at the
-   coarse-grid optimum.
+   coarse optimum.
 
 The result dictionary returns the maximum range plus the optimal
 `(burnout_angle, turn_stop)` and the full trajectory at the optimum.
