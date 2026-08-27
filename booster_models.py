@@ -3592,7 +3592,10 @@ def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
             # single cone.  biconic_nose_geometry is the SAME resolver the
             # reentry build-up and schematic use, so drawn == flown on ascent
             # too.  None (not a valid biconic) keeps the single-cone wave.
-            _bic = biconic_nose_geometry(top_params)
+            _tp_ro = getattr(top_params, 'ro', None)
+            _bic = (biconic_nose_geometry(top_params)
+                    if (_tp_ro is not None and getattr(_tp_ro, 'biconic', False))
+                    else None)
             _bic_arg = None
             if _bic is not None and float(_bic["break_diameter_m"]) > 0.0:
                 _bic_arg = (_bic["fore_len_m"] / _bic["break_diameter_m"],

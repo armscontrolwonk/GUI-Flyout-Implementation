@@ -106,17 +106,25 @@ def coriolis_acceleration(vel_ecef):
     """
     Coriolis acceleration: a_cor = -2 * omega x v  (m/s^2)
     omega is Earth rotation vector = [0, 0, OMEGA_EARTH] in ECEF.
+
+    Closed form (exact): with omega purely axial, omega x v = (-O*vy, O*vx, 0),
+    so a_cor = (2 O vy, -2 O vx, 0).  Avoids numpy's generic np.cross, whose
+    shape/axis dispatch dominated the EOM (called every integration step).
     """
-    omega = np.array([0.0, 0.0, OMEGA_EARTH])
-    return -2.0 * np.cross(omega, vel_ecef)
+    O = OMEGA_EARTH
+    return np.array([2.0 * O * vel_ecef[1], -2.0 * O * vel_ecef[0], 0.0])
 
 
 def centrifugal_acceleration(pos_ecef):
     """
     Centrifugal acceleration: a_cf = -omega x (omega x r)  (m/s^2)
+
+    Closed form (exact): with omega purely axial, -omega x (omega x r) reduces
+    to (O^2 rx, O^2 ry, 0) — the outward radial term in the equatorial plane.
+    Avoids two np.cross calls per EOM step.
     """
-    omega = np.array([0.0, 0.0, OMEGA_EARTH])
-    return -np.cross(omega, np.cross(omega, pos_ecef))
+    O2 = OMEGA_EARTH * OMEGA_EARTH
+    return np.array([O2 * pos_ecef[0], O2 * pos_ecef[1], 0.0])
 
 
 def range_between(lat1, lon1, lat2, lon2, radius=None):
