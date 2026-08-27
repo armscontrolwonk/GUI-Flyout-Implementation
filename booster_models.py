@@ -878,16 +878,34 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     if params.ro is not None:
         ro = params.ro
         import dataclasses as _dc
+        # ── Per-integration memo ──────────────────────────────────────────
+        # effective_ro is a pure function of params.ro plus (for a body) the
+        # last stage's static burnout mass/geometry — none of which change
+        # during a flyout, yet _eom calls it every RK step.  The body branch
+        # runs a dataclasses.replace (and a tumbling body a second one) on
+        # every call, which profiling showed to be ~15 % of a body
+        # trajectory.  Cache the derived object under a signature that captures
+        # every input: the identity of params.ro (a new object whenever the RO
+        # is edited or the equilibrium-glide split swaps it) and the last
+        # stage's burnout mass/diameter/length.  A signature match returns the
+        # cached object; any change misses and recomputes, so the result is
+        # byte-identical to the uncached path.  The memo holds the source ro by
+        # reference and compares it with `is` (not id(), which a freed object's
+        # successor could re-use), so a swapped or edited RO always misses.
+        _last = params
+        while _last.stage2 is not None:
+            _last = _last.stage2
+        _body_mass = (_last.mass_initial - _last.mass_propellant
+                      if _last.mass_propellant > 0 else _last.mass_final)
+        _memo = params.__dict__.get('_ero_memo')
+        if (_memo is not None and _memo[0] is ro
+                and _memo[1] == (_body_mass, _last.diameter_m, _last.length_m)):
+            return _memo[2]
         if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
             # The vehicle IS the booster body — inherit mass and geometry
             # from the last stage's burnout state.  β remains user-specified
             # on the RV itself because there's no clean way to derive a
             # single scalar β from a Mach-dependent body Cd table.
-            _last = params
-            while _last.stage2 is not None:
-                _last = _last.stage2
-            _body_mass = (_last.mass_initial - _last.mass_propellant
-                          if _last.mass_propellant > 0 else _last.mass_final)
             ro = _dc.replace(ro,
                 mass_kg=float(_body_mass) if _body_mass > 0 else ro.mass_kg,
                 diameter_m=(float(_last.diameter_m)
@@ -903,6 +921,8 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
             if _bt > 0:
                 ro = _dc.replace(ro, beta_kg_m2=float(_bt),
                                  glider_enabled=False, glider_LD=0.0)
+        params.__dict__['_ero_memo'] = (
+            params.ro, (_body_mass, _last.diameter_m, _last.length_m), ro)
         return ro
     # No reentry object configured.  (Old JSON that stored reentry fields inline
     # is migrated to a synthesised params.ro in booster_from_dict, so by the time
