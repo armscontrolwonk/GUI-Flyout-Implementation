@@ -1938,6 +1938,17 @@ shared Mach; single-profile noses (cone, ogive, Von Kármán, LV-Haack,
 parabola) were already end-to-end because every consumer keys on the shared
 shape string.
 
+**Biconic on ascent, too.** The boost-phase drag (`_cd_nose_shape`, used for
+an unshrouded biconic body or bare RV) takes the SAME two-cone treatment, but
+in the Chin cone-pressure framework rather than the hypersonic-Newtonian one:
+the wave term is the fore cone on the break area (br²) plus the aft frustum on
+the annulus (1−br²), each at its own half-angle, friction and base unchanged.
+This is correct for transonic/supersonic ascent (it keeps the M0.8–1.2
+wave-drag peak the Newtonian form floors away) and reduces EXACTLY to the
+single cone when the half-angles are equal.  A shrouded RV flies on the
+fairing's shape until jettison, so this applies only to bodies exposed through
+the dense atmosphere.  `test_biconic_front_end.py`.
+
 For blunted cones the pressure drag is the **exact closed form**
 
 ```

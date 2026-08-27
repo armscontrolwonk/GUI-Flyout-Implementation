@@ -1886,7 +1886,8 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
                    re_l: float = 5e6, ld_body: float = None,
                    aerospike_LD: float = 0.0,
                    aerospike_dD: float = 0.0,
-                   base_area_ratio: float = 1.0) -> float:
+                   base_area_ratio: float = 1.0,
+                   biconic: tuple = None) -> float:
     """
     Total zero-lift drag coefficient (Cd_wave + Cd_friction + Cd_base).
     Source: Chin (1961) *Booster Configuration Design*; NACA TN 4201; Crowell (1996).
@@ -1942,6 +1943,27 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
     if aerospike_LD > 0.0 and mach > 0.8:
         ld_eff = _aerospike_effective_LD(aerospike_LD, aerospike_dD)
         cd_wave = min(cd_wave, _cd_wave_cone(ld_eff, mach))
+
+    # ── Biconic (two-cone) wave drag, Chin framework ─────────────────────────
+    # A declared biconic nose is a steep fore cone on a shallow aft frustum;
+    # its transonic/supersonic wave drag is the SUM of the two, not a single
+    # cone.  Kept in the SAME Chin cone-pressure framework as the single noses
+    # (valid across the boost regime, unlike the hypersonic-Newtonian reentry
+    # build-up), so the ascent M0.8-1.2 wave-drag peak is right.  Each segment's
+    # cone-pressure coefficient is taken at its OWN half-angle and weighted by
+    # its base-area share; the fore cone rides on the break area (br²), the aft
+    # frustum on the annulus (1-br²).  Reduces EXACTLY to the single cone when
+    # the two half-angles are equal (both terms share one Cp).  Overrides the
+    # single-nose wave term above (biconic and aerospike are mutually exclusive
+    # in practice; if both are set the biconic two-cone form wins).
+    if biconic is not None:
+        import math as _m
+        _ld_fore, _theta2_deg, _br = biconic
+        _br = max(1e-3, min(float(_br), 1.0))
+        _ld_aft_eq = 1.0 / (2.0 * _m.tan(_m.radians(
+            max(1.0, min(float(_theta2_deg), 89.0)))))
+        cd_wave = (_cd_wave_cone(float(_ld_fore), mach) * _br * _br
+                   + _cd_wave_cone(_ld_aft_eq, mach) * (1.0 - _br * _br))
 
     # ── Friction drag (nose wetted area + cylindrical body section) ───────────
     nose_swet = _s_wet_ratio(nose_shape, ld)
@@ -3507,8 +3529,18 @@ def drag_force_vector(params: BoosterParams, vel_ecef, altitude_m,
         else:
             # Aerospike is attached to the shroud, so it stops working once
             # the shroud is jettisoned — no aerospike effect on this branch.
+            # Biconic front end (unshrouded body / bare RV): the exposed nose is
+            # two cones, so the boost wave drag is the two-cone Chin form, not a
+            # single cone.  biconic_nose_geometry is the SAME resolver the
+            # reentry build-up and schematic use, so drawn == flown on ascent
+            # too.  None (not a valid biconic) keeps the single-cone wave.
+            _bic = biconic_nose_geometry(top_params)
+            _bic_arg = None
+            if _bic is not None and float(_bic["break_diameter_m"]) > 0.0:
+                _bic_arg = (_bic["fore_len_m"] / _bic["break_diameter_m"],
+                            _bic["theta2_deg"], _bic["break_ratio"])
             cd = _cd_nose_shape(_shape, _ld, mach, re_l=re_l, ld_body=_ld_body,
-                                base_area_ratio=_bar)
+                                base_area_ratio=_bar, biconic=_bic_arg)
     else:
         cd = drag_coefficient(params, mach)
 

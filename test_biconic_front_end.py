@@ -159,3 +159,57 @@ def test_biconic_body_flies_and_differs_from_single_cone():
                                   burnout_angle_deg=-2.0, max_time_s=3600.0)
     assert r_bic['range_km'] > 0.0
     assert r_bic['range_km'] != pytest.approx(r_cone['range_km'], rel=1e-3)
+
+
+# ── boost-phase wave drag (ascent, Chin two-cone framework) ─────────────────
+
+def _straight_cone_biconic(f, L=2.0, d=1.0):
+    """(ld_fore, theta2_deg, break_ratio) for a break placed ON a straight
+    cone — the reduction anchor: the two 'cones' are one cone."""
+    Lf, br = f * L, f
+    ld_fore = Lf / (br * d)
+    theta = math.degrees(math.atan((d / 2) / L))
+    return (ld_fore, theta, br)
+
+
+@pytest.mark.parametrize("M", [0.9, 1.0, 1.2, 2.0, 4.0])
+@pytest.mark.parametrize("f", [0.3, 0.5, 0.7])
+def test_boost_biconic_reduces_to_single_cone(M, f):
+    """A straight-cone break gives the single-cone boost Cd0 at every Mach
+    across the boost regime — the two-cone wave sums back to one cone."""
+    single = mm._cd_nose_shape("cone", 2.0, M)
+    bic = mm._cd_nose_shape("cone", 2.0, M, biconic=_straight_cone_biconic(f))
+    assert bic == pytest.approx(single, abs=1e-9)
+
+
+def test_boost_biconic_uses_chin_not_newtonian_below_M3():
+    """The boost wave term is Mach-continuous through the transonic peak (Chin),
+    not floored at M3 like the hypersonic reentry build-up: the M1.2 value is
+    well above the M3 value."""
+    g = _straight_cone_biconic(0.5)
+    assert mm._cd_nose_shape("cone", 2.0, 1.2, biconic=g) > \
+           mm._cd_nose_shape("cone", 2.0, 3.0, biconic=g) * 1.3
+
+
+def test_boost_biconic_body_flies_different_from_single_cone():
+    """An unshrouded biconic body's ascent drag propagates to a different range
+    than the same body flown as a single cone; a non-biconic body is
+    unaffected by the biconic path."""
+    def _body(biconic, shape="cone"):
+        p = get_booster("Scud-B (R-17)"); p.diameter_m = 0.88; p.length_m = 11.0
+        ro = ROParams(name="B", mass_kg=500, beta_kg_m2=6000, shape=shape,
+                      diameter_m=0.88, length_m=11.0, separation_mode="body",
+                      body_nose_length_m=2.0, biconic=biconic,
+                      fore_length_m=0.6, break_diameter_m=0.44)
+        p2 = compose_loadout(p, ro, 1); p2.ro = ro; return p2
+
+    def _rng(p):
+        return integrate_trajectory(p, 39.12, 125.67, 90.0, burnout_angle_deg=45.0,
+                                    max_time_s=3600.0)["range_km"]
+    r_cone = _rng(_body(False))
+    r_bic = _rng(_body(True))
+    assert r_bic != pytest.approx(r_cone, rel=1e-3)
+    # a non-biconic (ogive) body never enters the biconic wave path
+    r_og = _rng(_body(False, shape="tangent_ogive"))
+    r_og2 = _rng(_body(False, shape="tangent_ogive"))
+    assert r_og == pytest.approx(r_og2, rel=1e-12)

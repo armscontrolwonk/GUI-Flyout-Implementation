@@ -529,7 +529,13 @@ The one phase that touches trajectory physics, gated to lifting forms
   band (speed identical to no-pull-up to ~0.05 m/s) and active only once real
   air returns — which is boost-energy-robust.  test_triggering_too_high_
   conjures_no_lift.
-- Biconic boost-phase wave drag (biconic Phase 2; β/L-D carry reentry today).
+- Biconic boost-phase wave drag — DONE (2026-08-23).  Unshrouded biconic
+  bodies/bare RVs now fly a two-cone wave term on ascent (Chin framework:
+  fore cone on br² + aft frustum on 1−br², each at its half-angle;
+  friction/base unchanged), routed in drag_force_vector via the shared
+  biconic_nose_geometry resolver.  Reduces exactly to the single cone at
+  θ2=θ1; non-biconic and shrouded vehicles byte-identical.
+  test_biconic_front_end.py, METHODS §8.2.
 - Interstage / conical-stage drag (Phase 2 of interstage work; geometry+mass
   shipped, drag-neutral by design).
 - Through-deck central upper stage (D5-style) and hammerhead /
