@@ -139,3 +139,45 @@ def test_reentry_cg_auto_is_the_airframe_centroid():
     airframe length)."""
     x_cg, total = gfs.estimate_cg(_kn23_cg(0.0))
     assert abs(x_cg - 0.5 * total) < 1e-6
+
+
+# ── declared warhead (payload_kg) is auto-placed forward ────────────────────
+
+def _body_with_warhead(struct_kg, warhead_kg, nose_len, length=9.18, diam=1.10):
+    """A long-nosed heavy-warhead body (KN-23A class): the airframe structure is
+    the body mass, the warhead is a DECLARED forward payload."""
+    p = get_booster("Scud-B (R-17)")
+    p.diameter_m = diam
+    p.length_m = length
+    ro = ROParams(name="body", mass_kg=struct_kg, payload_kg=warhead_kg,
+                  beta_kg_m2=0.0, shape="tangent_ogive", diameter_m=diam,
+                  length_m=length, separation_mode="body", glider_enabled=True,
+                  glider_LD=0.0, glider_guidance="damped_glide",
+                  body_nose_length_m=nose_len)
+    p2 = compose_loadout(p, ro, 1)
+    p2.ro = ro
+    return p2
+
+
+def test_declared_warhead_pulls_cg_forward_of_tube_centre():
+    """A body with a declared warhead (ro.payload_kg) packs it in the nose, so
+    Thrusty's auto CG sits AHEAD of the uniform-tube centroid — no reentry_cg_m
+    override needed.  Legacy bodies (no payload) keep the tube centre."""
+    p = _body_with_warhead(struct_kg=988.0, warhead_kg=2500.0, nose_len=4.44)
+    x_cg, total = gfs.estimate_cg(p)
+    assert x_cg < 0.5 * total - 1e-3            # forward of the tube centre
+    assert 0.28 < x_cg / total < 0.42          # nose-heavy, still inside the body
+    # no declared warhead -> unchanged tube centroid
+    p0 = _body_with_warhead(struct_kg=3488.0, warhead_kg=0.0, nose_len=4.44)
+    x0, t0 = gfs.estimate_cg(p0)
+    assert abs(x0 - 0.5 * t0) < 1e-6
+
+
+def test_heavy_warhead_body_glides_on_auto_cg():
+    """The long-nosed KN-23A tumbles on the bare tube centroid but, with the
+    warhead declared, Thrusty's auto CG makes it stable and it glides at best
+    glide — the reported behaviour with no hand-set CG."""
+    p = _body_with_warhead(struct_kg=988.0, warhead_kg=2500.0, nose_len=4.44)
+    g = trim_gate.trim_gate(p, mach=glider_ld.GLIDE_MACH_REF)   # auto CG
+    assert g["static_margin_cal"] > 1.0
+    assert g["LD_achievable"] > 2.5

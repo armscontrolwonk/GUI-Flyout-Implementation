@@ -164,16 +164,30 @@ def estimate_cg(params: BoosterParams):
                 and getattr(ro, 'separation_mode', 'separating_ro') == 'body')
     if _is_body:
         # The reentering body IS the last stage, empty (its propellant is spent
-        # and any earlier stages are gone) — so the reentry CG is the empty
-        # airframe's centroid.  Modelled as a uniform tube, that is the body
-        # centre; the nose is carved from the airframe (subtractive), already
-        # inside body_top, so nothing is stacked and no separate payload mass is
-        # added.  A real missile packs its warhead/guidance forward, moving the
-        # CG ahead of this centroid — captured by ROParams.reentry_cg_m, which
-        # overrides this estimate at the trim gate.  (Full-tank vs burnout is a
-        # no-op for a uniform single body: both centre on the tube.)
+        # and any earlier stages are gone).  The empty airframe is a uniform
+        # tube centred at body_top/2.  A DECLARED warhead — ro.payload_kg, the
+        # forward-packed warhead/guidance mass the A2 loadout folds into the
+        # body — is NOT smeared over the tube: it rides in the nose region, so
+        # place it at the nose centroid and mass-weight it against the empty
+        # airframe.  This is what pulls the CG ahead of the CP for a
+        # long-nosed, heavy-warhead body (KN-23A: 2.5 t in a 4.44 m nose →
+        # CG ~0.30 L, ~1.5 cal stable → it glides instead of tumbling).  A body
+        # with NO declared payload keeps the uniform-tube centroid (legacy,
+        # backward-compatible); ROParams.reentry_cg_m still overrides either at
+        # the trim gate.  (Full-tank vs burnout is a no-op here — the spent
+        # airframe + warhead is the same body either way.)
         total = body_top
-        return 0.5 * total, total
+        _x_air = 0.5 * total
+        _pay = float(getattr(ro, 'payload_kg', 0.0) or 0.0)
+        _body_mass = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
+        _airframe = _body_mass - _pay
+        # The body's nose is the RO's own front end (body_nose_length_m), not the
+        # base stage's nose field — the warhead rides in THAT nose.
+        _nose = float(getattr(ro, 'body_nose_length_m', 0.0) or 0.0) or nose_len
+        if _pay > 0.0 and _airframe > 0.0 and _nose > 0.0:
+            _x_pay = 0.5 * _nose                        # warhead centroid in nose
+            return (_pay * _x_pay + _airframe * _x_air) / (_pay + _airframe), total
+        return _x_air, total
     else:
         total = body_top + nose_len
         if payload > 0:                            # in / behind the nose
