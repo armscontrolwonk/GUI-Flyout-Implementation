@@ -9969,22 +9969,34 @@ class BoosterFlyoutApp(tk.Tk):
         self._on_terrain_toggled()
 
     def _new_site(self):
-        """Clear the site selector and lat/lon fields for fresh entry."""
-        self._site_var.set("")
-        self._launch_lat.set("")
-        self._launch_lon.set("")
-        self._site_del_btn.config(state=tk.DISABLED)
+        """Save the current lat/lon as a NEW named site.  Mirrors every other
+        sidebar section (Booster, Reentry Object, Flight Plan), where New opens
+        a creation dialog.  It must NOT clear the coordinate fields — the
+        common flow is Find… → New, and wiping the just-picked point here is
+        exactly the "my location disappeared / New does nothing" trap."""
+        self._save_site_dialog(prefill_name="", prefill_country="")
 
     def _edit_site(self):
-        """Save current lat/lon as a named user site."""
+        """Save/rename the current lat/lon under the selected site's name."""
+        self._save_site_dialog(
+            prefill_name=(self._site_var.get()
+                          if self._site_var.get() in self._site_map else ""),
+            prefill_country=self._site_map.get(
+                self._site_var.get(), {}).get("country", ""))
+
+    def _save_site_dialog(self, prefill_name="", prefill_country=""):
+        """Shared Save Site dialog: names the pad currently in the lat/lon
+        fields and writes it to the user site library."""
         lat_str = self._launch_lat.get().strip()
         lon_str = self._launch_lon.get().strip()
         try:
             lat = float(lat_str)
             lon = float(lon_str)
         except ValueError:
-            messagebox.showerror("Invalid coordinates",
-                                 "Enter valid lat/lon before saving.", parent=self)
+            messagebox.showerror(
+                "Invalid coordinates",
+                "Enter launch coordinates first (type them or use Find…), "
+                "then save the site.", parent=self)
             return
 
         dlg = tk.Toplevel(self)
@@ -9993,12 +10005,19 @@ class BoosterFlyoutApp(tk.Tk):
         dlg.grab_set()
         ttk.Label(dlg, text="Name:").grid(   row=0, column=0, sticky=tk.W, padx=(10,4), pady=(10,2))
         ttk.Label(dlg, text="Country:").grid(row=1, column=0, sticky=tk.W, padx=(10,4), pady=2)
-        name_var    = tk.StringVar(value=self._site_var.get()
-                                   if self._site_var.get() in self._site_map else "")
-        country_var = tk.StringVar(value=self._site_map.get(
-                                   self._site_var.get(), {}).get("country", ""))
-        ttk.Entry(dlg, textvariable=name_var,    width=28).grid(row=0, column=1, padx=(0,10), pady=(10,2))
+        name_var    = tk.StringVar(value=prefill_name)
+        country_var = tk.StringVar(value=prefill_country)
+        _name_entry = ttk.Entry(dlg, textvariable=name_var, width=28)
+        _name_entry.grid(row=0, column=1, padx=(0,10), pady=(10,2))
         ttk.Entry(dlg, textvariable=country_var, width=28).grid(row=1, column=1, padx=(0,10), pady=2)
+        # Echo the pad being saved so a Find…-picked point is visibly the one
+        # that lands in the library.
+        _ns = 'N' if lat >= 0 else 'S'
+        _ew = 'E' if lon >= 0 else 'W'
+        ttk.Label(dlg, text=f"Saving pad {abs(lat):.4f}°{_ns}, {abs(lon):.4f}°{_ew}",
+                  foreground="#666666").grid(
+            row=2, column=0, columnspan=2, padx=10, pady=(4, 0))
+        _name_entry.focus_set()
 
         def _do_save():
             name    = name_var.get().strip()
@@ -10028,7 +10047,7 @@ class BoosterFlyoutApp(tk.Tk):
             dlg.destroy()
 
         bf = ttk.Frame(dlg)
-        bf.grid(row=2, column=0, columnspan=2, pady=(6, 10))
+        bf.grid(row=3, column=0, columnspan=2, pady=(6, 10))
         ttk.Button(bf, text="Save",   command=_do_save).pack(side=tk.LEFT, padx=6)
         ttk.Button(bf, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
         dlg.bind("<Return>", lambda _e: _do_save())
