@@ -61,10 +61,10 @@ def main():
     print(f"reference body: D={BODY.diameter_m} L={BODY.length_m} "
           f"nose={BODY.nose_shape} {BODY.nose_length_m} m")
     print(f"glider_ld A_p_body = "
-          f"{glider_ld.whole_missile_LD(BODY, mach=5.0)['body_planform_m2']:.3f} m^2\n")
+          f"{glider_ld.whole_booster_LD(BODY, mach=5.0)['body_planform_m2']:.3f} m^2\n")
     worst = 0.0
     for mach, rows in parse_datcom(OUT):
-        r = glider_ld.whole_missile_LD(BODY, mach=mach)
+        r = glider_ld.whole_booster_LD(BODY, mach=mach)
         d_ld, d_a = max((cl / cd, a) for a, cd, cl, cn, ca in rows if cd > 0)
         gap = 100.0 * (r['ld_max'] - d_ld) / d_ld
         worst = max(worst, abs(gap))

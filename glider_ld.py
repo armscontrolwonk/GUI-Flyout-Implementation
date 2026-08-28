@@ -47,7 +47,14 @@ from booster_models import BoosterParams, _cd_nose_shape, drag_coefficient, _SHA
 _ETA = 1.0       # crossflow drag proportionality factor.  Jorgensen (NASA TN
                  # D-7228, 1973) states eta = 1 for supersonic/hypersonic
                  # free-stream Mach; the eta(L/d) chart (Gowen-Perkins TN 2960
-                 # Fig. 8) applies only at subsonic free-stream.
+                 # Fig. 8) applies only at subsonic free-stream.  NOT a free
+                 # calibration knob: at eta = 1 the whole-body L/D_max sits
+                 # within 5/9/10% (M2/3/5), conservative, of Digital DATCOM for
+                 # the finless slender reference body (validation/datcom/,
+                 # METHODS §"Whole-missile L/D").  De-rating it to chase a lower
+                 # number breaks that validation — the low free-flight L/D of a
+                 # fin-stabilized body is the TRIMMED value at its (low) trim
+                 # alpha, set by cg via trim_gate, not a smaller L/D ceiling.
 
 # Crossflow drag coefficient C_dn of a circular cylinder (section normal to the
 # stream) vs the crossflow Mach number M_n = M*sin(alpha).  This is the

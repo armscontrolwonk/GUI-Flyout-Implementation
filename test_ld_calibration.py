@@ -1,40 +1,23 @@
-"""Whole-body L/D calibration anchors (glider_ld.whole_booster_LD).
+"""Whole-body L/D: ceiling stays DATCOM-validated, flown L/D is trim-limited.
 
-The geometry L/D build-up (Jorgensen + Allen-Perkins cross-flow + NKP carryover)
-over-predicts the lift-to-drag ratio of a slender BODY in the hypersonic regime,
-and — worse — lets L/D_max *rise* with Mach (M3 -> M8) instead of plateauing.
-That inflates non-separating body glide range.
+Investigating "non-separating bodies over-range in phugoid glide", the first
+hypothesis was that whole_booster_LD over-predicts L/D.  It does NOT, for the
+shape it models: cross-checked against Digital DATCOM (USAF, AFFDL-TR-79-3032)
+for the finless slender reference body, the build-up sits within ~10% and
+CONSERVATIVE (under-predicts) at M2/3/5.  The low free-flight L/D quoted for
+fin-stabilized bodies (~1) and the flared-projectile / winged-glider anchors are
+DIFFERENT quantities or DIFFERENT shape classes:
 
-The over-prediction is in the BODY term, not the lifting-surface term.  Two
-free-flight anchors bracket it and localize it:
+  * ~1 for a fin-stabilized drag-driven body is the TRIMMED L/D at its low trim
+    alpha (cg-set), not the L/D_max ceiling — trim_gate evaluates it.
+  * CAN-4 (~1.25, DREV TM-9525 / Yates AIAA 96-3360) is a stubby cone-cylinder-
+    FLARE projectile (L/d 5.84), a high-drag shape.
+  * Seiff-Wilkins (~4-6.7, NASA TN D-341) is a WINGED hypersonic glider.
 
-  * Low end — Fournier & Dupuis, AIAA 96-3399 (2016 reprint) and the CAN-4 data
-    of Dupuis & Edwards, DREV TM-9525: a cone-cylinder-flare projectile
-    (L/d = 5.84) measures L/D_max ~= 1.25 at M ~= 5 (Yates & Chapman AIAA
-    96-3360 quote its coefficients: C_A = 0.646 - 0.11 dM + 2.26 sin^2 a,
-    C_N = 7.0 sin a).
-
-  * High end — Seiff & Wilkins, NASA TN D-341 (1961): a slender ogive-cylinder
-    carrying three large highly-swept wings (chord = body length) — a purpose-
-    built hypersonic glider — reaches L/D_max ~= 4-6.7 at M3-6.  Crucially they
-    found the *linear* (wing) lift-curve slope accurate to ~10%, but the
-    *nonlinear* body lift (a Newtonian 2*alpha^2 term) OVER-predicted: measured
-    C_L = 0.064 vs an estimated 0.08 near best-glide alpha (~24% high).
-
-  * Blunt floor — Intrieri, NASA TM X-569 (1961): a Mercury-type capsule at
-    M5.5 tops out at L/D ~= 0.38.  (Not constructible in this slender-body
-    model; quoted for scale only.)
-
-So a plain slender body with no wings (our missile-body case, L/d ~13) should
-sit nearer the CAN-4 end (~1.5-2.5), well below the winged glider — and its
-L/D must not climb into the hypersonic regime.
-
-These tests pin that.  Two are the CALIBRATION TARGETS, marked strict-xfail:
-they fail against today's build-up and will XPASS (turning the suite red) once
-whole_booster_LD is recalibrated, which is the signal to drop the markers and
-lock the win in.  The other two are GUARDS that must stay green THROUGH the
-calibration: the winged-glider anchor (wing lift is already right — don't break
-it) and the lifting-surface ordering.
+So the ceiling must NOT be de-rated (that breaks the DATCOM validation), and the
+over-range realism lever is TRIM / cg — which the trim gate already applies.
+These tests pin both: the ceiling stays glued to DATCOM, and small stabilizing
+fins do not buy full best-glide L/D.
 """
 
 import copy
@@ -44,13 +27,14 @@ import pytest
 from booster_models import (get_booster, load_booster_library, ROParams,
                             compose_loadout)
 import glider_ld as gld
+import trim_gate as tg
+from validation.datcom.compare_datcom import BODY as DATCOM_BODY, OUT, parse_datcom
 
 load_booster_library()
 
 
-def _body(l_over_d=13.4, fins=False, big_wings=False):
-    """A non-separating body off a real stage, with the last stage's fineness
-    and lifting surfaces overridden to a named reference shape."""
+def _body(l_over_d=13.4, fins=False, big_wings=False,
+          fin_span=0.4, fin_root=1.0, cg_frac=None):
     base = copy.deepcopy(get_booster("Scud-B (R-17)"))
     base.body_reenters = True
     last = base
@@ -59,10 +43,10 @@ def _body(l_over_d=13.4, fins=False, big_wings=False):
     last.length_m = l_over_d * last.diameter_m
     last.has_fins = fins or big_wings
     if fins:
-        last.n_fins = 4; last.fin_span_m = 0.4
-        last.fin_root_chord_m = 1.0; last.fin_tip_chord_m = 0.3
+        last.n_fins = 4; last.fin_span_m = fin_span
+        last.fin_root_chord_m = fin_root; last.fin_tip_chord_m = fin_root * 0.3
         last.fin_thickness_m = 0.03; last.fin_sweep_deg = 45.0
-    if big_wings:            # Seiff-Wilkins-like: chord ~ body length, big span
+    if big_wings:
         last.n_fins = 3; last.fin_span_m = 1.2
         last.fin_root_chord_m = last.length_m * 0.9; last.fin_tip_chord_m = 0.2
         last.fin_thickness_m = 0.03; last.fin_sweep_deg = 70.0
@@ -70,7 +54,8 @@ def _body(l_over_d=13.4, fins=False, big_wings=False):
                   beta_kg_m2=0.0, shape="cone",
                   diameter_m=float(last.diameter_m),
                   length_m=float(last.length_m), separation_mode='body',
-                  glider_enabled=True, glider_LD=0.0)
+                  glider_enabled=True, glider_LD=0.0,
+                  reentry_cg_m=(cg_frac * last.length_m if cg_frac else 0.0))
     p = compose_loadout(base, ro, 1)
     p.ro = ro
     return p
@@ -80,48 +65,67 @@ def _ld(p, mach):
     return gld.whole_booster_LD(p, mach=mach)['ld_max']
 
 
-# ── Calibration targets (strict-xfail until whole_booster_LD is recalibrated) ─
+# ── Ceiling: glued to Digital DATCOM, conservative — the anti-de-rate guard ───
 
-@pytest.mark.xfail(strict=True, reason="L/D calibration pending: hypersonic L/D "
-                   "must plateau, not rise (Seiff-Wilkins TN D-341; NACA 1328). "
-                   "Remove marker when whole_booster_LD is recalibrated.")
-def test_slender_body_ld_does_not_rise_into_hypersonic():
-    """A slender body's L/D_max should peak in the low-supersonic range and
-    plateau or fall by the hypersonic regime — never end HIGHER at M8 than at
-    M3.  Today it climbs (~2.45 -> ~3.07) because Cd0 keeps dropping while the
-    linear body-lift slope is held Mach-flat."""
+@pytest.mark.parametrize("mach,d_ld", [(2.0, 2.23), (3.0, 2.71), (5.0, 3.51)])
+def test_ld_ceiling_matches_datcom_and_stays_conservative(mach, d_ld):
+    """whole_booster_LD's L/D_max for the finless slender reference body must
+    track Digital DATCOM within 12% and stay conservative (<= DATCOM).  This is
+    the guard that fails loudly if anyone (re-)introduces a crossflow de-rate:
+    the low L/D of a real fin-stabilized body is a TRIM effect, not a lower
+    ceiling."""
+    got = gld.whole_booster_LD(DATCOM_BODY, mach=mach)['ld_max']
+    assert got <= d_ld * 1.001                    # conservative, never above
+    assert got >= d_ld * 0.88                      # within ~12%
+
+
+def test_datcom_reference_output_parses():
+    """The committed DATCOM reference still parses to the three Mach blocks the
+    guard above pins (guards the parser + fixture, not the physics)."""
+    blocks = parse_datcom(OUT)
+    assert sorted(m for m, _ in blocks) == [2.0, 3.0, 5.0]
+
+
+# ── Ceiling shape sanity ─────────────────────────────────────────────────────
+
+def test_ld_plateaus_into_hypersonic():
+    """L/D_max may rise through the transonic cross-flow-drag peak (~M3->M5) but
+    must PLATEAU beyond it, not keep climbing to M12."""
     p = _body(l_over_d=13.4, fins=False)
-    assert _ld(p, 8.0) <= _ld(p, 3.0) + 0.05
+    assert _ld(p, 12.0) <= _ld(p, 5.0) * 1.15
 
 
-@pytest.mark.xfail(strict=True, reason="L/D calibration pending: finless slender-"
-                   "body L/D_max at M5 is over-predicted (Seiff-Wilkins nonlinear "
-                   "body-lift ~24% high). Remove marker when recalibrated.")
-def test_finless_slender_body_ld_within_physical_band():
-    """A wingless slender missile body at M5 belongs above the CAN-4 flared
-    projectile (~1.25) but well below a winged hypersonic glider (~4-6.7):
-    physically ~1.5-2.5.  Today the build-up gives ~3.06."""
-    ld5 = _ld(_body(l_over_d=13.4, fins=False), 5.0)
-    assert 1.0 <= ld5 <= 2.5
-
-
-# ── Guards: must stay green THROUGH the calibration ──────────────────────────
-
-def test_winged_glider_anchor_preserved():
-    """A body with large wings (Seiff-Wilkins class) is wing-lift dominated,
-    which the build-up already gets right (~5.3 at M5, inside the measured
-    4-6.7).  The calibration targets the BODY cross-flow term, so this anchor
-    must NOT be dragged down with it."""
-    ld5 = _ld(_body(l_over_d=13.4, big_wings=True), 5.0)
-    assert 3.5 <= ld5 <= 7.0
+def test_winged_glider_anchor_in_band():
+    """A big-winged body (Seiff-Wilkins class) sits inside the measured 4-6.7
+    at M5 (~5.3)."""
+    assert 3.5 <= _ld(_body(l_over_d=13.4, big_wings=True), 5.0) <= 7.0
 
 
 def test_ld_increases_with_lifting_surface():
-    """Adding lifting surface must raise L/D monotonically: winged > tail-finned
-    > finless.  A guard that the recalibration reshapes the body term without
-    inverting the model's response to fins/wings."""
+    """winged > tail-finned > finless (monotone response to lifting surface)."""
     m = 5.0
     finless = _ld(_body(l_over_d=13.4, fins=False), m)
     finned = _ld(_body(l_over_d=13.4, fins=True), m)
     winged = _ld(_body(l_over_d=13.4, big_wings=True), m)
     assert winged > finned > finless
+
+
+# ── Operative cap: trim decides the FLOWN L/D (the realism lever) ─────────────
+
+def test_small_fins_do_not_reach_best_glide_ld():
+    """A slender body with only small stabilizing fins must NOT fly at its
+    L/D_max ceiling: unstable (tumbles, L/D 0) or control-limited to a low trim
+    alpha.  Full best-glide L/D is bought by control authority + cg, not
+    geometry — this is where the ~1 free-flight number lives."""
+    g = tg.trim_gate(_body(l_over_d=8.0, fins=True, fin_span=0.25,
+                           fin_root=0.6, cg_frac=0.55), mach=5.0)
+    assert g['LD_achievable'] < g['LD_max']
+
+
+def test_control_rich_stable_body_reaches_best_glide():
+    """The converse: a stable, control-rich body DOES trim to best glide, so the
+    trim gate returns the full (DATCOM-validated) ceiling."""
+    g = tg.trim_gate(_body(l_over_d=13.4, big_wings=True, cg_frac=0.55),
+                     mach=5.0)
+    assert g['LD_achievable'] == pytest.approx(g['LD_max'], rel=1e-6)
+    assert g['LD_achievable'] > 3.0
