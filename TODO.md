@@ -7,6 +7,40 @@ invent.
 
 ## New — not yet planned
 
+### 9. Recalibrate whole-body L/D (over-predicts hypersonically) — IN PROGRESS (2026-08-28)
+Non-separating bodies flying phugoid / damped-phugoid glide over-range
+because `glider_ld.whole_booster_LD` over-predicts L/D_max — and lets it
+RISE with Mach (finless slender L/d~13: 2.45 @ M3 -> 3.06 @ M5 -> 3.07 @ M8)
+instead of plateauing.  Root cause localized to the BODY term, not the
+lifting-surface term (a big-winged glider already reads ~5.3 @ M5, inside
+the measured 4-6.7 — wing lift is right).
+
+Anchors (papers in hand; see data/REFERENCES.md policy — mirror to Drive):
+  - CAN-4 cone-cylinder-flare, L/d 5.84: L/D_max ~1.25 @ M5 — Dupuis &
+    Edwards DREV TM-9525; coefficients quoted in Yates & Chapman AIAA
+    96-3360 (C_A=0.646-0.11dM+2.26 sin^2 a, C_N=7.0 sin a); base-cavity
+    study Fournier & Dupuis AIAA 96-3399.
+  - Winged hypersonic glider: L/D_max ~4-6.7 @ M3-6 — Seiff & Wilkins NASA
+    TN D-341.  KEY finding: linear (wing) lift slope accurate ~10%, but the
+    Newtonian nonlinear body-lift term OVER-predicts (measured C_L 0.064 vs
+    est 0.08 near best-glide alpha, ~24% high).
+  - Blunt floor: Mercury capsule L/D ~0.38 @ M5.5 — Intrieri NASA TM X-569.
+  - Correct high-Mach zero-lift body drag method: second-order shock-
+    expansion, Syvertson & Dennis NACA Rept 1328; recommended for M>1.2 by
+    Vukelich & Jenkins (Missile DATCOM feasibility, AIAA 81-1893R / J.
+    Spacecraft 19(6) 1982).
+
+Harness LANDED (test_ld_calibration.py): two strict-xfail calibration
+targets (hypersonic L/D must not rise M3->M8; finless slender L/D_max @ M5
+in 1.0-2.5) + two guards that must stay green (winged-glider anchor 3.5-7.0
+preserved; lifting-surface ordering winged>finned>finless).  When the
+recalibration lands the xfails XPASS (suite goes red) — drop the markers.
+
+Remaining (steps 2-3): turn down the body cross-flow / Newtonian nonlinear
+lift term (`_ETA`·C_dn·sin^2 a in whole_booster_LD), per Seiff-Wilkins;
+check Cd0(M) against SOSE (NACA 1328) so the denominator isn't falling too
+fast; leave the linear slope, fins/NKP carryover, and trim gate intact.
+
 ### 8. Canards / lifting surfaces on a non-separating body — DEFERRED (2026-08-22)
 Deferred with the user's agreement: "for a KN-23 the current approach is
 fine.  But at some point we have to deal with canards."
