@@ -1142,7 +1142,19 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # (C_D = 2·C_D0) during the post-burnout ascent through the
             # 86–120 km band, costing velocity and dropping apogee
             # relative to constant_LD.
+            # A ballistic reentry generates NO lift, full stop — drag · gravity ·
+            # rotation only.  The lift block below has no 'ballistic' case, so it
+            # relied on glider_enabled being off to stay quiet; but the body
+            # setup (setup block ~line 2090) derives glider_LD > 0 for ANY
+            # glider_enabled body, and the polar catch-all (elif glider_aero_model
+            # == 'polar') then flies even a ballistic-guidance body at max-L/D
+            # α* — a hidden skip-glide.  Enforce ballistic = no lift here, in the
+            # physics, independent of glider_enabled / glider_LD, so a plan that
+            # left glider_enabled on can never leak glide range.
+            _ballistic_reentry = (getattr(_ero, 'glider_guidance', 'ballistic')
+                                  == 'ballistic')
             if (_ero.glider_enabled and _ero.glider_LD > 0
+                    and not _ballistic_reentry
                     and alt < ACTON_PIERCE_ALT_M
                     and _glider_active):
                 # Lift direction: vertical-up component of (r̂ ⟂ v̂), banked.
