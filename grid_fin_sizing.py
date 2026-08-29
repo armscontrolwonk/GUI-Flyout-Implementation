@@ -116,7 +116,7 @@ def _front_nose(params: BoosterParams):
     return "tangent_ogive", 1.6 * d_top, d_top   # matches the schematic nom.
 
 
-def estimate_cg(params: BoosterParams):
+def estimate_cg(params: BoosterParams, fuelled: bool = False):
     """Estimate (x_cg_m, total_length_m) from the stage stack at liftoff/full.
 
     x is measured aft from the nose tip.  The stack is laid out from the REAL
@@ -126,7 +126,15 @@ def estimate_cg(params: BoosterParams):
     assumption squeezed a multi-stage vehicle and floated the CG upward).
     Each stage's OWN wet mass is m_i - m_{i+1} (cumulative-mass convention);
     the payload/RV mass sits in the nose region when the RV caps the stack,
-    else just behind a separate nose/shroud.  Approximate (see docstring)."""
+    else just behind a separate nose/shroud.  Approximate (see docstring).
+
+    ``fuelled`` matters ONLY for a non-separating body: False (default) returns
+    the empty burnout/re-entry CG (airframe + warhead, no propellant) — the CG
+    that governs re-entry glide stability, used by the trim gate; True adds the
+    motor propellant in the aft body, giving the fuelled liftoff CG (the one the
+    schematic labels 'fuelled').  The two differ substantially for a heavy motor
+    (KN-23A: ~0.31 L empty vs ~0.57 L fuelled).  For a stack (separating RV) the
+    normal path already uses fuelled stage masses, so the flag is a no-op."""
     nose_shape, nose_len, d = _front_nose(params)
     ro = effective_ro(params)
     payload = (params.payload_kg if params.payload_kg > 0
@@ -184,9 +192,23 @@ def estimate_cg(params: BoosterParams):
         # The body's nose is the RO's own front end (body_nose_length_m), not the
         # base stage's nose field — the warhead rides in THAT nose.
         _nose = float(getattr(ro, 'body_nose_length_m', 0.0) or 0.0) or nose_len
+        _segs = []                                      # (mass, x-aft-of-nose)
         if _pay > 0.0 and _airframe > 0.0 and _nose > 0.0:
-            _x_pay = 0.5 * _nose                        # warhead centroid in nose
-            return (_pay * _x_pay + _airframe * _x_air) / (_pay + _airframe), total
+            _segs.append((_pay, 0.5 * _nose))           # warhead in the nose
+            _segs.append((_airframe, _x_air))           # empty airframe tube
+        else:
+            _segs.append((_body_mass, _x_air))          # uniform tube (legacy)
+        if fuelled:
+            # Motor propellant fills the aft body (below the warhead); its
+            # centroid is the aft-section centre.  Single dominant term, so the
+            # fuelled CG is robust to the airframe's own distribution.
+            _prop = sum(float(getattr(st, 'mass_propellant', 0.0) or 0.0)
+                        for st in chain)
+            if _prop > 0.0 and total > _nose:
+                _segs.append((_prop, _nose + 0.5 * (total - _nose)))
+        _msum = sum(m for m, _ in _segs)
+        if _msum > 0.0:
+            return sum(m * x for m, x in _segs) / _msum, total
         return _x_air, total
     else:
         total = body_top + nose_len

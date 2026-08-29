@@ -173,6 +173,25 @@ def test_declared_warhead_pulls_cg_forward_of_tube_centre():
     assert abs(x0 - 0.5 * t0) < 1e-6
 
 
+def test_fuelled_cg_is_aft_of_reentry_cg():
+    """estimate_cg(fuelled=True) adds the aft motor propellant, so the liftoff CG
+    sits AFT of the empty re-entry CG (the schematic draws both, labelled).  The
+    trim gate keeps using the re-entry CG (default), so stability is unchanged."""
+    p = _body_with_warhead(struct_kg=988.0, warhead_kg=2500.0, nose_len=4.44)
+    x_re, _ = gfs.estimate_cg(p, fuelled=False)
+    x_fu, _ = gfs.estimate_cg(p, fuelled=True)
+    assert x_fu > x_re + 0.5                       # propellant pulls the CG aft
+    # a stack (separating RV) has no distinct re-entry CG — the flag is a no-op
+    sep = get_booster("Scud-B (R-17)")
+    from booster_models import ROParams as _RO
+    sep.diameter_m = 1.1
+    sep_ro = _RO(name="RV", mass_kg=500.0, beta_kg_m2=3000.0, shape="cone",
+                 diameter_m=0.6, length_m=1.8, separation_mode="separating_ro")
+    sep2 = compose_loadout(sep, sep_ro, 1); sep2.ro = sep_ro
+    assert gfs.estimate_cg(sep2, fuelled=True)[0] == \
+           pytest.approx(gfs.estimate_cg(sep2, fuelled=False)[0], abs=1e-9)
+
+
 def test_heavy_warhead_body_glides_on_auto_cg():
     """The long-nosed KN-23A tumbles on the bare tube centroid but, with the
     warhead declared, Thrusty's auto CG makes it stable and it glides at best

@@ -646,18 +646,17 @@ def draw_booster(ax, p, title=None):
 
 
 def _draw_cg_marker(ax, p, total_h):
-    """Draw the classic CG symbol at the full-stack fuelled centre of gravity.
-    estimate_cg measures x AFT FROM THE NOSE; the schematic is nose-up with
-    the base at y=0, so the CG sits at y = total − x_cg on the axis."""
+    """Draw the FUELLED (liftoff, with warhead) CG symbol.  For a non-separating
+    body — whose re-entry CG differs because the spent motor's propellant is
+    gone — also draw a second, clearly labelled re-entry CG marker.  estimate_cg
+    measures x AFT FROM THE NOSE; the schematic is nose-up with the base at y=0,
+    so a CG at x_cg sits at y = total − x_cg on the axis."""
     try:
         from grid_fin_sizing import estimate_cg
-        x_cg, L_est = estimate_cg(p)
+        x_fuel, L_est = estimate_cg(p, fuelled=True)
+        x_reentry, _ = estimate_cg(p, fuelled=False)
     except Exception:
         return
-    # estimate_cg lays the stages out the same way this schematic does, so
-    # its height-from-base (L_est − x_cg) lands on the drawn stack even if
-    # its nose-length nominal differs slightly from ours.
-    y_cg = max(0.0, min(total_h, L_est - x_cg))
     d_body = float(getattr(p, "diameter_m", 0.0) or 1.0)
     r = d_body / 20.0                                # symbol radius = ⌀/20
     # Pixel floor so a slender vehicle's marker stays legible: convert a
@@ -673,17 +672,32 @@ def _draw_cg_marker(ax, p, total_h):
         r = max(r, _MIN_PX * data_per_px)
     except Exception:
         pass
-    # two opposite quadrants filled black, the other two white, black rim
-    for a0 in (0.0, 180.0):
-        ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0,
-                           facecolor="black", edgecolor="black",
-                           lw=0.8, zorder=6))
-    for a0 in (90.0, 270.0):
-        ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0,
-                           facecolor="white", edgecolor="black",
-                           lw=0.8, zorder=6))
-    ax.add_patch(Circle((0.0, y_cg), r, fill=False, edgecolor="black",
-                        lw=1.0, zorder=7))
+
+    def _symbol(y_cg, fill, label):
+        # classic CG glyph: two opposite quadrants filled, two white, black rim
+        y_cg = max(0.0, min(total_h, y_cg))
+        for a0 in (0.0, 180.0):
+            ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0, facecolor=fill,
+                               edgecolor="black", lw=0.8, zorder=6))
+        for a0 in (90.0, 270.0):
+            ax.add_patch(Wedge((0.0, y_cg), r, a0, a0 + 90.0, facecolor="white",
+                               edgecolor="black", lw=0.8, zorder=6))
+        ax.add_patch(Circle((0.0, y_cg), r, fill=False, edgecolor="black",
+                            lw=1.0, zorder=7))
+        if label:
+            ax.text(r * 1.7, y_cg, label, va="center", ha="left",
+                    fontsize=7.5, zorder=8,
+                    color=("#1f5fb0" if fill != "black" else "#333333"))
+
+    y_fuel = L_est - x_fuel
+    y_re = L_est - x_reentry
+    # Two distinct CGs only for a body (the fuelled flag is a no-op for a stack,
+    # so x_fuel == x_reentry there — one unlabelled marker, unchanged).
+    if abs(y_re - y_fuel) > 1.5 * r:
+        _symbol(y_fuel, "black",   "CG · fuelled")
+        _symbol(y_re,   "#1f5fb0", "CG · re-entry")
+    else:
+        _symbol(y_fuel, "black", "")
 
 
 def _draw_scale_reference(ax, xl, yl):
