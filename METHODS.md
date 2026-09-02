@@ -913,11 +913,11 @@ estimate-and-flag posture used throughout Thrusty (Section 1.1): give a
 defensible default, surface the assumptions, and flag what is physically out of
 bounds rather than silently accepting it.
 
-> **Provenance note.** The estimator postdates the development-chat transcripts
-> committed to this repo (`chat_transcript*.txt` end before `mass_estimator.py`
-> was created), so its rationale is not in those logs; the authoritative record
-> is the module's own git history and [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md),
-> on which this section is based.
+> **Provenance note.** The estimator postdates the development-session logs
+> that were once committed to this repo (since removed; see
+> [`PROVENANCE.md`](PROVENANCE.md)), so its rationale was never in those logs;
+> the authoritative record is the module's own git history and
+> [`MASS_ESTIMATOR.md`](MASS_ESTIMATOR.md), on which this section is based.
 
 ### 6.7 Interstages and conical stages (Phase 1: geometry + mass)
 

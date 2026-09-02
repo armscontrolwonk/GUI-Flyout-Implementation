@@ -15,6 +15,8 @@ boosters](#built-in-boosters)) focus on reentry / hypersonic-glide testbeds.
 
 For the full technical reference — governing equations, algorithms, and primary
 citations for every model — see [`METHODS.md`](METHODS.md).
+For the record of values and citations that were caught and corrected during
+development, see [`PROVENANCE.md`](PROVENANCE.md).
 
 ---
 
