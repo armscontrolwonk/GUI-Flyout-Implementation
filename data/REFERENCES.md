@@ -60,3 +60,16 @@ trajectory code names directly.
    Remaining: the deliberate history rewrite for the actual clone-size
    win, and optionally sorting the flat Drive upload into topic
    subfolders.
+
+## Environmental documentation (vehicle descriptions)
+
+U.S. NEPA documents for the hypersonic flight-test campaigns. They carry the
+only official statements of payload mass and booster configuration used in
+the vehicle library. Held in the maintainer's Drive under `LRHW/CPS/EIS`, not
+the "Thrusty" paper folder.
+
+| Key | Citation | What the library uses it for | Repo file | Drive |
+|---|---|---|---|---|
+| **FE-2 EA 2019** | U.S. Navy, Strategic Systems Programs, *Final Environmental Assessment / Overseas Environmental Assessment, Navy Flight Experiment-2 (FE-2)*, December 2019 | §2.5.6: "up to 454 kg (1,000 lb) of tungsten alloy" for the FE-2 payload analysis; Table 2-2 payload materials. Basis of the 450 kg C-HGB mass. | — | `LRHW/CPS/EIS/FE-2_EA.pdf` |
+| **FT-3 BA 2020** | U.S. Army RCCTO / SMDC, *Biological Assessment for Hypersonic Flight Test-3 Activities*, 22 September 2020 | §2.2.1 Launch Vehicle Description: FT-3 payload ≈ 350 kg (750 lb), "similar to" FE-2 with 10 % of its tungsten; FT-3 booster stack (Table 3). | — | `LRHW/CPS/EIS/FT-3_BA.pdf` |
+| **AHW EA 2011** | U.S. Army SMDC/ARSTRAT, *Advanced Hypersonic Weapon Program Environmental Assessment*, June 2011 | §2.1.2 and Fig. 2.1.2-1: Strategic Target System configuration (Polaris A3 stages 1–2, Orbus 1a stage 3), 30,541 lb total propellant, ≈75,000 lb thrust. Basis of `STARS-1.booster.json` configuration. | — | `LRHW/CPS/EIS/2011-pmrf-…advanced-hypersonic-weapon-program-ea.pdf` |

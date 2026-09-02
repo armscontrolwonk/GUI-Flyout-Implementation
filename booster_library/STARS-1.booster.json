@@ -46,7 +46,7 @@
   "payload_diameter_m": 0.0,
   "pbv_diameter_m": 0.0,
   "pbv_length_m": 0.0,
-  "source": "",
+  "source": "Strategic Target System (STARS): surplus retired Polaris A3 first and second stages with an Orbus 1a third-stage motor; propellant in the three boosters totals 30,541 lb (13,853 kg); approximately 75,000 lb thrust. U.S. Army SMDC/ARSTRAT, Advanced Hypersonic Weapon Program Environmental Assessment, June 2011, sec. 2.1.2 Launch Vehicle Description and Fig. 2.1.2-1. This file carries two stages where the EA describes three; the stage-level masses, Isp and burn times are not from the EA and their source is not recorded. Grid-fin count and deploy schedule follow the AHW flight-test configuration (METHODS sec. 8.5); source not recorded in this file. Google Drive folder LRHW/CPS/EIS (maintainer's library).",
   "notes": "",
   "n_boosters": 0,
   "booster_thrust_n": 0.0,
