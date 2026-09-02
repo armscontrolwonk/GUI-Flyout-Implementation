@@ -390,7 +390,10 @@ def vehicle_elements(p):
     cg_z = None
     try:
         from grid_fin_sizing import estimate_cg
-        x_cg, L_est = estimate_cg(p)
+        # Fuelled (liftoff) CG — propellant plus warhead — matching the 2-D
+        # schematic.  The burnt-out body's re-entry CG is a different quantity
+        # (trim-gate/glide stability) and is not marked on the model.
+        x_cg, L_est = estimate_cg(p, fuelled=True)
         cg_z = max(0.0, min(total, L_est - x_cg))     # height from base
         R_local = 0.5 * (_f(getattr(stages[0], "diameter_m", 0.0)) or 0.6)
         for s, bz, sd in stage_bases:                 # radius at the station
