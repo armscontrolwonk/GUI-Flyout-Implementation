@@ -233,3 +233,62 @@ def test_cn_components_regroup_the_sweep_exactly():
                   * (A_p / a['ref_area_m2']) * sn * sn)
         assert sum(gld.cn_components(a, r).values()) == pytest.approx(expect,
                                                                      abs=1e-12)
+
+
+# ── The gate's dependency: centre of pressure, against committed DATCOM data ──
+#
+# The L/D guards above validate the FORCE.  The trim gate needs the MOMENT, i.e.
+# where that force acts, and until now nothing checked it: the committed DATCOM
+# output has carried CM and XCP columns since it was added and no code read them.
+# These tests read them.  Scope is honest -- the deck is body-alone and finless,
+# so this validates the two BODY stations (slender-body potential at the
+# Barrowman nose c.p., viscous crossflow at the planform centroid) and says
+# nothing about the fin term or control deflection, for which the repo holds no
+# reference data at all.
+
+from validation.datcom.compare_datcom import compare_cp, BODY as _CP_BODY
+
+
+def test_cp_migrates_aft_with_alpha_like_datcom():
+    """The mechanism the nonlinear trim solve rests on: as alpha grows, the
+    sin^2(alpha) crossflow term on the body planform overtakes the potential
+    term at the nose, so the c.p. moves AFT and the airframe stiffens.  DATCOM
+    shows the same migration.  This is what supplies the restoring moment the
+    old linearised gate (fixed c.p.) had no way to see."""
+    rows = compare_cp()
+    assert rows, "no DATCOM rows parsed"
+    by_mach = {}
+    for mach, a, d_cp, m_cp in rows:
+        by_mach.setdefault(mach, []).append((a, d_cp, m_cp))
+    for mach, rs in by_mach.items():
+        rs.sort()
+        d_first, d_last = rs[0][1], rs[-1][1]
+        m_first, m_last = rs[0][2], rs[-1][2]
+        assert d_last > d_first, f"M{mach}: DATCOM c.p. should migrate aft"
+        assert m_last > m_first, f"M{mach}: model c.p. should migrate aft"
+        # monotone in the model, as the two-term weighting requires
+        for (a0, _, m0), (a1, _, m1) in zip(rs, rs[1:]):
+            assert m1 >= m0 - 1e-9, f"M{mach}: model c.p. moved forward {a0}->{a1}"
+
+
+def test_cp_bias_is_forward_and_bounded():
+    """KNOWN, MEASURED BIAS -- pinned so it cannot silently worsen.
+
+    The model's body c.p. sits FORWARD of DATCOM's at every (Mach, alpha) in the
+    committed case, by up to ~20% of body length, worst at low alpha and high
+    Mach.  The cause is structural, not a tuning error: slender-body theory puts
+    the whole potential normal force at the nose c.p., whereas the real
+    body-alone c.p. at low incidence lies much further aft.
+
+    Direction matters and is recorded here deliberately: a c.p. too far forward
+    UNDERSTATES the restoring moment, so a given control deflection trims to a
+    higher alpha than it really would.  That is the NON-conservative direction
+    for the trim gate -- it over-grants glide.  This test does not fit a
+    correction (there is no in-repo source for one); it fixes the bias in place
+    so any change that widens it fails loudly."""
+    rows = compare_cp()
+    errs = [100.0 * (m_cp - d_cp) / _CP_BODY.length_m
+            for _mach, _a, d_cp, m_cp in rows]
+    assert max(errs) < 0.0, "model c.p. is expected to be FORWARD of DATCOM everywhere"
+    assert min(errs) > -25.0, (
+        f"c.p. bias widened beyond the recorded -20% band: worst {min(errs):.1f}% of L")

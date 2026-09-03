@@ -49,10 +49,30 @@ root of a nonlinear moment balance rather than a linearised relation that
 returned 144 deg for a Scud-B and could not limit that vehicle at ANY cg.
 See BODY_GLIDE_LD_PLAN.md 7.1 and METHODS.md 8.10.
 
-Still open there: control_eff = 0.85 is unverified (NACA 1307 is not in the
-repo; only the alpha-factors K_W(B)/K_B(W) are implemented, not the deflection
-factor k_W(B)), and the Kumar & Stollery deflection band is a [snippet] in
-docs/cl_margin_references.md, not read against the primary.
+Still open there, in rough order of how much they matter:
+
+(a) CENTRE-OF-PRESSURE BIAS, now MEASURED.  compare_datcom.py reads the DATCOM
+CM/XCP columns (previously unread) and shows the modelled body c.p. sits FORWARD
+of DATCOM at every alpha and Mach, by up to ~20% of body length, worst at low
+alpha / high Mach.  Cause is structural: slender-body theory puts all the
+potential normal force at the nose c.p.  Direction is NON-CONSERVATIVE for the
+gate (understates the restoring moment -> over-grants trim alpha -> over-grants
+glide).  Deliberately NOT corrected by a fitted factor; pinned instead by
+test_cp_bias_is_forward_and_bounded.  A real fix means distributing the
+potential term along the body rather than concentrating it at the nose, and
+should be validated by regenerating a DATCOM case rather than tuned.
+
+(b) The fin station and the control-deflection term are validated against
+NOTHING: the committed DATCOM deck is body-alone and finless.  Generating a
+finned/deflected deck (validation/datcom/README.md has the PDAS build steps)
+would be the single highest-value piece of evidence for this subsystem.
+
+(c) control_eff = 0.85 is unverified (NACA 1307 is not in the repo; only the
+alpha-factors K_W(B)/K_B(W) are implemented, not the deflection factor k_W(B)).
+
+(d) The Kumar & Stollery deflection band is a [snippet] in
+docs/cl_margin_references.md, not read against the primary; and laying the tier
+names onto its endpoints is a modelling choice, not a measurement.
 
 Open (only if a user still sees unrealistic glide range with correct cg):
 audit whether the phugoid / skip-glide LAW loses too little energy per skip

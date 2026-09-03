@@ -2203,6 +2203,37 @@ carried **no citation at all**. `control_eff = 0.85` is likewise carried over
 unverified: NACA 1307 is not in the repo, and only the angle-of-attack factors
 `K_W(B)/K_B(W)` are implemented, not the deflection factor `k_W(B)`.
 
+*What is validated, and what is not.* The gate's dependency is the **moment**,
+so `validation/datcom/compare_datcom.py` now also compares the modelled centre
+of pressure against the committed DATCOM `CM`/`XCP` columns (which had been in
+the repo unread since the case was added). Result for the finless reference
+body:
+
+| Mach | DATCOM x_cp, α 2→20° | model x_cp | error |
+|---|---|---|---|
+| 2 | 1.43 → 1.91 m | 0.93 → 1.73 m | −12.4 … −4.6 % of L |
+| 3 | 1.61 → 1.99 m | 0.93 → 1.84 m | −16.9 … −3.7 % of L |
+| 5 | 1.72 → 2.01 m | 0.93 → 1.75 m | −19.7 … −6.3 % of L |
+
+Both curves migrate **aft** with α, so the two-station mechanism is the right
+shape: the `sin²α` crossflow term on the planform does overtake the potential
+term and stiffen the airframe, which is what supplies the restoring moment the
+linearised gate could not see. But the model's c.p. is **forward of DATCOM at
+every point**, by up to ~20 % of body length, worst at low α and high Mach. The
+cause is structural: slender-body theory puts the entire potential normal force
+at the nose c.p., while the real body-alone c.p. at low incidence lies much
+further aft.
+
+**The direction is non-conservative for the gate.** A c.p. modelled too far
+forward understates the restoring moment, so a given deflection trims to a
+*higher* α than it really would, and the gate over-grants glide. No correction
+is applied: fitting one would be a calibration with no source behind it, which
+is exactly what this project's derive-don't-invent rule forbids. The bias is
+instead measured, pinned by `test_cp_bias_is_forward_and_bounded`, and recorded
+here as an open item. Note also the scope: the committed deck is **body-alone
+and finless**, so the fin station and the control-deflection term remain
+validated against nothing at all.
+
 *Why this replaced a linearised relation.* The previous gate used
 `α_trim,max = (C_Nδ/C_Nα,total)·(x_fin−x_CG)/(x_CP−x_CG)·δ_max`, which assumes a
 constant normal-force slope and a **fixed** centre of pressure. Because `x_CP`
