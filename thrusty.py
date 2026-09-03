@@ -4061,6 +4061,24 @@ class ROEditorDialog(tk.Toplevel):
             self._glider_frm, text="", foreground="#2a7",
             wraplength=340, justify=tk.LEFT)
         self._LD_var.trace_add("write", lambda *_a: self._refresh_ld_preview())
+        # Structural pull-up limit (hardware).  The reentry plan COMMANDS a g
+        # at or below this — the same shape as commanded L/D ≤ capability.
+        ttk.Label(self._glider_frm, text="Pull-up g-limit (structural):").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        self._glimit_var = tk.StringVar(
+            value=f"{float(getattr(ro, 'pullup_g_limit', 10.0) or 10.0):g}" if ro else "10")
+        self._glimit_entry = ttk.Entry(self._glider_frm, textvariable=self._glimit_var,
+                                       width=10)
+        self._glimit_entry.grid(row=1, column=1, sticky=tk.W, pady=2)
+        # Acton Phase-3 entry βₛ (hardware; read only by the analytic Acton
+        # law — 0 = Tracy).  A vehicle property, so it lives here.
+        ttk.Label(self._glider_frm, text="Entry βₛ (Acton, kg/m²):").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=2)
+        self._beta_s_var = tk.StringVar(
+            value=f"{float(getattr(ro, 'glider_beta_entry_kg_m2', 0.0) or 0.0):g}" if ro else "0")
+        self._beta_s_entry = ttk.Entry(self._glider_frm, textvariable=self._beta_s_var,
+                                       width=10)
+        self._beta_s_entry.grid(row=2, column=1, sticky=tk.W, pady=2)
         # Estimator trim row (Phase 3): α* feeds the windward-α consistency
         # guard, C_L0 the offset polar.  Set only by "Use β and L/D" (lifting
         # forms); shown read-only so the stored state is never invisible.
@@ -4070,7 +4088,7 @@ class ROEditorDialog(tk.Toplevel):
             if ro else 0.0
         self._trim_lbl = ttk.Label(self._glider_frm, text="",
                                    foreground="#2a7", justify=tk.LEFT)
-        self._trim_lbl.grid(row=1, column=0, columnspan=2, sticky=tk.W)
+        self._trim_lbl.grid(row=3, column=0, columnspan=2, sticky=tk.W)
         self._sync_trim_label()
         # Wing hint — body-aware (set in _update_separation_state): for a
         # SEPARATING RV the wing planform anchors the drag polar; for a
@@ -4080,7 +4098,7 @@ class ROEditorDialog(tk.Toplevel):
         self._wing_hint_lbl = ttk.Label(
             self._glider_frm, text="",
             foreground="#888888", justify=tk.LEFT, wraplength=340)
-        self._wing_hint_lbl.grid(row=2, column=0, columnspan=2, sticky=tk.W,
+        self._wing_hint_lbl.grid(row=4, column=0, columnspan=2, sticky=tk.W,
                                  pady=(2, 0))
 
         self._sync_wing_derived()
@@ -4940,6 +4958,19 @@ class ROEditorDialog(tk.Toplevel):
                 messagebox.showerror(
                     "Invalid input", "L/D must be a number.", parent=self)
                 return None
+        # Hardware limits kept whether or not Maneuvering is ticked, so a
+        # value is never silently lost by toggling the checkbox.
+        try:
+            g_limit = float(self._glimit_var.get() or 10.0)
+            beta_s = max(0.0, float(self._beta_s_var.get() or 0.0))
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input", "g-limit and entry βₛ must be numbers.", parent=self)
+            return None
+        if g_limit <= 0:
+            messagebox.showerror(
+                "Invalid input", "g-limit must be positive.", parent=self)
+            return None
         # Wing fields are stored only when VISIBLE (not for the wedge, whose
         # rows are disabled): hidden-but-active wing physics through the
         # polar's e_pull would be dishonest.  What you see is what's stored.
@@ -5003,6 +5034,8 @@ class ROEditorDialog(tk.Toplevel):
             payload_kg=payload,
             glider_enabled=glider_on,
             glider_LD=LD,
+            pullup_g_limit=g_limit,
+            glider_beta_entry_kg_m2=beta_s,
             wing_area_m2=wing_area,
             wing_aspect_ratio=wing_ar,
             wing_root_chord_m=wing_root,
@@ -5045,8 +5078,12 @@ class ROEditorDialog(tk.Toplevel):
         # disable until Maneuvering is ticked — the same declared-topology
         # pattern as the biconic fields.  Hiding the frame would collapse the
         # LabelFrame to nothing, checkbox and all.
-        self._LD_entry.config(
-            state="normal" if self._glider_var.get() else "disabled")
+        _st = "normal" if self._glider_var.get() else "disabled"
+        self._LD_entry.config(state=_st)
+        for _e in (getattr(self, '_glimit_entry', None),
+                   getattr(self, '_beta_s_entry', None)):
+            if _e is not None:
+                _e.config(state=_st)
         self._update_wing_state()
 
     def _update_wing_state(self):
@@ -5646,21 +5683,14 @@ class ReentryPlanDialog(tk.Toplevel):
         ttk.Label(_cf, text=f"  (≤ {self._cap:g} airframe max — fly it worse, not better)",
                   foreground="#888888").pack(side=tk.LEFT); r += 1
 
-        ttk.Label(frm, text="Pull-up g-limit:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        ttk.Label(frm, text="Pull-up g (commanded):").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._pullup_var = tk.StringVar(value=f"{float(_f('glider_pullup_g_max', 10.0)):g}")
         _pf = ttk.Frame(frm); _pf.grid(row=r, column=1, sticky=tk.W, pady=3)
         ttk.Entry(_pf, textvariable=self._pullup_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(_pf, text="  g", foreground="#888888").pack(side=tk.LEFT); r += 1
-
-        # β_S is the Acton Phase-3 direct-reentry ballistic coefficient — an
-        # ANALYTIC-family field; the numerical EOM never reads it.
-        self._beta_s_var = tk.StringVar(value=f"{float(_f('glider_beta_entry_kg_m2', 0.0)):g}")
-        if self._family == 'analytic':
-            ttk.Label(frm, text="Re-entry βₛ:").grid(row=r, column=0, sticky=tk.W, pady=3)
-            _bf = ttk.Frame(frm); _bf.grid(row=r, column=1, sticky=tk.W, pady=3)
-            ttk.Entry(_bf, textvariable=self._beta_s_var, width=10).pack(side=tk.LEFT)
-            ttk.Label(_bf, text="  kg/m²  (Acton Phase 3; 0 = Tracy)",
-                      foreground="#888888").pack(side=tk.LEFT); r += 1
+        ttk.Label(_pf, text="  g  (≤ the object's structural limit — fly it worse, not better)",
+                  foreground="#888888").pack(side=tk.LEFT); r += 1
+        # The Acton entry βₛ is a vehicle property: edited on the reentry
+        # object (hardware), not here.
 
         ttk.Label(frm, text="Flap deflection:").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._flap_var = tk.StringVar(value=f"{float(_f('glider_flap_deflection_deg', 0.0)):g}")
@@ -5832,7 +5862,6 @@ class ReentryPlanDialog(tk.Toplevel):
         self._result = {
             'commanded_LD':             cmd,
             'glider_pullup_g_max':      _num(self._pullup_var, 10.0),
-            'glider_beta_entry_kg_m2':  _num(self._beta_s_var, 0.0),
             'glider_flap_deflection_deg': _num(self._flap_var, 0.0),
             'reentry_attitude': ('tumbling'
                                  if self._att_var.get()
@@ -9675,8 +9704,9 @@ class BoosterFlyoutApp(tk.Tk):
             # dropdown above and separation is the Separation control — this
             # line only carries what is shown nowhere else in the strip.
             self._glider_status_var.set(
-                f"L/D {ro.glider_LD:.2f} · g-limit "
-                f"{ro.glider_pullup_g_max:.0f}   (Edit Reentry Object…)")
+                f"L/D {ro.glider_LD:.2f} · pull-up "
+                f"{ro.glider_pullup_g_max:.0f} g (limit "
+                f"{float(getattr(ro, 'pullup_g_limit', 10.0) or 10.0):.0f})")
         else:
             self._glider_status_var.set(
                 "No L/D set — Edit Reentry Object…")

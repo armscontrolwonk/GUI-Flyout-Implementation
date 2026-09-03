@@ -487,6 +487,11 @@ class ROParams:
     # keep loading as `equilibrium_glide` via ro_from_dict's explicit fallback,
     # so old data is unchanged; only new ROParams() default to the core law.
     glider_guidance:        str   = "dynamic_equilibrium_glide"
+    # Pull-up load factor.  pullup_g_limit is HARDWARE (the airframe's
+    # structural limit, stored on the object); glider_pullup_g_max is the
+    # PLAN's commanded value, clamped to the limit on apply_reentry_plan —
+    # "fly it worse, never better", the same shape as commanded_LD ≤ glider_LD.
+    pullup_g_limit:         float = 10.0
     glider_pullup_g_max:    float = 10.0
     # Terminal dive: 0 km = glide to impact (no altitude-triggered dive; the
     # target-proximity trigger still fires if armed).  A positive value
@@ -548,7 +553,8 @@ class ROParams:
     # β_S ≈ 7 kg/m² (Table 3, p. 206).  Used only by the
     # "equilibrium_glide_acton" guidance mode; ignored otherwise.  Set 0
     # to disable Phase 3 (effectively reverts to Tracy when paired with
-    # Acton mode).
+    # Acton mode).  HARDWARE: a vehicle property stored on the object, not a
+    # reentry-plan key.
     glider_beta_entry_kg_m2: float = 0.0
     # Number of phugoid upward crossings of the equilibrium curve before the
     # one-way handoff to equilibrium glide.  Only used by skip_to_equilibrium.
@@ -760,6 +766,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'trim_alpha_deg':        ro.trim_alpha_deg,
         'trim_CL0':              ro.trim_CL0,
         'glider_guidance':       ro.glider_guidance,
+        'pullup_g_limit':        ro.pullup_g_limit,
         'glider_pullup_g_max':   ro.glider_pullup_g_max,
         'glider_terminal_dive':  ro.glider_terminal_dive,
         'glider_terminal_alt_km':ro.glider_terminal_alt_km,
@@ -832,6 +839,7 @@ def ro_from_dict(d: dict) -> ROParams:
         trim_alpha_deg=float(d.get('trim_alpha_deg', 0.0) or 0.0),
         trim_CL0=float(d.get('trim_CL0', 0.0) or 0.0),
         glider_guidance=_g,
+        pullup_g_limit=float(d.get('pullup_g_limit', 10.0) or 10.0),
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
@@ -4072,7 +4080,7 @@ _REENTRY_PLAN_KEYS = (
     'glider_enabled', 'glider_guidance', 'glider_pullup_g_max',
     'glider_terminal_dive', 'glider_terminal_alt_km', 'glider_bank_schedule',
     'glider_dive_target_lat_deg', 'glider_dive_target_lon_deg',
-    'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
+    'glider_dive_target_radius_km',
     'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
     'glider_pullup_start_alt_km',
     'glider_aero_model', 'reentry_attitude',
@@ -4114,6 +4122,11 @@ def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
     cmd = rp.get('commanded_LD')
     if cmd is not None:
         q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better
+    # The commanded pull-up g is likewise clamped to the airframe's structural
+    # limit (hardware, on the object): a plan can ask for less, never more.
+    _lim = float(getattr(ro, 'pullup_g_limit', 0.0) or 0.0)
+    if _lim > 0:
+        q.glider_pullup_g_max = min(float(q.glider_pullup_g_max), _lim)
     return q
 
 

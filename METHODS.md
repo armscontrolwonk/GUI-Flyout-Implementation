@@ -2843,7 +2843,8 @@ one-way latch (`params._pullup_phase`, `trajectory.py`):
 1. **Fall** (above the trigger): **zero commanded lift**, β-based drag only —
    the low-AoA ballistic descent a real MaRV flies to preserve energy.
 2. **Pull** (at the trigger, descending): a hard pull at **full authority**,
-   capped by BOTH the structural g-limit (`glider_pullup_g_max`) AND what
+   capped by BOTH the commanded pull-up g (`glider_pullup_g_max`, itself
+   clamped to the object's structural `pullup_g_limit`) AND what
    dynamic pressure + the aero model can supply.  Triggering too high, where
    there is no q to pull with, therefore **undershoots honestly** — no lift is
    conjured — rather than faking a catch.
@@ -2939,8 +2940,9 @@ glide trim**, `m/(C_D,glide·A)`.  At the max-L/D trim `C_D = 2·C_D0`, so
 The analytic path (`trajectory.py`) derives β_L this way from the stored
 zero-lift β, so the same number serves both families without the ~2× semantic
 mismatch that would otherwise sit between them.  Acton's entry-phase `β_S`
-(`glider_beta_entry_kg_m2`) is a separate, directly-stored fit (his high-AoA
-flat-plate value), not subject to the halving.
+(`glider_beta_entry_kg_m2`, a vehicle property stored on the reentry object)
+is a separate, directly-stored fit (his high-AoA flat-plate value), not
+subject to the halving.
 
 **Why this matters — HTV-2 (re-based 2026-07-25).**  HTV-2 shipped with
 `β = 13,000`, which is Acton 2015 Table 3's fitted *glide* β_L, not a zero-lift

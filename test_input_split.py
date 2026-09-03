@@ -185,3 +185,22 @@ def test_body_reenters_forces_single_object_loadout():
     ro = ROParams(name="w", mass_kg=800.0, beta_kg_m2=5000.0, shape="cone",
                   diameter_m=0.88, length_m=2.0)
     assert compose_loadout(p, ro, 3).num_ros == 1
+
+
+# ── g-limit is hardware; the plan commands at or below it ───────────────────
+
+def test_beta_S_is_hardware_and_pullup_g_is_clamped_to_the_limit():
+    assert 'glider_beta_entry_kg_m2' not in REENTRY_PLAN_KEYS
+    assert 'glider_beta_entry_kg_m2' in RO_HARDWARE
+    assert 'pullup_g_limit' in RO_HARDWARE and 'pullup_g_limit' not in REENTRY_PLAN_KEYS
+    ro = ROParams(name="x", mass_kg=1.0, beta_kg_m2=1.0, shape="cone",
+                  diameter_m=0.5, length_m=1.0, pullup_g_limit=8.0,
+                  glider_beta_entry_kg_m2=7.0)
+    assert apply_reentry_plan(ro, {'glider_pullup_g_max': 30.0}).glider_pullup_g_max == 8.0
+    assert apply_reentry_plan(ro, {'glider_pullup_g_max': 5.0}).glider_pullup_g_max == 5.0
+    assert apply_reentry_plan(ro, {}).glider_pullup_g_max <= 8.0
+    # a legacy plan carrying beta_S is ignored; the object's value stands
+    assert apply_reentry_plan(ro, {'glider_beta_entry_kg_m2': 99.0}).glider_beta_entry_kg_m2 == 7.0
+    # and both survive the hardware-only serialiser
+    d = ro_to_dict(ro, include_reentry_plan=False)
+    assert d['pullup_g_limit'] == 8.0 and d['glider_beta_entry_kg_m2'] == 7.0

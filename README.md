@@ -102,7 +102,7 @@ the dropdown sits above its own New/Edit…/Delete row, like every other library
 section. The glider controls below it are the live strip editor for the quick
 run-to-run picks (glide law, separation, terminal-dive altitude, aero model,
 skip count); **Edit…** opens the full Reentry Plan dialog for the tuning fields
-(commanded L/D, pull-up g, βₛ, flap, reentry attitude, ζ damping with its
+(commanded L/D, pull-up g, flap, reentry attitude, ζ damping with its
 estimator, bank schedule, dive-at-target, provenance). **Running
 writes the strip through to the active plan**, and selecting the object or a
 variant repopulates from it, so a dive-altitude tweak (or a switch to Ballistic)
@@ -229,7 +229,7 @@ tabbed notebook**.
   law, the strip carries the one knob you iterate per-run: **ζ** (damping ratio
   for damped phugoid, tracking gain for dynamic equilibrium — with its estimator
   for the damped case), shown only for those two laws. **Edit…** opens the full
-  plan editor for the set-once tuning — commanded L/D, pull-up g, βₛ, flap,
+  plan editor for the set-once tuning — commanded L/D, pull-up g, flap,
   **reentry attitude** (trimmed vs. tumbling), **terminal-dive altitude**, the
   **aero model** (drag polar vs. fixed L/D), the **bank schedule**, and
   **dive-at-target**.
@@ -284,19 +284,20 @@ tabbed notebook**.
   tally shown on the Booster-Parameters tab, not an input here.
 - **Reentry-object editor** — define a reentry object's **hardware**: mass,
   ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
-  the airframe's **L/D capability**, TPS materials (nose and body, from a
-  catalog or bespoke values), and provenance. Separation is shown read-only
-  here (it is a plan choice, set on the sidebar). How the object is *flown* —
-  commanded L/D (≤ capability), pull-up g, βₛ, glide law, dives, banks,
-  separation, attitude — lives in the Reentry Plan, not here.
+  the airframe's **L/D capability**, its **structural pull-up g-limit**, the
+  Acton **entry βₛ**, TPS materials (nose and body, from a catalog or bespoke
+  values), and provenance. Separation is shown read-only here (it is the
+  booster's property). How the object is *flown* — commanded L/D (≤
+  capability), commanded pull-up g (≤ the limit), glide law, dives, banks,
+  attitude — lives in the Reentry Plan, not here.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
   (Reentry Plan ▸ Edit…), **family-aware**: commanded L/D clamped to the
-  airframe capability ("fly it worse, never better"), pull-up g-limit, flap
-  deflection, **reentry attitude** (trimmed vs. tumbling), and plan
-  source/notes always; a **numerical** plan adds **ζ damping** (with its
-  estimator), the **bank schedule**, and **dive-at-target**; an **analytic**
-  plan adds **re-entry βₛ** (Acton Phase 3) instead — the closed form cannot
-  bank, steer to a target, or damp a phugoid. The quick run-to-run picks (glide
+  airframe capability ("fly it worse, never better"), commanded pull-up g
+  (clamped to the object's structural limit the same way), flap deflection,
+  **reentry attitude** (trimmed vs. tumbling), and plan source/notes always;
+  a **numerical** plan adds **ζ damping** (with its estimator), the **bank
+  schedule**, and **dive-at-target** — the analytic closed form cannot bank,
+  steer to a target, or damp a phugoid. The quick run-to-run picks (glide
   law within the family, separation, terminal-dive altitude, aero model) stay
   on the sidebar strip.
 - **Parametric Sweep** — vary any one guidance parameter over a range and plot
