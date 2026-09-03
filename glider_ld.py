@@ -322,6 +322,30 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     c_na_pot = c_na_body + c_na_fin
     A_p = A_p_body + A_p_fin
 
+    # Chordwise centroid of one exposed fin panel, measured AFT OF THE ROOT
+    # LEADING EDGE.  The panel's VISCOUS (crossflow) normal force acts here,
+    # not at the fin aerodynamic centre where the potential part acts -- Simon &
+    # Blake, "Missile Datcom: High Angle of Attack Capabilities", AIAA 99-4258
+    # (AFRL), which states the split as C_m = (x_ac - x_cg)*C_N,p +
+    # (x_c - x_cg)*C_N,v with "the viscous normal force is assumed to act at the
+    # panel centroid".  trim_gate.py places it from the fin station.
+    #
+    # Closed form for a straight-tapered panel, taper ratio lam = c_tip/c_root,
+    # leading-edge sweep Lam, exposed semispan s_e.  Integrating the local chord
+    # midpoint x_LE(y) + c(y)/2 weighted by chord c(y) over the span:
+    #     x_c = [ s_e*tan(Lam)*(1+2*lam)/6 + (c_root/2)*(lam^2+lam+1)/3 ]
+    #           / ((1+lam)/2)
+    # Reduces to c_root/2 for an unswept rectangular panel, as it must.
+    fin_centroid_aft_le = 0.0
+    if S_W > 0 and last.fin_root_chord_m > 0:
+        _cr = float(last.fin_root_chord_m)
+        _lam = max(0.0, float(last.fin_tip_chord_m) / _cr)
+        _tanL = math.tan(math.radians(float(last.fin_sweep_deg)))
+        fin_centroid_aft_le = (
+            (float(last.fin_span_m) * _tanL * (1.0 + 2.0 * _lam) / 6.0
+             + (_cr / 2.0) * (_lam * _lam + _lam + 1.0) / 3.0)
+            / ((1.0 + _lam) / 2.0))
+
     best_ld, best_a, curve = 0.0, 0.0, []
     for i in range(ALPHA_SWEEP_MIN_DEG, ALPHA_SWEEP_MAX_DEG + 1):   # alpha = 1..59 deg
         a = math.radians(float(i))
@@ -342,7 +366,9 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
                k_sum=k_sum, cla_wing=cla_w, cd0=cd0, mach=mach,
                diameter_m=d, body_planform_m2=A_p_body, fin_planform_m2=A_p_fin,
                body_planform_centroid_m=x_p_body, ref_area_m2=A_ref,
-               body_length_m=L_body)
+               body_length_m=L_body,
+               fin_centroid_aft_le_m=fin_centroid_aft_le,
+               fin_root_chord_m=float(getattr(last, 'fin_root_chord_m', 0.0) or 0.0))
     if return_curve:
         out["curve"] = curve
     return out
@@ -362,6 +388,16 @@ def cn_components(aero: dict, alpha_rad: float) -> dict:
                + eta * C_dn(M sin a) * (A_p/A_ref) * sin^2 a
                                               <- Allen-Perkins viscous crossflow,
                                                  at the planform centroid
+
+    The planform-centroid station is not a modelling guess: Simon & Blake,
+    "Missile Datcom: High Angle of Attack Capabilities", AIAA 99-4258 (AFRL,
+    1999), describing Missile DATCOM's own implementation of this same
+    Allen-Perkins / Jorgensen build-up, states that "the center of pressure of
+    the body at large angles of attack is effectively at the planform centroid",
+    and gives the moment as the two-station sum
+    C_m = (x_ac - x_cg)*C_N,potential + (x_c - x_cg)*C_N,viscous (their Eq. 6),
+    with the fin's viscous part at the PANEL centroid.  trim_gate.py takes
+    moments in exactly that form.
 
     Summing the three reproduces whole_booster_LD's C_N identically; only the
     grouping is new.  The crossflow term is split between body and fin planform

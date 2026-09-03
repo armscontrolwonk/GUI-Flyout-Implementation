@@ -158,6 +158,12 @@ def main():
               f"error {min(errs):+.1f}..{max(errs):+.1f}% of L")
     print(f"  worst c.p. error: {worst_cp:.1f}% of body length, model FORWARD of "
           f"DATCOM at every point.")
+    print("  Reference uncertainty, for scale: Sooy & Schmidt, JSR 42(2) 2005, put "
+          "DATCOM's\n  OWN c.p. error against wind-tunnel data below 2% of body "
+          "length at any AoA\n  (body-wing-tail M1.5/M4.6, body-tail M2.0), and "
+          "Simon & Blake (AIAA 99-4258)\n  report c.p. 'well predicted at all "
+          "angles of attack' at supersonic speeds.  So the\n  gap above is model "
+          "error, not reference noise.")
     print("  Direction matters: a c.p. modelled too far forward understates the "
           "restoring\n  moment, so a given deflection trims to a HIGHER alpha "
           "than it really would.\n  That is the NON-conservative direction for "

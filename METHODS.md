@@ -2230,9 +2230,33 @@ forward understates the restoring moment, so a given deflection trims to a
 is applied: fitting one would be a calibration with no source behind it, which
 is exactly what this project's derive-don't-invent rule forbids. The bias is
 instead measured, pinned by `test_cp_bias_is_forward_and_bounded`, and recorded
-here as an open item. Note also the scope: the committed deck is **body-alone
-and finless**, so the fin station and the control-deflection term remain
-validated against nothing at all.
+as an open item in `TODO.md`.
+
+*Is the reference good enough to blame the model?* Yes. **Sooy & Schmidt**
+(JSR 42(2), 2005) validated Missile DATCOM against wind-tunnel data and found its
+centre-of-pressure error below **2 % of body length at any angle of attack** for
+body-wing-tail (M1.5, M4.6) and body-tail (M2.0) configurations; **Simon & Blake**
+(AIAA 99-4258) report c.p. "well predicted at all angles of attack" at supersonic
+speeds. The 5–20 % gap above is therefore model error, not reference noise. (Sooy
+& Schmidt's body-*alone* case is explicitly inconclusive — the test data are
+biased, non-zero C_N at α = 0 — so it is not used here.)
+
+*The stations themselves are sourced.* **Simon & Blake**, describing Missile
+DATCOM's implementation of this same Allen-Perkins/Jorgensen build-up, state that
+"the center of pressure of the body at large angles of attack is effectively at
+the planform centroid", and give the moment as the two-station sum
+`C_m = (x_ac − x_cg)·C_N,potential + (x_c − x_cg)·C_N,viscous` (their Eq. 6) —
+the form used above — with the **fin's** viscous part acting at the **panel
+centroid** rather than the fin aerodynamic centre. `glider_ld` returns that panel
+centroid in closed form for a straight-tapered panel (it reduces to the root
+mid-chord for an unswept rectangular fin) and the gate places the fin's crossflow
+term there. The same source explains the low-α end of the bias: DATCOM uses
+empirical charts and Van Dyke hybrid theory there, not the nose-concentrated
+slender-body result, which is why the gap is worst at low α.
+
+Note the remaining scope limit: the committed deck is **body-alone and finless**,
+so while the fin's viscous *station* is now sourced, the fin normal-force term
+and the control-deflection term are still validated against no data at all.
 
 *Why this replaced a linearised relation.* The previous gate used
 `α_trim,max = (C_Nδ/C_Nα,total)·(x_fin−x_CG)/(x_CP−x_CG)·δ_max`, which assumes a

@@ -272,6 +272,19 @@ def trim_gate(params, mach: float = 3.0, delta_max_deg: float = None,
     if control_eff is None:
         control_eff = ctrl['control_eff']
     x_p = float(ld.get('body_planform_centroid_m', 0.0) or 0.0)
+    # The fin's POTENTIAL normal force acts at its aerodynamic centre (x_fin,
+    # approximated here by the root mid-chord), but its VISCOUS crossflow part
+    # acts further aft, at the PANEL CENTROID -- Simon & Blake, AIAA 99-4258
+    # (AFRL), Eq. 6: C_m = (x_ac - x_cg)*C_N,p + (x_c - x_cg)*C_N,v, with "the
+    # viscous normal force is assumed to act at the panel centroid".  Lumping
+    # both at x_fin, as this gate did, understates the aft shift of the fin's
+    # contribution as alpha grows.  x_fin is the root mid-chord, so the root
+    # leading edge is x_fin - c_root/2 and the centroid sits the returned offset
+    # aft of that.  For a swept, tapered panel the centroid is aft of the root
+    # mid-chord; for an unswept rectangular panel the two coincide.
+    _cr_fin = float(ld.get('fin_root_chord_m', 0.0) or 0.0)
+    x_fin_panel = (x_fin - 0.5 * _cr_fin
+                   + float(ld.get('fin_centroid_aft_le_m', 0.0) or 0.0))
 
     def _cm(alpha_rad, delta_rad):
         """Pitching moment about the CG (per diameter), positive nose-up.
@@ -282,7 +295,8 @@ def trim_gate(params, mach: float = 3.0, delta_max_deg: float = None,
         c = glider_ld.cn_components(ld, alpha_rad)
         m = (c['body_potential'] * (x_body - x_cg)
              + c['crossflow_body'] * (x_p - x_cg)
-             + (c['fin_potential'] + c['crossflow_fin']) * (x_fin - x_cg))
+             + c['fin_potential'] * (x_fin - x_cg)
+             + c['crossflow_fin'] * (x_fin_panel - x_cg))
         # Commanded deflection adds normal force at the fin station.  A positive
         # (trailing-edge-down) deflection pitches the nose UP, hence the sign.
         m += (control_eff * c_na_fin * delta_rad) * (x_fin - x_cg)

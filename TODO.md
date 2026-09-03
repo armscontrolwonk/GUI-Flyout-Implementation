@@ -51,16 +51,31 @@ See BODY_GLIDE_LD_PLAN.md 7.1 and METHODS.md 8.10.
 
 Still open there, in rough order of how much they matter:
 
-(a) CENTRE-OF-PRESSURE BIAS, now MEASURED.  compare_datcom.py reads the DATCOM
-CM/XCP columns (previously unread) and shows the modelled body c.p. sits FORWARD
-of DATCOM at every alpha and Mach, by up to ~20% of body length, worst at low
-alpha / high Mach.  Cause is structural: slender-body theory puts all the
-potential normal force at the nose c.p.  Direction is NON-CONSERVATIVE for the
-gate (understates the restoring moment -> over-grants trim alpha -> over-grants
-glide).  Deliberately NOT corrected by a fitted factor; pinned instead by
-test_cp_bias_is_forward_and_bounded.  A real fix means distributing the
-potential term along the body rather than concentrating it at the nose, and
-should be validated by regenerating a DATCOM case rather than tuned.
+(a) CENTRE-OF-PRESSURE BIAS, MEASURED and now BOUNDED AGAINST THE REFERENCE.
+compare_datcom.py reads the DATCOM CM/XCP columns (previously unread) and shows
+the modelled body c.p. sits FORWARD of DATCOM at every alpha and Mach, by up to
+~20% of body length, worst at low alpha / high Mach.  Direction is
+NON-CONSERVATIVE for the gate (understates the restoring moment -> over-grants
+trim alpha -> over-grants glide).
+
+The reference is good enough to blame the model: Sooy & Schmidt (JSR 42(2),
+2005) put DATCOM's own c.p. error against wind tunnel below 2% of body length
+at any AoA (body-wing-tail M1.5/M4.6, body-tail M2.0), and Simon & Blake
+(AIAA 99-4258) report c.p. well predicted at all AoA at supersonic speeds.  So
+the 5-20% gap is model error, not reference noise.
+
+CAUSE, now sourced rather than hypothesised.  Simon & Blake note that at low
+alpha DATCOM determines the potential c.p. from empirical charts / Van Dyke
+hybrid theory, NOT the nose-concentrated slender-body result Thrusty uses --
+which is exactly where the gap is worst.  A real fix therefore means
+distributing the potential normal force along the body instead of putting it
+all at the Barrowman nose c.p.  Deliberately NOT corrected by a fitted factor;
+pinned instead by test_cp_bias_is_forward_and_bounded.
+
+DONE in this pass: the fin's VISCOUS normal force now acts at the panel centroid
+rather than being lumped at the fin aerodynamic centre, per Simon & Blake Eq. 6.
+Small effect on the shipped vehicles, but it makes the station structurally
+right and sourced.
 
 (b) The fin station and the control-deflection term are validated against
 NOTHING: the committed DATCOM deck is body-alone and finless.  Generating a
