@@ -66,6 +66,15 @@ def _fly(mode, zeta=None, aero="polar", cutoff=_CUTOFF):
     ro.glider_terminal_alt_km = 30.0
     if zeta is not None:
         ro.glider_damping_zeta = zeta
+    # Pin the boosted front-end mass these anchors were calibrated at.  The
+    # Minotaur-IV + HTV-2 booster file used to bake its 1000 kg HTV-2 payload
+    # into the stage masses, so this fixture flew a 1000 kg front end while
+    # reentering as the 450 kg C-HGB.  Booster files are now stack-only and
+    # integrate_trajectory composes the flown object's own mass (2fe10e6),
+    # which made the stack 550 kg lighter at burnout and let the marginal
+    # lofted case capture instead of plunging.  Carry the difference as bus
+    # mass so the boost stays at the anchors' operating point.
+    p.bus_mass_kg = 1000.0 - ro.mass_kg
     p.ro = ro
     r = integrate_trajectory(p, 0.0, 0.0, 90.0, max_time_s=8000.0,
                              dt_output=2.0, cutoff_time_s=cutoff)
