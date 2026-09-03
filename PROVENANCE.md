@@ -4,7 +4,7 @@ Thrusty was developed with AI coding agents between May and September
 2026. Raw session logs from that work (`chat_transcript.txt`,
 `chat_transcript_full.txt`, `chat_transcript_verbatim.txt`,
 `Thrusty_chat_transcript.md`; about 92,000 lines) were committed on
-2026-08-21 and removed on 2026-09-02. This file is the curated record of
+2026-08-21 and removed on 2026-09-03. This file is the curated record of
 what those logs established that bears on trusting the numbers in this
 repository. It replaces them.
 
