@@ -58,7 +58,6 @@
   "booster_diam_m": 0.0,
   "booster_length_m": 0.0,
   "booster_cd": 0.2,
-  "booster_core_delay_s": 0.0,
   "ro": null,
   "stage2": {
     "name": "SR-119 (Stage 2)",
@@ -120,7 +119,6 @@
     "booster_diam_m": 0.0,
     "booster_length_m": 0.0,
     "booster_cd": 0.2,
-    "booster_core_delay_s": 0.0,
     "stage2": {
       "name": "SR-120 (Stage 3)",
       "mass_initial": 9510.0,
@@ -180,8 +178,7 @@
       "booster_nozzle_area_m2": 0.0,
       "booster_diam_m": 0.0,
       "booster_length_m": 0.0,
-      "booster_cd": 0.2,
-      "booster_core_delay_s": 0.0
+      "booster_cd": 0.2
     }
   }
 }

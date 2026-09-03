@@ -174,6 +174,15 @@ read. How each object is *flown* is stored separately in
 Flight-plan variants live in `~/Documents/Thrusty/flight_plans/`, and the active
 variant per booster in `~/.gui_missile_flyout/active_flight_plans.json`.
 
+These are the **four inputs**, kept apart: two hardware files (booster, reentry
+object) and two plan files (flight plan, reentry plan). A hardware file stores
+no plan key and a plan file stores no hardware key; timings (fairing and
+strap-on drop, interstage jettison, core ignition delay, grid-fin deployment)
+are flight-plan data even though the thing that moves is hardware. The only
+link between a booster and a reentry object is the booster's `body_reenters`
+flag. `test_input_split.py` holds the rule over the shipped files and the
+serialisers.
+
 ---
 
 ## User interface
@@ -209,13 +218,14 @@ tabbed notebook**.
   dynamic equilibrium glide; ballistic RVs → Ballistic, which lives inside the
   numerical family so glide on/off is an in-family tweak). (The old discrete
   `skip→equilibrium` mode is retired — it now flies the equivalent
-  damped-phugoid glide.) A **Separation** control (*Separates at burnout* /
-  *Non-separating — body reenters*) sits here too: separation is a run-level
-  mission choice, not a stored property of the object, so the same aeroshell can
-  be A/B'd separating vs. integrated in two clicks (and any object flies on any
-  booster — no compatibility refusal). Non-separating inherits the last stage's
-  burnout mass and geometry; the casing debris on a separating run carries the
-  burnout mass minus the object, so nothing is double-counted. Below the glide
+  damped-phugoid glide.) A **Separation** indicator (*Separates at burnout* /
+  *Non-separating — body reenters*) sits here too, read-only: separation is the
+  **booster's** property (its `body_reenters` checkbox in the booster editor),
+  the one link between a booster and a reentry object. Neither the object nor
+  the reentry plan stores a separation choice, so any object flies on any
+  booster. Non-separating inherits the last stage's burnout mass and geometry;
+  the casing debris on a separating run carries the burnout mass minus the
+  object, so nothing is double-counted. Below the glide
   law, the strip carries the one knob you iterate per-run: **ζ** (damping ratio
   for damped phugoid, tracking gain for dynamic equilibrium — with its estimator
   for the damped case), shown only for those two laws. **Edit…** opens the full
@@ -448,10 +458,15 @@ upper stages).  Key fields on the top-level node:
   so a heavier object or more objects honestly cost boost range while one
   object is modeled on the way back
 - `ro_separates` — a **deprecated** build-era record (stage masses entered
-  stack-only, `mass_final = dry`). Consumed only by the no-object debris
-  fallback and legacy-file migration; every physics path derives burnout mass
-  from `mass_initial − mass_propellant`. It is **not** the separation authority
-  — that is the sidebar Separation control → `separation_mode` on the plan
+  stack-only, `mass_final = dry`). Consumed only by `compose_loadout`'s
+  legacy-mass convention and legacy-file migration; every physics path derives
+  burnout mass from `mass_initial − mass_propellant`. It is **not** the
+  separation authority — that is `body_reenters` (below)
+- `body_reenters` — the **separation link**, and the only place a booster and
+  a reentry object touch: `True` means the front end does not separate and the
+  last stage is the reentering body. The run derives the object's
+  `separation_mode` from it (`run_separation_mode`); object and reentry-plan
+  files never store one
 - `bus_mass_kg` — the bus/PBV mass (booster hardware). `num_ros`, `ro_mass_kg`
   — run-level loadout bookkeeping stamped by `compose_loadout`
 - `ro_beta_kg_m2`, `ro_shape`, `ro_diameter_m`, `ro_length_m` —

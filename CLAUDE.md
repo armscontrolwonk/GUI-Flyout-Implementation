@@ -44,6 +44,16 @@ improve this."
 - Requests in this repo are about the simulator: integrator bugs, guidance
   branch selection, plotting, file formats, validation against published
   benchmarks, and documentation. Frame work that way.
+- **Four inputs, kept apart.** A run is composed from two hardware files
+  (booster, reentry object) and two non-hardware files (flight plan,
+  reentry plan). Hardware files carry no plan key and plan files carry no
+  hardware key; nothing is stored twice. Timings are plan data even when
+  the thing that moves is hardware (grid fins are hardware, when they
+  deploy is flight plan). The only link between a booster and a reentry
+  object is the booster's `body_reenters` flag; neither the object nor the
+  reentry plan stores a separation choice. `test_input_split.py` enforces
+  this over the shipped files and the serialisers; a new field goes on the
+  side the rule says, and the test is updated with it.
 
 ## Out of scope
 

@@ -16,6 +16,7 @@ idempotency (composing twice adds the payload once).
 import pytest
 
 from booster_models import (get_booster, load_booster_library, ROParams,
+                            effective_ro,
                             compose_loadout, effective_ro, ro_to_dict,
                             ro_from_dict, booster_to_dict, booster_from_dict)
 from trajectory import integrate_trajectory
@@ -25,6 +26,7 @@ load_booster_library()
 
 def _kn23(payload=0.0, mass_kg=2198.0, glider=False):
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     ro = ROParams(name="KN23", mass_kg=mass_kg, beta_kg_m2=3000.0, shape="karman",
@@ -119,9 +121,13 @@ def test_body_reenters_defaults_false_and_round_trips():
     assert booster_from_dict(booster_to_dict(p)).body_reenters is True
 
 
-def test_body_reenters_is_a_physics_noop():
-    """The flag only drives the editor lock — the run reads the plan's
-    separation_mode, so flipping the flag alone changes no trajectory."""
+def test_body_reenters_is_the_separation_switch():
+    """The booster's body_reenters flag is the single source of the
+    booster<->object link: it decides the run, and the object's own
+    separation_mode is derived from it.  A booster marked body_reenters
+    inherits the last stage's mass into the object even when the object was
+    built as 'separating'; a booster NOT so marked separates even when the
+    object was built as 'body'."""
     p0 = get_booster("Scud-B (R-17)")
     p0.diameter_m = 1.1
     p0.length_m = 6.7
@@ -129,14 +135,27 @@ def test_body_reenters_is_a_physics_noop():
     p1.diameter_m = 1.1
     p1.length_m = 6.7
     p1.body_reenters = True
-    ro = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
-                  diameter_m=1.1, length_m=6.7, separation_mode="body",
-                  body_nose_length_m=2.0)
-    r0 = integrate_trajectory(_bind(p0, ro), 39.12, 125.67, 90.0,
+    ro_body = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
+                       diameter_m=1.1, length_m=6.7, separation_mode="body",
+                       body_nose_length_m=2.0)
+    ro_sep = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
+                      diameter_m=1.1, length_m=6.7, separation_mode="separating_ro",
+                      body_nose_length_m=2.0)
+    # Derivation follows the booster, whatever the object says.
+    assert effective_ro(_bind(p1, ro_sep)).separation_mode == "body"
+    assert effective_ro(_bind(p0, ro_body)).separation_mode == "separating_ro"
+    # Body-reentering booster: object mass is the stage's burnout mass.
+    e1 = effective_ro(_bind(p1, ro_sep))
+    assert e1.mass_kg == pytest.approx(p1.mass_initial - p1.mass_propellant)
+    # Not marked: the object keeps its own mass (it separates).
+    e0 = effective_ro(_bind(p0, ro_body))
+    assert e0.mass_kg == pytest.approx(2198.0)
+    # And the run differs: same object, the flag alone changes the trajectory.
+    r0 = integrate_trajectory(_bind(p0, ro_body), 39.12, 125.67, 90.0,
                               burnout_angle_deg=-2.0, max_time_s=3600.0)
-    r1 = integrate_trajectory(_bind(p1, ro), 39.12, 125.67, 90.0,
+    r1 = integrate_trajectory(_bind(p1, ro_body), 39.12, 125.67, 90.0,
                               burnout_angle_deg=-2.0, max_time_s=3600.0)
-    assert r0["range_km"] == pytest.approx(r1["range_km"], rel=1e-9)
+    assert r0["range_km"] != pytest.approx(r1["range_km"], rel=1e-6)
 
 
 def _bind(p, ro):

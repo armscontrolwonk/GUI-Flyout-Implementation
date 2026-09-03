@@ -7,7 +7,6 @@
   "length_m": 7.5,
   "nose_radius_m": 0.08,
   "glider_LD": 1.0,
-  "glider_aero_model": "polar",
   "glider_control_surfaces": "unknown",
   "glider_flap_area_ratio": 0.0,
   "emissivity": 0.85,

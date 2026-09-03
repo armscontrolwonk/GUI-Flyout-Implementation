@@ -52,6 +52,7 @@ def _kn23():
     """A body-mode KN-23 fixture: one ⌀1.1×6.7 m stage, ⌀1.1×2.0 m Von Kármán
     non-separating body."""
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     if p.stage2 is None:                       # ensure single stage

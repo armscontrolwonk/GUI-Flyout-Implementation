@@ -108,22 +108,19 @@ class BoosterParams:
     # DEPRECATED build-era record: True means the stage masses were entered
     # stack-only (payload kept separate; mass_final = dry), False means the
     # builder baked the payload into the last stage's masses (Scud-class
-    # legacy files).  It is NOT the separation event — that is the reentry
-    # plan's separation_mode, a run-level choice.  Consumed only by (a) the
-    # no-reentry-object debris fallback in trajectory.py and (b) legacy-file
-    # migration; every physics path derives burnout mass from
-    # mass_initial − mass_propellant instead of trusting this flag.
+    # legacy files).  It is NOT the separation event — that is body_reenters
+    # below.  Consumed only by compose_loadout's legacy-mass convention and by
+    # legacy-file migration; no physics path reads it as a separation input.
     ro_separates:  bool  = False
 
     # Non-separating vehicle: True marks this booster as one whose front end
     # does NOT separate — the last stage IS the reentry body (Hwasong-11 /
-    # Iskander / Scud / KN-23 class).  Unlike ro_separates (a build-era mass-
-    # bookkeeping record) this is a VEHICLE property the modeller sets: when it
-    # is on, the GUI locks the reentry plan's separation to "body" (the run
-    # authority), so the separation choice lives with the missile, not the
-    # flight plan.  Default False → the reentry plan owns the separation choice
-    # exactly as before.  A pure-physics no-op (effective_ro / the run read the
-    # plan's separation_mode); it only drives the editor lock.
+    # Iskander / Scud / KN-23 class).  This is the SINGLE SOURCE of the
+    # booster↔reentry-object link, the one place the four inputs (booster,
+    # reentry object, flight plan, reentry plan) are allowed to touch: neither
+    # the object file nor the reentry plan stores a separation choice.  The
+    # run derives ro.separation_mode from this flag (run_separation_mode /
+    # bind_ro_separation); the sidebar Separation indicator only displays it.
     body_reenters: bool  = False
 
     # When True this stage uses a solid rocket motor that cannot be shut off.
@@ -406,6 +403,10 @@ class ROParams:
     #                     mass/beta/diameter are inherited from the booster's
     #                     last stage (mass_final, beta_kg_m2, diameter_m)
     #                     by effective_ro() at runtime.
+    # DERIVED, never stored: the value is set at run time from the booster's
+    # body_reenters (the single source of the link) by bind_ro_separation /
+    # effective_ro.  It is omitted from object and plan files.  Legacy files
+    # that still carry it are read (normalised) but the booster wins.
     separation_mode: str = "separating_ro"
 
     # Glider / HGV properties
@@ -722,8 +723,10 @@ def glide_family(guidance) -> str:
 def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
     """Serialise an ROParams to a JSON-compatible dict.
 
+    ``separation_mode`` is never written: it is derived from the booster's
+    ``body_reenters`` at run time (see run_separation_mode).
     With ``include_reentry_plan=False`` the reentry-plan fields (everything in
-    ``_REENTRY_PLAN_KEYS`` -- glide mode, turns, dives, separation) are omitted,
+    ``_REENTRY_PLAN_KEYS`` -- glide mode, turns, dives) are omitted,
     yielding a hardware-only reentry object; that is the form ro_library stores,
     with the plan travelling separately in a ``.reentryplan.json`` file.  The
     ``glider_LD`` capability stays: it is what the airframe *can* do.  The
@@ -772,7 +775,6 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'glider_control_surfaces':   ro.glider_control_surfaces,
         'glider_flap_area_ratio':    ro.glider_flap_area_ratio,
         'glider_flap_deflection_deg':ro.glider_flap_deflection_deg,
-        'separation_mode':       ro.separation_mode,
         'reentry_attitude':      ro.reentry_attitude,
         'emissivity':            ro.emissivity,
         'tps_material':          ro.tps_material,
@@ -861,13 +863,44 @@ def ro_from_dict(d: dict) -> ROParams:
     )
 
 
+def run_separation_mode(params) -> str:
+    """The run's separation mode, derived from the booster alone.
+
+    ``'body'`` when the booster is marked ``body_reenters`` (its front end does
+    not separate; the last stage IS the reentry body), else
+    ``'separating_ro'``.  This is the ONLY place the booster and the reentry
+    object are linked: the object file and the reentry plan carry no
+    separation choice of their own.
+    """
+    return 'body' if bool(getattr(params, 'body_reenters', False)) else 'separating_ro'
+
+
+def bind_ro_separation(params: 'BoosterParams') -> 'BoosterParams':
+    """Return ``params`` with ``params.ro.separation_mode`` stamped from the
+    booster's ``body_reenters`` so every reader of the object's mode agrees
+    with the booster.  A shallow copy is returned when a change is needed;
+    the caller's chain is never mutated.  No-op without a reentry object."""
+    ro = getattr(params, 'ro', None)
+    if ro is None:
+        return params
+    mode = run_separation_mode(params)
+    if getattr(ro, 'separation_mode', 'separating_ro') == mode:
+        return params
+    import copy as _copy
+    import dataclasses as _dc
+    q = _copy.copy(params)
+    q.ro = _dc.replace(ro, separation_mode=mode)
+    return q
+
+
 def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
     """Return the active reentry object (ROParams), or None if none is set.
 
     The reentry object is params.ro; the booster carries no reentry hardware.
 
-    When params.ro has separation_mode == "body" the reentering body IS the
-    booster's own last stage (Hwasong-11 / Iskander, Pershing II MaRV class, or an
+    When the booster is marked ``body_reenters`` (the single source of the
+    separation link; ro.separation_mode is derived from it and stamped onto the
+    returned object) the reentering body IS the booster's own last stage (Hwasong-11 / Iskander, Pershing II MaRV class, or an
     SSTO where that stage is the whole vehicle) — not a separating object.
     In that case mass_kg / diameter_m / length_m are
     inherited from the booster's last-stage burnout state (mass_final,
@@ -897,11 +930,15 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
             _last = _last.stage2
         _body_mass = (_last.mass_initial - _last.mass_propellant
                       if _last.mass_propellant > 0 else _last.mass_final)
+        _mode = run_separation_mode(params)
         _memo = params.__dict__.get('_ero_memo')
         if (_memo is not None and _memo[0] is ro
-                and _memo[1] == (_body_mass, _last.diameter_m, _last.length_m)):
+                and _memo[1] == (_body_mass, _last.diameter_m, _last.length_m,
+                                 _mode)):
             return _memo[2]
-        if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
+        if getattr(ro, 'separation_mode', 'separating_ro') != _mode:
+            ro = _dc.replace(ro, separation_mode=_mode)
+        if _mode == 'body':
             # The vehicle IS the booster body — inherit mass and geometry
             # from the last stage's burnout state.  β remains user-specified
             # on the RV itself because there's no clean way to derive a
@@ -922,7 +959,7 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
                 ro = _dc.replace(ro, beta_kg_m2=float(_bt),
                                  glider_enabled=False, glider_LD=0.0)
         params.__dict__['_ero_memo'] = (
-            params.ro, (_body_mass, _last.diameter_m, _last.length_m), ro)
+            params.ro, (_body_mass, _last.diameter_m, _last.length_m, _mode), ro)
         return ro
     # No reentry object configured.  (Old JSON that stored reentry fields inline
     # is migrated to a synthesised params.ro in booster_from_dict, so by the time
@@ -947,8 +984,9 @@ def compose_loadout(params: 'BoosterParams', ro=None,
     idempotent, and a legacy booster flown with the object it was built
     around at N = 1 is numerically unchanged.
 
-    Body-mode objects (separation_mode == 'body') force N = 1 — the object
-    IS the last stage; a multi-object non-separating loadout is meaningless.
+    A body-reentering booster (``params.body_reenters``, the single source of
+    the separation link) forces N = 1 — the object IS the last stage; a
+    multi-object non-separating loadout is meaningless.
 
     Returns a deep copy; the input chain is never mutated.  When ro is None
     or carries no usable mass the chain is returned as built.
@@ -959,7 +997,7 @@ def compose_loadout(params: 'BoosterParams', ro=None,
         return p
     n = max(1, int(num_ros))
     ro_mass = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
-    if getattr(ro, 'separation_mode', 'separating_ro') == 'body':
+    if run_separation_mode(params) == 'body':
         # NON-SEPARATING body: the airframe IS the last stage, so its structural
         # + residual burnout mass is ALREADY in the stage masses — adding the
         # RO's mass_kg would double-count (a KN-23 seeded with the 2198 kg
@@ -3345,9 +3383,8 @@ def _stage_chain_mass(params: BoosterParams, t: float, alt_m: float = 0.0) -> fl
             # separating loadout coasts on as the payload alone, while a
             # body-mode vehicle (V2 / Scud class) keeps the empty stage
             # fused to the warhead and coasts at full burnout mass.
-            _ro = getattr(params, 'ro', None)
-            if (_ro is not None and getattr(_ro, 'separation_mode',
-                                            'separating_ro') == 'body'):
+            if (getattr(params, 'ro', None) is not None
+                    and run_separation_mode(params) == 'body'):
                 return (s.mass_initial - s.mass_propellant
                         if s.mass_propellant > 0 else s.mass_final)
             return params.payload_kg if params.payload_kg > 0 else s.mass_final
@@ -3821,15 +3858,21 @@ _FLIGHT_PLAN_TOP_KEYS = ('guidance', 'burnout_angle_deg', 'loft_angle_rate_deg_s
                       # when the payload shroud is jettisoned (altitude, or <=0
                       # for the heating-flux default) and when spent strap-on
                       # boosters separate.  Both are flight decisions, not
-                      # hardware, so they live in the flight plan.
-                      'shroud_jettison_alt_km', 'booster_jettison_s')
+                      # hardware, so they live in the flight plan.  Likewise
+                      # the strap-on core ignition delay: when the core lights
+                      # relative to the strap-ons is a flight decision.
+                      'shroud_jettison_alt_km', 'booster_jettison_s',
+                      'booster_core_delay_s')
 _FLIGHT_PLAN_STAGE_KEYS = ('stage_turn_start_s', 'stage_turn_stop_s',
                         'stage_burnout_angle_deg', 'coast_time_s', 'stage_cutoff_s',
                         'stage_yaw_start_s', 'stage_yaw_stop_s', 'stage_yaw_final_az_deg',
                         # Grid-fin deployment schedule is read per active stage
                         # (drag_force_vector receives the current stage), so it is
                         # a per-stage flight-plan field.
-                        'grid_fin_deploy_schedule')
+                        'grid_fin_deploy_schedule',
+                        # Interstage jettison time: WHEN the adapter drops is a
+                        # flight decision (the adapter's mass/length are hardware).
+                        'interstage_jettison_s')
 
 
 def extract_flight_plan(p: BoosterParams) -> dict:
@@ -4032,7 +4075,10 @@ _REENTRY_PLAN_KEYS = (
     'glider_dive_target_radius_km', 'glider_beta_entry_kg_m2',
     'glider_skip_count', 'glider_damping_zeta', 'glider_flap_deflection_deg',
     'glider_pullup_start_alt_km',
-    'glider_aero_model', 'reentry_attitude', 'separation_mode',
+    'glider_aero_model', 'reentry_attitude',
+    # NOTE: separation_mode is NOT a plan key.  The booster↔object link is the
+    # booster's body_reenters flag (run_separation_mode); a legacy plan file
+    # that still carries separation_mode is ignored on apply.
 )
 
 

@@ -19,12 +19,17 @@ import json
 import numpy as np
 import pytest
 
-from booster_models import ro_from_dict
+from booster_models import ro_from_dict, load_reentry_plan, apply_reentry_plan
 from trajectory import _aero_polar
 
 
 def _ro(name):
-    return ro_from_dict(json.load(open(f"ro_library/{name}.ro.json")))
+    """The object AS FLOWN: the hardware file with its shipped reentry plan
+    applied, exactly as the library loader composes it.  Plan-side values
+    (glide law, entry beta_S, ...) live in reentry_plans/, not the .ro.json."""
+    ro = ro_from_dict(json.load(open(f"ro_library/{name}.ro.json")))
+    rp = load_reentry_plan(ro.name)
+    return apply_reentry_plan(ro, rp) if rp else ro
 
 
 # ── HTV-2: the re-base reproduces Acton Table 3 in BOTH families ─────────────

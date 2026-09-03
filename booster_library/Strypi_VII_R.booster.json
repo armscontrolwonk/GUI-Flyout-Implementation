@@ -58,7 +58,6 @@
   "booster_diam_m": 0.229,
   "booster_length_m": 0.0,
   "booster_cd": 0.2,
-  "booster_core_delay_s": 0.0,
   "ro": null,
   "stage2": {
     "name": "Alcor IB (Strypi 2nd stage)",
@@ -120,7 +119,6 @@
     "booster_diam_m": 0.0,
     "booster_length_m": 0.0,
     "booster_cd": 0.2,
-    "booster_core_delay_s": 0.0,
     "stage2": {
       "name": "BE-3B-1 (Strypi 3rd stage)",
       "mass_initial": 189.3293008,
@@ -180,8 +178,7 @@
       "booster_nozzle_area_m2": 0.0,
       "booster_diam_m": 0.0,
       "booster_length_m": 0.0,
-      "booster_cd": 0.2,
-      "booster_core_delay_s": 0.0
+      "booster_cd": 0.2
     }
   }
 }

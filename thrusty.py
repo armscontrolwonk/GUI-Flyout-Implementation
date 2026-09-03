@@ -903,12 +903,9 @@ class _StageFrame(ttk.LabelFrame):
         self._is_mass_var = tk.StringVar(value="0")
         self._is_mass_entry = ttk.Entry(_is_f, textvariable=self._is_mass_var, width=8)
         self._is_mass_entry.pack(side=tk.LEFT)
-        ttk.Label(_is_f, text="jettison (s):").pack(side=tk.LEFT, padx=(8, 2))
-        self._is_jett_var = tk.StringVar(value="")
-        self._is_jett_entry = ttk.Entry(_is_f, textvariable=self._is_jett_var, width=7)
-        self._is_jett_entry.pack(side=tk.LEFT)
-        ttk.Label(_is_f, text="(blank = stage sep.)",
-                  foreground="gray50").pack(side=tk.LEFT, padx=(4, 0))
+        # WHEN the interstage drops (interstage_jettison_s) is a flight-plan
+        # choice, edited under "Deployment events" in the Flight Plan editor;
+        # only the adapter's length and mass (hardware) are here.
         self._on_conical()
         self._on_interstage()
 
@@ -923,7 +920,7 @@ class _StageFrame(ttk.LabelFrame):
 
     def _on_interstage(self):
         st = "normal" if self._interstage_var.get() else "disabled"
-        for e in (self._is_len_entry, self._is_mass_entry, self._is_jett_entry):
+        for e in (self._is_len_entry, self._is_mass_entry):
             e.config(state=st)
 
     def _recompute_burn(self, *_):
@@ -1371,11 +1368,9 @@ class _StageFrame(ttk.LabelFrame):
                 result["interstage_mass_kg"]  = max(0.0, float(self._is_mass_var.get()))
             except ValueError:
                 raise ValueError("Interstage length and mass must be numbers.")
-            _jt = self._is_jett_var.get().strip()
-            try:
-                result["interstage_jettison_s"] = float(_jt) if _jt else None
-            except ValueError:
-                raise ValueError("Interstage jettison time must be a number (or blank).")
+            # interstage_jettison_s is flight-plan data (Flight Plan editor);
+            # left at its default so a hardware save never clobbers it.
+            result["interstage_jettison_s"] = None
         else:
             result["interstage_length_m"] = 0.0
             result["interstage_mass_kg"]  = 0.0
@@ -1432,8 +1427,6 @@ class _StageFrame(ttk.LabelFrame):
         self._interstage_var.set(bool(d.get("has_interstage", False)))
         self._is_len_var.set(str(d.get("interstage_length_m", 0.0) or 0.0))
         self._is_mass_var.set(str(d.get("interstage_mass_kg", 0.0) or 0.0))
-        _jt = d.get("interstage_jettison_s", None)
-        self._is_jett_var.set("" if _jt is None else f"{_jt:g}")
         self._on_conical()
         self._on_interstage()
 
@@ -1784,18 +1777,18 @@ class BoosterDialog(tk.Toplevel):
             ttk.Label(_inner, text=unit).pack(side=tk.LEFT, padx=(2, 0))
             return _var
 
-        # Strap-on JETTISON TIME (booster drop) is a flight-plan choice and
-        # lives in the Flight Plan editor; only the motor/mass hardware is here.
+        # Strap-on JETTISON TIME (booster drop) and the core IGNITION DELAY
+        # are flight-plan choices and live in the Flight Plan editor; only
+        # the motor/mass hardware is here.
         self._b_thrust_var      = _be_entry(0, "Thrust per booster (kN):", "500",  "kN")
         self._b_burn_var        = _be_entry(1, "Burn time (s):",            "60",   "s")
-        self._b_core_delay_var  = _be_entry(2, "Core ignition delay (s):", "0",    "s")
-        self._b_inert_var       = _be_entry(3, "Inert mass per booster (kg):", "2000", "kg")
-        self._b_prop_var        = _be_entry(4, "Propellant per booster (kg):", "10000","kg")
-        self._b_isp_var         = _be_entry(5, "Isp (vacuum, s):",          "270",  "s")
-        self._b_nozzle_var      = _be_entry(6, "Nozzle exit area (m²):",    "0",    "m²")
-        self._b_diam_var        = _be_entry(7, "Diameter (m):",              "1.2",  "m")
-        self._b_length_var      = _be_entry(8, "Length (m):",               "0",    "m  (0 = 2×dia)")
-        self._b_cd_var          = _be_entry(9, "Cd (drag coeff):",          "0.20", "",
+        self._b_inert_var       = _be_entry(2, "Inert mass per booster (kg):", "2000", "kg")
+        self._b_prop_var        = _be_entry(3, "Propellant per booster (kg):", "10000","kg")
+        self._b_isp_var         = _be_entry(4, "Isp (vacuum, s):",          "270",  "s")
+        self._b_nozzle_var      = _be_entry(5, "Nozzle exit area (m²):",    "0",    "m²")
+        self._b_diam_var        = _be_entry(6, "Diameter (m):",              "1.2",  "m")
+        self._b_length_var      = _be_entry(7, "Length (m):",               "0",    "m  (0 = 2×dia)")
+        self._b_cd_var          = _be_entry(8, "Cd (drag coeff):",          "0.20", "",
                                             pady=(2, 6))
         ttk.Label(self._booster_frame, text="Cd guide: 0.10 ogive · 0.20 cone · 0.40 hemi · 1.0 flat",
                   foreground="gray50").grid(
@@ -1860,7 +1853,7 @@ class BoosterDialog(tk.Toplevel):
         self._update_fins_state()
         # Booster section
         self._n_boosters_spin.config(state="disabled")
-        for _bv in (self._b_thrust_var, self._b_burn_var, self._b_core_delay_var,
+        for _bv in (self._b_thrust_var, self._b_burn_var,
                     self._b_inert_var, self._b_prop_var, self._b_isp_var,
                     self._b_nozzle_var, self._b_diam_var, self._b_length_var,
                     self._b_cd_var):
@@ -2389,7 +2382,6 @@ class BoosterDialog(tk.Toplevel):
             self._b_diam_var.set(f"{getattr(p, 'booster_diam_m', 0.0):.2f}")
             self._b_length_var.set(f"{getattr(p, 'booster_length_m', 0.0):.2f}")
             self._b_cd_var.set(f"{getattr(p, 'booster_cd', 0.20):.2f}")
-            self._b_core_delay_var.set(f"{getattr(p, 'booster_core_delay_s', 0.0):.1f}")
         self._update_booster_frame()
 
         # Apply show/hide state for all sections
@@ -2615,7 +2607,6 @@ class BoosterDialog(tk.Toplevel):
             try:
                 _b_thrust_kn   = float(self._b_thrust_var.get())
                 _b_burn        = float(self._b_burn_var.get())
-                _b_core_delay  = float(self._b_core_delay_var.get())
                 _b_inert       = float(self._b_inert_var.get())
                 _b_prop        = float(self._b_prop_var.get())
                 _b_isp         = float(self._b_isp_var.get())
@@ -2632,9 +2623,9 @@ class BoosterDialog(tk.Toplevel):
             node.n_boosters             = _n_b
             node.booster_thrust_n       = _b_thrust_kn * 1000.0
             node.booster_burn_time_s    = _b_burn
-            node.booster_core_delay_s   = max(0.0, _b_core_delay)
-            # booster_jettison_s is flight-plan data (owned by the Flight Plan
-            # editor); left at its default here so a save never clobbers it.
+            # booster_jettison_s and booster_core_delay_s are flight-plan data
+            # (owned by the Flight Plan editor); left at their defaults here so
+            # a hardware save never clobbers them.
             node.booster_inert_kg       = _b_inert
             node.booster_prop_kg        = _b_prop
             node.booster_isp_s          = _b_isp
@@ -3792,11 +3783,11 @@ class ROEditorDialog(tk.Toplevel):
         # Reentry Object section and persisted with the plan.  Shown read-only
         # here so the greyed-out inherited fields below are explicable.
         _lbl(0, "Separation:")
-        # The active plan's separation wins when supplied (it is the run
-        # authority); else fall back to the object's stored mode / the default.
+        # Separation is the booster's (body_reenters).  The caller passes the
+        # run's derived mode; else derive it from the booster handed in.
         self._plan_sep = (self._plan_sep_override
-                          or (getattr(ro, 'separation_mode', 'separating_ro')
-                              if ro else 'separating_ro'))
+                          or (mm.run_separation_mode(booster)
+                              if booster is not None else 'separating_ro'))
         _sep_txt = ("Non-separating — body reenters with the final stage"
                     if self._plan_sep == 'body'
                     else "Separates at burnout")
@@ -6019,6 +6010,26 @@ class FlightPlanDialog(tk.Toplevel):
             ttk.Entry(_ev, textvariable=self._ev_vars['booster'], width=10).grid(row=er, column=1, sticky=tk.W)
             ttk.Label(_ev, text="blank = at burnout", foreground="#555555").grid(row=er, column=2, sticky=tk.W, padx=4)
             er += 1; _has_ev = True
+            ttk.Label(_ev, text="Core ignition delay (s):").grid(row=er, column=0, sticky=tk.W, pady=2)
+            _cd = float(plan.get('booster_core_delay_s', 0.0) or 0.0)
+            self._ev_vars['core_delay'] = tk.StringVar(value=f"{_cd:g}" if _cd > 0 else "")
+            ttk.Entry(_ev, textvariable=self._ev_vars['core_delay'], width=10).grid(row=er, column=1, sticky=tk.W)
+            ttk.Label(_ev, text="blank = with strap-ons", foreground="#555555").grid(row=er, column=2, sticky=tk.W, padx=4)
+            er += 1; _has_ev = True
+        self._ev_interstage = {}
+        for i, s in enumerate(self._stages):
+            if getattr(s, 'has_interstage', False):
+                ttk.Label(_ev, text=f"Interstage jettison, stage {i + 1} (s):").grid(
+                    row=er, column=0, sticky=tk.W, pady=2)
+                _ij = None
+                if i < len(plan.get('stages', [])):
+                    _ij = plan['stages'][i].get('interstage_jettison_s')
+                sv = tk.StringVar(value="" if _ij is None else f"{float(_ij):g}")
+                ttk.Entry(_ev, textvariable=sv, width=10).grid(row=er, column=1, sticky=tk.W)
+                ttk.Label(_ev, text="blank = at stage separation", foreground="#555555").grid(
+                    row=er, column=2, sticky=tk.W, padx=4)
+                self._ev_interstage[i] = sv
+                er += 1; _has_ev = True
         self._ev_gridfin = {}
         for i, s in enumerate(self._stages):
             if getattr(s, 'has_grid_fins', False) and getattr(s, 'n_grid_fins', 0) > 0:
@@ -6210,6 +6221,11 @@ class FlightPlanDialog(tk.Toplevel):
         if 'booster' in self._ev_vars:
             v = self._f(self._ev_vars['booster'])
             plan['booster_jettison_s'] = v if v is not None else 0.0
+        if 'core_delay' in self._ev_vars:
+            v = self._f(self._ev_vars['core_delay'])
+            plan['booster_core_delay_s'] = max(0.0, v) if v is not None else 0.0
+        for i, sv in self._ev_interstage.items():
+            stages[i]['interstage_jettison_s'] = self._f(sv)      # None = at sep.
         for i, sv in self._ev_gridfin.items():
             try:
                 stages[i]['grid_fin_deploy_schedule'] = _parse_deploy_schedule(sv.get())
@@ -8608,16 +8624,16 @@ class BoosterFlyoutApp(tk.Tk):
         }
         self._main_sep_var = tk.StringVar(
             value=self._SEP_LABELS['separating_ro'])
+        # Indicator only: separation is the BOOSTER's property (its
+        # body_reenters flag, set in the booster editor) — the one link between
+        # the booster and the reentry object.  Neither the object nor the
+        # reentry plan stores a separation choice, so there is nothing to
+        # choose here; the box mirrors the booster and stays disabled.
         self._main_sep_cb = ttk.Combobox(
             _sepbar, textvariable=self._main_sep_var,
             values=list(self._SEP_LABELS.values()),
-            state="readonly", width=32)
+            state="disabled", width=32)
         self._main_sep_cb.pack(side=tk.LEFT, padx=(4, 0))
-        self._main_sep_cb.bind(
-            "<<ComboboxSelected>>",
-            lambda _e: (self._refresh_glider_status_line(),
-                        self._update_loadout_state(),
-                        self._update_params_display()))
 
         # No status line: the strip explains only non-obvious inputs (house
         # rule) — vehicle properties (L/D, g-limit) live in Edit Reentry
@@ -9625,8 +9641,7 @@ class BoosterFlyoutApp(tk.Tk):
         end the airframe does not have."""
         if not hasattr(self, '_loadout_spin'):
             return
-        body = (getattr(self, '_main_sep_var', None) is not None
-                and self._main_sep_var.get() == self._SEP_LABELS['body'])
+        body = self._run_is_non_separating()
         if body:
             self._loadout_n_var.set("1")
             self._loadout_spin.config(state="disabled")
@@ -10276,26 +10291,20 @@ class BoosterFlyoutApp(tk.Tk):
         onto a body is a category error — the schematic then draws a body AND a
         corner object, and the run flies a front end the airframe doesn't have.
         """
-        if name == self._RO_DEFAULT_SENTINEL or name not in RO_DB:
-            return True
-        try:
-            return (getattr(RO_DB[name](), 'separation_mode',
-                            'separating_ro') == 'body')
-        except Exception:
-            return True          # unreadable entry: don't hide it
+        # Separation is the booster's property, not the object's: any object
+        # can be the front end of a non-separating vehicle (its mass and
+        # geometry are then inherited from the last stage by effective_ro).
+        return True
 
     def _run_is_non_separating(self):
-        """True when the current run reenters as a body — either the booster is
-        marked non-separating (the vehicle-level master) or the reentry plan's
-        Separation control says so."""
+        """True when the current run reenters as a body: the BOOSTER is marked
+        non-separating (body_reenters).  That flag is the single source of the
+        booster<->object link; nothing else is consulted."""
         try:
-            if bool(getattr(get_booster(self._booster_var.get()),
-                            'body_reenters', False)):
-                return True
+            return mm.run_separation_mode(
+                get_booster(self._booster_var.get())) == 'body'
         except Exception:
-            pass
-        return (getattr(self, '_main_sep_var', None) is not None
-                and self._main_sep_var.get() == self._SEP_LABELS['body'])
+            return False
 
     def _ro_combo_values(self):
         """Combobox values: the sentinel plus every name in RO_DB — filtered to
@@ -10368,13 +10377,9 @@ class BoosterFlyoutApp(tk.Tk):
             return None
 
     def _current_plan_sep(self):
-        """The active reentry plan's separation mode ('body' | 'separating_ro'),
-        read back from the sidebar Separation control."""
-        lbl = self._main_sep_var.get() if hasattr(self, '_main_sep_var') else ""
-        for _k, _v in getattr(self, '_SEP_LABELS', {}).items():
-            if _v == lbl:
-                return _k
-        return 'separating_ro'
+        """The run's separation mode ('body' | 'separating_ro'), derived from
+        the current booster's body_reenters flag (the single source)."""
+        return 'body' if self._run_is_non_separating() else 'separating_ro'
 
     def _seed_booster_default_ro(self):
         """A booster-default reentry object: the booster's front end made into an
@@ -10654,15 +10659,11 @@ class BoosterFlyoutApp(tk.Tk):
                "skip_glide"                if "skip"         in label else
                "equilibrium_glide_acton"   if "acton"        in label else
                "equilibrium_glide")
-        # Separation is a plan field on EVERY path — a ballistic reentry
-        # object still either separates at burnout or reenters as the body.
-        _sep = ('body'
-                if getattr(self, '_main_sep_var', None) is not None
-                and self._main_sep_var.get() == self._SEP_LABELS['body']
-                else 'separating_ro')
+        # Separation is NOT a plan field: the booster's body_reenters decides
+        # it (run_separation_mode) and the run stamps it onto the object.
         if key == "ballistic":
             # no lift, regardless of RV config
-            return {'glider_enabled': False, 'separation_mode': _sep}
+            return {'glider_enabled': False}
         try:
             dalt = float(self._main_dive_alt_var.get())
         except (ValueError, AttributeError):
@@ -10701,8 +10702,7 @@ class BoosterFlyoutApp(tk.Tk):
             glider_terminal_alt_km=dalt, glider_bank_schedule=bank,
             glider_pullup_start_alt_km=pull_alt,
             glider_aero_model=aero, glider_dive_target_lat_deg=dt_lat,
-            glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad,
-            separation_mode=_sep)
+            glider_dive_target_lon_deg=dt_lon, glider_dive_target_radius_km=dt_rad)
 
     def _populate_glider_panel(self, ro):
         """Fill the sidebar glider controls from reentry object ``ro`` (with its
@@ -10710,26 +10710,11 @@ class BoosterFlyoutApp(tk.Tk):
         reentry-object/plan-change population so all paths agree."""
         self._ro = ro           # _refresh_glider_status_line picks this up
         if hasattr(self, '_main_sep_var'):
-            # A booster marked non-separating (body_reenters) is the master: it
-            # locks the reentry-plan separation to "body" and greys the combo,
-            # so the separation choice lives with the missile.  Otherwise the
-            # plan/RO owns it as before.
-            _locked = False
-            try:
-                _b = self._current_booster()
-                _locked = bool(getattr(_b, 'body_reenters', False)) if _b else False
-            except Exception:
-                _locked = False
-            if _locked:
-                self._main_sep_var.set(self._SEP_LABELS['body'])
-            else:
-                self._main_sep_var.set(self._SEP_LABELS[
-                    'body' if getattr(ro, 'separation_mode',
-                                      'separating_ro') == 'body'
-                    else 'separating_ro'])
+            # The booster owns separation (body_reenters); the indicator
+            # mirrors it and is never editable here.
+            self._main_sep_var.set(self._SEP_LABELS[self._current_plan_sep()])
             if hasattr(self, '_main_sep_cb'):
-                self._main_sep_cb.configure(
-                    state='disabled' if _locked else 'readonly')
+                self._main_sep_cb.configure(state='disabled')
             self._update_loadout_state()
         _guid = ro.glider_guidance if ro.glider_enabled else "ballistic"
         # skip_to_equilibrium is retired (aliased to damped_glide on load), so
@@ -11517,11 +11502,8 @@ class BoosterFlyoutApp(tk.Tk):
             if not is_last:
                 _row(left, r, "Coast (s):",      f"{node.coast_time_s:.0f}");     r += 1
             # Debris β for jettisoned stage bodies.  Whether the LAST stage
-            # body becomes debris is the run-level separation choice (the
-            # sidebar Separation control), not a booster property.
-            _sep_body = (getattr(self, '_main_sep_var', None) is not None
-                         and self._main_sep_var.get()
-                         == self._SEP_LABELS['body'])
+            # body becomes debris is the booster's body_reenters flag.
+            _sep_body = self._run_is_non_separating()
             _body_jettisoned = (not is_last) or not _sep_body
             if _body_jettisoned:
                 if is_last:

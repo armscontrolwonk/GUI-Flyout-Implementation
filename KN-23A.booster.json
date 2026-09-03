@@ -29,7 +29,6 @@
   "has_interstage": false,
   "interstage_length_m": 0.0,
   "interstage_mass_kg": 0.0,
-  "interstage_jettison_s": null,
   "nose_shape": "tangent_ogive",
   "nose_length_m": 4.44,
   "shroud_nose_shape": "",
@@ -66,6 +65,5 @@
   "booster_nozzle_area_m2": 0.0,
   "booster_diam_m": 0.0,
   "booster_length_m": 0.0,
-  "booster_cd": 0.2,
-  "booster_core_delay_s": 0.0
+  "booster_cd": 0.2
 }

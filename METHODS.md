@@ -680,20 +680,22 @@ re-entry vehicle (Section 8.2).
 ### 6.4 Reentry vehicle separation
 
 Whether the reentry object separates from the final-stage body at burnout is a
-**run-level mission choice**, not a stored property of the object. It is set by
-the sidebar **Separation** control and persisted on the reentry plan as
-`separation_mode ∈ {separating_ro, body}` (§8.11); the same aeroshell can
-therefore be flown separating or integrated without editing the object, and any
-object can be flown on any booster.
-
-For a vehicle whose front end *never* separates — Scud / KN-23 / Hwasong class —
-that is a property of the missile, not the flight. `BoosterParams.body_reenters`
-(a checkbox in the booster editor) makes the vehicle the **master**: when set,
-the sidebar locks the plan's Separation to `body` and greys the control, so the
-choice lives with the missile; the reentry mode still defaults to ballistic and
-stays switchable. It is a pure-physics no-op — the run reads the plan's
-`separation_mode` — driving only the editor lock. Default off leaves the plan in
-control as above.
+property of the **booster**, and the one place the booster and the reentry
+object are linked. `BoosterParams.body_reenters` (a checkbox in the booster
+editor) marks a vehicle whose front end never separates — Scud / KN-23 /
+Hwasong class — so the last stage *is* the reentering body. The run derives the
+object's `separation_mode ∈ {separating_ro, body}` from that flag
+(`run_separation_mode`; `bind_ro_separation` stamps it onto the object at the
+start of every integration, and `effective_ro` on every read), so every path
+that branches on `ro.separation_mode` agrees with the booster. Neither the
+reentry-object file nor the reentry plan stores a separation choice: the key is
+omitted by `ro_to_dict` and is not a reentry-plan key, and a legacy plan file
+that still carries it is ignored on apply. The sidebar **Separation** box is a
+read-only indicator of the booster flag. Any object can be flown on any
+booster; the reentry mode still defaults to ballistic and stays switchable.
+`test_input_split.py` holds this, and the wider four-inputs rule (hardware
+files carry no plan key, plan files carry no hardware key), over the shipped
+files and the serialisers.
 
 - **Separating** (`separating_ro`): the object departs at burnout and reenters
   on its own geometry/β; the spent final stage tumbles away as debris (§14.3).
@@ -719,10 +721,10 @@ control as above.
 
 The legacy `BoosterParams.ro_separates` flag is retained as a **build-time
 descriptor** — it records whether the stored stage masses embed the payload,
-seeding the ascent-drag geometry and throw-weight bookkeeping — but the run
-path (separation debris, post-burnout mass) consults the plan's
-`separation_mode`, falling back to `ro_separates` only when no reentry object
-is configured at all. Post-burnout drag uses the reentering vehicle's geometry
+seeding the ascent-drag geometry and throw-weight bookkeeping — and is not a
+separation input anywhere: the run path (separation debris, post-burnout mass)
+consults `body_reenters` alone, with or without a reentry object configured.
+Post-burnout drag uses the reentering vehicle's geometry
 and ballistic coefficient rather than the spent stage's. This matters for ICBMs
 and SLVs where the spent upper stage has very different drag characteristics
 from the warhead or payload it deployed.

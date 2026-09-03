@@ -12,6 +12,6 @@
   "glider_skip_count": 1,
   "glider_damping_zeta": 0.7,
   "glider_flap_deflection_deg": 0.0,
-  "separation_mode": "separating_ro",
-  "commanded_LD": 1.8
+  "commanded_LD": 1.8,
+  "glider_aero_model": "polar"
 }

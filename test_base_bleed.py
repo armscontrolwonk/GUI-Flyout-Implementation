@@ -79,6 +79,7 @@ def test_cd_drops_by_base_bleed_and_only_by_that():
 
 def _strypi_body(nozzle=True):
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True          # the booster owns the separation link
     p.diameter_m = 0.88
     p.length_m = 11.0
     if nozzle:

@@ -36,6 +36,7 @@ load_booster_library()
 def _body(l_over_d=13.4, fins=False, big_wings=False,
           fin_span=0.4, fin_root=1.0, cg_frac=None):
     base = copy.deepcopy(get_booster("Scud-B (R-17)"))
+    base.body_reenters = True       # the booster owns the separation link
     base.body_reenters = True
     last = base
     while getattr(last, 'stage2', None) is not None:

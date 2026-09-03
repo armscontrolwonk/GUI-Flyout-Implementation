@@ -29,6 +29,7 @@ load_booster_library()
 
 def _kn23(glider_LD=0.0, glider_enabled=True):
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     ro = ROParams(name="KN23", mass_kg=500.0, beta_kg_m2=3000.0, shape="karman",
@@ -83,6 +84,7 @@ def test_separating_rv_length_is_unchanged():
     """A separating RV still caps the stack additively (its own length on top) —
     the fix is scoped to body mode only."""
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = False         # separating: the booster says so
     p.diameter_m = 1.1
     p.length_m = 6.7
     ro = ROParams(name="RV", mass_kg=500.0, beta_kg_m2=3000.0, shape="cone",
@@ -97,6 +99,7 @@ def test_separating_rv_length_is_unchanged():
 
 def _kn23_cg(reentry_cg_m):
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     ro = ROParams(name="KN23", mass_kg=500.0, beta_kg_m2=0.0, shape="karman",
@@ -147,6 +150,7 @@ def _body_with_warhead(struct_kg, warhead_kg, nose_len, length=9.18, diam=1.10):
     """A long-nosed heavy-warhead body (KN-23A class): the airframe structure is
     the body mass, the warhead is a DECLARED forward payload."""
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = diam
     p.length_m = length
     ro = ROParams(name="body", mass_kg=struct_kg, payload_kg=warhead_kg,

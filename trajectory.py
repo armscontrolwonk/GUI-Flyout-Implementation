@@ -93,6 +93,7 @@ from booster_models import (
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     _eff_burn,
     booster_drag_vector, effective_ro, booster_separation_time,
+    run_separation_mode, bind_ro_separation,
     booster_area,
     wing_geometry, wedge_planform_area,
     _wedge_coeffs, _half_cone_coeffs, NEWTON_K_SLENDER,
@@ -2036,6 +2037,10 @@ def integrate_trajectory(params: BoosterParams,
         'apogee_km' : maximum altitude (km)
     """
     import copy
+    # The booster owns the separation link (body_reenters): stamp it onto the
+    # reentry object up front so every reader of ro.separation_mode below
+    # agrees with the booster.  Copies only when a change is needed.
+    params = bind_ro_separation(params)
     # Apply session-level overrides non-destructively.  guidance and
     # burnout_angle_deg are flight parameters (like launch site) that the caller
     # may override independently of the stored booster definition.
@@ -3103,18 +3108,14 @@ def integrate_trajectory(params: BoosterParams,
 
     # Walk stages: every jettisoned stage body gets a debris arc.
     # Non-last stages are always jettisoned.  Whether the LAST stage body is
-    # separate debris is the run-level separation decision, owned by the
-    # reentry plan (ro.separation_mode): a separating reentry object sheds the
+    # separate debris is the separation decision, owned by the BOOSTER
+    # (body_reenters): a separating reentry object sheds the
     # casing at burnout; a body-mode ('no separation') vehicle keeps the stage
-    # fused — the body IS the reentering vehicle, not debris.  The legacy
-    # params.ro_separates flag is only the fallback when no reentry object is
-    # configured at all (it then just records how the booster was built).
+    # fused — the body IS the reentering vehicle, not debris.  The decision is
+    # the booster's alone (body_reenters via run_separation_mode); the legacy
+    # ro_separates build flag is mass bookkeeping, not a separation input.
     _ro_run = params.ro
-    if _ro_run is not None:
-        _run_separates = (getattr(_ro_run, 'separation_mode',
-                                  'separating_ro') == 'separating_ro')
-    else:
-        _run_separates = bool(params.ro_separates)
+    _run_separates = (run_separation_mode(params) == 'separating_ro')
     _t_node = 0.0
     _node   = params
     _sn     = 1

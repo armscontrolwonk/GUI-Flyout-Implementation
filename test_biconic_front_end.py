@@ -32,6 +32,7 @@ load_booster_library()
 
 def _kn23(biconic, fore=1.0, break_d=0.5):
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     ro = ROParams(name="KN23", mass_kg=2100.0, beta_kg_m2=0.0, shape="cone",
@@ -197,6 +198,7 @@ def test_boost_biconic_body_flies_different_from_single_cone():
     unaffected by the biconic path."""
     def _body(biconic, shape="cone"):
         p = get_booster("Scud-B (R-17)"); p.diameter_m = 0.88; p.length_m = 11.0
+        p.body_reenters = True
         ro = ROParams(name="B", mass_kg=500, beta_kg_m2=6000, shape=shape,
                       diameter_m=0.88, length_m=11.0, separation_mode="body",
                       body_nose_length_m=2.0, biconic=biconic,

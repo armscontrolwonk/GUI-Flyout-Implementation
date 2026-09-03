@@ -26,6 +26,7 @@ load_booster_library()
 
 def _booster():
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     return p
@@ -33,6 +34,7 @@ def _booster():
 
 def _fly(beta, sep="body", glider=True):
     p = _booster()
+    p.body_reenters = (sep == "body")      # the booster owns the link
     ro = ROParams(name="RV", mass_kg=500.0, beta_kg_m2=beta, shape="karman",
                   diameter_m=1.1, length_m=2.0, separation_mode=sep,
                   glider_enabled=glider, glider_LD=(0.0 if glider else 0.0),

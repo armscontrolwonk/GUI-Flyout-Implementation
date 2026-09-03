@@ -40,7 +40,9 @@ def _fly(glider_enabled, burnout_angle_deg, beta=3000.0, ld=2.5):
                       diameter_m=1.1, length_m=2.0, glider_enabled=glider_enabled,
                       glider_LD=ld, glider_guidance="damped_glide",
                       separation_mode="body")
-        p = compose_loadout(get_booster("Scud-B (R-17)"), ro, 1)
+        b = get_booster("Scud-B (R-17)")
+        b.body_reenters = True
+        p = compose_loadout(b, ro, 1)
         p.ro = ro
         _CACHE[key] = integrate_trajectory(
             p, 39.12, 125.67, 90.0, burnout_angle_deg=burnout_angle_deg,

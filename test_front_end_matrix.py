@@ -19,6 +19,7 @@ load_booster_library()
 
 def _booster():
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
     return p
