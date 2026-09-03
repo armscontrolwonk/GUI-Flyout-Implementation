@@ -2844,7 +2844,8 @@ one-way latch (`params._pullup_phase`, `trajectory.py`):
    the low-AoA ballistic descent a real MaRV flies to preserve energy.
 2. **Pull** (at the trigger, descending): a hard pull at **full authority**,
    capped by BOTH the commanded pull-up g (`glider_pullup_g_max`, itself
-   clamped to the object's structural `pullup_g_limit`) AND what
+   clamped to the object's structural `pullup_g_limit` when that is set;
+   0 = unlimited) AND what
    dynamic pressure + the aero model can supply.  Triggering too high, where
    there is no q to pull with, therefore **undershoots honestly** — no lift is
    conjured — rather than faking a catch.

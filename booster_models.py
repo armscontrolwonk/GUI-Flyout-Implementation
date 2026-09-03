@@ -491,7 +491,9 @@ class ROParams:
     # structural limit, stored on the object); glider_pullup_g_max is the
     # PLAN's commanded value, clamped to the limit on apply_reentry_plan —
     # "fly it worse, never better", the same shape as commanded_LD ≤ glider_LD.
-    pullup_g_limit:         float = 10.0
+    # A limit of 0 (the default) means UNLIMITED: no clamp is applied, so a
+    # plan can command an extreme manoeuvre to see what load it produces.
+    pullup_g_limit:         float = 0.0
     glider_pullup_g_max:    float = 10.0
     # Terminal dive: 0 km = glide to impact (no altitude-triggered dive; the
     # target-proximity trigger still fires if armed).  A positive value
@@ -839,7 +841,7 @@ def ro_from_dict(d: dict) -> ROParams:
         trim_alpha_deg=float(d.get('trim_alpha_deg', 0.0) or 0.0),
         trim_CL0=float(d.get('trim_CL0', 0.0) or 0.0),
         glider_guidance=_g,
-        pullup_g_limit=float(d.get('pullup_g_limit', 10.0) or 10.0),
+        pullup_g_limit=float(d.get('pullup_g_limit', 0.0) or 0.0),   # 0 = unlimited
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
         glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
@@ -4124,6 +4126,7 @@ def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
         q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better
     # The commanded pull-up g is likewise clamped to the airframe's structural
     # limit (hardware, on the object): a plan can ask for less, never more.
+    # An unset limit (0) is unlimited — no clamp.
     _lim = float(getattr(ro, 'pullup_g_limit', 0.0) or 0.0)
     if _lim > 0:
         q.glider_pullup_g_max = min(float(q.glider_pullup_g_max), _lim)

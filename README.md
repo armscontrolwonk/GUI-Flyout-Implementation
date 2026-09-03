@@ -284,7 +284,8 @@ tabbed notebook**.
   tally shown on the Booster-Parameters tab, not an input here.
 - **Reentry-object editor** — define a reentry object's **hardware**: mass,
   ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
-  the airframe's **L/D capability**, its **structural pull-up g-limit**, the
+  the airframe's **L/D capability**, its **structural pull-up g-limit** (0 =
+  unlimited, so an extreme manoeuvre shows the load it would demand), the
   Acton **entry βₛ**, TPS materials (nose and body, from a catalog or bespoke
   values), and provenance. Separation is shown read-only here (it is the
   booster's property). How the object is *flown* — commanded L/D (≤
@@ -293,7 +294,7 @@ tabbed notebook**.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
   (Reentry Plan ▸ Edit…), **family-aware**: commanded L/D clamped to the
   airframe capability ("fly it worse, never better"), commanded pull-up g
-  (clamped to the object's structural limit the same way), flap deflection,
+  (clamped to the object's structural limit the same way, when one is set), flap deflection,
   **reentry attitude** (trimmed vs. tumbling), and plan source/notes always;
   a **numerical** plan adds **ζ damping** (with its estimator), the **bank
   schedule**, and **dive-at-target** — the analytic closed form cannot bank,

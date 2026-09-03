@@ -199,6 +199,11 @@ def test_beta_S_is_hardware_and_pullup_g_is_clamped_to_the_limit():
     assert apply_reentry_plan(ro, {'glider_pullup_g_max': 30.0}).glider_pullup_g_max == 8.0
     assert apply_reentry_plan(ro, {'glider_pullup_g_max': 5.0}).glider_pullup_g_max == 5.0
     assert apply_reentry_plan(ro, {}).glider_pullup_g_max <= 8.0
+    # an UNSET limit (0, the default) is unlimited: the plan's command stands
+    free = ROParams(name="y", mass_kg=1.0, beta_kg_m2=1.0, shape="cone",
+                    diameter_m=0.5, length_m=1.0)
+    assert free.pullup_g_limit == 0.0
+    assert apply_reentry_plan(free, {'glider_pullup_g_max': 30.0}).glider_pullup_g_max == 30.0
     # a legacy plan carrying beta_S is ignored; the object's value stands
     assert apply_reentry_plan(ro, {'glider_beta_entry_kg_m2': 99.0}).glider_beta_entry_kg_m2 == 7.0
     # and both survive the hardware-only serialiser

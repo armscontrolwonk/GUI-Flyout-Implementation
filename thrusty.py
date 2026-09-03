@@ -4066,10 +4066,12 @@ class ROEditorDialog(tk.Toplevel):
         ttk.Label(self._glider_frm, text="Pull-up g-limit (structural):").grid(
             row=1, column=0, sticky=tk.W, padx=(0, 8), pady=2)
         self._glimit_var = tk.StringVar(
-            value=f"{float(getattr(ro, 'pullup_g_limit', 10.0) or 10.0):g}" if ro else "10")
-        self._glimit_entry = ttk.Entry(self._glider_frm, textvariable=self._glimit_var,
-                                       width=10)
-        self._glimit_entry.grid(row=1, column=1, sticky=tk.W, pady=2)
+            value=f"{float(getattr(ro, 'pullup_g_limit', 0.0) or 0.0):g}" if ro else "0")
+        _gl = ttk.Frame(self._glider_frm)
+        _gl.grid(row=1, column=1, sticky=tk.W, pady=2)
+        self._glimit_entry = ttk.Entry(_gl, textvariable=self._glimit_var, width=10)
+        self._glimit_entry.pack(side=tk.LEFT)
+        ttk.Label(_gl, text="  g  (0 = unlimited)", foreground="#888888").pack(side=tk.LEFT)
         # Acton Phase-3 entry βₛ (hardware; read only by the analytic Acton
         # law — 0 = Tracy).  A vehicle property, so it lives here.
         ttk.Label(self._glider_frm, text="Entry βₛ (Acton, kg/m²):").grid(
@@ -4961,15 +4963,11 @@ class ROEditorDialog(tk.Toplevel):
         # Hardware limits kept whether or not Maneuvering is ticked, so a
         # value is never silently lost by toggling the checkbox.
         try:
-            g_limit = float(self._glimit_var.get() or 10.0)
+            g_limit = max(0.0, float(self._glimit_var.get() or 0.0))   # 0 = unlimited
             beta_s = max(0.0, float(self._beta_s_var.get() or 0.0))
         except ValueError:
             messagebox.showerror(
                 "Invalid input", "g-limit and entry βₛ must be numbers.", parent=self)
-            return None
-        if g_limit <= 0:
-            messagebox.showerror(
-                "Invalid input", "g-limit must be positive.", parent=self)
             return None
         # Wing fields are stored only when VISIBLE (not for the wedge, whose
         # rows are disabled): hidden-but-active wing physics through the
@@ -5687,7 +5685,7 @@ class ReentryPlanDialog(tk.Toplevel):
         self._pullup_var = tk.StringVar(value=f"{float(_f('glider_pullup_g_max', 10.0)):g}")
         _pf = ttk.Frame(frm); _pf.grid(row=r, column=1, sticky=tk.W, pady=3)
         ttk.Entry(_pf, textvariable=self._pullup_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(_pf, text="  g  (≤ the object's structural limit — fly it worse, not better)",
+        ttk.Label(_pf, text="  g  (≤ the object's structural limit, if one is set)",
                   foreground="#888888").pack(side=tk.LEFT); r += 1
         # The Acton entry βₛ is a vehicle property: edited on the reentry
         # object (hardware), not here.
@@ -9706,7 +9704,8 @@ class BoosterFlyoutApp(tk.Tk):
             self._glider_status_var.set(
                 f"L/D {ro.glider_LD:.2f} · pull-up "
                 f"{ro.glider_pullup_g_max:.0f} g (limit "
-                f"{float(getattr(ro, 'pullup_g_limit', 10.0) or 10.0):.0f})")
+                + (f"{_gl:.0f})" if (_gl := float(getattr(ro, 'pullup_g_limit', 0.0) or 0.0)) > 0
+                   else "none)"))
         else:
             self._glider_status_var.set(
                 "No L/D set — Edit Reentry Object…")
