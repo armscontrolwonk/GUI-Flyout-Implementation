@@ -177,6 +177,15 @@ read. How each object is *flown* is stored separately in
 Flight-plan variants live in `~/Documents/Thrusty/flight_plans/`, and the active
 variant per booster in `~/.gui_missile_flyout/active_flight_plans.json`.
 
+**Reading old files.** Every file vintage Thrusty has accepted is understood
+in one place per kind: `upgrade_booster_dict` and `upgrade_ro_dict` convert a
+dict of any age to the current schema (stamped `schema`), and
+`booster_from_dict` / `ro_from_dict` then read the current schema and nothing
+else. A new compatibility rule goes in the upgrader, never in a constructor.
+`test_legacy_upgrade.py` pins the behaviour: `legacy_corpus.py` holds one dict
+per historical shape, and `tests_data/legacy_load_golden.json` records what
+each loaded to before the rule moved, so a conversion cannot drift silently.
+
 These are the **four inputs**, kept apart: two hardware files (booster, reentry
 object) and two plan files (flight plan, reentry plan). A hardware file stores
 no plan key and a plan file stores no hardware key; timings (fairing and

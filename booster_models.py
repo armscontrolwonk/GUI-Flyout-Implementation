@@ -804,12 +804,55 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
     return d
 
 
+def upgrade_ro_dict(d: dict) -> dict:
+    """Convert a reentry-object dict of ANY vintage into the current schema.
+
+    The object-side counterpart of :func:`upgrade_booster_dict`: pure,
+    idempotent, and the only place old object files are understood.
+
+    Conversions:
+
+    * Retired glide laws are aliased to their live equivalent
+      (``constant_bank`` and ``azimuth_command`` -> ``skip_glide``,
+      ``skip_to_equilibrium`` -> ``damped_glide``).  A file with no glide law
+      at all predates the field and meant Tracy's ``equilibrium_glide``.
+    * Separation tokens ``separating_rv`` -> ``separating_ro`` (the rename)
+      and ``non_separating`` -> ``body`` (the run path only ever branched on
+      ``body``, so the old token silently missed body-mode inheritance).
+      The value is derived from the booster at run time now; it is normalised
+      here so an old file still reads sensibly.
+    * An unknown or absent ``body_form`` means a body of revolution.
+    * ``maneuvering`` (the lift capability) postdates the capability/intent
+      split.  A file without it declared capability implicitly: a stored
+      ``glider_enabled``, a positive L/D, or wing geometry.
+    """
+    if not isinstance(d, dict):
+        raise TypeError("reentry-object dict expected")
+    d = dict(d)
+    if d.get('schema') == RO_SCHEMA:
+        return d
+    d['glider_guidance'] = _norm_glide_mode(
+        d.get('glider_guidance', 'equilibrium_glide'))
+    d['separation_mode'] = _norm_sep_mode(
+        d.get('separation_mode', 'separating_ro'))
+    _bf = str(d.get('body_form', '') or '')
+    d['body_form'] = _bf if _bf in BODY_FORMS else 'axisymmetric'
+    if 'maneuvering' not in d:
+        d['maneuvering'] = bool(
+            d.get('glider_enabled', False)
+            or float(d.get('glider_LD', 0.0) or 0.0) > 0.0
+            or float(d.get('wing_area_m2', 0.0) or 0.0) > 0.0)
+    d['schema'] = RO_SCHEMA
+    return d
+
+
 def ro_from_dict(d: dict) -> ROParams:
-    # Legacy mode aliases:
-    #   "constant_bank"   → "skip_glide"   (old bank-angle knob is gone)
-    #   "azimuth_command" → "skip_glide"   (proportional heading hold removed)
-    #   "skip_to_equilibrium" → "damped_glide"  (retired; damped covers it)
-    _g = _norm_glide_mode(d.get('glider_guidance', 'equilibrium_glide'))
+    """Reconstruct an ROParams from an object dict.
+
+    The dict is passed through :func:`upgrade_ro_dict` first, so this function
+    reads the CURRENT schema only.  A new compatibility rule goes there.
+    """
+    d = upgrade_ro_dict(d)
     return ROParams(
         name=str(d.get('name', 'RV')),
         mass_kg=float(d['mass_kg']),
@@ -821,22 +864,12 @@ def ro_from_dict(d: dict) -> ROParams:
         biconic=bool(d.get('biconic', False)),
         fore_length_m=float(d.get('fore_length_m', 0.0)),
         break_diameter_m=float(d.get('break_diameter_m', 0.0)),
-        # Unknown/legacy strings normalise to the default rather than crash —
-        # an old JSON simply has no body_form (= body of revolution).
-        body_form=(str(d.get('body_form', '') or '')
-                   if str(d.get('body_form', '') or '') in BODY_FORMS
-                   else 'axisymmetric'),
+        body_form=str(d['body_form']),
         body_span_m=float(d.get('body_span_m', 0.0) or 0.0),
         body_nose_length_m=float(d.get('body_nose_length_m', 0.0) or 0.0),
         reentry_cg_m=float(d.get('reentry_cg_m', 0.0) or 0.0),
         payload_kg=float(d.get('payload_kg', 0.0) or 0.0),
-        # Capability.  A file from before the split (no 'maneuvering' key)
-        # declared it implicitly: a stored glider_enabled, a positive L/D, or
-        # wing geometry.
-        maneuvering=bool(d['maneuvering']) if 'maneuvering' in d else bool(
-            d.get('glider_enabled', False)
-            or float(d.get('glider_LD', 0.0) or 0.0) > 0.0
-            or float(d.get('wing_area_m2', 0.0) or 0.0) > 0.0),
+        maneuvering=bool(d['maneuvering']),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
@@ -848,7 +881,7 @@ def ro_from_dict(d: dict) -> ROParams:
         n_wings=int(d.get('n_wings', 4) or 4),
         trim_alpha_deg=float(d.get('trim_alpha_deg', 0.0) or 0.0),
         trim_CL0=float(d.get('trim_CL0', 0.0) or 0.0),
-        glider_guidance=_g,
+        glider_guidance=str(d['glider_guidance']),
         pullup_g_limit=float(d.get('pullup_g_limit', 0.0) or 0.0),   # 0 = unlimited
         glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
         glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
@@ -865,7 +898,7 @@ def ro_from_dict(d: dict) -> ROParams:
         glider_control_surfaces=str(d.get('glider_control_surfaces', 'unknown')),
         glider_flap_area_ratio=float(d.get('glider_flap_area_ratio', 0.0)),
         glider_flap_deflection_deg=float(d.get('glider_flap_deflection_deg', 0.0)),
-        separation_mode=_norm_sep_mode(d.get('separation_mode', 'separating_ro')),
+        separation_mode=str(d['separation_mode']),
         reentry_attitude=str(d.get('reentry_attitude', 'trim')),
         emissivity=float(d.get('emissivity', 0.85)),
         tps_material=str(d.get('tps_material', '')),
@@ -2135,43 +2168,6 @@ def get_booster(name: str, plan: str = None) -> BoosterParams:
     return p
 
 
-def _migrate_guidance(g: str) -> str:
-    """Migrate legacy guidance keys.
-
-    The old "gravity_turn" key actually meant a user-directed pitch program
-    (thrust pointed at a fixed elevation in ENU).  It was renamed to
-    "pitch_program" when a true gravity-turn mode (thrust aligned with the
-    velocity vector, internally "true_gravity_turn") was added.  Old JSON
-    files use the legacy name and are silently migrated here.
-    """
-    if g == 'gravity_turn':
-        return 'pitch_program'
-    return g
-
-
-def _convert_loft_to_gravity_turn(p: BoosterParams) -> None:
-    """In-place conversion of a 'loft' booster to equivalent gravity_turn pitch overrides.
-
-    The Forden formula el(t)=max(la, 90−rate·t) is mathematically identical to
-    a linear gravity_turn with turn_start=0 and turn_stop=(90−la)/rate.
-    """
-    la   = p.burnout_angle_deg
-    rate = p.loft_angle_rate_deg_s
-    p.guidance = 'pitch_program'
-    if p.stage_turn_start_s is None:
-        p.stage_turn_start_s = 0.0
-    if p.stage_turn_stop_s is None and rate > 0:
-        p.stage_turn_stop_s = round((90.0 - la) / rate, 1)
-    if p.stage_burnout_angle_deg is None:
-        p.stage_burnout_angle_deg = la
-    # Inner stages: set guidance and hold at the top-level target angle.
-    s = p.stage2
-    while s is not None:
-        if s.guidance == 'loft':
-            s.guidance = 'pitch_program'
-        if s.stage_burnout_angle_deg is None:
-            s.stage_burnout_angle_deg = la
-        s = s.stage2
 
 
 def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
@@ -2292,8 +2288,157 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
     return d
 
 
+BOOSTER_SCHEMA = 2      # bump when a conversion is added below
+RO_SCHEMA = 2
+
+
+def upgrade_booster_dict(d: dict) -> dict:
+    """Convert a booster dict of ANY vintage into the current schema.
+
+    This is the single place old Thrusty files are understood.  Every
+    compatibility rule lives here as an explicit conversion, so
+    :func:`booster_from_dict` can read the current schema and nothing else.
+    The function is pure (the caller's dict is not mutated) and idempotent:
+    a dict already at ``BOOSTER_SCHEMA`` is returned unchanged.
+
+    Conversions, oldest first:
+
+    * ``guidance="gravity_turn"`` meant a user-directed ENU pitch program;
+      the name now belongs to the true (velocity-aligned) gravity turn, so it
+      becomes ``pitch_program``.
+    * ``guidance="loft"`` was Forden's ``el(t) = max(la, 90 − rate·t)``, which
+      is the same trajectory as a linear pitch program with ``turn_start = 0``
+      and ``turn_stop = (90 − la)/rate``; it is rewritten as those overrides.
+    * ``loft_angle_deg`` was the burnout angle's old name.
+    * The ``rv_*`` field family predates the rename to ``ro_*`` (reentry
+      object): ``num_rvs``, ``rv_mass_kg``, ``rv_separates``, and the inline
+      ``rv_beta_kg_m2`` / ``rv_shape`` / ``rv_diameter_m`` / ``rv_length_m``.
+    * ``nose_ld_ratio`` / ``shroud_nose_ld_ratio`` gave nose length as a
+      multiple of the stage diameter; they become absolute lengths.
+    * Reentry hardware used to live on the booster, first as inline fields and
+      then under an embedded ``rv`` / ``ro`` key.  Both become a nested ``ro``
+      dict, which :func:`ro_from_dict` reads.
+    * A design payload used to be stored in ``payload_kg`` *and* baked into
+      every stage's launch mass (and, when ``ro_separates`` was false, into the
+      last stage's burnout mass).  Booster files are stack-only now and the
+      reentry object owns its mass, so the payload is subtracted back out.
+    """
+    if not isinstance(d, dict):
+        raise TypeError("booster dict expected")
+    d = dict(d)
+    if d.get('schema') == BOOSTER_SCHEMA:
+        return d
+    # Sub-stages are upgraded first, exactly as the loader recursed, so a
+    # legacy stage inside a legacy stack is converted on its own terms before
+    # this stage's whole-chain rules (payload, loft) run over it.
+    if d.get('stage2'):
+        d['stage2'] = upgrade_booster_dict(d['stage2'])
+
+    _raw_guidance = str(d.get('guidance', 'pitch_program'))
+    if _raw_guidance == 'gravity_turn':
+        d['guidance'] = 'pitch_program'
+
+    if 'burnout_angle_deg' not in d and 'loft_angle_deg' in d:
+        d['burnout_angle_deg'] = d['loft_angle_deg']
+    d.pop('loft_angle_deg', None)
+
+    for _new, _old in (('num_ros', 'num_rvs'), ('ro_mass_kg', 'rv_mass_kg'),
+                       ('ro_separates', 'rv_separates')):
+        if _new not in d and _old in d:
+            d[_new] = d[_old]
+        d.pop(_old, None)
+
+    _dia = float(d.get('diameter_m', 0.0) or 0.0)
+    for _len_key, _ratio_key in (('nose_length_m', 'nose_ld_ratio'),
+                                 ('shroud_nose_length_m', 'shroud_nose_ld_ratio')):
+        if _len_key not in d and _ratio_key in d:
+            d[_len_key] = float(d.get(_ratio_key, 0.0) or 0.0) * _dia
+        d.pop(_ratio_key, None)
+
+    # The payload the file baked into its stage masses.  Read before it is
+    # removed, because the inline-object conversion below falls back to it.
+    _payload = float(d.get('payload_kg', 0.0) or 0.0)
+    _baked = not bool(d.get('ro_separates', False))
+
+    # Reentry hardware -> a nested 'ro' dict.
+    _ro_data = d.pop('ro', None) or d.pop('rv', None)
+    d.pop('rv', None)
+    if _ro_data is None:
+        _rb = float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0)) or 0.0)
+        if _rb > 0:
+            # Gated on an inline ballistic coefficient: without one there is no
+            # reentry vehicle described, only stray keys.
+            _ro_data = dict(
+                name='(migrated)',
+                mass_kg=float(d.get('ro_mass_kg', 0.0) or 0.0) or _payload,
+                beta_kg_m2=_rb,
+                shape=str(d.get('ro_shape', d.get('rv_shape', '')) or ''),
+                diameter_m=float(d.get('ro_diameter_m',
+                                       d.get('rv_diameter_m', 0.0)) or 0.0),
+                length_m=float(d.get('ro_length_m',
+                                     d.get('rv_length_m', 0.0)) or 0.0),
+                glider_enabled=bool(d.get('glider_enabled', False)),
+                glider_LD=float(d.get('glider_LD', 0.0) or 0.0),
+                glider_guidance=str(d.get('glider_guidance',
+                                          'equilibrium_glide')),
+                glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
+                glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
+                glider_terminal_alt_km=float(
+                    d.get('glider_terminal_alt_km', 0.0) or 0.0),
+            )
+    for _k in ('ro_beta_kg_m2', 'rv_beta_kg_m2', 'ro_shape', 'rv_shape',
+               'ro_diameter_m', 'rv_diameter_m', 'ro_length_m', 'rv_length_m',
+               'glider_enabled', 'glider_LD', 'glider_guidance',
+               'glider_pullup_g_max', 'glider_terminal_dive',
+               'glider_terminal_alt_km'):
+        d.pop(_k, None)
+    if _ro_data is not None:
+        d['ro'] = upgrade_ro_dict(_ro_data)
+
+    # Stack-only masses: subtract the baked payload from the whole chain.
+    if _payload > 0:
+        _node = d
+        while _node is not None:
+            _node['mass_initial'] = float(_node['mass_initial']) - _payload
+            _last = _node
+            _node = _node.get('stage2')
+        if _baked and float(_last.get('mass_final', 0.0)) > _payload:
+            _last['mass_final'] = float(_last['mass_final']) - _payload
+    d.pop('payload_kg', None)
+    d.pop('ro_separates', None)
+
+    # Forden's loft law -> the equivalent pitch-program overrides.  Applied
+    # last, over the fully-converted chain, as the loader did after building it.
+    if _raw_guidance == 'loft':
+        _la = float(d.get('burnout_angle_deg', 45.0))
+        _rate = float(d.get('loft_angle_rate_deg_s', 2.0) or 0.0)
+        d['guidance'] = 'pitch_program'
+        if d.get('stage_turn_start_s') is None:
+            d['stage_turn_start_s'] = 0.0
+        if d.get('stage_turn_stop_s') is None and _rate > 0:
+            d['stage_turn_stop_s'] = round((90.0 - _la) / _rate, 1)
+        if d.get('stage_burnout_angle_deg') is None:
+            d['stage_burnout_angle_deg'] = _la
+        _s = d.get('stage2')
+        while _s is not None:
+            if _s.get('guidance') == 'loft':
+                _s['guidance'] = 'pitch_program'
+            if _s.get('stage_burnout_angle_deg') is None:
+                _s['stage_burnout_angle_deg'] = _la
+            _s = _s.get('stage2')
+
+    d['schema'] = BOOSTER_SCHEMA
+    return d
+
+
 def booster_from_dict(d: dict) -> BoosterParams:
-    """Reconstruct a BoosterParams from a dict produced by booster_to_dict."""
+    """Reconstruct a BoosterParams from a dict produced by booster_to_dict.
+
+    The dict is passed through :func:`upgrade_booster_dict` first, so this
+    function reads the CURRENT schema only: no legacy aliases or shapes are
+    understood here.  A new compatibility rule goes in the upgrader.
+    """
+    d = upgrade_booster_dict(d)
     prop  = float(d['mass_propellant'])
     burn  = float(d['burn_time_s'])
     isp   = float(d['isp_s'])
@@ -2310,8 +2455,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
         burn_time_s=burn,
         coast_time_s=float(d.get('coast_time_s', 0.0)),
         isp_s=isp,
-        guidance=_migrate_guidance(d.get('guidance', 'pitch_program')),
-        burnout_angle_deg=float(d.get('burnout_angle_deg', d.get('loft_angle_deg', 45.0))),
+        guidance=str(d.get('guidance', 'pitch_program')),
+        burnout_angle_deg=float(d.get('burnout_angle_deg', 45.0)),
         loft_angle_rate_deg_s=float(d.get('loft_angle_rate_deg_s', 2.0)),
         mach_table=list(d.get('mach_table', _FORDEN_MACH)),
         cd_table=list(d.get('cd_table', _FORDEN_CD)),
@@ -2319,8 +2464,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
         payload_kg=0.0,                 # stack-only; legacy payload handled below
         body_reenters=bool(d.get('body_reenters', False)),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
-        num_ros=int(d.get('num_ros', d.get('num_rvs', 1))),
-        ro_mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))),
+        num_ros=int(d.get('num_ros', 1)),
+        ro_mass_kg=float(d.get('ro_mass_kg', 0.0)),
         shroud_mass_kg=float(d.get('shroud_mass_kg', 0.0)),
         shroud_jettison_alt_km=float(d.get('shroud_jettison_alt_km', 80.0)),
         shroud_length_m=float(d.get('shroud_length_m', 0.0)),
@@ -2340,11 +2485,9 @@ def booster_from_dict(d: dict) -> BoosterParams:
         interstage_jettison_s=(float(d['interstage_jettison_s'])
                                if d.get('interstage_jettison_s') is not None else None),
         nose_shape=d.get('nose_shape', ''),
-        nose_length_m=float(d.get('nose_length_m',
-                            float(d.get('nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
+        nose_length_m=float(d.get('nose_length_m', 0.0)),
         shroud_nose_shape=d.get('shroud_nose_shape', ''),
-        shroud_nose_length_m=float(d.get('shroud_nose_length_m',
-                            float(d.get('shroud_nose_ld_ratio', 0.0)) * float(d['diameter_m']))),
+        shroud_nose_length_m=float(d.get('shroud_nose_length_m', 0.0)),
         aerospike_LD=float(d.get('aerospike_LD', 0.0)),
         aerospike_dD=float(d.get('aerospike_dD', 0.0)),
         has_fins=bool(d.get('has_fins', False)),
@@ -2396,57 +2539,10 @@ def booster_from_dict(d: dict) -> BoosterParams:
         stage_yaw_final_az_deg=(float(d['stage_yaw_final_az_deg'])
                                 if d.get('stage_yaw_final_az_deg') is not None else None),
     )
-    # Load RV object when actually present (new format); legacy inline fields
-    # stay on _p for effective_ro() to find when _p.ro is None (old format).
-    # A null/absent 'ro' means the booster embeds no object — the reentry
-    # object is composed at run time from the sidebar loadout.
-    # Legacy files stored a design payload in payload_kg AND inside every
-    # stage's launch mass (and, for 'body-baked' Scud-class builds flagged
-    # ro_separates=False, inside the last stage's burnout mass too).  The
-    # reentry object now carries that mass, so normalise the chain to
-    # stack-only here; compose_loadout adds the object's mass back at run
-    # time, reproducing the original masses exactly for the same payload.
-    _legacy_payload = float(d.get('payload_kg', 0.0) or 0.0)
-    if _legacy_payload > 0:
-        _baked = not bool(d.get('ro_separates', d.get('rv_separates', False)))
-        _node, _last = _p, _p
-        while _node is not None:
-            _node.mass_initial -= _legacy_payload
-            _last = _node
-            _node = _node.stage2
-        if _baked and _last.mass_final > _legacy_payload:
-            _last.mass_final -= _legacy_payload
-    _ro_data = d.get('ro') or d.get('rv')      # 'rv' = legacy embedded-object key
-    if _ro_data is not None:
-        _p.ro = ro_from_dict(_ro_data)
-    else:
-        # Migrate genuinely-old JSON that stored reentry hardware inline on the
-        # booster (no embedded 'ro'/'rv' key) into a synthesised ROParams, so the
-        # booster itself carries no reentry fields.  Gated on an inline β.
-        _rb = float(d.get('ro_beta_kg_m2', d.get('rv_beta_kg_m2', 0.0)) or 0.0)
-        if _rb > 0:
-            _g = _norm_glide_mode(d.get('glider_guidance', 'equilibrium_glide'))
-            _p.ro = ROParams(
-                name='(migrated)',
-                mass_kg=float(d.get('ro_mass_kg', d.get('rv_mass_kg', 0.0))
-                              or d.get('payload_kg', 0.0)),
-                beta_kg_m2=_rb,
-                shape=str(d.get('ro_shape', d.get('rv_shape', ''))),
-                diameter_m=float(d.get('ro_diameter_m', d.get('rv_diameter_m', 0.0))),
-                length_m=float(d.get('ro_length_m', d.get('rv_length_m', 0.0))),
-                maneuvering=bool(d.get('glider_enabled', False)
-                                 or float(d.get('glider_LD', 0.0) or 0.0) > 0.0),
-                glider_enabled=bool(d.get('glider_enabled', False)),
-                glider_LD=float(d.get('glider_LD', 0.0)),
-                glider_guidance=_g,
-                glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
-                glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
-                glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
-            )
-    # Backwards compatibility: old saved boosters with guidance="loft" are
-    # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
-    if d.get('guidance', '') == 'loft':
-        _convert_loft_to_gravity_turn(_p)
+    # The upgrader guarantees a nested 'ro' dict (or none): reentry hardware
+    # never lives on the booster in the current schema.
+    if d.get('ro') is not None:
+        _p.ro = ro_from_dict(d['ro'])
     return _p  # type: ignore[return-value]
 
 
