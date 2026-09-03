@@ -187,7 +187,9 @@ name the object it flies (`reentry_object`) — plan data, not a hardware link.
 The sidebar picks it up when nothing else is selected, `get_booster` attaches
 it for headless runs, and `integrate_trajectory` composes an object onto a
 chain that was not composed already, so a run with an object always carries
-its mass. The only link
+its mass. Where hardware and plan meet, the plan is clamped by the hardware:
+commanded L/D ≤ airframe L/D, commanded g ≤ structural limit, and a glide is
+flown only if the object is `maneuvering`. The only link
 between a booster and a reentry object is the booster's `body_reenters` flag.
 `test_input_split.py` holds the rule over the shipped files and the
 serialisers.
@@ -293,7 +295,9 @@ tabbed notebook**.
   tally shown on the Booster-Parameters tab, not an input here.
 - **Reentry-object editor** — define a reentry object's **hardware**: mass,
   ballistic coefficient β (with a Newtonian β Calculator), nose shape/geometry,
-  the airframe's **L/D capability**, its **structural pull-up g-limit** (0 =
+  a **Maneuvering** checkbox (the hardware *capability* to generate lift — an
+  object without it can only fly ballistic, whatever a plan asks), the
+  airframe's **L/D capability**, its **structural pull-up g-limit** (0 =
   unlimited, so an extreme manoeuvre shows the load it would demand), the
   Acton **entry βₛ**, TPS materials (nose and body, from a catalog or bespoke
   values), and provenance. Separation is shown read-only here (it is the
@@ -302,8 +306,10 @@ tabbed notebook**.
   attitude — lives in the Reentry Plan, not here.
 - **Reentry-plan editor** — the down-leg analogue of the flight-plan dialog
   (Reentry Plan ▸ Edit…), **family-aware**: commanded L/D clamped to the
-  airframe capability ("fly it worse, never better"), commanded pull-up g
-  (clamped to the object's structural limit the same way, when one is set), flap deflection,
+  airframe capability ("fly it worse, never better"), whether this run
+  *glides* at all (`glider_enabled`, clamped by the object's Maneuvering
+  capability the same way), commanded pull-up g (clamped to the object's
+  structural limit, when one is set), flap deflection,
   **reentry attitude** (trimmed vs. tumbling), and plan source/notes always;
   a **numerical** plan adds **ζ damping** (with its estimator), the **bank
   schedule**, and **dive-at-target** — the analytic closed form cannot bank,

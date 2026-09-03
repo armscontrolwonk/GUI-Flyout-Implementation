@@ -435,6 +435,13 @@ class ROParams:
     #                              ζ = glider_damping_zeta.  ζ=0
     #                              ≡ skip_glide; large ζ → equilibrium_glide.
     #                              See DAMPED_GLIDE.md.
+    # Capability vs intent.  `maneuvering` is HARDWARE: the object can
+    # generate lift (an aeroshell trimmed at angle of attack, wings, control
+    # surfaces) — the object editor's Maneuvering checkbox.  `glider_enabled`
+    # is the reentry PLAN's intent to fly it as a glider on this run, and
+    # apply_reentry_plan clamps it by the capability: a plan can fly a glider
+    # ballistic, never a ballistic object as a glider.
+    maneuvering:            bool  = False
     glider_enabled:         bool  = False
     glider_LD:              float = 0.0
     # Wing geometry — the physical anchor for the DECOUPLED drag polar
@@ -749,6 +756,7 @@ def ro_to_dict(ro: ROParams, include_reentry_plan: bool = True) -> dict:
         'body_nose_length_m':    ro.body_nose_length_m,
         'reentry_cg_m':          ro.reentry_cg_m,
         'payload_kg':            ro.payload_kg,
+        'maneuvering':           ro.maneuvering,
         'glider_enabled':        ro.glider_enabled,
         'glider_LD':             ro.glider_LD,
         'wing_area_m2':          ro.wing_area_m2,
@@ -822,6 +830,13 @@ def ro_from_dict(d: dict) -> ROParams:
         body_nose_length_m=float(d.get('body_nose_length_m', 0.0) or 0.0),
         reentry_cg_m=float(d.get('reentry_cg_m', 0.0) or 0.0),
         payload_kg=float(d.get('payload_kg', 0.0) or 0.0),
+        # Capability.  A file from before the split (no 'maneuvering' key)
+        # declared it implicitly: a stored glider_enabled, a positive L/D, or
+        # wing geometry.
+        maneuvering=bool(d['maneuvering']) if 'maneuvering' in d else bool(
+            d.get('glider_enabled', False)
+            or float(d.get('glider_LD', 0.0) or 0.0) > 0.0
+            or float(d.get('wing_area_m2', 0.0) or 0.0) > 0.0),
         glider_enabled=bool(d.get('glider_enabled', False)),
         glider_LD=float(d.get('glider_LD', 0.0)),
         wing_area_m2=float(d.get('wing_area_m2', 0.0) or 0.0),
@@ -2419,6 +2434,8 @@ def booster_from_dict(d: dict) -> BoosterParams:
                 shape=str(d.get('ro_shape', d.get('rv_shape', ''))),
                 diameter_m=float(d.get('ro_diameter_m', d.get('rv_diameter_m', 0.0))),
                 length_m=float(d.get('ro_length_m', d.get('rv_length_m', 0.0))),
+                maneuvering=bool(d.get('glider_enabled', False)
+                                 or float(d.get('glider_LD', 0.0) or 0.0) > 0.0),
                 glider_enabled=bool(d.get('glider_enabled', False)),
                 glider_LD=float(d.get('glider_LD', 0.0)),
                 glider_guidance=_g,
@@ -4171,6 +4188,8 @@ def apply_reentry_plan(ro: ROParams, rp: dict) -> ROParams:
     # 'skip_to_equilibrium' -> 'damped_glide').
     q.separation_mode = _norm_sep_mode(q.separation_mode)
     q.glider_guidance = _norm_glide_mode(q.glider_guidance)
+    # Intent is clamped by capability: only a maneuvering object can glide.
+    q.glider_enabled = bool(q.glider_enabled) and bool(getattr(ro, 'maneuvering', False))
     cmd = rp.get('commanded_LD')
     if cmd is not None:
         q.glider_LD = min(float(cmd), ro.glider_LD)  # fly it worse, never better

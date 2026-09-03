@@ -14,6 +14,7 @@
   "body_nose_length_m": 0.0,
   "reentry_cg_m": 0.0,
   "payload_kg": 191.0,
+  "maneuvering": false,
   "glider_LD": 0.0,
   "wing_area_m2": 0.0,
   "wing_aspect_ratio": 0.0,

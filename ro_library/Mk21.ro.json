@@ -19,5 +19,6 @@
   "nose_tps_custom": null,
   "body_tps_custom": null,
   "source": "",
-  "notes": ""
+  "notes": "",
+  "maneuvering": false
 }

@@ -299,3 +299,38 @@ def test_headless_get_booster_attaches_the_plan_named_object_and_flies_its_mass(
     assert r["range_km"] > 0
     # a booster whose plan names no object stays bare
     assert get_booster("Shahab-3").ro is None
+
+
+# ── capability (object) vs intent (plan) ────────────────────────────────────
+
+def test_plan_cannot_glide_a_non_maneuvering_object():
+    """maneuvering is hardware; glider_enabled is plan intent clamped by it."""
+    assert 'maneuvering' in RO_HARDWARE and 'maneuvering' not in REENTRY_PLAN_KEYS
+    assert 'glider_enabled' in REENTRY_PLAN_KEYS
+    can = ROParams(name="g", mass_kg=1.0, beta_kg_m2=1.0, shape="cone",
+                   diameter_m=0.5, length_m=1.0, maneuvering=True, glider_LD=2.0)
+    cannot = ROParams(name="b", mass_kg=1.0, beta_kg_m2=1.0, shape="cone",
+                      diameter_m=0.5, length_m=1.0, maneuvering=False, glider_LD=2.0)
+    assert apply_reentry_plan(can, {'glider_enabled': True}).glider_enabled is True
+    assert apply_reentry_plan(cannot, {'glider_enabled': True}).glider_enabled is False
+    assert apply_reentry_plan(can, {'glider_enabled': False}).glider_enabled is False
+
+
+def test_legacy_object_file_derives_capability():
+    """A file from before the split declared capability implicitly."""
+    base = dict(name="x", mass_kg=1.0, beta_kg_m2=1.0, shape="cone",
+                diameter_m=0.5, length_m=1.0)
+    assert ro_from_dict({**base, 'glider_LD': 1.8}).maneuvering is True
+    assert ro_from_dict({**base, 'glider_enabled': True}).maneuvering is True
+    assert ro_from_dict({**base, 'wing_area_m2': 0.3}).maneuvering is True
+    assert ro_from_dict(base).maneuvering is False
+    assert ro_from_dict({**base, 'glider_LD': 1.8, 'maneuvering': False}).maneuvering is False
+
+
+@pytest.mark.parametrize('path', RO_FILES)
+def test_shipped_object_declares_capability_consistently(path):
+    d = json.load(open(path))
+    assert 'maneuvering' in d, f"{path} lacks the maneuvering capability flag"
+    rp = mm.load_reentry_plan(d['name']) or {}
+    if rp.get('glider_enabled'):
+        assert d['maneuvering'] is True, f"{path}: plan glides an object that cannot"

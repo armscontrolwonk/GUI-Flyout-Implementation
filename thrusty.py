@@ -4028,7 +4028,10 @@ class ROEditorDialog(tk.Toplevel):
         # ── Maneuvering (glider / HGV) — HOW it flies, not what it is.  The
         # wing PLANFORM lives in Geometry (it is hardware); this group keeps
         # only the capability flag and L/D.  The checkbox IS the group label.
-        self._glider_var = tk.BooleanVar(value=ro.glider_enabled if ro else False)
+        # Maneuvering = CAPABILITY (hardware: the object can generate lift).
+        # Whether a run glides is the reentry plan's glider_enabled, clamped
+        # by this on apply.
+        self._glider_var = tk.BooleanVar(value=bool(getattr(ro, 'maneuvering', False)) if ro else False)
         _glider_chk = ttk.Checkbutton(right, text="Maneuvering (glider / HGV)",
                                       variable=self._glider_var,
                                       command=self._update_glider_state)
@@ -5029,7 +5032,7 @@ class ROEditorDialog(tk.Toplevel):
             body_form=body_form, body_span_m=body_span,
             body_nose_length_m=body_nose, reentry_cg_m=reentry_cg,
             payload_kg=payload,
-            glider_enabled=glider_on,
+            maneuvering=glider_on,
             glider_LD=LD,
             pullup_g_limit=g_limit,
             glider_beta_entry_kg_m2=beta_s,
@@ -5061,12 +5064,14 @@ class ROEditorDialog(tk.Toplevel):
         # tweak would silently reset the stored plan (glide law, dive, banks,
         # ζ, separation, attitude, …) to dataclass defaults, because
         # _save_ro_to_library re-extracts the plan from what we return here.
-        # glider_enabled is the one plan key the dialog owns (its checkbox).
+        # This dialog owns no plan key: the Maneuvering checkbox is the
+        # hardware capability (maneuvering); the plan's glider_enabled intent
+        # is carried through untouched and re-clamped on apply.
         if self._orig_ro is not None:
             import dataclasses as _dc
             _carry = {k: (list(_v) if isinstance(_v := getattr(self._orig_ro, k),
                                                  list) else _v)
-                      for k in mm._REENTRY_PLAN_KEYS if k != 'glider_enabled'}
+                      for k in mm._REENTRY_PLAN_KEYS}
             ro_new = _dc.replace(ro_new, **_carry)
         return ro_new
 
@@ -5391,7 +5396,7 @@ class ROEditorDialog(tk.Toplevel):
             body_nose_length_m=_fv('_body_nose_var'),
             reentry_cg_m=_fv('_reentry_cg_var'),
             payload_kg=_fv('_payload_var'),
-            separation_mode='body', glider_enabled=True, glider_LD=0.0)
+            separation_mode='body', maneuvering=True, glider_enabled=True, glider_LD=0.0)
 
     def _refresh_ld_preview(self):
         """Update the inline L/D preview next to the field (body mode): the
@@ -9725,6 +9730,9 @@ class BoosterFlyoutApp(tk.Tk):
                 f"{ro.glider_pullup_g_max:.0f} g (limit "
                 + (f"{_gl:.0f})" if (_gl := float(getattr(ro, 'pullup_g_limit', 0.0) or 0.0)) > 0
                    else "none)"))
+        elif ro is not None and not getattr(ro, 'maneuvering', False):
+            self._glider_status_var.set(
+                "Ballistic object (no lift) — maneuvering is an object property")
         else:
             self._glider_status_var.set(
                 "No L/D set — Edit Reentry Object…")
@@ -9771,6 +9779,15 @@ class BoosterFlyoutApp(tk.Tk):
         _fam_modes = (self._REENTRY_MODE_ANALYTIC if _fam == 'analytic'
                       else self._REENTRY_MODE_NUMERICAL)
         _vals = [lbl for _k, lbl in _fam_modes]
+        # A non-maneuvering object (hardware) can only fly ballistic: the
+        # plan's intent is clamped on apply, so do not offer glide laws.
+        _ro = getattr(self, '_ro', None)
+        if _ro is not None and not getattr(_ro, 'maneuvering', False):
+            _bal = [lbl for _k, lbl in _fam_modes if 'ballistic' in str(_k)]
+            if _bal:
+                _vals = _bal
+                if self._main_guidance_var.get() not in _vals:
+                    self._main_guidance_var.set(_vals[0])
         try:
             if list(self._main_guidance_cb['values']) != _vals:
                 self._main_guidance_cb.configure(values=_vals)
@@ -10458,7 +10475,7 @@ class BoosterFlyoutApp(tk.Tk):
                 beta_kg_m2=0.0, shape="cone",
                 diameter_m=float(getattr(_last, 'diameter_m', 0.0) or 0.5),
                 length_m=float(getattr(_last, 'length_m', 0.0) or 2.0),
-                separation_mode='body', glider_enabled=True, glider_LD=0.0)
+                separation_mode='body', maneuvering=True, glider_enabled=True, glider_LD=0.0)
         return mm.ROParams(name="New RV", mass_kg=500.0, beta_kg_m2=10000.0,
                            shape="cone", diameter_m=0.5, length_m=2.0,
                            separation_mode=_sep)

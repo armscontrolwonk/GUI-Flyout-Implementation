@@ -695,7 +695,11 @@ read-only indicator of the booster flag. Any object can be flown on any
 booster; the reentry mode still defaults to ballistic and stays switchable.
 `test_input_split.py` holds this, and the wider four-inputs rule (hardware
 files carry no plan key, plan files carry no hardware key), over the shipped
-files and the serialisers.
+files and the serialisers. Where a plan value meets a hardware limit the plan
+is clamped on apply — commanded L/D ≤ `glider_LD`, commanded pull-up g ≤
+`pullup_g_limit` (0 = unlimited), and the plan's `glider_enabled` intent by
+the object's `maneuvering` capability — so a plan can fly a vehicle worse
+than its hardware allows, never better.
 
 - **Separating** (`separating_ro`): the object departs at burnout and reenters
   on its own geometry/β; the spent final stage tumbles away as debris (§14.3).
