@@ -1,8 +1,8 @@
 {
   "name": "No-dong",
-  "mass_initial": 20900.0,
+  "mass_initial": 19900.0,
   "mass_propellant": 16000.0,
-  "mass_final": 4900.0,
+  "mass_final": 3900.0,
   "diameter_m": 1.32,
   "length_m": 15.6,
   "burn_time_s": 70.0,
@@ -23,10 +23,7 @@
     0.2,
     0.2
   ],
-  "payload_kg": 1000.0,
-  "ro_separates": false,
   "bus_mass_kg": 0.0,
-  "num_ros": 1,
   "shroud_mass_kg": 0.0,
   "shroud_length_m": 0.0,
   "shroud_diameter_m": 0.0,

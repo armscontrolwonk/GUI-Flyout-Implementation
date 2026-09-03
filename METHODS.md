@@ -719,11 +719,13 @@ files and the serialisers.
   never added for a body (that was a range-halving double-count); default
   `payload_kg = 0` leaves existing files byte-identical. `test_body_payload.py`.
 
-The legacy `BoosterParams.ro_separates` flag is retained as a **build-time
-descriptor** — it records whether the stored stage masses embed the payload,
-seeding the ascent-drag geometry and throw-weight bookkeeping — and is not a
-separation input anywhere: the run path (separation debris, post-burnout mass)
-consults `body_reenters` alone, with or without a reentry object configured.
+Booster files are **stack-only**: no payload is stored, the reentry object
+owns its mass, and `compose_loadout` adds it at run time (`payload_kg` on the
+chain is the run's record of what is composed). The former `ro_separates`
+build flag is retired; a legacy file that baked a design payload into its
+stage masses (and, Scud-class, into the last stage's burnout mass) is
+normalised to stack-only when loaded, and composing the object that carries
+that mass reproduces the original masses exactly (`test_input_split.py`).
 Post-burnout drag uses the reentering vehicle's geometry
 and ballistic coefficient rather than the spent stage's. This matters for ICBMs
 and SLVs where the spent upper stage has very different drag characteristics

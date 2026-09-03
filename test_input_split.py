@@ -34,10 +34,12 @@ FLIGHT_PLAN_KEYS = set(mm._FLIGHT_PLAN_TOP_KEYS) | set(mm._FLIGHT_PLAN_STAGE_KEY
 REENTRY_PLAN_KEYS = set(mm._REENTRY_PLAN_KEYS)
 LINK_KEY = 'body_reenters'
 DERIVED = {'separation_mode'}
-META = {'name', 'booster', 'base_plan', 'source', 'notes', 'stages', 'stage2'}
+RUN_SCRATCH = set(mm._RUN_LOADOUT_KEYS) | {'ro_mass_kg', 'body_payload_kg', 'ro_separates', 'rv_separates'}
+META = {'name', 'booster', 'base_plan', 'source', 'notes', 'stages', 'stage2',
+        'reentry_object'}          # a flight plan names the object it flies
 
 BOOSTER_HARDWARE = ({f.name for f in dc.fields(BoosterParams)}
-                    - FLIGHT_PLAN_KEYS - META - {'ro'})
+                    - FLIGHT_PLAN_KEYS - META - RUN_SCRATCH - {'ro'})
 RO_HARDWARE = {f.name for f in dc.fields(ROParams)} - REENTRY_PLAN_KEYS - META - DERIVED
 
 BOOSTER_FILES = sorted(glob.glob('booster_library/*.booster.json') + glob.glob('*.booster.json'))
@@ -81,8 +83,8 @@ def test_no_key_is_both_hardware_and_plan():
 def test_booster_file_is_hardware_only(path):
     d = json.load(open(path))
     for i, st in enumerate(_stages(d)):
-        leaked = set(st) & (FLIGHT_PLAN_KEYS | DERIVED)
-        assert not leaked, f"{path} stage {i + 1} stores plan/derived keys {sorted(leaked)}"
+        leaked = set(st) & (FLIGHT_PLAN_KEYS | DERIVED | RUN_SCRATCH)
+        assert not leaked, f"{path} stage {i + 1} stores plan/derived/loadout keys {sorted(leaked)}"
 
 
 @pytest.mark.parametrize('path', RO_FILES)
@@ -209,3 +211,91 @@ def test_beta_S_is_hardware_and_pullup_g_is_clamped_to_the_limit():
     # and both survive the hardware-only serialiser
     d = ro_to_dict(ro, include_reentry_plan=False)
     assert d['pullup_g_limit'] == 8.0 and d['glider_beta_entry_kg_m2'] == 7.0
+
+
+# ── booster files are stack-only; the object owns its mass ──────────────────
+
+def _legacy(payload, baked):
+    """A pre-2026-09 booster dict: design payload inside every stage's launch
+    mass and, when 'baked' (ro_separates False, Scud class), inside the last
+    stage's burnout mass too."""
+    d = booster_to_dict(get_booster("No-dong"))          # a separating stack
+    node = d
+    while node is not None:
+        node['mass_initial'] += payload
+        last = node
+        node = node.get('stage2')
+    if baked:
+        last['mass_final'] += payload
+    d['payload_kg'] = payload
+    d['ro_separates'] = not baked
+    return d
+
+
+@pytest.mark.parametrize('baked', [False, True])
+def test_legacy_payload_is_normalised_on_load_and_reproduced_by_composition(baked):
+    clean = get_booster("No-dong")
+    p = booster_from_dict(_legacy(1000.0, baked))
+    # loaded chain is stack-only: same masses as the shipped (clean) file
+    assert p.payload_kg == 0.0
+    assert p.mass_initial == pytest.approx(clean.mass_initial)
+    assert p.mass_final == pytest.approx(clean.mass_final)
+    # composing the object that carries the mass reproduces the legacy launch mass
+    ro = ROParams(name="w", mass_kg=1000.0, beta_kg_m2=5000.0, shape="cone",
+                  diameter_m=1.32, length_m=1.0)
+    c = compose_loadout(p, ro, 1)
+    assert c.mass_initial == pytest.approx(clean.mass_initial + 1000.0)
+    assert c.payload_kg == 1000.0
+
+
+def test_hardware_only_booster_serialiser_omits_the_loadout_record():
+    p = compose_loadout(get_booster("No-dong"),                # separating stack
+                        ROParams(name="w", mass_kg=800.0, beta_kg_m2=5000.0,
+                                 shape="cone", diameter_m=0.84, length_m=1.0), 2)
+    assert p.payload_kg == 1600.0 and p.num_ros == 2
+    d = booster_to_dict(p, include_flight_plan=False)
+    assert not (set(d) & RUN_SCRATCH)
+    # the full (internal) form still round-trips the record
+    q = booster_from_dict(booster_to_dict(p))
+    assert q.num_ros == 2
+
+
+@pytest.mark.parametrize('path', FLIGHT_PLAN_FILES)
+def test_plan_named_reentry_object_resolves(path):
+    """A flight plan may name the object it flies; when it does, the object
+    must ship (every default run that used to fly a stored payload now flies
+    a real object)."""
+    name = json.load(open(path)).get('reentry_object', '')
+    if not name:
+        return
+    shipped = {json.load(open(f))['name'] for f in RO_FILES}
+    assert name in shipped, f"{path} names '{name}', which is not in ro_library/"
+
+
+def test_non_separating_shipped_boosters_carry_their_warhead_as_object_payload():
+    """Scud-B and Al Hussein do not separate: the booster is body_reenters and
+    the flight plan names a front-end object whose payload_kg is the warhead."""
+    for bname in ("Scud-B (R-17)", "Al Hussein"):
+        b = get_booster(bname)
+        assert b.body_reenters is True
+        oname = mm.load_flight_plan(bname)['reentry_object']
+        ro = next(ro_from_dict(json.load(open(f))) for f in RO_FILES
+                  if json.load(open(f))['name'] == oname)
+        assert ro.payload_kg > 0 and ro.beta_kg_m2 == 0.0     # warhead rides; beta derived
+        c = compose_loadout(b, ro, 1)
+        assert c.mass_initial == pytest.approx(b.mass_initial + ro.payload_kg)
+        assert c.mass_final == pytest.approx(b.mass_final + ro.payload_kg)
+
+
+def test_headless_get_booster_attaches_the_plan_named_object_and_flies_its_mass():
+    """A flight plan that names its object is honoured headless too: get_booster
+    attaches it, and integrate_trajectory composes it onto the stack-only
+    chain, so a 'bare' run carries the same front end the GUI default flies."""
+    from trajectory import integrate_trajectory
+    p = get_booster("No-dong")
+    assert p.ro is not None and p.ro.name == "No-dong warhead"
+    assert p.payload_kg == 0.0                       # stack-only until composed
+    r = integrate_trajectory(p, 39.12, 125.67, 90.0, max_time_s=1200.0)
+    assert r["range_km"] > 0
+    # a booster whose plan names no object stays bare
+    assert get_booster("Shahab-3").ro is None

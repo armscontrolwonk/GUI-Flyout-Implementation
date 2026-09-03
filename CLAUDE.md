@@ -47,7 +47,9 @@ improve this."
 - **Four inputs, kept apart.** A run is composed from two hardware files
   (booster, reentry object) and two non-hardware files (flight plan,
   reentry plan). Hardware files carry no plan key and plan files carry no
-  hardware key; nothing is stored twice. Timings are plan data even when
+  hardware key; nothing is stored twice. Booster files are stack-only: the
+  reentry object owns its mass, and a flight plan may name the object it
+  flies. Timings are plan data even when
   the thing that moves is hardware (grid fins are hardware, when they
   deploy is flight plan). The only link between a booster and a reentry
   object is the booster's `body_reenters` flag; neither the object nor the

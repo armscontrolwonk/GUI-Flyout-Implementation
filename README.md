@@ -9,9 +9,12 @@ bodies.
 It is modelled after Geoffrey Forden's open-source MATLAB tool
 (*Simulating the Operation of Ballistic Missiles*, Science & Global Security, 2007).
 The integrator reproduces Forden's Table 3 maximum-range figures for the classic
-SRBM/MRBM set (Scud-B, Al Hussein, No-dong, Taepodong-I); those builders remain in
-`booster_models.py`. The boosters shipped in the picker (see [Built-in
-boosters](#built-in-boosters)) focus on reentry / hypersonic-glide testbeds.
+SRBM/MRBM set (Scud-B, Al Hussein, No-dong, Taepodong-I). No vehicle is defined
+in code: every booster, reentry object and launch site the pickers offer is
+read from a file (`booster_library/`, `ro_library/`, `launch_sites.json`, plus
+the user's `~/Documents/Thrusty/` libraries). The boosters shipped (see
+[Built-in boosters](#built-in-boosters)) focus on reentry / hypersonic-glide
+testbeds.
 
 For the full technical reference — governing equations, algorithms, and primary
 citations for every model — see [`METHODS.md`](METHODS.md).
@@ -178,9 +181,15 @@ These are the **four inputs**, kept apart: two hardware files (booster, reentry
 object) and two plan files (flight plan, reentry plan). A hardware file stores
 no plan key and a plan file stores no hardware key; timings (fairing and
 strap-on drop, interstage jettison, core ignition delay, grid-fin deployment)
-are flight-plan data even though the thing that moves is hardware. The only
-link between a booster and a reentry object is the booster's `body_reenters`
-flag. `test_input_split.py` holds the rule over the shipped files and the
+are flight-plan data even though the thing that moves is hardware. Booster
+files are stack-only: the reentry object owns its mass, and a flight plan may
+name the object it flies (`reentry_object`) — plan data, not a hardware link.
+The sidebar picks it up when nothing else is selected, `get_booster` attaches
+it for headless runs, and `integrate_trajectory` composes an object onto a
+chain that was not composed already, so a run with an object always carries
+its mass. The only link
+between a booster and a reentry object is the booster's `body_reenters` flag.
+`test_input_split.py` holds the rule over the shipped files and the
 serialisers.
 
 ---
@@ -454,16 +463,16 @@ upper stages).  Key fields on the top-level node:
   `shroud_nose_length_m` — aerodynamics before jettison
 
 **Payload / reentry object (top-level)**
-- `payload_kg` — throw weight AS COMPOSED for the run = bus + N × object mass.
-  Stage masses are built stack-only; `compose_loadout(booster, ro, N)` adjusts
-  every stage's launch mass by the delta against the built payload at run time,
-  so a heavier object or more objects honestly cost boost range while one
-  object is modeled on the way back
-- `ro_separates` — a **deprecated** build-era record (stage masses entered
-  stack-only, `mass_final = dry`). Consumed only by `compose_loadout`'s
-  legacy-mass convention and legacy-file migration; every physics path derives
-  burnout mass from `mass_initial − mass_propellant`. It is **not** the
-  separation authority — that is `body_reenters` (below)
+- `payload_kg`, `num_ros`, `ro_mass_kg` — **run-time** loadout record written
+  by `compose_loadout(booster, ro, N)` (throw weight = bus + N × object mass),
+  never stored: booster files are **stack-only** and the reentry object owns
+  its mass. Every stage's launch mass is adjusted at run time, so a heavier
+  object or more objects honestly cost boost range while one object is
+  modeled on the way back. A legacy file that baked
+  a design payload into its stage masses (and, Scud-class, into the last
+  stage's burnout mass, the retired `ro_separates = false` convention) is
+  normalised to stack-only on load; composing the object that carries that
+  mass reproduces the original masses exactly
 - `body_reenters` — the **separation link**, and the only place a booster and
   a reentry object touch: `True` means the front end does not separate and the
   last stage is the reentering body. The run derives the object's

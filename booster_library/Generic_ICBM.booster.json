@@ -25,10 +25,7 @@
     0.18,
     0.14
   ],
-  "payload_kg": 0.0,
-  "ro_separates": false,
   "bus_mass_kg": 0.0,
-  "num_ros": 1,
   "shroud_mass_kg": 0.0,
   "shroud_length_m": 0.0,
   "shroud_diameter_m": 0.0,
@@ -101,10 +98,7 @@
       0.18,
       0.14
     ],
-    "payload_kg": 0.0,
-    "ro_separates": false,
     "bus_mass_kg": 0.0,
-    "num_ros": 1,
     "shroud_mass_kg": 0.0,
     "shroud_length_m": 0.0,
     "shroud_diameter_m": 0.0,

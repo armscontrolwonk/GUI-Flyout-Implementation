@@ -1,6 +1,6 @@
 {
   "name": "Taepodong-I",
-  "mass_initial": 25251.0,
+  "mass_initial": 24797.0,
   "mass_propellant": 16100.0,
   "mass_final": 3800.0,
   "diameter_m": 1.32,
@@ -23,10 +23,7 @@
     0.2,
     0.2
   ],
-  "payload_kg": 454.0,
-  "ro_separates": false,
   "bus_mass_kg": 0.0,
-  "num_ros": 1,
   "shroud_mass_kg": 0.0,
   "shroud_length_m": 0.0,
   "shroud_diameter_m": 0.0,
@@ -74,9 +71,9 @@
   "booster_cd": 0.2,
   "stage2": {
     "name": "Taepodong-I Stage 2",
-    "mass_initial": 5351.0,
+    "mass_initial": 4897.0,
     "mass_propellant": 3699.0,
-    "mass_final": 1652.0,
+    "mass_final": 1198.0,
     "diameter_m": 0.84,
     "length_m": 11.25,
     "burn_time_s": 75.0,
@@ -97,10 +94,7 @@
       0.2,
       0.2
     ],
-    "payload_kg": 0.0,
-    "ro_separates": false,
     "bus_mass_kg": 0.0,
-    "num_ros": 1,
     "shroud_mass_kg": 0.0,
     "shroud_length_m": 0.0,
     "shroud_diameter_m": 0.0,

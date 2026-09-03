@@ -93,7 +93,7 @@ from booster_models import (
     active_stage, active_stage_and_t, total_burn_time, tumbling_cylinder_beta,
     _eff_burn,
     booster_drag_vector, effective_ro, booster_separation_time,
-    run_separation_mode, bind_ro_separation,
+    run_separation_mode, bind_ro_separation, compose_loadout,
     booster_area,
     wing_geometry, wedge_planform_area,
     _wedge_coeffs, _half_cone_coeffs, NEWTON_K_SLENDER,
@@ -2041,6 +2041,15 @@ def integrate_trajectory(params: BoosterParams,
     # reentry object up front so every reader of ro.separation_mode below
     # agrees with the booster.  Copies only when a change is needed.
     params = bind_ro_separation(params)
+    # A chain flown with a reentry object carries that object's mass.  Booster
+    # files are stack-only, so a caller that set params.ro without composing
+    # (compose_loadout) would fly the boost without the front end and coast
+    # on the empty stage.  compose_loadout is idempotent through the run-time
+    # payload_kg record, so a chain the GUI already composed is untouched.
+    if (params.ro is not None
+            and float(getattr(params, 'payload_kg', 0.0) or 0.0) <= 0.0):
+        _n = max(1, int(getattr(params, 'num_ros', 1) or 1))
+        params = compose_loadout(params, params.ro, _n)
     # Apply session-level overrides non-destructively.  guidance and
     # burnout_angle_deg are flight parameters (like launch site) that the caller
     # may override independently of the stored booster definition.

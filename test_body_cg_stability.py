@@ -187,6 +187,7 @@ def test_fuelled_cg_is_aft_of_reentry_cg():
     assert x_fu > x_re + 0.5                       # propellant pulls the CG aft
     # a stack (separating RV) has no distinct re-entry CG — the flag is a no-op
     sep = get_booster("Scud-B (R-17)")
+    sep.body_reenters = False                    # a separating stack here
     from booster_models import ROParams as _RO
     sep.diameter_m = 1.1
     sep_ro = _RO(name="RV", mass_kg=500.0, beta_kg_m2=3000.0, shape="cone",

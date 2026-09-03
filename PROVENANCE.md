@@ -67,7 +67,28 @@ working rules in `CLAUDE.md`.
   project statement at the top of `CLAUDE.md` exists partly so that
   ordinary simulator work on named vehicles is understood for what it is.
 
-## 3. Where to look instead
+## 3. Reconstructed objects (2026-09-03 payload migration)
+
+When the booster library became stack-only, the payload masses that had
+lived inside booster files became reentry objects. Five of them matched no
+existing object and were created by reconstruction. Each file's `source`
+field says exactly what was derived and from what; none carries a documented
+geometry.
+
+| Object | Mass (kg) | From | Reentry drag |
+|---|---|---|---|
+| Scud-B warhead | 1000 (as `payload_kg`) | Scud-B (R-17) booster file | Non-separating: β derived from the airframe at run time (0 = derive) |
+| Al Hussein warhead | 191 (as `payload_kg`) | Al Hussein booster file | Non-separating: β derived from the airframe at run time |
+| No-dong warhead | 1000 | No-dong booster file | β = m/(Cd·A) with Cd = 0.200 at Mach 5 from the booster's own drag table and D = 1.32 m: 3,653.7 kg/m² |
+| Taepodong-I payload | 454 | Taepodong-I booster file | Same method, D = 0.84 m: 4,096.2 kg/m² |
+| Strypi VII R payload | 45.36 (100 lb) | Strypi VII R booster file | Same method, D = 0.33 m: 2,651.7 kg/m² |
+
+The derived β values reproduce what the simulator did before the migration,
+when a bare run flew the stored payload mass with the stage's drag table.
+They are reconstructions, flagged as such in each object's notes, to be
+replaced when a source for the payload's own geometry is found.
+
+## 4. Where to look instead
 
 - `git log` from 2026-08-21 for the history of any current value.
 - `METHODS.md` §16 and `data/REFERENCES.md` for the citation of record

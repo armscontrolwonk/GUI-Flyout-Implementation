@@ -181,6 +181,7 @@ mm.USER_FLIGHT_PLAN_DIRS = [str(_FLIGHT_PLAN_LIBRARY_PATH)]
 # separate reentry plan.  User plans live here and override the bundled ones.
 _REENTRY_PLAN_LIBRARY_PATH = _THRUSTY_ROOT / "reentry_plans"
 mm.USER_REENTRY_PLAN_DIRS = [str(_REENTRY_PLAN_LIBRARY_PATH)]
+mm.USER_RO_DIRS = [str(_RO_LIBRARY_PATH)]      # plan-named objects resolve here too
 # Canonical RVs that ship with the code, next to this file (e.g. SWERVE, AHW).
 # These are always available; the writable user library above overrides them.
 _BUNDLED_RO_LIBRARY_PATH = Path(__file__).resolve().parent / "ro_library"
@@ -2414,7 +2415,6 @@ class BoosterDialog(tk.Toplevel):
         payload  = 0.0
         num_ros  = 1
         ro_mass  = 0.0
-        ro_separates = True   # build-era record: stack-only masses (mass_final = dry)
 
         # Front-end ascent shape now follows the run-level object (or the
         # fairing while attached) via _boost_front_geometry; the booster
@@ -2566,7 +2566,6 @@ class BoosterDialog(tk.Toplevel):
         node.bus_mass_kg            = bus_mass
         node.num_ros                = num_ros
         node.ro_mass_kg             = ro_mass
-        node.ro_separates           = ro_separates
         node.body_reenters          = bool(self._body_reenters_var.get())
         node.nose_shape             = nose_shape
         node.nose_length_m          = nose_length_m
@@ -5953,6 +5952,16 @@ class FlightPlanDialog(tk.Toplevel):
                                              padx=(6, 0), pady=3)
         r += 1
 
+        # ── Reentry object this plan flies (plan data, not a hardware link) ─
+        ttk.Label(frm, text="Reentry object:").grid(row=r, column=0, sticky=tk.W, pady=3)
+        _cur_ro = str(plan.get('reentry_object', '') or '')
+        self._ro_var = tk.StringVar(
+            value=_cur_ro if _cur_ro in RO_DB else "(none — sidebar choice)")
+        ttk.Combobox(frm, textvariable=self._ro_var,
+                     values=["(none — sidebar choice)"] + sorted(RO_DB.keys()),
+                     state="readonly", width=30).grid(row=r, column=1, sticky=tk.W, pady=3)
+        r += 1
+
         # ── Launch elevation (always shown) ──────────────────────────────
         ttk.Label(frm, text="Launch elev. (°):").grid(row=r, column=0, sticky=tk.W, pady=3)
         self._launch_el_var = tk.StringVar(value=f"{float(plan.get('launch_elevation_deg', 90.0)):g}")
@@ -6216,6 +6225,8 @@ class FlightPlanDialog(tk.Toplevel):
         plan['guidance'] = ("true_gravity_turn" if _mode == "Gravity turn" else
                             "orbital_insertion" if _mode == "Orbital insertion" else
                             "pitch_program")
+        _rv = self._ro_var.get()
+        plan['reentry_object'] = _rv if _rv in RO_DB else ''
         le = self._f(self._launch_el_var)
         if le is not None:
             plan['launch_elevation_deg'] = le
@@ -9598,6 +9609,14 @@ class BoosterFlyoutApp(tk.Tk):
                 and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL):
             self._ro_main_var.set(_p_ero.name)
             self._ro_del_btn.config(state=tk.NORMAL)
+        elif (hasattr(self, '_ro_main_cb')
+                and self._ro_main_var.get() == self._RO_DEFAULT_SENTINEL
+                and self._plan_reentry_object() in RO_DB):
+            # The flight plan names the object this plan flies (plan data:
+            # what is loaded, not a hardware link).  Booster files carry no
+            # payload, so without this a default run would fly bare.
+            self._ro_main_var.set(self._plan_reentry_object())
+            self._ro_del_btn.config(state=tk.NORMAL)
         # Refresh the reentry-plan dropdown for the now-current object, then take
         # the variant-applied object as the single source of truth for the
         # glider panel, the run, and the write-through (mirror of get_booster
@@ -10396,6 +10415,15 @@ class BoosterFlyoutApp(tk.Tk):
         # Loadout tally + composed launch mass follow the selected object.
         self._update_params_display()
 
+    def _plan_reentry_object(self):
+        """The reentry object named by the current booster's active flight
+        plan ('reentry_object' key: what this plan flies), or ''."""
+        try:
+            return str(self._raw_active_plan(self._booster_var.get())
+                       .get('reentry_object', '') or '')
+        except Exception:
+            return ''
+
     def _current_booster(self):
         """The current sidebar booster (raw, un-composed), or None — passed to
         the RO editor so its inline body-mode L/D preview can compose the live
@@ -10665,6 +10693,10 @@ class BoosterFlyoutApp(tk.Tk):
             st['stage_yaw_stop_s'] = None
             st['stage_yaw_final_az_deg'] = None
 
+        # The object this plan flies (plan data; see _plan_reentry_object).
+        _sel = self._ro_main_var.get() if hasattr(self, '_ro_main_var') else ""
+        if _sel in RO_DB:
+            base['reentry_object'] = _sel
         try:
             save_flight_plan(booster_name, base, _FLIGHT_PLAN_LIBRARY_PATH,
                              plan=self._active_plan_name())

@@ -15,7 +15,7 @@ idempotency (composing twice adds the payload once).
 
 import pytest
 
-from booster_models import (get_booster, load_booster_library, ROParams,
+from booster_models import (get_booster, load_booster_library, ROParams, BoosterParams,
                             effective_ro,
                             compose_loadout, effective_ro, ro_to_dict,
                             ro_from_dict, booster_to_dict, booster_from_dict)
@@ -99,6 +99,7 @@ def test_separating_rv_ignores_payload_kg():
     """payload_kg is a body concept — a separating RV still composes on its
     mass_kg, unaffected by a stray payload_kg."""
     p = get_booster("Scud-B (R-17)")
+    p.body_reenters = False              # a separating stack for this test
     ro = ROParams(name="RV", mass_kg=500.0, beta_kg_m2=8000.0, shape="cone",
                   diameter_m=0.6, length_m=1.8, separation_mode="separating_ro",
                   payload_kg=999.0)
@@ -113,10 +114,16 @@ def test_separating_rv_ignores_payload_kg():
 # ── booster body_reenters flag (the non-separating master switch) ───────────
 
 def test_body_reenters_defaults_false_and_round_trips():
-    """The booster's non-separating flag defaults off (existing files unchanged)
-    and survives a to_dict/from_dict round-trip."""
-    assert get_booster("Scud-B (R-17)").body_reenters is False
-    p = get_booster("Scud-B (R-17)")
+    """The booster's non-separating flag defaults off on the dataclass and on
+    a separating shipped booster, and survives a to_dict/from_dict round-trip.
+    (Scud-B ships body_reenters=True since the payload migration: the R-17
+    does not separate its warhead.)"""
+    assert BoosterParams(name="x", mass_initial=2.0, mass_propellant=1.0,
+                         mass_final=1.0, diameter_m=1.0, length_m=1.0,
+                         thrust_N=1.0, burn_time_s=1.0, isp_s=200.0).body_reenters is False
+    assert get_booster("No-dong").body_reenters is False
+    assert get_booster("Scud-B (R-17)").body_reenters is True
+    p = get_booster("No-dong")
     p.body_reenters = True
     assert booster_from_dict(booster_to_dict(p)).body_reenters is True
 
@@ -129,6 +136,7 @@ def test_body_reenters_is_the_separation_switch():
     built as 'separating'; a booster NOT so marked separates even when the
     object was built as 'body'."""
     p0 = get_booster("Scud-B (R-17)")
+    p0.body_reenters = False
     p0.diameter_m = 1.1
     p0.length_m = 6.7
     p1 = get_booster("Scud-B (R-17)")

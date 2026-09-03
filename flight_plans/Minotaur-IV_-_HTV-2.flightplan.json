@@ -39,5 +39,6 @@
       "stage_yaw_final_az_deg": null,
       "grid_fin_deploy_schedule": []
     }
-  ]
+  ],
+  "reentry_object": "HTV-2"
 }

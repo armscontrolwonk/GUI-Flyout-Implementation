@@ -108,6 +108,10 @@ def _fly(mode, cutoff, aero="polar", zeta=None, boost="Minotaur-IV + HTV-2"):
     chgb.glider_terminal_alt_km = 30.0
     p = get_booster(boost)
     ro = copy.deepcopy(chgb)
+    # These fixtures were tuned when the Minotaur file carried a 1,000 kg
+    # payload baked into its stage masses; booster files are stack-only now
+    # and the object's mass is composed on, so pin the same boosted mass.
+    ro.mass_kg = 1000.0
     ro.glider_guidance = mode
     ro.glider_aero_model = aero
     if zeta is not None:

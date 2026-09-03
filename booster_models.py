@@ -80,11 +80,12 @@ class BoosterParams:
     coast_time_s: float = 0.0
 
     # Payload (kg) — total front-end mass carried to burnout (bus + all RVs),
-    # i.e. the throw weight as CURRENTLY COMPOSED.  Stored on the top-level
-    # stage only.  For legacy files this is the design payload baked into the
-    # stage masses at build time; compose_loadout() re-derives it at run time
-    # from the selected reentry object (bus + N × object mass) and adjusts the
-    # stage launch masses by the delta.
+    # i.e. the throw weight as CURRENTLY COMPOSED.  A RUN-TIME record on the
+    # top-level stage only, never stored: booster files are stack-only, the
+    # reentry object owns its mass, and compose_loadout() sets this from the
+    # selected object (bus + N × object mass), adjusting the stage launch
+    # masses by the delta.  A legacy file that baked a design payload into
+    # its stage masses is normalised to stack-only on load (booster_from_dict).
     payload_kg: float = 0.0
 
     # Payload decomposition (throw-weight): bus (post-boost vehicle) + N reentry
@@ -104,14 +105,6 @@ class BoosterParams:
     # payload — reusing that made a body subtract the booster's baked warhead.
     # Runtime bookkeeping only; not serialised (a loaded booster starts at 0).
     body_payload_kg: float = 0.0
-
-    # DEPRECATED build-era record: True means the stage masses were entered
-    # stack-only (payload kept separate; mass_final = dry), False means the
-    # builder baked the payload into the last stage's masses (Scud-class
-    # legacy files).  It is NOT the separation event — that is body_reenters
-    # below.  Consumed only by compose_loadout's legacy-mass convention and by
-    # legacy-file migration; no physics path reads it as a separation input.
-    ro_separates:  bool  = False
 
     # Non-separating vehicle: True marks this booster as one whose front end
     # does NOT separate — the last stage IS the reentry body (Hwasong-11 /
@@ -986,13 +979,13 @@ def compose_loadout(params: 'BoosterParams', ro=None,
     ONE object is modeled on the way back (the PBV is not maneuvering, so a
     single object's arc represents the pattern).
 
-    The chain was built (or loaded from file) carrying ``params.payload_kg``:
-    zero for stack-only builds, or a baked-in design payload for legacy
-    files.  Every stage's launch mass is adjusted by the DELTA between the
-    new loadout (bus_mass_kg + N × ro.mass_kg) and that built payload, so
-    both file generations compose correctly, a chain composed twice is
-    idempotent, and a legacy booster flown with the object it was built
-    around at N = 1 is numerically unchanged.
+    Chains are stack-only (booster files carry no payload; a legacy file
+    that did is normalised on load).  ``params.payload_kg`` is the run-time
+    record of what is already composed onto the chain, so every stage's
+    launch mass is adjusted by the DELTA between the new loadout
+    (bus_mass_kg + N × ro.mass_kg) and that record: a chain composed twice
+    is idempotent, and re-composing with a different object replaces the
+    previous loadout rather than stacking on it.
 
     A body-reentering booster (``params.body_reenters``, the single source of
     the separation link) forces N = 1 — the object IS the last stage; a
@@ -1048,12 +1041,6 @@ def compose_loadout(params: 'BoosterParams', ro=None,
         _node.mass_initial += delta
         _last = _node
         _node = _node.stage2
-    # Legacy body-baked builds (ro_separates False) also baked the payload
-    # into the last stage's mass_final; keep that convention consistent.
-    # Stack-only builds (mass_final = dry) are left alone.  Physics paths
-    # derive burnout mass from mass_initial − mass_propellant either way.
-    if not p.ro_separates and p.payload_kg > 0:
-        _last.mass_final += delta
     p.payload_kg = loadout
     p.ro_mass_kg = ro_mass
     p.num_ros    = n
@@ -2062,8 +2049,43 @@ def _cd_nose_shape(nose_shape: str, ld: float, mach: float,
 BOOSTER_DB: dict = {}
 
 
+# Extra dirs (highest precedence last) for user reentry objects; the GUI sets
+# this to its writable library, mirroring USER_FLIGHT_PLAN_DIRS.
+USER_RO_DIRS: list = []
+
+
+def resolve_reentry_object(name: str, extra_dirs=()):
+    """The shipped (or user) reentry object called ``name`` as hardware-only
+    ROParams with its default reentry plan applied, or None.  Files are
+    matched by their ``name`` field, as the GUI library loader does; a user
+    file of the same name overrides the bundled one."""
+    import json as _js
+    from pathlib import Path as _P
+    found = None
+    _bundled = _P(__file__).resolve().parent / "ro_library"
+    for d in [_bundled, *[_P(x) for x in extra_dirs]]:
+        if not d.exists():
+            continue
+        for fp in sorted(d.glob("*.ro.json")):
+            try:
+                dd = _js.loads(fp.read_text())
+            except Exception:
+                continue
+            if str(dd.get('name', '')) == name:
+                found = dd
+    if found is None:
+        return None
+    ro = ro_from_dict(found)
+    rp = load_reentry_plan(name, extra_dirs=USER_REENTRY_PLAN_DIRS)
+    return apply_reentry_plan(ro, rp) if rp is not None else ro
+
+
 def get_booster(name: str, plan: str = None) -> BoosterParams:
-    """Return the named booster with its flight plan applied.
+    """Return the named booster with its flight plan applied, and with the
+    reentry object the plan names (``reentry_object``) attached when the
+    booster carries none — so a headless run flies what the GUI's default run
+    flies.  Booster files are stack-only; the object's mass is composed onto
+    the chain by integrate_trajectory / compose_loadout.
 
     A booster can fly many flight plans: the booster-named file is the
     "(default)" plan; named variants (see list_flight_plans) reference the
@@ -2081,10 +2103,20 @@ def get_booster(name: str, plan: str = None) -> BoosterParams:
         p = apply_flight_plan(p, fp)
     if plan is None:
         plan = ACTIVE_FLIGHT_PLANS.get(name)
+    vp = None
     if plan and plan != DEFAULT_PLAN_LABEL:
         vp = load_flight_plan(name, extra_dirs=USER_FLIGHT_PLAN_DIRS, plan=plan)
         if vp is not None:
             p = apply_flight_plan(p, vp)
+    if p.ro is None:
+        _fp_all = fp or {}
+        if plan and plan != DEFAULT_PLAN_LABEL and vp:
+            _fp_all = {**_fp_all, **vp}
+        _oname = str(_fp_all.get('reentry_object', '') or '')
+        if _oname:
+            _ro = resolve_reentry_object(_oname, extra_dirs=USER_RO_DIRS)
+            if _ro is not None:
+                p.ro = _ro
     return p
 
 
@@ -2153,7 +2185,6 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         'mach_table':            list(p.mach_table),
         'cd_table':              list(p.cd_table),
         'payload_kg':            p.payload_kg,
-        'ro_separates':          p.ro_separates,
         'body_reenters':         p.body_reenters,
         'bus_mass_kg':           p.bus_mass_kg,
         'num_ros':               p.num_ros,
@@ -2237,7 +2268,11 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
     if p.stage2 is not None:
         d['stage2'] = booster_to_dict(p.stage2, include_flight_plan)
     if not include_flight_plan:
-        for _k in (*_FLIGHT_PLAN_TOP_KEYS, *_FLIGHT_PLAN_STAGE_KEYS):
+        # Hardware-only: no plan keys, and no run-time loadout record either
+        # (the composed payload and object count belong to the run, not the
+        # booster file — the reentry object carries its own mass).
+        for _k in (*_FLIGHT_PLAN_TOP_KEYS, *_FLIGHT_PLAN_STAGE_KEYS,
+                   *_RUN_LOADOUT_KEYS):
             d.pop(_k, None)
     return d
 
@@ -2266,8 +2301,7 @@ def booster_from_dict(d: dict) -> BoosterParams:
         mach_table=list(d.get('mach_table', _FORDEN_MACH)),
         cd_table=list(d.get('cd_table', _FORDEN_CD)),
         stage2=stage2,
-        payload_kg=float(d.get('payload_kg', 0.0)),
-        ro_separates=bool(d.get('ro_separates', d.get('rv_separates', False))),
+        payload_kg=0.0,                 # stack-only; legacy payload handled below
         body_reenters=bool(d.get('body_reenters', False)),
         bus_mass_kg=float(d.get('bus_mass_kg', 0.0)),
         num_ros=int(d.get('num_ros', d.get('num_rvs', 1))),
@@ -2351,6 +2385,22 @@ def booster_from_dict(d: dict) -> BoosterParams:
     # stay on _p for effective_ro() to find when _p.ro is None (old format).
     # A null/absent 'ro' means the booster embeds no object — the reentry
     # object is composed at run time from the sidebar loadout.
+    # Legacy files stored a design payload in payload_kg AND inside every
+    # stage's launch mass (and, for 'body-baked' Scud-class builds flagged
+    # ro_separates=False, inside the last stage's burnout mass too).  The
+    # reentry object now carries that mass, so normalise the chain to
+    # stack-only here; compose_loadout adds the object's mass back at run
+    # time, reproducing the original masses exactly for the same payload.
+    _legacy_payload = float(d.get('payload_kg', 0.0) or 0.0)
+    if _legacy_payload > 0:
+        _baked = not bool(d.get('ro_separates', d.get('rv_separates', False)))
+        _node, _last = _p, _p
+        while _node is not None:
+            _node.mass_initial -= _legacy_payload
+            _last = _node
+            _node = _node.stage2
+        if _baked and _last.mass_final > _legacy_payload:
+            _last.mass_final -= _legacy_payload
     _ro_data = d.get('ro') or d.get('rv')      # 'rv' = legacy embedded-object key
     if _ro_data is not None:
         _p.ro = ro_from_dict(_ro_data)
@@ -2375,9 +2425,6 @@ def booster_from_dict(d: dict) -> BoosterParams:
                 glider_pullup_g_max=float(d.get('glider_pullup_g_max', 10.0)),
                 glider_terminal_dive=bool(d.get('glider_terminal_dive', False)),
                 glider_terminal_alt_km=float(d.get('glider_terminal_alt_km', 0.0)),
-                separation_mode=('separating_ro'
-                                 if bool(d.get('ro_separates', d.get('rv_separates', False)))
-                                 else 'body'),
             )
     # Backwards compatibility: old saved boosters with guidance="loft" are
     # auto-converted to gravity_turn with equivalent per-stage pitch overrides.
@@ -3873,6 +3920,9 @@ _FLIGHT_PLAN_TOP_KEYS = ('guidance', 'burnout_angle_deg', 'loft_angle_rate_deg_s
                       # relative to the strap-ons is a flight decision.
                       'shroud_jettison_alt_km', 'booster_jettison_s',
                       'booster_core_delay_s')
+# Run-time loadout record written by compose_loadout; omitted from the
+# hardware-only booster file (the reentry object owns its mass).
+_RUN_LOADOUT_KEYS = ('payload_kg', 'num_ros')
 _FLIGHT_PLAN_STAGE_KEYS = ('stage_turn_start_s', 'stage_turn_stop_s',
                         'stage_burnout_angle_deg', 'coast_time_s', 'stage_cutoff_s',
                         'stage_yaw_start_s', 'stage_yaw_stop_s', 'stage_yaw_final_az_deg',
