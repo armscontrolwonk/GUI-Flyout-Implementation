@@ -723,6 +723,14 @@ than its hardware allows, never better.
   never added for a body (that was a range-halving double-count); default
   `payload_kg = 0` leaves existing files byte-identical. `test_body_payload.py`.
 
+Old files are converted before they are read: `upgrade_booster_dict` and
+`upgrade_ro_dict` (booster_models.py) hold every compatibility rule Thrusty
+has ever needed — Forden's `loft` guidance, the `rv_*` field family, nose
+length as a diameter ratio, reentry hardware stored on the booster, retired
+glide-law and separation tokens — and the constructors read only the current
+schema. `test_legacy_upgrade.py` pins each conversion against a golden record
+of what it used to produce.
+
 Booster files are **stack-only**: no payload is stored, the reentry object
 owns its mass, and `compose_loadout` adds it at run time (`payload_kg` on the
 chain is the run's record of what is composed). The former `ro_separates`

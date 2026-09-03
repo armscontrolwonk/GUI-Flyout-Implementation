@@ -55,7 +55,9 @@ improve this."
   object is the booster's `body_reenters` flag; neither the object nor the
   reentry plan stores a separation choice. `test_input_split.py` enforces
   this over the shipped files and the serialisers; a new field goes on the
-  side the rule says, and the test is updated with it.
+  side the rule says, and the test is updated with it. Compatibility with
+  older files lives only in `upgrade_booster_dict` / `upgrade_ro_dict`; the
+  `*_from_dict` constructors read the current schema and nothing else.
 
 ## Out of scope
 
