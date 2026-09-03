@@ -25,9 +25,10 @@ nonlinear-lift finding is real but a weak L/D lever here (crossflow OFF ->
 
 The low free-flight L/D (~1) of a fin-stabilized body is a TRIM effect, not
 a lower ceiling: it is the L/D at the body's (low) trim alpha, set by cg,
-which `trim_gate` already evaluates (unstable -> tumbles/ballistic;
-control-limited -> L/D at trim alpha; only stable+control-rich reaches best
-glide).  So the real over-range levers are (a) cg / static margin, and
+which `trim_gate` evaluates (unstable -> tumbles/ballistic; no commanded
+control surfaces -> trims at zero incidence -> ballistic NOSE-FIRST, keeping
+its beta; control-limited -> best L/D over the reachable alpha band; only
+stable + control-rich reaches best glide).  So the real over-range levers are (a) cg / static margin, and
 (b) flying a drag-driven body BALLISTIC vs as an active glider — the latter
 now enforced by the ballistic=no-lift guard (trajectory.py, committed
 2026-08-28).

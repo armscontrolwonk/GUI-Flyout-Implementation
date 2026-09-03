@@ -679,16 +679,30 @@ best-glide AoA closely), `glider_ld` staying slightly conservative.  The deck,
 reference output, and comparison script are in `validation/datcom/`.
 
 **Trim/control gate** (`trim_gate.py`) — a derived L/D is only *achievable* if
-the airframe can trim and hold that AoA.  From the linearised pitching moment
-about the CG (`SM` from the static margin above, `C_Nδ = control_eff·C_Nα,fin`):
+the airframe can trim and hold that AoA.  The pitching moment about the CG is
+summed **term by term**, because the build-up's normal force is nonlinear in α
+and its three terms act at three different stations:
 
 ```
-α_trim,max = (C_Nδ/C_Nα,total) · (x_fin − x_CG)/(x_CP − x_CG) · δ_max
+C_m(α,δ)·d = −[ C_N,body(α)·(x_body−x_CG)          slender-body potential
+              + C_N,cross(α)·(x_planform−x_CG)     crossflow, at the planform centroid
+              + C_N,fin(α)·(x_fin−x_CG)            fin + N-K-P carryover
+              + control_eff·C_Nα,fin·δ·(x_fin−x_CG) ]   commanded control
+α_trim(δ) = root of C_m = 0, bisected on the build-up's own 1–59° sweep
 ```
 
-Outcomes: `SM ≤ 0` → unstable → tumbles → ballistic (no glide); `SM > 0` with
+Outcomes: `SM ≤ 0` → unstable → tumbles → ballistic (drag re-derived as a
+tumbling cylinder); **`δ_max = 0` (fixed surfaces) → trims at zero incidence →
+ballistic nose-first** (no lift, but the aeroshell β is kept — *not* tumbling);
 `α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
-control-limited → the (lower) L/D at `α_trim,max`.
+control-limited → the best L/D over the reachable band `(0, α_trim,max]`.
+
+**Control authority is read from the vehicle,** not assumed: the reentry
+object's `glider_control_surfaces` descriptor sets the usable deflection
+(`none` → 0°, `small` → 5°, `substantial` → 15°, `unknown` → 10° reported as an
+assumption), on the Kumar & Stollery separation band `damping_estimate.py`
+already uses.  A previous 25° all-moving-control default made the gate unable to
+limit a fin-stabilised body at *any* CG; see METHODS.md §8.10.
 
 **Reentry attitude — trimmed vs. tumbling.** The reentry plan carries
 `reentry_attitude ∈ {trim, tumbling}`. *Trim* (default) is the stable controlled

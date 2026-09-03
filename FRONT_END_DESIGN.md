@@ -350,8 +350,14 @@ Follow-ups — **all done (2026-08-21):**
   body — both centre on the tube — so the real lever is CG *placement*
   (warhead-forward → stable). `test_body_cg_stability.py`.
 - **Report surfacing** — the Booster Parameters tab previews the derived β (ref
-  Mach + M2–12 range + screening caveat) and the trim-gated L/D (with static
-  margin, or the tumbling verdict) whenever they are left at 0 = derive.
+  Mach + M2–12 range + screening caveat) and the trim-gated L/D whenever they
+  are left at 0 = derive.  The L/D preview names the static margin, the usable
+  control deflection, and whether that deflection was ASSUMED (the `unknown`
+  tier), and distinguishes three no-glide outcomes: tumbling (unstable),
+  ballistic nose-first (stable, no commanded control surfaces), and no trimmed
+  attitude at full deflection.  The β preview shows the tumbling-cylinder β only
+  when the body actually tumbles — a stable body that makes no lift still flies
+  nose-first and keeps its nose-first β.
 - **Estimate body L/D button** — the whole-body build-up (`_estimate_body_LD`)
   is wired to a sidebar "Estimate body L/D…" button and composes the current
   object so it matches the run.

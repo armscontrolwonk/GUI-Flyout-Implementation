@@ -140,10 +140,13 @@ The doctrine now:
 * **Static-margin gate** for non-separating trim mode: reuse the §8.9
   fin/body static-margin machinery (Barrowman/DATCOM build-up, already used
   for boost-phase stability).  SM ≤ 0 → warn and default the plan's attitude
-  to `tumbling`; SM > 0 but `α_trim,max < α_LDmax` → control-limited L/D (the
-  curve value at `α_trim,max`), per the scheme already sketched in METHODS
-  §12.  The METHODS text describes this gate; implementation must confirm how
-  much is wired and finish it.
+  to `tumbling`; SM > 0 but `α_trim,max < α_LDmax` → control-limited L/D.
+  **Implemented, and since revised** (see METHODS §8.10): α_trim is the root of
+  a nonlinear term-by-term moment balance rather than a linearised relation, the
+  control-limited L/D is the best value over the reachable band `(0, α_trim,max]`
+  rather than the endpoint value, and a body whose `glider_control_surfaces` is
+  `none` trims at zero incidence and does not glide at all — while staying
+  nose-first, which is a *different* outcome from tumbling and keeps its β.
 
 * **Auto-derived L/D: non-separating only.**  Already wired at integration
   setup (`trajectory.py` ~1531): body mode + `glider_LD ≤ 0` sentinel →
