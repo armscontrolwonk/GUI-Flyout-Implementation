@@ -1579,7 +1579,8 @@ and cell pitch `p` (centre-to-centre). See `docs/grid_fin_solidity_diagram.png`
 for a labelled frontal view of `t`, `p`, and the open window `(p − t)`.
 
 This blockage parameterisation is independently corroborated by **Dikbaş 2015**
-(METU M.S. thesis, *Design of a Grid Fin… for Transonic Flight*, in `data/`),
+(METU M.S. thesis, *Design of a Grid Fin… for Transonic Flight*; held in the
+Drive library, not the repo — `data/` holds no PDFs),
 whose grid-fin design driver is the **web-to-cell ratio `t/w`** — i.e. exactly
 `σ/2` for thin webs. His transonic design study (D = 400 mm, c = 0.1 D, fixed
 1 mm web, cell width swept) spans `t/w = 0.0025–0.030`, i.e. **σ ≈ 0.005–0.06 —
@@ -1665,7 +1666,8 @@ approach rather than changing it. Two ways to supply σ:
 
   *Origin source.* The foundational monograph — **S. M. Belotserkovsky (ed.),
   "Решетчатые крылья" (Reshetchatye Krylya / Lattice Wings), Mashinostroenie,
-  Moscow, 1985** (the original of the 1987 FTD translation) — is in `data/`. It
+  Moscow, 1985** (the original of the 1987 FTD translation) — is held in the
+  Drive library, not the repo (`data/` holds no PDFs; see `data/REFERENCES.md`). It
   is a theory/structures/materials work (vortex-lattice aerodynamics, structural
   mechanics, manufacturing), **not** a catalogue of fielded-missile fin
   dimensions, so it yields no new σ data point. Worth recording, though: its
@@ -2100,8 +2102,12 @@ airframe and its L/D is an emergent geometric property (not a designed input,
 as for a separating RV). Two modules handle this.
 
 **Whole-missile L/D (`glider_ld.py`)** — the semi-empirical body+fin build-up at
-angle of attack (the theoretical core of Missile DATCOM), assembled from primary
-sources in `data/`: body normal force from **Jorgensen (NASA TR R-474)** Eq 2.12
+angle of attack (the theoretical core of Missile DATCOM), assembled from the
+primary sources cited here. (Those documents are **not in the repo**: `data/`
+holds no PDFs — papers live in Drive per `data/REFERENCES.md`, which does not
+list these either. The citations are the record, not a file you can open; the
+one cross-check with committed primary material is Digital DATCOM, in
+`validation/datcom/`.) Body normal force from **Jorgensen (NASA TR R-474)** Eq 2.12
 — slender-body potential + **Allen-Perkins (NACA 1048)** viscous crossflow;
 wing-body interference from **Pitts-Nielsen-Kaattari (NACA 1307)**, whose
 slender-body factors satisfy the identity `K_W(B)+K_B(W) = (1+r/s)²`; combined
@@ -4335,7 +4341,8 @@ augmentation is the load-bearing output, not the exact instant.  This is why
 the gate feeds a *screening* flux multiplier and never a hard verdict.
 
 **The sharpest counter-example is SWERVE — the vehicle class Thrusty models.**
-Iliff & Shafer (NASA Dryden, AIAA 93-0311, read from primary, PDF in `data/`)
+Iliff & Shafer (NASA Dryden, AIAA 93-0311, read from primary; PDF in the Drive
+library, not the repo)
 report the third SWERVE flight — a 5.25° ablating slender cone, i.e. almost
 exactly a Thrusty reentry object — and find the boundary layer was
 **turbulent at Mach 12 and laminar at Mach 8** (their words: *"Surprisingly,
@@ -4405,7 +4412,8 @@ that every colorization span lands exactly on its cell text.
 Above roughly 9 km/s the shock layer itself becomes an important radiator, and
 a convective-only screen understates the environment.  Thrusty computes the
 stagnation-point radiative flux with the **Tauber & Sutton 1991** Earth/air
-correlation (*JSR* 28(1):40–42, read from primary, PDF in `data/`):
+correlation (*JSR* 28(1):40–42, read from primary; PDF in the Drive library,
+not the repo):
 
 > q̇_r = C · R_n^a · ρ^b · f_E(V)  [W/cm²],  C = 4.736×10⁴, b = 1.22,
 > a = 1.072×10⁶ · V^−1.88 · ρ^−0.325 (capped: a ≤ 0.6 for 1 ≤ R_n ≤ 2 m,

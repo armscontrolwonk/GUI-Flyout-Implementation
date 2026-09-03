@@ -602,7 +602,8 @@ jettison with their stage.  This affects range for finned atmospheric boosters
 - **Grid (lattice) fins** (`_cd_gridfins`): a box-frame lattice is not a planar
   airfoil — it has a transonic-choke drag bump and a roughly flat supersonic
   level.  The model is calibrated to Washington & Miller (AIAA 93-0035) and
-  corroborated against eight further grid-fin papers (all in `data/`).  Inputs
+  corroborated against eight further grid-fin papers (cited only — `data/` holds
+  no PDFs; papers live in Drive per `data/REFERENCES.md`).  Inputs
   are kept observable: count, frame width/height, chord, **solidity σ = 1 −
   ((p−t)/p)²** (the blocked frontal fraction, estimable from imagery, or via a
   **"Calculate σ…"** button that derives it from the web thickness `t` and cell
@@ -622,8 +623,9 @@ x_CP = Σ_i (C_Nα,i · x_i) / Σ_i C_Nα,i
 SM   = (x_CP − x_CG) / D          [calibers;  ~0.5–2 is "appropriate"]
 ```
 
-The fin normal-force slope is **Barrowman 1967 thesis Eq 3-12** (`_cl_alpha_fins`;
-the thesis is in `data/`):
+The fin normal-force slope is **Barrowman 1967 thesis Eq 3-12**
+(`_cl_alpha_fins`; the thesis is cited only — it is not in `data/`, which holds
+no PDFs):
 
 ```
 AR = (2s)²/A_f,   β = √|M²−1|,   tan Γ_c = tan Λ_LE + (c_tip−c_root)/(2s)
@@ -641,8 +643,9 @@ A **separating** reentry object carries its own designed `glider_LD`.  But when 
 object does **not** separate (Hwasong-11 / Pershing II MaRV class), the gliding body
 *is* the whole airframe, so its L/D is an emergent geometric property, not an
 input. `glider_ld.py` derives it from the semi-empirical body+fin force build-up
-at angle of attack — the analytic core of Missile DATCOM — assembled from primary
-sources in `data/`:
+at angle of attack — the analytic core of Missile DATCOM — assembled from the
+primary sources cited below (which are **not in the repo**: `data/` holds no
+PDFs; papers live in Drive per `data/REFERENCES.md`):
 
 - **body normal force**: slender-body potential lift + viscous crossflow
   (**Allen-Perkins**, NACA Rep. 1048 / RM A50L07; **Jorgensen**, NASA TN D-7228
