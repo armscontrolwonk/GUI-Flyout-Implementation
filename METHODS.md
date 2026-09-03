@@ -2148,19 +2148,66 @@ fuller body-lift method. The input deck, reference output, and comparison script
 are in `validation/datcom/`.
 
 **Trim/control gate (`trim_gate.py`)** — a derived L/D is only *achievable* if
-the airframe can trim and hold that AoA. Using the linearised pitching moment
-about the CG:
+the airframe can trim and hold that AoA. The pitching moment about the CG is
+summed **term by term**, because the build-up's normal force is nonlinear in α
+and its three contributions act at three different stations
+(`glider_ld.cn_components` regroups the same `C_N` the L/D sweep forms, exactly):
 ```
-C_mα = −SM·C_Nα,total ;   α_trim,max = (C_Nδ/C_Nα,total)·(x_fin−x_CG)/(x_CP−x_CG)·δ_max
-C_Nδ = control_eff·C_Nα,fin     (control_eff = N-K-P k_W(B)/K_W(B): ~1 all-moving, ~0.85 typ., ~0.5 flap)
+C_m(α,δ)·d = −[ C_N,body(α)·(x_body−x_CG)          slender-body potential, Barrowman c.p.
+              + C_N,cross(α)·(x_planform−x_CG)     Allen-Perkins crossflow, planform centroid
+              + C_N,fin(α)·(x_fin−x_CG)            fin + N-K-P carryover, fin station
+              + control_eff·C_Nα,fin·δ·(x_fin−x_CG) ]   commanded control
+α_trim(δ) = root of C_m = 0, by bisection on the sweep's own 1–59° interval
 ```
-Outcomes: **SM ≤ 0 → unstable → tumbles → ballistic** (L/D≈0); SM > 0 with
-`α_trim,max ≥ α_LDmax` → control reaches best glide (full L/D); otherwise
-**control-limited** → achievable L/D is the curve value at `α_trim,max` (the
-over-stable / weak-control case). The gate uses the static margin of §8.9 (body
-incl. transitions + fins) and the `glider_ld` L/D curve, with a mass-stack CG
-and aft fin station (both overridable). It is a preliminary gate, not a 6-DOF
-trim solution.
+The crossflow term grows as `sin²α` on the body **planform**, well aft of the
+nose c.p., so the centre of pressure migrates aft and the airframe stiffens with
+incidence. That is the restoring mechanism, and it is why the balance has to be
+solved rather than linearised.
+
+Outcomes: **SM ≤ 0 → unstable → tumbles → ballistic** (L/D≈0); **δ_max = 0
+(fixed surfaces) → trims at zero incidence → ballistic**, whatever the
+aerodynamic ceiling; `α_trim,max ≥ α_LDmax` → control reaches best glide (full
+L/D); `α_trim,max < α_LDmax` → **control-limited**, achievable L/D is the best
+value of the curve over the reachable band `(0, α_trim,max]`; **no root at
+δ_max** → the control moment beats the restoring moment everywhere on the sweep,
+reported as "not a glide" rather than as unlimited authority. Achievable L/D is
+the best value over the reachable band, not the value at its endpoint, because
+deflection is commandable and L/D falls away beyond best glide. The gate uses
+the static margin of §8.9 (body incl. transitions + fins) and the `glider_ld`
+L/D curve, with a mass-stack CG and aft fin station (both overridable). It is a
+preliminary gate, not a 6-DOF trim solution.
+
+**Control authority is read from the vehicle, not assumed.** The reentry
+object's `glider_control_surfaces` descriptor (`none` / `small` /
+`substantial` / `unknown`) sets the usable one-sided deflection, mapped onto the
+5–15° band `docs/cl_margin_references.md` already records for the damping
+estimator (Kumar & Stollery, *Aeronautical Journal* 100(996), 1996; incipient
+separation per Needham & Stollery, AIAA 66-455): `none` → 0°, `small` → 5°,
+`substantial` → 15°, `unknown` → 10° **reported as an assumption**. An explicit
+`glider_flap_deflection_deg` overrides the tier, still capped at the separation
+limit; `damping_estimate.py` caps at the same 15°. Control effectiveness is
+real-gas derated above M≈7 (Maus et al., *J. Spacecraft & Rockets* 21(2), 1984,
+and the STS-1 trim anomaly), matching that module's `REAL_GAS_DERATE`.
+
+*Provenance, stated plainly.* The Kumar & Stollery band is marked **[snippet]**
+in `docs/cl_margin_references.md` — a web-search extract, not read against the
+primary, and the paper is not in the repo. It is reused here as an in-repo
+precedent of recorded but unverified provenance, replacing a 25° default that
+carried **no citation at all**. `control_eff = 0.85` is likewise carried over
+unverified: NACA 1307 is not in the repo, and only the angle-of-attack factors
+`K_W(B)/K_B(W)` are implemented, not the deflection factor `k_W(B)`.
+
+*Why this replaced a linearised relation.* The previous gate used
+`α_trim,max = (C_Nδ/C_Nα,total)·(x_fin−x_CG)/(x_CP−x_CG)·δ_max`, which assumes a
+constant normal-force slope and a **fixed** centre of pressure. Because `x_CP`
+is a weighted average of `x_body` and `x_fin`, the lever
+`(x_fin−x_CG)/(x_CP−x_CG)` exceeds 1 for **every** stable CG, so `α_trim,max`
+had a hard floor of `control_eff·(C_Nα,fin/C_Nα,total)·δ_max` — 12.8° for a
+Scud-B body, already above its 11° best-glide α. The gate therefore returned the
+full aerodynamic peak at every CG in the stable range, with `α_trim` running from
+33° to 642° as the static margin approached zero. A gate whose failure mode is
+to grant the unconstrained ceiling is not a gate; this was the open item recorded
+in `BODY_GLIDE_LD_PLAN.md` §7.1 and `TODO.md`.
 
 **Wiring.** The GUI L/D estimator calls `whole_booster_LD` directly. In the
 trajectory, a no-separation body glider left at the sentinel `glider_LD = 0` has

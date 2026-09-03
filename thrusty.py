@@ -5428,18 +5428,30 @@ class ROEditorDialog(tk.Toplevel):
                 lbl.config(text="0 = derive — set body geometry / fins")
                 return
             _sm = g['static_margin_cal']
-            if g['LD_achievable'] <= 0.0:
-                # Unstable → the run tumbles, but still report the aero
-                # (L/D)_max the shape could reach if trimmed — the estimate
+            _lm = float(g.get('LD_max', 0.0) or 0.0)
+            if g.get('tumbles'):
+                # Statically unstable → the run tumbles, but still report the
+                # aero (L/D)_max the shape could reach if trimmed — the estimate
                 # must always return a value, plus the lever that unlocks it.
-                _lm = float(g.get('LD_max', 0.0) or 0.0)
                 _tail = (f" — aero max ~{_lm:.2f} if trimmed; "
                          f"set Reentry CG forward" if _lm > 0.0 else "")
                 lbl.config(text=f"0 → tumbles — unstable "
                                 f"(SM {_sm:+.1f} cal){_tail}")
+            elif g['LD_achievable'] <= 0.0:
+                # STABLE but nothing commands an incidence: flies nose-first at
+                # zero lift.  Not tumbling — say which, and name the lever.
+                _why = ("no control surfaces"
+                        if g.get('delta_max_deg', 0.0) <= 0.0
+                        else "no trimmed attitude at full deflection")
+                _tail = (f" — aero max ~{_lm:.2f} if trimmed"
+                         if _lm > 0.0 else "")
+                lbl.config(text=f"0 → no glide, ballistic nose-first "
+                                f"({_why}; SM {_sm:+.1f} cal){_tail}")
             else:
+                _asm = " — control authority ASSUMED" if g.get('control_assumed') else ""
                 lbl.config(text=f"0 → derives ~{g['LD_achievable']:.2f} "
-                                f"(SM {_sm:+.1f} cal, M{_gld.GLIDE_MACH_REF:.0f})")
+                                f"(SM {_sm:+.1f} cal, M{_gld.GLIDE_MACH_REF:.0f}, "
+                                f"δ{g.get('delta_max_deg', 0.0):.0f}°){_asm}")
         except Exception:
             lbl.config(text="0 = derive from geometry")
 
@@ -5477,7 +5489,11 @@ class ROEditorDialog(tk.Toplevel):
             # Unstable → the run forces tumbling; the spinning-cylinder β (from
             # effective_ro's tumbling branch) is what actually flies, not the
             # nose-first table.  Report that so the preview stays honest.
-            if (not g.get('error')) and g.get('LD_achievable', 0.0) <= 0.0:
+            # Branch on `tumbles`, NOT on a zero achievable L/D: a STABLE body
+            # with no commanded control also makes no lift, but it still flies
+            # nose-first and keeps its nose-first β — showing it a tumbling
+            # cylinder's β would be plain wrong (trim_gate returns both flags).
+            if (not g.get('error')) and g.get('tumbles'):
                 p_t = mm.compose_loadout(self._booster, ro, 1)
                 p_t.ro = _dc.replace(ro, reentry_attitude='tumbling')
                 _et = mm.effective_ro(p_t)
@@ -9908,9 +9924,17 @@ class BoosterFlyoutApp(tk.Tk):
                 return "derive from geometry"
             _ach = g['LD_achievable']
             _sm = g['static_margin_cal']
-            if _ach <= 0.0:
+            if g.get('tumbles'):
                 return f"tumbles — unstable (SM {_sm:+.1f} cal)  (derived)"
-            return f"~{_ach:.2f}  (derived; SM {_sm:+.1f} cal)"
+            if _ach <= 0.0:
+                _why = ("no control surfaces"
+                        if g.get('delta_max_deg', 0.0) <= 0.0
+                        else "no trim at full deflection")
+                return (f"no glide, ballistic nose-first — {_why} "
+                        f"(SM {_sm:+.1f} cal)  (derived)")
+            _asm = "; control ASSUMED" if g.get('control_assumed') else ""
+            return (f"~{_ach:.2f}  (derived; SM {_sm:+.1f} cal, "
+                    f"δ{g.get('delta_max_deg', 0.0):.0f}°{_asm})")
         except Exception:
             return "derive from geometry"
 

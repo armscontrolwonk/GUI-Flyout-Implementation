@@ -127,16 +127,45 @@ as the validation method, not a runtime change.
 
 ## 7. Open follow-ups (only if range still looks high with a correct cg)
 
-### 7.1 Trim gate assumes full control deflection to reach best glide
-`trim_gate` computes the trim α reachable at **δ = 25° full deflection** and, if
-that reaches the best-glide α, grants the full ceiling. That is right for an
+### 7.1 Trim gate assumes full control deflection to reach best glide — DONE
+`trim_gate` computed the trim α reachable at **δ = 25° full deflection** and, if
+that reached the best-glide α, granted the full ceiling. That is right for an
 **actively maneuvering** HGV/MaRV but over-generous for a body meant to be
-**passively stabilized** (which would fly near α ≈ 0, L/D ≈ 0). 
-**Plan:** decide whether a body's "active vs passive" intent should be an
-explicit switch (or inferred from the reentry mode: glide laws ⇒ active,
-ballistic ⇒ passive). If passive, cap the trim α at the cg-offset trim, not the
-full-deflection trim. **Validate** against the fin-stabilized-body expectation
-(~1) and leave the active-glider path (DATCOM ceiling) unchanged.
+**passively stabilized** (which would fly near α ≈ 0, L/D ≈ 0).
+
+It was worse than "over-generous": the gate could not bite **at any cg**. Its
+linearised relation divided by `(x_CP − x_CG)`, and since `x_CP` is a weighted
+average of `x_body` and `x_fin`, the lever `(x_fin−x_CG)/(x_CP−x_CG)` exceeds 1
+for every stable cg. So `α_trim,max` had a hard floor of
+`control_eff·(C_Nα,fin/C_Nα,total)·δ_max` = 12.8° for a Scud-B body, already
+above its 11° best-glide α. Sweeping the cg across the whole stable range
+returned the full aerodynamic peak every time, with `α_trim` running 33° → 642°
+as the static margin approached zero.
+
+**Done as follows.** Intent is an explicit switch, but not a new one: the
+reentry object's existing `glider_control_surfaces` descriptor carries it, so no
+field was added and the GUI already edits it. `none` ⇒ no commanded deflection
+⇒ trims at α = 0 ⇒ no glide (the passive case). `small`/`substantial` ⇒ 5°/15°,
+mapped onto the Kumar & Stollery separation band already used by
+`damping_estimate.py`; `unknown` ⇒ 10°, reported as an assumption. The trim α is
+now the root of a **nonlinear** moment balance summed term by term at each
+term's own station (`glider_ld.cn_components`), bisected on the build-up's own
+1–59° sweep, so nothing is extrapolated and the aft-migrating crossflow c.p.
+supplies the restoring moment the linearisation lacked. The active-glider path
+is unchanged: a stable, control-rich body still reaches the DATCOM ceiling
+(`test_control_rich_stable_body_reaches_best_glide`).
+
+One correction to the plan's own wording: a passively stabilized body lands at
+**L/D ≈ 0, not ~1** — the "~1" in §9 is the *trimmed* L/D of a body that does
+hold a small incidence, not one that trims at zero. Both are now reachable
+outcomes depending on the declared control surfaces. See METHODS.md §8.10;
+pinned by `test_ld_calibration.py` (`test_fixed_surfaces_do_not_glide`,
+`test_control_tier_orders_the_achievable_glide`, `test_trim_alpha_stays_physical`).
+
+**Still open:** `control_eff = 0.85` remains unverified (NACA 1307 is not in the
+repo and only the α-factors `K_W(B)/K_B(W)` are implemented, not the deflection
+factor `k_W(B)`), and the Kumar & Stollery deflection band is marked
+**[snippet]** in `docs/cl_margin_references.md`. Both are recorded in the code.
 
 ### 7.2 Glide-law energy budget (phugoid / skip-glide)
 Range at a given L/D is set by how much energy the glide law bleeds per skip. If

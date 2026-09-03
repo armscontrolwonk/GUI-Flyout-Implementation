@@ -2130,18 +2130,37 @@ def integrate_trajectory(params: BoosterParams,
                     'LD_max': _g['LD_max'], 'LD_achievable': _g['LD_achievable'],
                     'alpha_trim_max_deg': _g['alpha_trim_max_deg'],
                     'alpha_glide_deg': _g.get('alpha_glide_deg'),
+                    # Control authority the gate actually used, and whether it
+                    # was assumed — a reported glide that rests on the 'unknown'
+                    # default must say so in the run record, not just in the GUI.
+                    'delta_max_deg': _g.get('delta_max_deg'),
+                    'control_tier': _g.get('control_tier'),
+                    'control_assumed': _g.get('control_assumed'),
+                    'tumbles': _g.get('tumbles'),
+                    'trim_unbounded': _g.get('trim_unbounded'),
                     'verdict': _g['verdict'],
                 }
                 params = copy.copy(params)
-                if _g['LD_achievable'] <= 0.0:
-                    # Unstable -> tumbles.  effective_ro's tumbling branch will
-                    # derive the ballistic-coefficient and zero the lift.  The
-                    # nose-first β table no longer applies (the body is not
-                    # nose-first): drop it so the tumbling β wins, and clear the
-                    # reported derived-β so the result stays honest.
+                if _g.get('tumbles'):
+                    # Statically UNSTABLE -> cannot hold an attitude -> tumbles.
+                    # effective_ro's tumbling branch will derive the ballistic
+                    # coefficient and zero the lift.  The nose-first β table no
+                    # longer applies (the body is not nose-first): drop it so the
+                    # tumbling β wins, and clear the reported derived-β so the
+                    # result stays honest.
                     params.ro = _dc.replace(_ro, reentry_attitude='tumbling')
                     params._beta_of_mach = None
                     _derived_beta_ref = None
+                elif _g['LD_achievable'] <= 0.0:
+                    # STABLE but nothing can command an incidence (fixed control
+                    # surfaces, or no trimmed attitude at full deflection).  The
+                    # body still flies NOSE-FIRST: it just makes no lift.  Zero
+                    # the glide and leave the attitude — and therefore the
+                    # nose-first β and its Mach table — exactly as they are.
+                    # Forcing 'tumbling' here would hand a fin-stabilised
+                    # ballistic body a tumbling-cylinder drag it does not have.
+                    params.ro = _dc.replace(_ro, glider_enabled=False,
+                                            glider_LD=0.0)
                 else:
                     # Mach-varying (L/D)_max: sample the geometry build-up over
                     # a Mach grid, capped by the control-achievable L/D, and

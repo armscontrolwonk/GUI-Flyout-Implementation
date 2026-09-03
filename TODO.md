@@ -39,11 +39,23 @@ anchor, lifting-surface ordering, and two trim tests (small fins do NOT buy
 best-glide L/D; a control-rich body does).  Also fixed the stale
 `whole_missile_LD` name in validation/datcom/compare_datcom.py.
 
+DONE: trim_gate's 25-deg control-deflection assumption no longer over-grants
+best-glide trim.  Control authority is read from the reentry object's
+glider_control_surfaces descriptor (none => no commanded deflection => trims at
+zero incidence => no glide), deflection is capped at the Kumar & Stollery
+separation limit damping_estimate.py already uses, and the trim angle is the
+root of a nonlinear moment balance rather than a linearised relation that
+returned 144 deg for a Scud-B and could not limit that vehicle at ANY cg.
+See BODY_GLIDE_LD_PLAN.md 7.1 and METHODS.md 8.10.
+
+Still open there: control_eff = 0.85 is unverified (NACA 1307 is not in the
+repo; only the alpha-factors K_W(B)/K_B(W) are implemented, not the deflection
+factor k_W(B)), and the Kumar & Stollery deflection band is a [snippet] in
+docs/cl_margin_references.md, not read against the primary.
+
 Open (only if a user still sees unrealistic glide range with correct cg):
 audit whether the phugoid / skip-glide LAW loses too little energy per skip
-(a guidance-law question, separate from L/D), and whether trim_gate's full
-25-deg control-deflection assumption over-grants best-glide trim to a body
-meant to be stabilized rather than actively maneuvered.  Papers in hand
+(a guidance-law question, separate from L/D).  Papers in hand
 (mirror to Drive per data/REFERENCES.md): Seiff-Wilkins TN D-341, Syvertson-
 Dennis NACA 1328 (SOSE), Vukelich-Jenkins (Missile DATCOM feasibility),
 Fournier-Dupuis AIAA 96-3399, Intrieri TM X-569, Yates-Chapman AIAA 96-3360.

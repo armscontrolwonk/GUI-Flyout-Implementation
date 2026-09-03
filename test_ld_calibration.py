@@ -130,3 +130,106 @@ def test_control_rich_stable_body_reaches_best_glide():
                      mach=5.0)
     assert g['LD_achievable'] == pytest.approx(g['LD_max'], rel=1e-6)
     assert g['LD_achievable'] > 3.0
+
+
+# ── The gate must actually gate: control authority is read, not assumed ───────
+
+def _tiered(tier, **kw):
+    """A body whose reentry object declares a control-surface tier."""
+    p = _body(**kw)
+    p.ro = copy.deepcopy(p.ro)
+    p.ro.glider_control_surfaces = tier
+    p.__dict__.pop('_ero_memo', None)
+    return p
+
+
+def test_fixed_surfaces_do_not_glide():
+    """A stable body with NO commanded control surfaces trims at zero incidence
+    and reenters ballistically, however good its aerodynamic ceiling is.
+
+    This is the branch a fin-stabilized ballistic-missile body belongs in, and
+    the one the gate could not express while it assumed a 25 deg all-moving
+    control on every finned airframe (BODY_GLIDE_LD_PLAN.md 7.1)."""
+    g = tg.trim_gate(_tiered('none', l_over_d=13.4, fins=True, cg_frac=0.55),
+                     mach=5.0)
+    assert g['LD_max'] > 2.0                 # the ceiling is untouched...
+    assert g['LD_achievable'] == 0.0         # ...but nothing can command it
+    assert g['alpha_trim_max_deg'] == 0.0
+    assert g['delta_max_deg'] == 0.0
+
+
+def test_control_tier_orders_the_achievable_glide():
+    """More control authority reaches a higher trim alpha, so the achievable
+    glide is monotone in the tier while the ceiling stays fixed."""
+    kw = dict(l_over_d=13.4, fins=True, cg_frac=0.50)
+    gs = {t: tg.trim_gate(_tiered(t, **kw), mach=5.0)
+          for t in ('none', 'small', 'substantial')}
+    assert all(abs(gs[t]['LD_max'] - gs['none']['LD_max']) < 1e-9 for t in gs)
+    assert (gs['none']['alpha_trim_max_deg']
+            < gs['small']['alpha_trim_max_deg']
+            < gs['substantial']['alpha_trim_max_deg'])
+    assert gs['none']['LD_achievable'] < gs['small']['LD_achievable']
+    assert gs['small']['LD_achievable'] <= gs['substantial']['LD_achievable']
+
+
+def test_trim_alpha_stays_physical():
+    """The trim solve must never leave the build-up's own alpha sweep (1-59 deg).
+
+    The linearised relation this replaced divided by (x_cp - x_cg), a small
+    difference of large numbers, and returned 144 deg for a Scud-B body and over
+    600 deg near neutral stability -- which the gate then read as 'control
+    reaches best glide' and so handed back the unconstrained peak."""
+    for cg in (0.40, 0.45, 0.50, 0.55, 0.60, 0.62):
+        for tier in ('none', 'small', 'substantial', 'unknown'):
+            g = tg.trim_gate(_tiered(tier, l_over_d=13.4, fins=True,
+                                     cg_frac=cg), mach=5.0)
+            if g.get('error'):
+                continue
+            assert 0.0 <= g['alpha_trim_max_deg'] <= 59.0, (
+                f"cg={cg} tier={tier}: alpha_trim {g['alpha_trim_max_deg']}")
+            assert g['LD_achievable'] <= g['LD_max'] + 1e-9
+
+
+def test_unknown_control_is_flagged_as_assumed():
+    """'unknown' is the shipped default on every reentry object, so a glide it
+    produces must be reported as resting on an assumption."""
+    g = tg.trim_gate(_tiered('unknown', l_over_d=13.4, fins=True, cg_frac=0.50),
+                     mach=5.0)
+    assert g['control_assumed'] is True
+    assert g['control_tier'] == 'unknown'
+    if g['LD_achievable'] > 0.0:
+        assert 'ASSUMED' in g['verdict']
+    d = tg.trim_gate(_tiered('substantial', l_over_d=13.4, fins=True,
+                             cg_frac=0.50), mach=5.0)
+    assert d['control_assumed'] is False
+
+
+def test_deflection_respects_the_separation_limit():
+    """Usable deflection is capped at the Kumar & Stollery separation limit
+    (docs/cl_margin_references.md), the same 15 deg damping_estimate.py uses --
+    not the uncited 25 deg this replaced."""
+    assert tg._DELTA_MAX_BY_CONTROL['substantial'] == 15.0
+    assert tg._DELTA_MAX_BY_CONTROL['none'] == 0.0
+    import damping_estimate as de
+    assert tg._DELTA_MAX_BY_CONTROL['substantial'] == de.DELTA_MAX_DEG
+    # An explicit per-object deflection overrides the tier, still capped.
+    p = _tiered('small', l_over_d=13.4, fins=True, cg_frac=0.50)
+    p.ro.glider_flap_deflection_deg = 40.0
+    assert tg.control_authority(p.ro)['delta_max_deg'] == 15.0
+
+
+def test_cn_components_regroup_the_sweep_exactly():
+    """The moment balance must use the SAME normal force as the L/D sweep: the
+    three components are a regrouping of C_N, not a second model of it."""
+    import math
+    p = _body(l_over_d=13.4, fins=True)
+    a = gld.whole_booster_LD(p, mach=5.0)
+    A_p = a['body_planform_m2'] + a['fin_planform_m2']
+    for i in range(1, 60):
+        r = math.radians(i)
+        sn = math.sin(r)
+        expect = (a['c_na_pot'] * math.sin(2 * r) / 2.0
+                  + gld._ETA * gld.crossflow_cd(5.0 * sn)
+                  * (A_p / a['ref_area_m2']) * sn * sn)
+        assert sum(gld.cn_components(a, r).values()) == pytest.approx(expect,
+                                                                     abs=1e-12)

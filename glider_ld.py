@@ -9,7 +9,11 @@ designed property and is supplied directly as ro.glider_LD.
 
 Method: the standard semi-empirical component build-up for slender body+fin
 configurations at angle of attack (the same theoretical core Booster DATCOM
-uses), assembled from primary sources, all in data/:
+uses), assembled from these primary sources.  NOTE none of the three is in the
+repo: data/ holds no PDFs (papers live in Drive per data/REFERENCES.md, which
+does not list them either), so the citations below are the record, not a file
+you can open.  The one cross-check with committed primary material is Digital
+DATCOM, in validation/datcom/:
   * Allen & Perkins, NACA Rep. 1048 (1951): the two-term body normal force
     (slender-body potential + viscous crossflow); origin of the crossflow term.
   * Jorgensen, NASA TR R-474 (1977): generalises it to all AoA (Eq 2.12), the
@@ -37,7 +41,12 @@ unbanked fins without swept-forward LE / swept-back TE (NACA 1307).
 
 CAVEATS: a slender whole booster is a POOR lifting shape, so the resulting L/D
 is modest; this is a preliminary-design estimate, not a substitute for
-wind-tunnel/CFD.  The body planform is the cone/slender ~0.5*L*d approximation.
+wind-tunnel/CFD.  The body planform is built as nose + cylindrical afterbody
+(falling back to the ~0.5*L*d pointed-body triangle when no nose length is
+known), and its centroid is returned alongside the area for the trim gate's
+moment balance.  The fin path (c_na_fin and the N-K-P carryover) is NOT
+validated against any external reference here: the committed DATCOM case is
+deliberately finless.
 """
 
 from __future__ import annotations
@@ -96,6 +105,14 @@ _NOSE_PLANFORM_FILL = {
     'cone': 0.5, 'tangent_ogive': 0.667, 'parabola': 0.667,
     'von_karman': 0.667, 'lv_haack': 0.667, 'blunt_cylinder': 0.85,
 }
+
+# The angle-of-attack sweep the L/D curve and the trim solve BOTH run on.
+# Exported so trim_gate.py brackets its moment balance on exactly this interval
+# instead of hard-coding a copy that would silently desynchronise if the sweep
+# ever changed.
+ALPHA_SWEEP_MIN_DEG = 1
+ALPHA_SWEEP_MAX_DEG = 59
+
 
 # Representative glide Mach at which a no-sep body's L/D is derived for the
 # trajectory (the build-up's L/D-max is only weakly Mach-sensitive across the
@@ -236,21 +253,47 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     from booster_models import biconic_nose_geometry, cd0_biconic_body
     _bic = biconic_nose_geometry(params)
     _nose_shape_eff, L_nose = _front_nose_aero(params, last)
+    # The crossflow planform CENTROID (station aft of the nose tip) is built from
+    # the same decomposition as the area.  The viscous-crossflow normal force acts
+    # on the planform, so its line of action is the planform centroid — needed by
+    # the trim gate's moment balance (trim_gate.py).  It is derived here, next to
+    # the area, so the two can never drift apart.  Each piece contributes
+    # area x its own centroid: a triangle apex-forward at 2/3 of its length, a
+    # trapezoid at its area-weighted centroid, a rectangle at its mid-length.
     if _bic is not None:
         _Lf, _La = _bic['fore_len_m'], _bic['aft_len_m']
         _bd = _bic['break_diameter_m']
         _Ln = _bic['nose_len_m']
         # fore triangle (tip→break) + aft trapezoid (break→base) + afterbody
-        A_p_body = (0.5 * _Lf * _bd + 0.5 * (_bd + d) * _La
-                    + max(0.0, L_body - _Ln) * d)
+        _a_fore = 0.5 * _Lf * _bd
+        _a_aft = 0.5 * (_bd + d) * _La
+        _a_body = max(0.0, L_body - _Ln) * d
+        A_p_body = _a_fore + _a_aft + _a_body
+        # trapezoid centroid from its forward edge: (La/3)*(2d + bd)/(d + bd)
+        _x_aft = (_Lf + (_La / 3.0) * (2.0 * d + _bd) / (d + _bd)
+                  if (d + _bd) > 0 else _Lf + 0.5 * _La)
+        _x_body_piece = _Ln + 0.5 * max(0.0, L_body - _Ln)
+        x_p_body = ((_a_fore * (2.0 / 3.0) * _Lf + _a_aft * _x_aft
+                     + _a_body * _x_body_piece) / A_p_body
+                    if A_p_body > 0 else 0.5 * L_body)
         cd0 = cd0_biconic_body(_bic, (L_body / d) if d > 0 else 5.0, mach)
     else:
         if 0.0 < L_nose < L_body:
             nose = _SHAPE_ALIAS.get(_nose_shape_eff or '', _nose_shape_eff or '')
             fill = _NOSE_PLANFORM_FILL.get(nose, 0.667)   # cone 0.5, ogive ~0.67
-            A_p_body = fill * L_nose * d + (L_body - L_nose) * d
+            _a_nose = fill * L_nose * d
+            _a_aft = (L_body - L_nose) * d
+            A_p_body = _a_nose + _a_aft
+            # A cone's side projection is a triangle (centroid 2/3 back); a fuller
+            # (ogive) nose is nearer its mid-length.  Interpolate on the same fill
+            # factor that sets the area, so shape enters both consistently.
+            _x_nose = L_nose * (2.0 / 3.0 if fill <= 0.5 else 0.5 + (0.667 - fill))
+            x_p_body = ((_a_nose * _x_nose
+                         + _a_aft * (L_nose + 0.5 * (L_body - L_nose))) / A_p_body
+                        if A_p_body > 0 else 0.5 * L_body)
         else:
             A_p_body = 0.5 * L_body * d                # pointed-body fallback
+            x_p_body = (2.0 / 3.0) * L_body            # triangle, apex at the tip
         cd0 = _body_cd0(last, mach, _nose_shape_eff, L_nose)
 
     # Fins (the pitch-plane lifting pair); body+fin carryover via N-K-P.
@@ -280,7 +323,7 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     A_p = A_p_body + A_p_fin
 
     best_ld, best_a, curve = 0.0, 0.0, []
-    for i in range(1, 60):                         # alpha = 1..59 deg
+    for i in range(ALPHA_SWEEP_MIN_DEG, ALPHA_SWEEP_MAX_DEG + 1):   # alpha = 1..59 deg
         a = math.radians(float(i))
         sn, cs = math.sin(a), math.cos(a)
         c_dn = crossflow_cd(mach * sn)             # C_dn at crossflow Mach M*sin(a)
@@ -297,10 +340,50 @@ def whole_booster_LD(params: BoosterParams, mach: float = 3.0,
     out = dict(ld_max=best_ld, alpha_deg=best_a, c_na_pot=c_na_pot,
                c_na_body=c_na_body, c_na_fin=c_na_fin,
                k_sum=k_sum, cla_wing=cla_w, cd0=cd0, mach=mach,
-               diameter_m=d, body_planform_m2=A_p_body, fin_planform_m2=A_p_fin)
+               diameter_m=d, body_planform_m2=A_p_body, fin_planform_m2=A_p_fin,
+               body_planform_centroid_m=x_p_body, ref_area_m2=A_ref,
+               body_length_m=L_body)
     if return_curve:
         out["curve"] = curve
     return out
+
+
+def cn_components(aero: dict, alpha_rad: float) -> dict:
+    """Split the build-up's normal force at one angle of attack into the three
+    contributions that act at DIFFERENT stations, so a caller can take moments.
+
+    ``aero`` is a whole_booster_LD() result.  The split is exactly the C_N the
+    sweep in whole_booster_LD forms, term for term:
+
+        C_N(a) = c_na_body * sin(2a)/2        <- slender-body potential, at the
+                                                 body's Barrowman c.p.
+               + c_na_fin  * sin(2a)/2        <- fin + N-K-P carryover, at the
+                                                 fin station
+               + eta * C_dn(M sin a) * (A_p/A_ref) * sin^2 a
+                                              <- Allen-Perkins viscous crossflow,
+                                                 at the planform centroid
+
+    Summing the three reproduces whole_booster_LD's C_N identically; only the
+    grouping is new.  The crossflow term is split between body and fin planform
+    in proportion to their areas, because the two act at different stations.
+    Returns each term (referenced to A_ref, per the same convention).
+    """
+    a = float(alpha_rad)
+    sn = math.sin(a)
+    s2 = math.sin(2.0 * a) / 2.0
+    A_ref = float(aero.get('ref_area_m2', 0.0) or 0.0)
+    A_pb = float(aero.get('body_planform_m2', 0.0) or 0.0)
+    A_pf = float(aero.get('fin_planform_m2', 0.0) or 0.0)
+    c_dn = crossflow_cd(float(aero.get('mach', 0.0)) * abs(sn))
+    # sn*|sn| keeps the crossflow force odd in alpha, so the moment balance has
+    # the right sign for a negative (nose-down) angle of attack too.
+    _q = _ETA * c_dn * (sn * abs(sn)) / A_ref if A_ref > 0 else 0.0
+    return dict(
+        body_potential=float(aero.get('c_na_body', 0.0)) * s2,
+        fin_potential=float(aero.get('c_na_fin', 0.0)) * s2,
+        crossflow_body=_q * A_pb,
+        crossflow_fin=_q * A_pf,
+    )
 
 
 def derive_glider_LD(params: BoosterParams, mach: float = GLIDE_MACH_REF) -> float:
