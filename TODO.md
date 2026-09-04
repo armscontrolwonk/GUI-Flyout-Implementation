@@ -72,6 +72,17 @@ distributing the potential normal force along the body instead of putting it
 all at the Barrowman nose c.p.  Deliberately NOT corrected by a fitted factor;
 pinned instead by test_cp_bias_is_forward_and_bounded.
 
+STRUCTURE CONFIRMED (2026-09-04).  Moore, McInville & Hymer, JSR 33(3) 1996,
+Eq. 3: the body-alone c.p. is "determined by summing the separately determined
+linear and nonlinear contributions to the total moment and then dividing by the
+combined normal force" -- exactly the normal-force-weighted two-station mean
+trim_gate uses.  So the FORM is right and only the potential station is wrong.
+Their additional empirical c.p. shifts are forward corrections for asymmetric
+body vortices (alpha > 25 deg, M < 2) and transonic shock, i.e. the same
+direction as our error, so they are not the fix.  Their tabulated shifts live
+in their Ref. 3, NSWCDD/TR-94/379 (1995 Aeroprediction Code, Part I), Table 1 --
+worth having, but secondary to fixing the potential station itself.
+
 DONE in this pass: the fin's VISCOUS normal force now acts at the panel centroid
 rather than being lumped at the fin aerodynamic centre, per Simon & Blake Eq. 6.
 Small effect on the shipped vehicles, but it makes the station structurally
@@ -99,24 +110,38 @@ fins (a/s_m = 0.467) it is 0.635 -- well BELOW the hard-coded 0.85, so the
 constant currently OVERSTATES control authority for that vehicle, in the
 non-conservative direction.
 
-NOT IMPLEMENTED, deliberately, on two honest blockers:
-  1. Table 1's column headers did not survive PDF text extraction.  The self
-     column was identified by physical argument (two columns are exactly
-     antisymmetric = the perpendicular fin pair; one is small and same-signed =
-     the opposite fin; the remaining one goes to 1.000 at a/s_m = 1 where the
-     exposed span vanishes = the self term).  Defensible, but it is an inference
-     from values, not a read header.  A look at the printed table settles it.
-  2. Thrusty's c_na_fin carries k_sum = K_W(B) + K_B(W), i.e. fin PLUS body
-     carryover.  The deflection analogue needs the deflection-case carryover
-     too (k_W(B) + k_B(W)), and whether A_44 already embeds that is exactly what
-     the normalisation question turns on.
+BLOCKER 2 IS NOW RESOLVED.  Moore, McInville & Hymer, JSR 33(3) 1996 (read
+2026-09-04) states that the deflection case uses the pair (k_W(B), k_B(W))
+mirroring the AoA pair (K_W(B), K_B(W)), and that "k_B(W) is still defined by
+slender-body theory".  So the correct construction is
 
-Settle both from Nielsen, Hemsch & Smith, "A Preliminary Method for Calculating
-the Aerodynamic Characteristics of Cruciform Missiles to High Angles of Attack
-Including Effects of Roll Angle and Control Deflections", ONR CR215-226-4F,
-Nov. 1977 (their Ref. 13, the source of both the Table 1 factors and the
-slender-body K_w values), or from Nielsen, *Missile Aerodynamics*, McGraw-Hill
-1960 (their Ref. 12), which derives k_W(B) and K_W(B) in the same framework.
+    control_eff = [k_W(B) + k_B(W)] / [K_W(B) + K_B(W)]
+
+and Thrusty already computes the denominator exactly as k_sum = (1+r/s)^2
+(glider_ld.nkp_interference).  What is missing is only the slender-body
+NUMERATOR pair.
+
+BLOCKER 1 REMAINS.  Hemsch & Nielsen Table 1's column headers did not survive
+PDF text extraction.  The self column was identified by physical argument (two
+columns are exactly antisymmetric = the perpendicular fin pair; one is small and
+same-signed = the opposite fin; the remaining one reaches 1.000 at a/s_m = 1
+where the exposed span vanishes = the self term).  Defensible, but an inference
+from values rather than a read header -- and in any case A_44 alone is not the
+numerator above, so the table is not sufficient by itself.
+
+WHAT WOULD FINISH IT, in priority order:
+  1. NACA TR 1307 (Pitts, Nielsen & Kaattari, 1957) -- the closed-form
+     slender-body k_W(B) and k_B(W) for the DEFLECTION case, alongside the
+     K_W(B)/K_B(W) Thrusty already implements from it.  This is the single
+     document that closes the item, it is already cited throughout this repo,
+     and it is public.  Both Hemsch & Nielsen (their Ref. 9) and Moore et al.
+     (their Ref. 10) cite it for exactly this.
+  2. Nielsen, Hemsch & Smith, ONR-CR215-226-4F, Nov. 1977 -- the source of
+     Hemsch & Nielsen's Table 1 factors AND their slender-body K_w values.
+     Independently named by BOTH supplied papers (Hemsch & Nielsen Ref. 13,
+     Moore et al. Ref. 5), which is a strong signal it is the canonical source.
+  3. Nielsen, *Missile Aerodynamics*, McGraw-Hill 1960 -- the textbook
+     derivation of both factor pairs in one place.
 
 (d) The Kumar & Stollery deflection band is a [snippet] in
 docs/cl_margin_references.md, not read against the primary; and laying the tier
