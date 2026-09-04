@@ -53,15 +53,32 @@ implements only the ANGLE-OF-ATTACK factors K_W(B)/K_B(W); the deflection factor
 k_W(B) is implemented nowhere, so the ratio cannot be computed here yet.  0.85 is
 carried over unchanged from the previous implementation.
 
-The source IS now located: NACA Rep. 1307 is in the Drive library and linked from
-data/REFERENCES.md.  It defines the deflection pair at its Eq. (8), gives k_W(B)
-in closed form at **Eq. (19)** in terms of tau = s/r, and plots it in **Chart 1**.
-Moore, McInville & Hymer (JSR 33(3), 1996) confirm the construction:
-control_eff = [k_W(B) + k_B(W)] / [K_W(B) + K_B(W)], with k_B(W) also slender-body
--- and this file already has the denominator exactly as (1+r/s)^2.  What blocks
-implementation is only transcription: Eq. (19) is a display equation that did not
-survive OCR of either scanned copy, and Chart 1 is a figure.  Reading Eq. (19)
-off the page finishes it.  See TODO.md item (c).
+The source IS now located, and the construction REDUCES to this exact ratio.
+NACA Rep. 1307 (Drive; linked from data/REFERENCES.md) defines all four factors
+on a COMMON normalisation -- its Eqs. (4),(5) for K_B(W),K_W(B) and (7),(8) for
+k_B(W),k_W(B), every one of them divided by the same wing-alone (C_La)_W.  Moore,
+McInville & Hymer (JSR 33(3), 1996) give the fin construction as
+[k_W(B) + k_B(W)] / [K_W(B) + K_B(W)], which is what c_na_fin's carryover needs.
+NACA 1307 Eq. (34) then collapses it:
+
+    k_B(W) ~= k_W(B) * K_B(W) / K_W(B)
+
+(their k'_B(W); the report states this differs from the exact slender-body
+k_B(W) of its Eq. (33) "by no more than 0.01").  Substituting,
+
+    [k_W(B) + k_W(B)*K_B(W)/K_W(B)] / [K_W(B) + K_B(W)]
+        = k_W(B)*[K_W(B) + K_B(W)] / K_W(B) / [K_W(B) + K_B(W)]
+        = k_W(B) / K_W(B)
+
+so the carryover cancels EXACTLY and control_eff is the simple ratio this
+docstring always claimed it was.  The remaining unknown is therefore ONE
+quantity, not two: k_W(B), given in closed form by NACA 1307 **Eq. (19)** in
+terms of tau = s/r and plotted in **Chart 1**.  K_W(B) is already implemented
+(glider_ld.nkp_interference).
+
+Still not implemented for one reason only: Eq. (19) is a display equation that
+did not survive OCR of either scanned copy in Drive, and Chart 1 is a figure.
+Nothing is guessed from the fragment.  See TODO.md item (c).
 
 OUTCOMES:
   * SM <= 0  -> statically unstable -> tumbles -> reenters BALLISTICALLY (L/D≈0).

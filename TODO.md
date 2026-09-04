@@ -129,6 +129,20 @@ where the exposed span vanishes = the self term).  Defensible, but an inference
 from values rather than a read header -- and in any case A_44 alone is not the
 numerator above, so the table is not sufficient by itself.
 
+REDUCED TO ONE UNKNOWN (2026-09-04).  NACA 1307 Eq. (34) gives
+k_B(W) ~= k_W(B)*K_B(W)/K_W(B), stating it differs from the exact slender-body
+k_B(W) (their Eq. 33) by no more than 0.01.  Substituting into the Moore
+construction [k_W(B)+k_B(W)]/[K_W(B)+K_B(W)], the carryover cancels exactly and
+
+    control_eff = k_W(B) / K_W(B)
+
+which is what trim_gate's docstring always claimed.  All four factors share the
+same normalisation (NACA 1307 Eqs. 4,5,7,8 are each divided by the wing-alone
+(C_La)_W), so the ratio is clean.  K_W(B) is already implemented.  The ONLY
+missing quantity is k_W(B) itself: NACA 1307 Eq. (19), closed form in
+tau = s/r, plotted in Chart 1.  Both the equation and the chart are display
+elements that OCR could not transcribe from either Drive copy.
+
 WHAT WOULD FINISH IT, in priority order:
   1. NACA TR 1307 (Pitts, Nielsen & Kaattari, 1957) -- the closed-form
      slender-body k_W(B) and k_B(W) for the DEFLECTION case, alongside the
