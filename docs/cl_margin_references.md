@@ -103,20 +103,49 @@ marked **[derived]** are standard closed-form results computed directly.
 - **Needham, D. A. & Stollery, J. L., "Boundary Layer Separation in Hypersonic
   Flow," AIAA 66-455 (1966).** **[snippet]** Incipient-separation criterion for
   a deflected ramp/flap; incipient angle decreases with Mach, increases with Re.
-- **Kumar, D. & Stollery, J. L., "Hypersonic control flap effectiveness,"
-  *Aeronautical Journal* 100(996), 1996.** **[snippet]** M = 8.2, flap 0–30°:
-  effectiveness falls once the boundary layer separates ahead of the flap.
-  Practical **usable laminar-hypersonic deflection ≈ 5–15°** (M≈10 "critical
-  deflection" ≈ 15°).
-  *Acquisition status (checked 2026-09-04): NOT in the repo and NOT in the Drive
-  library.* The citation above is itself unverified — it comes from the same
-  web-search extract as the finding, so the volume/issue, the exact title and the
-  author initials have never been checked against the paper, and page numbers and
-  a DOI are missing. Anyone completing it should treat every field as provisional.
-  Note `kumar2015.pdf` in the Drive Thrusty folder is **a different paper**
-  (Kumar & Mahulikar, TPS materials, ASME JTSEA 8(2), 2016) — a name collision,
-  not this reference. This band is load-bearing: `trim_gate._DELTA_MAX_BY_CONTROL`
-  and `damping_estimate.DELTA_MAX_DEG` both rest on it.
+- **Kumar, D. & Stollery, J. L., "Hypersonic Control Flap Effectiveness,"
+  ICAS-94-4.4.3, 19th Congress of the International Council of the Aeronautical
+  Sciences, 1994, pp. 1194-1204. College of Aeronautics, Cranfield University,
+  Cranfield, Bedford, MK43 0AL, UK. Copyright 1994 by ICAS and AIAA.**
+  **[verified]** — read against the paper 2026-09-04.
+
+  CORRECTION: the previous entry here cited this as *Aeronautical Journal*
+  100(996), 1996, and that is WRONG — it is an ICAS congress paper from 1994.
+  The technical claim was wrong too, and the code rested on it; both are
+  restated below from the paper itself.
+
+  What the paper actually reports.  Hypersonic gun tunnel, **M∞ = 8.2**
+  (NOT "M ≈ 10"), Re∞/cm = 9.0 × 10⁴, quasi-2D flat plate with a full-span
+  trailing-edge control flap, flap deflection **0 ≤ β ≤ 30°**, incidence
+  0 ≤ α ≤ 10°, sharp and hemi-cylindrically blunted leading edges.
+
+  * **Incipient separation flap angle, laminar interaction: 7.8° at α = 5°**,
+    and eq. 12 predicts **8.4° at α = 10°** (their §7.2.3).  These are the
+    paper's actual separation-onset numbers.
+  * Incidence DELAYS separation: at α = 10°, β = 10° the flow was observed
+    attached, above the laminar prediction, because transition occurs upstream
+    of the hingeline.
+  * Flap boundary-layer state with deflection: **laminar at β = 5°,
+    transitional at β = 15°, turbulent at β = 25°** (their §7.3.2).
+  * Conclusions: "Flap deflection promotes separation of laminar boundary
+    layers"; "Incidence promotes transition of the flap boundary layer.  It
+    delays separation"; large bluntness "substantially delays separation" but
+    "reduces the pressure recovered downstream of the hingeline and hence causes
+    **significant loss of control effectiveness**".
+
+  There is **no "usable deflection ≈ 5–15°" statement in the paper**, and no
+  "critical deflection ≈ 15°".  The old 5–15° band appears to have conflated the
+  boundary-layer-state sequence (laminar 5° / transitional 15°) with a usable
+  limit, and the Mach number was wrong by ~2.  A band anchored on what the paper
+  DOES say would sit near 8°, not 15°.
+
+  LOAD-BEARING: `trim_gate._DELTA_MAX_BY_CONTROL` (5/15/10°) and
+  `damping_estimate.DELTA_MAX_DEG` (15°) both rest on the superseded reading.
+  See TODO.md — this needs a decision, not a silent re-anchor.
+
+  (Note `kumar2015.pdf` in the Drive Thrusty folder is a DIFFERENT paper —
+  Kumar & Mahulikar, TPS materials, ASME JTSEA 8(2), 2016 — a name collision.)
+
 - **Maus, Griffith, Szema & Best, "…Real Gas Effects on Space Shuttle Orbiter
   Aerodynamics," *J. Spacecraft & Rockets* 21(2), 1984 (and the STS-1 trim
   anomaly, DOI 10.2514/3.26680).** **[snippet]** Real-gas γ reduction shifted
@@ -138,7 +167,7 @@ marked **[derived]** are standard closed-form results computed directly.
 | Flap ΔC_L | (S_flap/S_ref)·Cp,max·[sin²(α+δ)−sin²α]·cosα | Grant & Braun | verified+derived |
 | Cone/biconic C_L,max | ≈ 0.4–0.5 (at α ≈ 25–50°) | TN D-840, D-4098 | verified |
 | Biconic max-L/D trim α | ≈ 8–10° | NTRS 19770017117 | snippet |
-| Usable flap deflection | ≈ 5–15° (laminar, before separation) | Kumar & Stollery | snippet |
+| Laminar incipient separation flap angle | **7.8° at α=5°, 8.4° at α=10°** (M 8.2); attached to β=10° at α=10° | Kumar & Stollery ICAS-94-4.4.3 | **verified** |
 | L/D cost at 1.5× C_L,opt | ≈ 8 % (20 % at 2×) | parabolic polar | derived |
 | Trim deflection L/D cost | up to ~30 % | Ferretto 2023 | verified |
 | Typical S_flap/S_ref | ~5–8 % (Shuttle elevon 8 %, body flap 5 %) | Bornemann | snippet |

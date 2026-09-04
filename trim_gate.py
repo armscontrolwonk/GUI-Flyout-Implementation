@@ -122,51 +122,43 @@ import grid_fin_sizing as gfs
 # --- Control authority ------------------------------------------------------
 # Usable control deflection is NOT a free parameter: past the incipient-separation
 # angle the boundary layer separates ahead of the surface and effectiveness
-# collapses.  docs/cl_margin_references.md records the band this repo already
-# uses for the damping estimator -- "usable flap deflection ~5-15 deg (laminar,
-# before separation)", from Kumar & Stollery, "Hypersonic control flap
-# effectiveness", Aeronautical Journal 100(996), 1996 (M = 8.2, flap 0-30 deg;
-# M ~ 10 "critical deflection" ~ 15 deg), with Needham & Stollery AIAA 66-455
-# (1966) for the incipient-separation criterion.  damping_estimate.py caps at the
-# same 15 deg (DELTA_MAX_DEG), so the two estimators now agree.
+# collapses.  The tiers below map onto that physics.
 #
-# PROVENANCE, stated plainly per that file's own convention: the Kumar & Stollery
-# entry is marked **[snippet]** there -- a web-search extract, not read against
-# the primary, "spot-check against the source before publication-grade quoting".
-# The paper is not in the repo NOR in the Drive library (unlike the aero
-# build-up sources, which data/REFERENCES.md now links directly).  So this band
-# is an IN-REPO PRECEDENT of recorded but
-# unverified provenance, reused for consistency -- not a verified measurement.
-# It nevertheless replaces a number with NO citation at all: the 25 deg it
-# supersedes appeared in this file's signature uncited, and TODO.md and
-# BODY_GLIDE_LD_PLAN.md 7.1 both flagged it as a known over-grant.  Verifying
-# Kumar & Stollery against the primary would upgrade this block; changing the
-# numbers needs a source, not a preference.
+# SOURCE, NOW VERIFIED AND PARTLY CONTRADICTING THESE NUMBERS (2026-09-04).
+# The anchor is Kumar, D. & Stollery, J. L., "Hypersonic Control Flap
+# Effectiveness", ICAS-94-4.4.3, 19th ICAS Congress, 1994, pp. 1194-1204
+# (Cranfield).  It was read against the paper on 2026-09-04, and two things it
+# had been cited for are wrong:
+#   * It is an ICAS 1994 congress paper, not Aeronautical Journal 100(996) 1996.
+#   * It is at M 8.2, not "M ~ 10", and it states NO "usable deflection 5-15 deg"
+#     band and no "critical deflection ~ 15 deg".
+# What it DOES report: laminar incipient separation at flap angle 7.8 deg at
+# alpha = 5 deg and 8.4 deg at alpha = 10 deg; flow still attached at beta = 10
+# deg when alpha = 10 deg (incidence delays separation); and the flap boundary
+# layer laminar at beta = 5, transitional at 15, turbulent at 25.  Bluntness
+# "causes significant loss of control effectiveness".
+#
+# So the paper anchors separation onset near 8 deg, not 15.  The 15 deg upper
+# tier below is therefore NOT sourced -- it survives from the superseded reading,
+# and damping_estimate.DELTA_MAX_DEG rests on the same one.  Re-anchoring both is
+# a physics decision with flown consequences (it would cut achievable glide for
+# every control-rich body), so it is FLAGGED here and in TODO.md rather than
+# changed silently.  See docs/cl_margin_references.md for the verified entry.
 #
 # The qualitative tiers map onto that band:
 #
 #   none        -- fixed surfaces: no commanded deflection at all.  The body
 #                  trims where its own aerodynamics put it (alpha ~ 0 for a
 #                  statically stable airframe), so it does not glide.
-#   small       -- 5 deg, the lower end of the usable band.
-#   substantial -- 15 deg, the critical deflection (upper end).
-#   unknown     -- 10 deg, the band midpoint, reported as an ASSUMPTION.  Set the
-#                  reentry object's glider_control_surfaces to replace it.
+#   small       -- 5 deg, laminar and attached in the paper's tests.
+#   substantial -- 15 deg.  NOT sourced; see the note above.
+#   unknown     -- 10 deg, reported as an ASSUMPTION.  Set the reentry object's
+#                  glider_control_surfaces to replace it.  Notably this is the
+#                  one tier the paper does support: attached flow was observed
+#                  at beta = 10 deg with incidence.
 #
-# To be clear about which half is sourced: the 5-15 deg BAND is (per the caveat
-# above).  Laying the tier names onto its endpoints -- small to the bottom,
-# substantial to the top, unknown to the middle -- is a monotone modelling
-# choice, not a measurement, and no document in this repo grades those three
-# words.  It is chosen so the ordering is defensible and the outcome is
-# reported, not hidden: 'unknown' is flagged in the verdict wherever it produces
-# a glide.
-#
-# NOTE the same descriptor also feeds damping_estimate._TIER_RATIO, which reads
-# it as a control-surface AREA ratio (small 0.08, substantial 0.30) rather than a
-# deflection.  That is deliberate, not a collision: a tier says how much control
-# a vehicle has, and the two modules need different consequences of that -- area
-# for the lift margin a flap can add, deflection for the incidence it can trim
-# to.  They must stay ordered the same way; if one is re-graded, re-grade both.
+# Laying tier names onto deflection angles is a modelling choice either way; no
+# document in this repo grades those three words.
 _DELTA_MAX_BY_CONTROL = {'none': 0.0, 'small': 5.0, 'substantial': 15.0,
                          'unknown': 10.0}
 _DELTA_MAX_DEFAULT_DEG = 10.0

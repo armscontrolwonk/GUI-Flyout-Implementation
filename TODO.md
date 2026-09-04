@@ -116,9 +116,29 @@ Scud-B fins give 0.66, well below the old 0.85 -- the constant had been
 overstating control authority.  Achievable L/D for a Scud-B body at the
 'substantial' tier drops 3.19 -> 2.70 accordingly.
 
-(d) The Kumar & Stollery deflection band is a [snippet] in
-docs/cl_margin_references.md, not read against the primary; and laying the tier
-names onto its endpoints is a modelling choice, not a measurement.
+(d) DEFLECTION BAND -- SOURCE NOW VERIFIED, AND IT DOES NOT SAY WHAT WE CITED.
+Kumar & Stollery was read against the paper 2026-09-04.  Two corrections:
+  * Citation: it is "Hypersonic Control Flap Effectiveness", ICAS-94-4.4.3,
+    19th ICAS Congress, 1994, pp. 1194-1204 (Cranfield) -- NOT Aeronautical
+    Journal 100(996), 1996 as recorded.
+  * Content: it is at M 8.2, not "M ~ 10", and it contains NO "usable deflection
+    5-15 deg" band and no "critical deflection ~ 15 deg".  What it reports is
+    laminar INCIPIENT SEPARATION at flap angle 7.8 deg (alpha = 5 deg) and
+    8.4 deg (alpha = 10 deg), with flow still attached at beta = 10 deg when
+    alpha = 10 deg because incidence delays separation, and the flap boundary
+    layer laminar at beta = 5 / transitional at 15 / turbulent at 25.  The old
+    "5-15" appears to have conflated that boundary-layer-state sequence with a
+    usable-deflection limit.
+
+DECISION NEEDED, not a silent fix.  The paper anchors separation onset near
+8 deg.  trim_gate._DELTA_MAX_BY_CONTROL uses 5/15/10 and
+damping_estimate.DELTA_MAX_DEG uses 15; the 15 deg figure is now unsourced in
+both.  Re-anchoring the 'substantial' tier from 15 to ~8-10 deg would cut
+achievable glide for every control-rich body -- a real change to flown results,
+in the conservative direction -- and the two modules must move together.  Note
+separation onset is not the same as zero effectiveness, so 8 deg is a lower
+bound on usable travel rather than a hard cap; that is exactly the judgement
+that needs making.  Verified entry: docs/cl_margin_references.md.
 
 Open (only if a user still sees unrealistic glide range with correct cg):
 audit whether the phugoid / skip-glide LAW loses too little energy per skip
