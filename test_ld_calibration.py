@@ -373,3 +373,61 @@ def test_deflection_factor_matches_naca1307_chart1():
     assert 0.30 <= x_at_min <= 0.50, f"chart 1 minimum sits near r/s 0.4, got {x_at_min}"
     # k_W(B) never leaves the chart's band
     assert all(0.92 <= v <= 1.0 for v in ks)
+
+
+# ── "Set the CG forward" needs a station, not an adjective ───────────────────
+
+def test_cg_targets_inverts_the_static_margin_exactly():
+    """cg_for_sm_m must actually deliver the margin it promises.
+
+    SM = (x_cp - x_cg)/d is the gate's own definition, so inverting it is exact,
+    and that is what makes the advice actionable: a station, not "forward"."""
+    p = _tiered('substantial', l_over_d=13.4, fins=True, cg_frac=0.55)
+    for target in (0.0, 0.25, 0.5, 1.0, 2.0):
+        t = tg.cg_targets(p, mach=5.0, sm_target_cal=target, find_glide_cg=False)
+        assert not t.get('error')
+        got = tg.trim_gate(p, mach=5.0, x_cg_m=t['cg_for_sm_m'])
+        assert got['static_margin_cal'] == pytest.approx(target, abs=1e-9)
+
+
+def test_cg_targets_names_the_neutral_point_as_the_hard_limit():
+    """The neutral point is where the margin goes to zero: CG aft of it tumbles,
+    CG forward of it is stable.  Both sides are checked, because a limit you
+    only test on one side is not a limit."""
+    p = _tiered('substantial', l_over_d=13.4, fins=True, cg_frac=0.55)
+    t = tg.cg_targets(p, mach=5.0, find_glide_cg=False)
+    np_m, d = t['neutral_point_m'], t['diameter_m']
+    assert tg.trim_gate(p, mach=5.0, x_cg_m=np_m + 0.05 * d)['tumbles'] is True
+    assert tg.trim_gate(p, mach=5.0, x_cg_m=np_m - 0.05 * d)['tumbles'] is False
+    # the reported margin is the distance to that limit
+    assert t['margin_m'] == pytest.approx(np_m - t['x_cg_m'], abs=1e-9)
+
+
+def test_moving_the_cg_forward_costs_glide():
+    """The trade the old advice hid.  Moving the CG forward buys stability but
+    STIFFENS the airframe, so a given deflection trims to a smaller angle of
+    attack and the achievable L/D falls.  "Set it forward" is therefore not
+    free, and the estimator has to show both numbers or it misleads."""
+    p = _tiered('substantial', l_over_d=13.4, fins=True, cg_frac=0.55)
+    t = tg.cg_targets(p, mach=5.0, find_glide_cg=False)
+    np_m = t['neutral_point_m']
+    rows = []
+    for frac in (0.35, 0.50, 0.65, 0.80, 0.95):
+        r = tg.trim_gate(p, mach=5.0, x_cg_m=frac * np_m)
+        if not r.get('tumbles'):
+            rows.append((frac, r['static_margin_cal'], r['LD_achievable']))
+    assert len(rows) >= 4
+    sms = [sm for _, sm, _ in rows]
+    lds = [ld for _, _, ld in rows]
+    assert all(b < a for a, b in zip(sms, sms[1:])), sms   # aft -> less stable
+    assert lds[-1] > lds[0], lds                            # ...but more glide
+
+
+def test_cg_targets_is_cheap_when_the_glide_scan_is_skipped():
+    """The previews call this on field edits, so the closed-form fields must not
+    drag the several-hundred-evaluation glide scan along with them."""
+    p = _tiered('substantial', l_over_d=13.4, fins=True, cg_frac=0.55)
+    t = tg.cg_targets(p, mach=5.0, find_glide_cg=False)
+    assert t['cg_for_glide_m'] is None
+    for k in ('neutral_point_m', 'cg_for_sm_m', 'margin_m', 'static_margin_cal'):
+        assert isinstance(t[k], float)

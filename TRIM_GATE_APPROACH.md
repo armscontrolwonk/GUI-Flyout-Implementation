@@ -240,6 +240,27 @@ measured, pinned so it cannot silently widen, and left open.
 finless. The fin normal-force term and the control-deflection term are validated
 against **no data at all**. Only the fin's viscous *station* is sourced.
 
+### 3.5 Answer the CG question with a station
+
+The gate's stability verdict is only useful if the user can act on it. "Set the
+CG forward" is not actionable, and the auto CG (a uniform-tube centroid) makes a
+warhead-forward missile look unstable, so the failure was easy to hit and hard
+to fix.
+
+`cg_targets()` inverts the gate's own static-margin definition, which is exact,
+and reports the **neutral point** the CG must sit forward of, the current margin
+in metres as well as calibers, and the CG that would buy a requested margin.
+
+It also reports the **trade**, which the old advice hid: moving the CG forward
+buys stability but stiffens the airframe, so the same deflection trims to a
+smaller incidence and achievable L/D falls. There is a window, not a maximum.
+An estimator showing only the stability side would walk a user straight through
+it, so both directions are pinned by tests.
+
+Note the other lever, which is easy to miss: the warhead-forward CG only engages
+when the reentry object declares a **body nose length**. Left at zero, the
+estimate falls back to the uniform tube regardless of the declared payload.
+
 ---
 
 ## 7. Open items

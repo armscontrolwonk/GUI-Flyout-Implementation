@@ -2234,6 +2234,30 @@ against the primary, and that paper is in neither the repo nor the Drive library
 It is reused as an in-repo precedent of recorded but unverified provenance,
 replacing a 25° default that carried **no citation at all**.
 
+**Where the CG has to be (`cg_targets`).** "Set the CG forward" is not
+actionable without a station, so the gate answers the question directly. Since
+`SM = (x_cp − x_cg)/d` is the gate's own definition, a target margin inverts
+exactly:
+
+```
+x_cg(SM) = x_cp − SM·d
+```
+
+`cg_targets()` returns the **neutral point** `x_cp` (the CG must be forward of
+it or the body tumbles), the current CG and its margin in both calibers and
+metres, the CG that would buy a requested margin, and optionally the CG at which
+the body first reaches its full aerodynamic ceiling. That last one is found by
+scanning the stable range rather than inverting, because trim angle depends on
+the CG through the whole nonlinear moment balance, not through the static margin
+alone; it is skippable, since it costs a few hundred gate evaluations and the
+live previews only need the closed-form fields.
+
+The estimator reports the **trade**, not just the stability side. Moving the CG
+forward buys margin but stiffens the airframe, so the same deflection trims to a
+smaller angle of attack and achievable L/D *falls*. There is normally a usable
+window rather than a best value, and an estimator that showed only the margin
+would push a user straight through it. Both directions are pinned by tests.
+
 *What is validated, and what is not.* The gate's dependency is the **moment**,
 so `validation/datcom/compare_datcom.py` now also compares the modelled centre
 of pressure against the committed DATCOM `CM`/`XCP` columns (which had been in

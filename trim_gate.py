@@ -46,15 +46,16 @@ airframe.
 
 Control normal-force slope (all-moving-fin model, ref body base area):
     C_Nδ = control_eff · C_Nα,fin
-where control_eff is meant to be the N-K-P deflection-vs-AoA effectiveness ratio
-k_W(B)/K_W(B) (~1.0 ideal all-moving, ~0.85 typical, ~0.5 trailing-edge flap).
-UNVERIFIED, and flagged rather than silently re-blessed.  glider_ld.nkp_interference
-implements only the ANGLE-OF-ATTACK factors K_W(B)/K_B(W); the deflection factor
-k_W(B) is implemented nowhere, so the ratio cannot be computed here yet.  0.85 is
-carried over unchanged from the previous implementation.
+where control_eff is the N-K-P deflection-vs-AoA effectiveness ratio
+k_W(B)/K_W(B), DERIVED from fin geometry (glider_ld.control_effectiveness), not
+assumed.  It replaced a hard-coded 0.85 that had no backing document, and it is
+a FUNCTION of body-radius/semispan -- about 1.0 for a vanishing body down to
+about 0.52 for a fin nearly buried in one -- so no constant could have been right
+in form.  A Scud-B's fins give 0.66, i.e. the old constant had been overstating
+control authority.
 
-The source IS now located, and the construction REDUCES to this exact ratio.
-NACA Rep. 1307 (Drive; linked from data/REFERENCES.md) defines all four factors
+Why that ratio is the whole answer.  NACA Rep. 1307 (Drive; linked from
+data/REFERENCES.md) defines all four factors
 on a COMMON normalisation -- its Eqs. (4),(5) for K_B(W),K_W(B) and (7),(8) for
 k_B(W),k_W(B), every one of them divided by the same wing-alone (C_La)_W.  Moore,
 McInville & Hymer (JSR 33(3), 1996) give the fin construction as
@@ -70,15 +71,13 @@ k_B(W) of its Eq. (33) "by no more than 0.01").  Substituting,
         = k_W(B)*[K_W(B) + K_B(W)] / K_W(B) / [K_W(B) + K_B(W)]
         = k_W(B) / K_W(B)
 
-so the carryover cancels EXACTLY and control_eff is the simple ratio this
-docstring always claimed it was.  The remaining unknown is therefore ONE
-quantity, not two: k_W(B), given in closed form by NACA 1307 **Eq. (19)** in
-terms of tau = s/r and plotted in **Chart 1**.  K_W(B) is already implemented
-(glider_ld.nkp_interference).
-
-Still not implemented for one reason only: Eq. (19) is a display equation that
-did not survive OCR of either scanned copy in Drive, and Chart 1 is a figure.
-Nothing is guessed from the fragment.  See TODO.md item (c).
+so the carryover cancels EXACTLY, leaving the simple ratio.  Both halves are
+implemented: K_W(B) by glider_ld.nkp_interference, and k_W(B) by
+glider_ld.nkp_deflection_factor -- the closed form of NACA 1307 **Eq. (19)** in
+tau = s/r.  The Eq. (19) transcription is checked against its two theoretical
+limits and against **Chart 1** of the same report (a shallow minimum near 0.93
+at r/s ~ 0.4 between endpoints of 1.0, reproduced in both depth and location),
+pinned by tests in test_ld_calibration.py.
 
 OUTCOMES:
   * SM <= 0  -> statically unstable -> tumbles -> reenters BALLISTICALLY (L/D≈0).
@@ -228,6 +227,77 @@ def control_authority(ro, mach: float = 0.0,
     return dict(delta_max_deg=float(delta), control_eff=float(eff),
                 tier=tier if tier in _DELTA_MAX_BY_CONTROL else 'unknown',
                 assumed=bool(assumed))
+
+
+def cg_targets(params, mach: float = 3.0, sm_target_cal: float = 0.5,
+               find_glide_cg: bool = True) -> dict:
+    """Where the reentry CG has to be, in metres aft of the nose.
+
+    "Set the CG forward" is not actionable on its own -- forward of WHAT?  This
+    answers that.  Everything here follows from the gate's own static margin
+    definition, SM = (x_cp - x_cg)/d, so a target margin inverts directly:
+
+        x_cg(SM) = x_cp - SM * d
+
+    Returns, all in metres aft of the nose tip unless noted:
+      neutral_point_m   x_cp.  The CG must be FORWARD of this or the body is
+                        statically unstable and tumbles.  This is the hard limit.
+      x_cg_m            what the CG estimate currently gives.
+      static_margin_cal current margin, in calibers.
+      cg_for_sm_m       CG that would give sm_target_cal.
+      cg_for_glide_m    (find_glide_cg only -- it costs a few hundred gate
+                        evaluations, so callers driving a live preview can skip
+                        it; the other fields are closed-form and free)
+                        CG at which the body first reaches its best-glide angle
+                        of attack, i.e. the full aerodynamic ceiling, or None if
+                        no CG in the stable range gets there at the vehicle's
+                        control authority.  Found by scanning the stable range,
+                        because trim alpha depends on the CG through the whole
+                        nonlinear moment balance, not through SM alone.
+      margin_m          how far forward of neutral the current CG sits (>0 stable).
+      body_length_m     the length these stations are measured along.
+
+    Note the trade the numbers will show: moving the CG forward buys stability
+    but COSTS glide, because a stiffer airframe trims to a smaller angle of
+    attack at the same deflection.  There is usually a window, not a maximum.
+    """
+    g = trim_gate(params, mach=mach)
+    if g.get('error'):
+        return dict(error=g['error'])
+    d = float(g['diameter_m'])
+    x_cp = float(g['x_cp_m'])
+    last = glider_ld._last_stage(params)
+    L = float(getattr(last, 'length_m', 0.0) or 0.0)
+
+    cg_for_glide = None
+    if L > 0 and find_glide_cg:
+        # Scan forward from the neutral point.  Step is fine enough to land
+        # within a few cm on a missile-scale body.
+        steps = 400
+        for i in range(1, steps + 1):
+            x = x_cp - (i / steps) * x_cp
+            if x <= 0:
+                break
+            r = trim_gate(params, mach=mach, x_cg_m=x)
+            if r.get('error') or r.get('tumbles'):
+                continue
+            if r['LD_achievable'] >= g['LD_max'] - 1e-9:
+                cg_for_glide = x
+                break
+    return dict(
+        neutral_point_m=x_cp,
+        x_cg_m=float(g['x_cg_m']),
+        static_margin_cal=float(g['static_margin_cal']),
+        margin_m=x_cp - float(g['x_cg_m']),
+        cg_for_sm_m=x_cp - float(sm_target_cal) * d,
+        sm_target_cal=float(sm_target_cal),
+        cg_for_glide_m=cg_for_glide,
+        body_length_m=L,
+        diameter_m=d,
+        LD_max=float(g['LD_max']),
+        LD_achievable=float(g['LD_achievable']),
+        tumbles=bool(g.get('tumbles')),
+    )
 
 
 def trim_gate(params, mach: float = 3.0, delta_max_deg: float = None,

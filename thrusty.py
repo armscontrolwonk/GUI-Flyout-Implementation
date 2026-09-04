@@ -5433,8 +5433,22 @@ class ROEditorDialog(tk.Toplevel):
                 # Statically unstable → the run tumbles, but still report the
                 # aero (L/D)_max the shape could reach if trimmed — the estimate
                 # must always return a value, plus the lever that unlocks it.
-                _tail = (f" — aero max ~{_lm:.2f} if trimmed; "
-                         f"set Reentry CG forward" if _lm > 0.0 else "")
+                # "Set the CG forward" is not actionable without a station,
+                # so give one: the neutral point the CG must be ahead of, and
+                # the CG that would buy a half-caliber margin.
+                _tail = ""
+                try:
+                    _ct = _tg.cg_targets(p, mach=_gld.GLIDE_MACH_REF,
+                                         find_glide_cg=False)
+                    if not _ct.get('error'):
+                        _tail = (f" — CG {_ct['x_cg_m']:.2f} m is aft of the "
+                                 f"neutral point {_ct['neutral_point_m']:.2f} m; "
+                                 f"set Reentry CG ≤ {_ct['cg_for_sm_m']:.2f} m "
+                                 f"for +0.5 cal")
+                except Exception:
+                    pass
+                if not _tail and _lm > 0.0:
+                    _tail = f" — aero max ~{_lm:.2f} if trimmed"
                 lbl.config(text=f"0 → tumbles — unstable "
                                 f"(SM {_sm:+.1f} cal){_tail}")
             elif g['LD_achievable'] <= 0.0:
@@ -9925,6 +9939,16 @@ class BoosterFlyoutApp(tk.Tk):
             _ach = g['LD_achievable']
             _sm = g['static_margin_cal']
             if g.get('tumbles'):
+                try:
+                    _ct = _tg.cg_targets(p, mach=_gld.GLIDE_MACH_REF,
+                                         find_glide_cg=False)
+                    if not _ct.get('error'):
+                        return (f"tumbles — unstable (SM {_sm:+.1f} cal); CG "
+                                f"{_ct['x_cg_m']:.2f} m is aft of neutral "
+                                f"{_ct['neutral_point_m']:.2f} m — set Reentry "
+                                f"CG ≤ {_ct['cg_for_sm_m']:.2f} m  (derived)")
+                except Exception:
+                    pass
                 return f"tumbles — unstable (SM {_sm:+.1f} cal)  (derived)"
             if _ach <= 0.0:
                 _why = ("no control surfaces"
