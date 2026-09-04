@@ -9,11 +9,11 @@ designed property and is supplied directly as ro.glider_LD.
 
 Method: the standard semi-empirical component build-up for slender body+fin
 configurations at angle of attack (the same theoretical core Booster DATCOM
-uses), assembled from these primary sources.  NOTE none of the three is in the
-repo: data/ holds no PDFs (papers live in Drive per data/REFERENCES.md, which
-does not list them either), so the citations below are the record, not a file
-you can open.  The one cross-check with committed primary material is Digital
-DATCOM, in validation/datcom/:
+uses), assembled from these primary sources.  They are NOT in the repo (data/
+holds no PDFs) but they ARE in the Drive library, and data/REFERENCES.md now
+carries a direct link for each under "Aero build-up and trim-gate sources".
+The one cross-check with committed primary material is Digital DATCOM, in
+validation/datcom/:
   * Allen & Perkins, NACA Rep. 1048 (1951): the two-term body normal force
     (slender-body potential + viscous crossflow); origin of the crossflow term.
   * Jorgensen, NASA TR R-474 (1977): generalises it to all AoA (Eq 2.12), the

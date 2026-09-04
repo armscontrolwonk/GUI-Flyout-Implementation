@@ -36,6 +36,24 @@ trajectory code names directly.
 | **Sooy & Schmidt 2005** | Sooy, T. J. & Schmidt, R. Z., *Aerodynamic Predictions, Comparisons, and Validations Using Missile DATCOM (97) and Aeroprediction 98 (AP98)*, JSR 42(2), March-April 2005 | Bounds the ACCURACY OF THE REFERENCE the trim gate is validated against: DATCOM centre-of-pressure error vs wind tunnel < 2 % of body length at any AoA for body-wing-tail (M1.5, M4.6) and body-tail (M2.0). Also publishes the convention x_cp = −C_m/C_N (their Eq. 4) used by `validation/datcom/compare_datcom.py`. Their body-ALONE case 3 is explicitly inconclusive (biased test data) and is NOT used | **no PDF in repo** (read from primary, 2026-09-03) | **not yet in Drive** |
 | **Sutton-Graves 1971** | Sutton, K. & Graves, R. A., *A General Stagnation-Point Convective-Heating Equation for Arbitrary Gas Mixtures*, NASA TR R-376, 1971 | The stagnation convective-heating constant (k = 1.7415e-4) at the root of the heating chain | `data/sutton-graves-1971-stagnation-point-convective-heating-nasa-tr-r-376-ntrs-19720003329.pdf` | [sutton-graves-1971…ntrs-19720003329.pdf](https://drive.google.com/file/d/1wBfCRSnc8R-sijFD3qotEMgiI85LwXdw/view) |
 
+## Aero build-up and trim-gate sources
+
+Added 2026-09-04.  These are the citations `glider_ld.py`, `trim_gate.py` and
+`grid_fin_sizing.py` name directly.  They were previously absent from this
+manifest entirely, and several code comments claimed they were "in `data/`" —
+they are not, but they ARE in the Drive folder under the standing policy, so
+they are linked here rather than merely cited.
+
+| Key | Citation | What the code uses it for | Drive |
+|---|---|---|---|
+| **NACA Rep. 1307** | Pitts, W. C., Nielsen, J. N. & Kaattari, G. E., *Lift and Center of Pressure of Wing-Body-Tail Combinations at Subsonic, Transonic, and Supersonic Speeds*, 1957 | The wing-body interference factors. `glider_ld.nkp_interference` implements the ANGLE-OF-ATTACK pair K_W(B)/K_B(W) (Eqs. 14/21; sum is the identity (1+r/s)²). The DEFLECTION pair k_W(B)/k_B(W) is defined at Eq. (8), given in closed form by **Eq. (19)** in terms of τ = s/r, and plotted in **Chart 1** — this is what `trim_gate`'s `control_eff` needs and does not yet have | [pitts-nielsen-kaattari…rep-1307](https://drive.google.com/file/d/1EUc8BzFzN9xPZLOTo0W_5_XOYpVbfPip/view) |
+| **Jorgensen TR R-474** | Jorgensen, L. H., *Prediction of Static Aerodynamic Characteristics for Slender Bodies Alone and with Lifting Surfaces to Very High Angles of Attack*, NASA TR R-474, 1977 | The all-AoA body normal force (Eq. 2.12), the body+wing assembly (Eq. 5.3) with the sin(2α)/(2α) correction, axial force (2.18), C_L/C_D (2.16/2.17) | [jorgensen-1977…tr-r-474](https://drive.google.com/file/d/1JsConkX6ZsTdn_GtI9waYe19Lyip0wcX/view) |
+| **Jorgensen TN D-7228** | Jorgensen, L. H., *Prediction of Static Aerodynamic Characteristics for Space-Shuttle-Like and Other Bodies at Angles of Attack From 0° to 180°*, NASA TN D-7228, 1973 | The analytic statement of the build-up (Eq. 1); the basis cited for `_ETA = 1.0` at supersonic/hypersonic free-stream | [jorgensen-1973…tn-d-7228](https://drive.google.com/file/d/1Np87dpkQF8OpgIjU7P7f9jTQ6I1C_-SX/view) |
+| **Allen & Perkins NACA 1048** | Allen, H. J. & Perkins, E. W., *A Study of Effects of Viscosity on Flow Over Slender Inclined Bodies of Revolution*, NACA Rep. 1048, 1951 | Origin of the viscous-crossflow term and the planform it acts on | [allen-perkins-1951…rep-1048](https://drive.google.com/file/d/17JNzvkJNCwDjQVyedVG-k_vwoNoMjFAf/view) |
+| **Allen & Perkins RM A50L07** | Allen, H. J. & Perkins, E. W., *Characteristics of Flow Over Inclined Bodies of Revolution*, NACA RM A50L07, 1951 | Companion to the above | [allen-perkins-1951…rm-a50l07](https://drive.google.com/file/d/1tNV-yzChdpgeqjssJvEcGpliBS4Zasro/view) |
+| **Gowen & Perkins TN 2960** | Gowen, F. E. & Perkins, E. W., *Drag of Circular Cylinders for a Wide Range of Reynolds Numbers and Mach Numbers*, NACA TN 2960, 1953 | Fig. 7 is the source of `glider_ld._CDN_VS_MCROSS`, the 17-point crossflow drag table — the one digitised artifact in the aero chain, and it carries no digitisation provenance header. Worth re-checking against this file | [gowen-perkins-1953…tn-2960](https://drive.google.com/file/d/14Bl4bQaUw-ixFNYiKagvlT_W1CmX044n/view) |
+| **Barrowman 1967** | Barrowman, J. S., *The Practical Calculation of the Aerodynamic Characteristics of Slender Finned Vehicles*, M.S. thesis, 1967 | Nose centre-of-pressure fractions (`grid_fin_sizing._NOSE_CP_FRACTION`) and the fin normal-force slope (Eq. 3-12) | [barrowman-1967…thesis](https://drive.google.com/file/d/1a3-XJID_N5Gfku3eOI8HkbHjOdG-12SP/view) |
+
 ## Supporting material in the Drive Thrusty folder
 
 - **Grant 2012** — Grant, M. J., *Rapid Simultaneous Hypersonic Aerodynamic

@@ -48,12 +48,20 @@ Control normal-force slope (all-moving-fin model, ref body base area):
     C_Nδ = control_eff · C_Nα,fin
 where control_eff is meant to be the N-K-P deflection-vs-AoA effectiveness ratio
 k_W(B)/K_W(B) (~1.0 ideal all-moving, ~0.85 typical, ~0.5 trailing-edge flap).
-UNVERIFIED, and flagged rather than silently re-blessed: NACA 1307 is not in this
-repo in any form, and glider_ld.nkp_interference implements only the
-ANGLE-OF-ATTACK factors K_W(B)/K_B(W) — the deflection factor k_W(B) is
-implemented nowhere, so the ratio cannot be derived in-repo either.  0.85 is
-carried over unchanged from the previous implementation; deriving k_W(B)
-properly is the follow-up (TODO.md).
+UNVERIFIED, and flagged rather than silently re-blessed.  glider_ld.nkp_interference
+implements only the ANGLE-OF-ATTACK factors K_W(B)/K_B(W); the deflection factor
+k_W(B) is implemented nowhere, so the ratio cannot be computed here yet.  0.85 is
+carried over unchanged from the previous implementation.
+
+The source IS now located: NACA Rep. 1307 is in the Drive library and linked from
+data/REFERENCES.md.  It defines the deflection pair at its Eq. (8), gives k_W(B)
+in closed form at **Eq. (19)** in terms of tau = s/r, and plots it in **Chart 1**.
+Moore, McInville & Hymer (JSR 33(3), 1996) confirm the construction:
+control_eff = [k_W(B) + k_B(W)] / [K_W(B) + K_B(W)], with k_B(W) also slender-body
+-- and this file already has the denominator exactly as (1+r/s)^2.  What blocks
+implementation is only transcription: Eq. (19) is a display equation that did not
+survive OCR of either scanned copy, and Chart 1 is a figure.  Reading Eq. (19)
+off the page finishes it.  See TODO.md item (c).
 
 OUTCOMES:
   * SM <= 0  -> statically unstable -> tumbles -> reenters BALLISTICALLY (L/D≈0).
@@ -108,8 +116,9 @@ import grid_fin_sizing as gfs
 # PROVENANCE, stated plainly per that file's own convention: the Kumar & Stollery
 # entry is marked **[snippet]** there -- a web-search extract, not read against
 # the primary, "spot-check against the source before publication-grade quoting".
-# The paper is not in the repo (data/ holds no PDFs; papers live in Drive per
-# data/REFERENCES.md).  So this band is an IN-REPO PRECEDENT of recorded but
+# The paper is not in the repo NOR in the Drive library (unlike the aero
+# build-up sources, which data/REFERENCES.md now links directly).  So this band
+# is an IN-REPO PRECEDENT of recorded but
 # unverified provenance, reused for consistency -- not a verified measurement.
 # It nevertheless replaces a number with NO citation at all: the 25 deg it
 # supersedes appeared in this file's signature uncited, and TODO.md and
