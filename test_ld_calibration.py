@@ -292,3 +292,84 @@ def test_cp_bias_is_forward_and_bounded():
     assert max(errs) < 0.0, "model c.p. is expected to be FORWARD of DATCOM everywhere"
     assert min(errs) > -25.0, (
         f"c.p. bias widened beyond the recorded -20% band: worst {min(errs):.1f}% of L")
+
+
+# ── Control effectiveness: derived from NACA 1307, not assumed ────────────────
+
+def test_deflection_factor_matches_its_theoretical_limits():
+    """NACA 1307 Eq. (19) transcription guard.
+
+    The closed form has two limits fixed by the physics rather than by the
+    algebra, and they are what verify the transcription: as tau = s/r -> inf the
+    body vanishes and the fin IS the wing alone, so k_W(B) -> 1; as tau -> 1 the
+    fin is buried in the body and simply moves with it, so k_W(B) -> 1 again.
+    In between it dips to a shallow minimum near 0.93."""
+    assert gld.nkp_deflection_factor(1.0, 1e7) == pytest.approx(1.0, abs=1e-4)
+    for tau in (1e3, 1e4, 1e5):
+        assert gld.nkp_deflection_factor(1.0, tau) == pytest.approx(1.0, abs=2e-3)
+    for eps in (1e-9, 1e-6, 1e-4, 1e-3, 1e-2):
+        assert gld.nkp_deflection_factor(1.0, 1.0 + eps) == pytest.approx(1.0, abs=2e-2)
+    mid = [gld.nkp_deflection_factor(1.0, t) for t in (2.0, 2.5, 3.0, 3.5)]
+    assert all(0.90 < v < 0.97 for v in mid), mid
+    # degenerate inputs fall back to the wing-alone value
+    assert gld.nkp_deflection_factor(0.0, 1.0) == 1.0
+    assert gld.nkp_deflection_factor(1.0, 0.0) == 1.0
+
+
+def test_control_effectiveness_falls_with_body_share_and_is_never_a_constant():
+    """k_W(B)/K_W(B) is a FUNCTION of body-radius/semispan, which is the whole
+    point: the 0.85 constant it replaced could not be right in form.  It must
+    decrease monotonically as the body takes more of the span, and stay inside
+    the physically sensible band."""
+    ratios = [gld.control_effectiveness(lam, 1.0)
+              for lam in (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)]
+    assert all(b < a for a, b in zip(ratios, ratios[1:])), ratios
+    assert 0.5 < min(ratios) < max(ratios) < 1.0
+    # a vanishing body is the wing alone: ratio -> 1
+    assert gld.control_effectiveness(1e-9, 1.0) == pytest.approx(1.0, abs=1e-3)
+
+
+def test_gate_uses_the_derived_effectiveness_not_the_old_constant():
+    """The gate must take control_eff from fin geometry.  For a Scud-B-derived
+    body the derived value is well below the 0.85 that used to be hard-coded,
+    i.e. the old constant overstated control authority."""
+    p = _tiered('substantial', l_over_d=13.4, fins=True, cg_frac=0.50)
+    g = tg.trim_gate(p, mach=5.0)
+    last = gld._last_stage(p)
+    r = 0.5 * last.diameter_m
+    expect = gld.control_effectiveness(r, r + last.fin_span_m)
+    assert g['control_eff'] == pytest.approx(expect, rel=1e-9)
+    assert g['control_eff'] < 0.85          # the constant it replaced
+    assert 0.5 < g['control_eff'] < 1.0
+
+
+def test_deflection_factor_matches_naca1307_chart1():
+    """Independent check of the Eq. (19) transcription against Chart 1 of the
+    same report, "Values of lift ratios based on slender-body theory", read off
+    the printed chart against its 0.2-interval gridlines.
+
+    Chart 1 plots all four factors against the radius-semispan ratio r/s.  The
+    two that this codebase computes must reproduce it:
+
+      k_W(B)  starts at 1.0, dips to a shallow minimum of about 0.93 near
+              r/s = 0.4, and returns to 1.0 at r/s = 1.0.
+      K_W(B)  rises from 1.0 at r/s = 0 to 2.0 at r/s = 1.0.
+
+    The dip is the distinctive feature -- a transcription error in Eq. (19)
+    would not reproduce a minimum in the right place at the right depth."""
+    # endpoints
+    assert gld.nkp_deflection_factor(1e-9, 1.0) == pytest.approx(1.0, abs=1e-3)
+    assert gld.nkp_deflection_factor(1.0, 1.0 + 1e-9) == pytest.approx(1.0, abs=1e-3)
+    k0, _ = gld.nkp_interference(1e-9, 1.0)
+    assert k0 == pytest.approx(1.0, abs=1e-3)
+    k1, _ = gld.nkp_interference(0.999, 1.0)
+    assert k1 == pytest.approx(2.0, abs=0.05)
+    # the shallow minimum of k_W(B), located and valued off the chart
+    xs = [i / 200.0 for i in range(1, 200)]
+    ks = [gld.nkp_deflection_factor(x, 1.0) for x in xs]
+    kmin = min(ks)
+    x_at_min = xs[ks.index(kmin)]
+    assert 0.92 <= kmin <= 0.95, f"chart 1 minimum is ~0.93, got {kmin:.4f}"
+    assert 0.30 <= x_at_min <= 0.50, f"chart 1 minimum sits near r/s 0.4, got {x_at_min}"
+    # k_W(B) never leaves the chart's band
+    assert all(0.92 <= v <= 1.0 for v in ks)

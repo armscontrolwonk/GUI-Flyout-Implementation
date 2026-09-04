@@ -2195,13 +2195,44 @@ limit; `damping_estimate.py` caps at the same 15°. Control effectiveness is
 real-gas derated above M≈7 (Maus et al., *J. Spacecraft & Rockets* 21(2), 1984,
 and the STS-1 trim anomaly), matching that module's `REAL_GAS_DERATE`.
 
-*Provenance, stated plainly.* The Kumar & Stollery band is marked **[snippet]**
-in `docs/cl_margin_references.md` — a web-search extract, not read against the
-primary, and the paper is not in the repo. It is reused here as an in-repo
-precedent of recorded but unverified provenance, replacing a 25° default that
-carried **no citation at all**. `control_eff = 0.85` is likewise carried over
-unverified: NACA 1307 is not in the repo, and only the angle-of-attack factors
-`K_W(B)/K_B(W)` are implemented, not the deflection factor `k_W(B)`.
+**Control effectiveness is now derived, not assumed.** `C_Nδ = control_eff ·
+C_Nα,fin` with
+
+```
+control_eff = k_W(B) / K_W(B)
+```
+
+both from NACA Rep. 1307 slender-body theory, normalised by the same wing-alone
+`(C_Lα)_W` (their Eqs. 5 and 8), so the ratio is exact within that theory.
+`K_W(B)` is `glider_ld.nkp_interference`; `k_W(B)` is `nkp_deflection_factor`,
+the closed form of their **Eq. (19)** in `τ = s/r`.
+
+The body carryover *cancels* rather than being neglected. The full fin
+construction is `[k_W(B) + k_B(W)] / [K_W(B) + K_B(W)]` (Moore, McInville &
+Hymer, JSR 33(3), 1996 — matching the carryover `c_na_fin` already carries), and
+NACA 1307 Eq. (34) gives `k_B(W) ≈ k_W(B)·K_B(W)/K_W(B)`, stated to differ from
+the exact Eq. (33) value by no more than 0.01. Substituting, the bracket divides
+out exactly and leaves `k_W(B)/K_W(B)`.
+
+The transcription of Eq. (19) is checked two ways: against its theoretical
+limits (→ 1 as the body vanishes, and again as the fin is buried in it), and
+against **Chart 1** of the same report, which plots all four factors against
+`r/s` — `k_W(B)` starts at 1.0, dips to a shallow minimum near 0.93 around
+`r/s = 0.4`, and returns to 1.0, while `K_W(B)` runs 1.0 → 2.0. Both are pinned
+by tests.
+
+This replaced a hard-coded `0.85` with no backing document. The derived value is
+a **function of fin geometry**, running ~1.0 for a vanishing body down to ~0.52
+for a fin nearly buried in one, so no constant could have been right in form.
+For typical tail fins it lands well below 0.85 — a Scud-B's fins give 0.66 —
+meaning the old constant overstated control authority, the non-conservative
+direction.
+
+*Provenance, stated plainly.* The Kumar & Stollery deflection band is marked
+**[snippet]** in `docs/cl_margin_references.md` — a web-search extract, not read
+against the primary, and that paper is in neither the repo nor the Drive library.
+It is reused as an in-repo precedent of recorded but unverified provenance,
+replacing a 25° default that carried **no citation at all**.
 
 *What is validated, and what is not.* The gate's dependency is the **moment**,
 so `validation/datcom/compare_datcom.py` now also compares the modelled centre

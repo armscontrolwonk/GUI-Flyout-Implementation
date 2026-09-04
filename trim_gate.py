@@ -193,9 +193,15 @@ _ALPHA_FIN_LINEAR_DEG = 25.0
 _ALPHA_SWEEP_MAX_DEG = float(glider_ld.ALPHA_SWEEP_MAX_DEG)
 
 
-def control_authority(ro, mach: float = 0.0) -> dict:
+def control_authority(ro, mach: float = 0.0,
+                      fin_body_radius_m: float = 0.0,
+                      fin_semispan_m: float = 0.0) -> dict:
     """Commanded control authority for a no-separation body, from the reentry
     object's ``glider_control_surfaces`` descriptor.
+
+    fin_body_radius_m / fin_semispan_m give the fin geometry the effectiveness
+    ratio is derived from (body radius, and semispan measured from the body
+    AXIS).  Omit them and the ratio falls back to the wing-alone value 1.0.
 
     Returns delta_max_deg (usable one-sided deflection), control_eff (the N-K-P
     deflection-vs-AoA effectiveness ratio, real-gas derated when the reference
@@ -210,18 +216,21 @@ def control_authority(ro, mach: float = 0.0) -> dict:
     if explicit > 0.0:
         delta = min(explicit, _DELTA_MAX_BY_CONTROL['substantial'])
         assumed = False
-    # control_eff is the N-K-P deflection-vs-AoA effectiveness ratio k_W(B)/K_W(B)
-    # for a typical (not all-moving) surface.  CARRIED OVER UNCHANGED from the
-    # previous implementation, and flagged here rather than silently re-blessed:
-    # NACA 1307 is not in the repo in any form, glider_ld.nkp_interference
-    # implements only the ANGLE-OF-ATTACK factors K_W(B)/K_B(W), and the
-    # deflection-case factor k_W(B) is implemented nowhere -- so 0.85 cannot be
-    # derived in-repo and has no backing document here.  It is scoped to the
-    # control term alone and is not what made the old gate inert (that was the
-    # linearised lever and the uncited 25 deg), so it is left as-is rather than
-    # replaced by a second unsourced guess.  Deriving k_W(B) properly is the
-    # follow-up; see TODO.md.
-    eff = 0.85
+    # control_eff is the N-K-P deflection-vs-AoA effectiveness ratio k_W(B)/K_W(B),
+    # now DERIVED from fin geometry rather than assumed.  Both factors are NACA
+    # 1307 slender-body results on a common normalisation, so the ratio is exact
+    # within that theory; see glider_ld.control_effectiveness for the derivation
+    # and for why the body carryover cancels instead of being neglected.
+    #
+    # This replaces a hard-coded 0.85 that had no backing document.  The derived
+    # value is a FUNCTION of body-radius/semispan, running ~1.0 for a vanishing
+    # body down to ~0.52 for a fin nearly buried in one, so no constant could
+    # have been right in form.  For typical tail-fin geometries it lands well
+    # BELOW 0.85 (a Scud-B's fins give 0.66), meaning the old constant
+    # overstated control authority -- the non-conservative direction.
+    eff = (glider_ld.control_effectiveness(fin_body_radius_m, fin_semispan_m)
+           if (fin_body_radius_m > 0.0 and fin_semispan_m > fin_body_radius_m)
+           else 1.0)
     if mach and float(mach) >= _REAL_GAS_MACH:
         eff *= _REAL_GAS_DERATE
     return dict(delta_max_deg=float(delta), control_eff=float(eff),
@@ -289,7 +298,10 @@ def trim_gate(params, mach: float = 3.0, delta_max_deg: float = None,
     # viscous crossflow at the planform centroid, and the fin term (plus the
     # commanded control increment) at the fin station.  Solved by bisection on
     # the build-up's own alpha sweep interval, so nothing is extrapolated.
-    ctrl = control_authority(getattr(params, 'ro', None), mach=mach)
+    _r_fin = 0.5 * d
+    _s_fin = _r_fin + float(getattr(last, 'fin_span_m', 0.0) or 0.0)
+    ctrl = control_authority(getattr(params, 'ro', None), mach=mach,
+                             fin_body_radius_m=_r_fin, fin_semispan_m=_s_fin)
     if delta_max_deg is None:
         delta_max_deg = ctrl['delta_max_deg']
         delta_assumed = ctrl['assumed']

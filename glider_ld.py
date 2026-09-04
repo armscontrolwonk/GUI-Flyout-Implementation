@@ -138,6 +138,83 @@ def nkp_interference(r: float, s: float):
     return k_wb, k_bw
 
 
+def nkp_deflection_factor(r: float, s: float) -> float:
+    """NACA 1307 slender-body fin DEFLECTION factor k_W(B).
+
+    r = body radius, s = fin semispan from the body AXIS (= r + exposed
+    semispan), so tau = s/r is the report's semispan-radius ratio.
+
+    This is the deflection-case counterpart of nkp_interference's K_W(B): where
+    K_W(B) is the lift on the wing in the presence of the body per unit ANGLE OF
+    ATTACK (their Eq. 5), k_W(B) is the same ratio per unit fin DEFLECTION at
+    zero body incidence (their Eq. 8).  Both are normalised by the SAME
+    wing-alone (C_La)_W, so their ratio is dimensionless and the wing-alone
+    slope cancels -- which is what makes trim_gate's control_eff well defined.
+
+    Closed form, NACA Rep. 1307 Eq. (19), from the Appendix A load distribution:
+
+        k_W(B) = (1/pi^2) [ (pi^2/4)(tau+1)^2/tau^2
+                          + pi(tau^2+1)^2 / (tau^2 (tau-1)^2) * asin(x)
+                          - 2 pi (tau+1) / (tau (tau-1))
+                          + (tau^2+1)^2 / (tau^2 (tau-1)^2) * asin(x)^2
+                          - 4 (tau+1) / (tau (tau-1)) * asin(x)
+                          + 8/(tau-1)^2 * log((tau^2+1)/(2 tau)) ]
+        with x = (tau^2 - 1)/(tau^2 + 1).
+
+    Verified against the theoretical limit: as tau -> inf (vanishing body, the
+    fin IS the wing alone) k_W(B) -> 1.  It also -> 1 as tau -> 1 (the fin is
+    buried in the body and simply moves with it), with a shallow minimum of
+    about 0.935 near tau ~ 2.5-3.
+    """
+    if s <= 0 or r < 0 or r >= s:
+        return 1.0                     # no body, or degenerate: wing alone
+    if r <= 0:
+        return 1.0
+    tau = s / r
+    if tau > 1e6:                      # vanishing body -> wing alone
+        return 1.0
+    # Near tau = 1 the (tau-1)^2 denominators lose all precision to catastrophic
+    # cancellation (at tau = 1+1e-8 the expression returns -0.04).  The limit is
+    # 1.0 and the formula still holds it to ~1e-5 at tau = 1+1e-4, so clamp
+    # comfortably clear of the instability rather than at the singularity.
+    if tau - 1.0 < 1e-4:               # removable singularity; limit is 1
+        return 1.0
+    t2 = tau * tau
+    asin = math.asin((t2 - 1.0) / (t2 + 1.0))
+    tm1 = tau - 1.0
+    tp1 = tau + 1.0
+    q = (t2 + 1.0) ** 2 / (t2 * tm1 * tm1)
+    total = ((math.pi ** 2 / 4.0) * tp1 * tp1 / t2
+             + math.pi * q * asin
+             - 2.0 * math.pi * tp1 / (tau * tm1)
+             + q * asin * asin
+             - 4.0 * tp1 / (tau * tm1) * asin
+             + 8.0 / (tm1 * tm1) * math.log((t2 + 1.0) / (2.0 * tau)))
+    return total / math.pi ** 2
+
+
+def control_effectiveness(r: float, s: float) -> float:
+    """Deflection-vs-angle-of-attack control effectiveness, k_W(B)/K_W(B).
+
+    The quantity trim_gate multiplies C_Na,fin by to get C_Nd.  Derived, not
+    assumed: both factors are NACA 1307 slender-body results normalised by the
+    same wing-alone lift-curve slope, so the ratio is exact within that theory.
+
+    The body CARRYOVER cancels rather than being neglected.  The full fin
+    construction is [k_W(B) + k_B(W)] / [K_W(B) + K_B(W)] (Moore, McInville &
+    Hymer, JSR 33(3) 1996), and NACA 1307 Eq. (34) gives
+    k_B(W) ~= k_W(B) * K_B(W)/K_W(B) -- the report states this differs from the
+    exact slender-body k_B(W) of its Eq. (33) by no more than 0.01.  Substituting,
+    the [K_W(B) + K_B(W)] bracket divides out exactly and leaves k_W(B)/K_W(B).
+
+    Runs from ~1.0 for a vanishing body to ~0.52 for a fin nearly buried in one:
+    control effectiveness is a function of fin geometry, never a constant.
+    """
+    k = nkp_deflection_factor(r, s)
+    K, _ = nkp_interference(r, s)
+    return (k / K) if K > 0 else k
+
+
 def wing_alone_cla(exposed_semispan: float, c_root: float, c_tip: float,
                    mach: float, sweep_deg: float = 0.0) -> float:
     """Wing-alone lift-curve slope /rad (N-K-P 'wing alone' = the two exposed

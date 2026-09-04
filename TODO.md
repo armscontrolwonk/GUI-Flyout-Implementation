@@ -93,69 +93,28 @@ NOTHING: the committed DATCOM deck is body-alone and finless.  Generating a
 finned/deflected deck (validation/datcom/README.md has the PDAS build steps)
 would be the single highest-value piece of evidence for this subsystem.
 
-(c) control_eff = 0.85 is unverified AND WRONG IN FORM.  Hemsch & Nielsen,
-JSR 20(4) 1983 (read 2026-09-04) defines the two factors it is meant to be the
-ratio of: the Beskin upwash factor K_w for the angle-of-attack case, and the fin
-deflection factor A_ji (their Eqs. 11-12), tabulated for slender-body theory
-against a/s_m (body radius / semispan) in their Table 1.  The headline point is
-structural: control effectiveness is a FUNCTION of a/s_m, not a constant.  Using
-their Table 1 self-deflection column over the repo's own NACA 1307 K_W(B),
-the ratio runs
+(c) control_eff -- DONE (2026-09-04).  Was a hard-coded 0.85 with no backing
+document.  Now DERIVED as k_W(B)/K_W(B), both NACA 1307 slender-body factors on
+a common normalisation (their Eqs. 5 and 8, each over the wing-alone (C_La)_W).
+K_W(B) was already implemented; k_W(B) is glider_ld.nkp_deflection_factor, the
+closed form of their Eq. (19) in tau = s/r.
 
-    a/s_m   0.0   0.2   0.4   0.5   0.6   0.8   0.9
-    ratio   0.92  0.76  0.66  0.62  0.59  0.54  0.52
+The body carryover cancels rather than being dropped: the full construction is
+[k_W(B)+k_B(W)]/[K_W(B)+K_B(W)] (Moore, McInville & Hymer 1996), and NACA 1307
+Eq. (34) gives k_B(W) ~= k_W(B)*K_B(W)/K_W(B) to within 0.01, so the bracket
+divides out exactly.
 
-i.e. it varies by nearly 2x across fin geometries, and for the shipped Scud-B
-fins (a/s_m = 0.467) it is 0.635 -- well BELOW the hard-coded 0.85, so the
-constant currently OVERSTATES control authority for that vehicle, in the
-non-conservative direction.
+Transcription validated twice: against the theoretical limits (-> 1 both as the
+body vanishes and as the fin is buried in it), and against Chart 1 of the same
+report, which shows k_W(B) dipping to ~0.93 near r/s = 0.4 between endpoints of
+1.0 -- reproduced to the chart's readable precision, and pinned by
+test_deflection_factor_matches_naca1307_chart1.
 
-BLOCKER 2 IS NOW RESOLVED.  Moore, McInville & Hymer, JSR 33(3) 1996 (read
-2026-09-04) states that the deflection case uses the pair (k_W(B), k_B(W))
-mirroring the AoA pair (K_W(B), K_B(W)), and that "k_B(W) is still defined by
-slender-body theory".  So the correct construction is
-
-    control_eff = [k_W(B) + k_B(W)] / [K_W(B) + K_B(W)]
-
-and Thrusty already computes the denominator exactly as k_sum = (1+r/s)^2
-(glider_ld.nkp_interference).  What is missing is only the slender-body
-NUMERATOR pair.
-
-BLOCKER 1 REMAINS.  Hemsch & Nielsen Table 1's column headers did not survive
-PDF text extraction.  The self column was identified by physical argument (two
-columns are exactly antisymmetric = the perpendicular fin pair; one is small and
-same-signed = the opposite fin; the remaining one reaches 1.000 at a/s_m = 1
-where the exposed span vanishes = the self term).  Defensible, but an inference
-from values rather than a read header -- and in any case A_44 alone is not the
-numerator above, so the table is not sufficient by itself.
-
-REDUCED TO ONE UNKNOWN (2026-09-04).  NACA 1307 Eq. (34) gives
-k_B(W) ~= k_W(B)*K_B(W)/K_W(B), stating it differs from the exact slender-body
-k_B(W) (their Eq. 33) by no more than 0.01.  Substituting into the Moore
-construction [k_W(B)+k_B(W)]/[K_W(B)+K_B(W)], the carryover cancels exactly and
-
-    control_eff = k_W(B) / K_W(B)
-
-which is what trim_gate's docstring always claimed.  All four factors share the
-same normalisation (NACA 1307 Eqs. 4,5,7,8 are each divided by the wing-alone
-(C_La)_W), so the ratio is clean.  K_W(B) is already implemented.  The ONLY
-missing quantity is k_W(B) itself: NACA 1307 Eq. (19), closed form in
-tau = s/r, plotted in Chart 1.  Both the equation and the chart are display
-elements that OCR could not transcribe from either Drive copy.
-
-WHAT WOULD FINISH IT, in priority order:
-  1. NACA TR 1307 (Pitts, Nielsen & Kaattari, 1957) -- the closed-form
-     slender-body k_W(B) and k_B(W) for the DEFLECTION case, alongside the
-     K_W(B)/K_B(W) Thrusty already implements from it.  This is the single
-     document that closes the item, it is already cited throughout this repo,
-     and it is public.  Both Hemsch & Nielsen (their Ref. 9) and Moore et al.
-     (their Ref. 10) cite it for exactly this.
-  2. Nielsen, Hemsch & Smith, ONR-CR215-226-4F, Nov. 1977 -- the source of
-     Hemsch & Nielsen's Table 1 factors AND their slender-body K_w values.
-     Independently named by BOTH supplied papers (Hemsch & Nielsen Ref. 13,
-     Moore et al. Ref. 5), which is a strong signal it is the canonical source.
-  3. Nielsen, *Missile Aerodynamics*, McGraw-Hill 1960 -- the textbook
-     derivation of both factor pairs in one place.
+Effect: the ratio is a FUNCTION of fin geometry (~1.0 for a vanishing body,
+~0.52 for a fin nearly buried), so no constant could have been right in form.
+Scud-B fins give 0.66, well below the old 0.85 -- the constant had been
+overstating control authority.  Achievable L/D for a Scud-B body at the
+'substantial' tier drops 3.19 -> 2.70 accordingly.
 
 (d) The Kumar & Stollery deflection band is a [snippet] in
 docs/cl_margin_references.md, not read against the primary; and laying the tier
