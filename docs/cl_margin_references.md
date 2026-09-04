@@ -108,6 +108,15 @@ marked **[derived]** are standard closed-form results computed directly.
   effectiveness falls once the boundary layer separates ahead of the flap.
   Practical **usable laminar-hypersonic deflection ≈ 5–15°** (M≈10 "critical
   deflection" ≈ 15°).
+  *Acquisition status (checked 2026-09-04): NOT in the repo and NOT in the Drive
+  library.* The citation above is itself unverified — it comes from the same
+  web-search extract as the finding, so the volume/issue, the exact title and the
+  author initials have never been checked against the paper, and page numbers and
+  a DOI are missing. Anyone completing it should treat every field as provisional.
+  Note `kumar2015.pdf` in the Drive Thrusty folder is **a different paper**
+  (Kumar & Mahulikar, TPS materials, ASME JTSEA 8(2), 2016) — a name collision,
+  not this reference. This band is load-bearing: `trim_gate._DELTA_MAX_BY_CONTROL`
+  and `damping_estimate.DELTA_MAX_DEG` both rest on it.
 - **Maus, Griffith, Szema & Best, "…Real Gas Effects on Space Shuttle Orbiter
   Aerodynamics," *J. Spacecraft & Rockets* 21(2), 1984 (and the STS-1 trim
   anomaly, DOI 10.2514/3.26680).** **[snippet]** Real-gas γ reduction shifted
