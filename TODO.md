@@ -82,8 +82,41 @@ NOTHING: the committed DATCOM deck is body-alone and finless.  Generating a
 finned/deflected deck (validation/datcom/README.md has the PDAS build steps)
 would be the single highest-value piece of evidence for this subsystem.
 
-(c) control_eff = 0.85 is unverified (NACA 1307 is not in the repo; only the
-alpha-factors K_W(B)/K_B(W) are implemented, not the deflection factor k_W(B)).
+(c) control_eff = 0.85 is unverified AND WRONG IN FORM.  Hemsch & Nielsen,
+JSR 20(4) 1983 (read 2026-09-04) defines the two factors it is meant to be the
+ratio of: the Beskin upwash factor K_w for the angle-of-attack case, and the fin
+deflection factor A_ji (their Eqs. 11-12), tabulated for slender-body theory
+against a/s_m (body radius / semispan) in their Table 1.  The headline point is
+structural: control effectiveness is a FUNCTION of a/s_m, not a constant.  Using
+their Table 1 self-deflection column over the repo's own NACA 1307 K_W(B),
+the ratio runs
+
+    a/s_m   0.0   0.2   0.4   0.5   0.6   0.8   0.9
+    ratio   0.92  0.76  0.66  0.62  0.59  0.54  0.52
+
+i.e. it varies by nearly 2x across fin geometries, and for the shipped Scud-B
+fins (a/s_m = 0.467) it is 0.635 -- well BELOW the hard-coded 0.85, so the
+constant currently OVERSTATES control authority for that vehicle, in the
+non-conservative direction.
+
+NOT IMPLEMENTED, deliberately, on two honest blockers:
+  1. Table 1's column headers did not survive PDF text extraction.  The self
+     column was identified by physical argument (two columns are exactly
+     antisymmetric = the perpendicular fin pair; one is small and same-signed =
+     the opposite fin; the remaining one goes to 1.000 at a/s_m = 1 where the
+     exposed span vanishes = the self term).  Defensible, but it is an inference
+     from values, not a read header.  A look at the printed table settles it.
+  2. Thrusty's c_na_fin carries k_sum = K_W(B) + K_B(W), i.e. fin PLUS body
+     carryover.  The deflection analogue needs the deflection-case carryover
+     too (k_W(B) + k_B(W)), and whether A_44 already embeds that is exactly what
+     the normalisation question turns on.
+
+Settle both from Nielsen, Hemsch & Smith, "A Preliminary Method for Calculating
+the Aerodynamic Characteristics of Cruciform Missiles to High Angles of Attack
+Including Effects of Roll Angle and Control Deflections", ONR CR215-226-4F,
+Nov. 1977 (their Ref. 13, the source of both the Table 1 factors and the
+slender-body K_w values), or from Nielsen, *Missile Aerodynamics*, McGraw-Hill
+1960 (their Ref. 12), which derives k_W(B) and K_W(B) in the same framework.
 
 (d) The Kumar & Stollery deflection band is a [snippet] in
 docs/cl_margin_references.md, not read against the primary; and laying the tier
