@@ -375,7 +375,7 @@ def draw_booster(ax, p, title=None):
 
     # DRAWN ≡ FLOWN (FRONT_END_DESIGN.md §3): the front end is read from the
     # SAME object the physics flies, effective_ro(p).  For a NON-SEPARATING
-    # body (V-2/Scud/KN-23) the reentering vehicle IS the last stage, so its
+    # body (V-2/Scud) the reentering vehicle IS the last stage, so its
     # nose is carved SUBTRACTIVELY from the top of that stage (body length
     # unchanged) — never a cone stacked on top, and never a separate corner
     # object.  front_end records what was actually drawn, so the invariant is

@@ -30,12 +30,12 @@ from trajectory import integrate_trajectory
 load_booster_library()
 
 
-def _kn23(biconic, fore=1.0, break_d=0.5):
+def _body(biconic, fore=1.0, break_d=0.5):
     p = get_booster("Scud-B (R-17)")
     p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
-    ro = ROParams(name="KN23", mass_kg=2100.0, beta_kg_m2=0.0, shape="cone",
+    ro = ROParams(name="quasi-ballistic body", mass_kg=2100.0, beta_kg_m2=0.0, shape="cone",
                   diameter_m=1.1, length_m=6.7, separation_mode="body",
                   glider_enabled=True, glider_LD=0.0,
                   glider_guidance="damped_glide", body_nose_length_m=2.0,
@@ -88,18 +88,18 @@ def test_break_ratio_moves_the_cp():
 # ── the resolver activates only on valid biconic geometry ───────────────────
 
 def test_geometry_none_without_the_biconic_flag():
-    assert mm.biconic_nose_geometry(_kn23(False)) is None
+    assert mm.biconic_nose_geometry(_body(False)) is None
 
 
 def test_geometry_none_when_break_fields_unset():
     """Biconic flagged but fore-length / break-diameter missing → None, so the
     single-cone path stands (biconic activates only when fully specified)."""
-    p = _kn23(True, fore=0.0, break_d=0.0)
+    p = _body(True, fore=0.0, break_d=0.0)
     assert mm.biconic_nose_geometry(p) is None
 
 
 def test_geometry_resolves_the_two_half_angles():
-    g = mm.biconic_nose_geometry(_kn23(True))
+    g = mm.biconic_nose_geometry(_body(True))
     assert g is not None
     assert g['theta1_deg'] > 0 and g['theta2_deg'] > 0
     assert 0.0 < g['break_ratio'] < 1.0
@@ -111,7 +111,7 @@ def test_geometry_resolves_the_two_half_angles():
 def test_drag_cp_ld_all_move_with_biconic():
     """Toggling biconic changes the flown Cd0, the trim-gate CP/static margin,
     and the L/D — not just the picture."""
-    p0, p1 = _kn23(False), _kn23(True)
+    p0, p1 = _body(False), _body(True)
     cd0 = gld.body_cd0(p0, 5.0), gld.body_cd0(p1, 5.0)
     g0 = tg.trim_gate(p0, mach=gld.GLIDE_MACH_REF)
     g1 = tg.trim_gate(p1, mach=gld.GLIDE_MACH_REF)
@@ -126,7 +126,7 @@ def test_schematic_reports_a_biconic_front_end():
     """The schematic draws (and records) the biconic, so the invariant check
     sees body_biconic — the declared shape, not a stand-in cone."""
     fig, ax = plt.subplots()
-    info = bs.draw_booster(ax, _kn23(True))
+    info = bs.draw_booster(ax, _body(True))
     plt.close(fig)
     fe = info['front_end']
     assert fe['kind'] == 'body_biconic'
@@ -134,7 +134,7 @@ def test_schematic_reports_a_biconic_front_end():
     assert fe['nose_length_m'] == pytest.approx(2.0)
     # single-cone control still draws a plain nose
     fig, ax = plt.subplots()
-    info0 = bs.draw_booster(ax, _kn23(False))
+    info0 = bs.draw_booster(ax, _body(False))
     plt.close(fig)
     assert info0['front_end']['kind'] == 'body_nose'
 
@@ -143,7 +143,7 @@ def test_schematic_total_height_unchanged_by_biconic():
     """The nose is still carved subtractively — a biconic body is the same
     height as the airframe, not airframe + nose."""
     fig, ax = plt.subplots()
-    info = bs.draw_booster(ax, _kn23(True))
+    info = bs.draw_booster(ax, _body(True))
     plt.close(fig)
     assert info['total_height_m'] == pytest.approx(6.7, abs=1e-6)
 
@@ -154,9 +154,9 @@ def test_biconic_body_flies_and_differs_from_single_cone():
     """A biconic body integrates a full trajectory and lands a different range
     than the single-cone equivalent (the two-cone drag/CP genuinely propagate
     to the flyout, not just the estimate)."""
-    r_bic = integrate_trajectory(_kn23(True), 39.12, 125.67, 90.0,
+    r_bic = integrate_trajectory(_body(True), 39.12, 125.67, 90.0,
                                  burnout_angle_deg=-2.0, max_time_s=3600.0)
-    r_cone = integrate_trajectory(_kn23(False), 39.12, 125.67, 90.0,
+    r_cone = integrate_trajectory(_body(False), 39.12, 125.67, 90.0,
                                   burnout_angle_deg=-2.0, max_time_s=3600.0)
     assert r_bic['range_km'] > 0.0
     assert r_bic['range_km'] != pytest.approx(r_cone['range_km'], rel=1e-3)

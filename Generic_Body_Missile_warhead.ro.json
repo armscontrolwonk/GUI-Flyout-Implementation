@@ -1,5 +1,5 @@
 {
-  "name": "KN-23A warhead",
+  "name": "Generic body missile warhead",
   "mass_kg": 988.0,
   "beta_kg_m2": 0.0,
   "shape": "tangent_ogive",

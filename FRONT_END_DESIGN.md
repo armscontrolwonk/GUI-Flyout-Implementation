@@ -1,7 +1,7 @@
 # Front-End Redesign: the non-separating reentry body
 
 Design document for making Thrusty's depiction and modeling of a **unitary,
-non-separating** missile (V-2, Scud, KN-23 / Iskander, Pershing II MaRV) mutually
+non-separating** missile (V-2, Scud, a quasi-ballistic body / Iskander, Pershing II MaRV) mutually
 consistent. Companion to `BODY_REENTRY_DESIGN.md` (which established
 `separation_mode` and the run-level loadout) and `GLIDE_CAPTURE_DESIGN.md`.
 
@@ -28,8 +28,8 @@ against it.
 
 ## 2. The bug, precisely
 
-Reconstructing the user's KN-23 (single stage ⌀1.1 × 6.7 m; reentry object
-"KN23 front end" ⌀1.1 × 2.0 m, Von Kármán, `separation_mode = "body"`) exposes
+Reconstructing the user's a quasi-ballistic body (single stage ⌀1.1 × 6.7 m; reentry object
+"quasi-ballistic body front end" ⌀1.1 × 2.0 m, Von Kármán, `separation_mode = "body"`) exposes
 **three distinct defects that happen to overlap** on this vehicle:
 
 | # | Layer | What happens | Evidence |
@@ -83,14 +83,14 @@ The user chose the **subtractive** model for a unitary body (over the additive
 > **The last-stage length IS the whole airframe. The nose is the forward taper
 > carved out of the top of that length — not an extra section stacked on top.**
 
-For a KN-23 that means: one true length, 6.7 m. The forward (say) 2.0 m is the
+For a a quasi-ballistic body that means: one true length, 6.7 m. The forward (say) 2.0 m is the
 shaped ogive/Von-Kármán nose; the aft 4.7 m is the cylindrical motor body. Total
 drawn height = 6.7 m, matching the airframe and the flown body. There is no
 8.46 m anywhere.
 
 ### Why subtractive, not additive
 
-- **A unitary missile has one length.** A V-2/Scud/KN-23 is a single tube with a
+- **A unitary missile has one length.** A V-2/Scud is a single tube with a
   pointed top. "Motor length 6.7 m" already *includes* the ogive on any real
   drawing; asking the user to enter 4.7 m of motor + 2.0 m of nose forces them to
   hand-subtract and invites the exact double-count we are removing.
@@ -164,7 +164,7 @@ actually wanted; Phase 4 is folded into this doc's status.
 ### Phase 0 — the invariant test (write first, RED) — DONE
 `test_front_end_consistency.py`. `draw_booster` returns a `front_end`
 dict `{kind, shape, nose_length_m, body_diameter_m}`; the test asserts it equals
-what `effective_ro` flies, for the body-mode KN-23 fixture and every library
+what `effective_ro` flies, for the body-mode a quasi-ballistic body fixture and every library
 booster. Red on the pre-fix 8.46 ≠ 6.7 / cone ≠ Von Kármán, green after Phase 1.
 
 ### Phase 1 — schematic truth (fix A + B) — DONE
@@ -172,7 +172,7 @@ Body mode draws the last stage with its nose carved subtractively from the top
 (the airframe length is the total height); the corner reentry object and the
 containment check are skipped for a body (nothing contains it); the corner RO and
 the stack nose draw the declared analytic profile (`_nose_profile`) instead of an
-unconditional cone. KN-23: 8.46 m → 6.7 m, Von Kármán, no phantom "too long".
+unconditional cone. a quasi-ballistic body: 8.46 m → 6.7 m, Von Kármán, no phantom "too long".
 
 ### Phase 2 — data model + editor — DONE
 `ROParams.body_nose_length_m` (JSON + xlsx round-trip); the RO editor gains a
@@ -188,7 +188,7 @@ shape (for Cd), not the taper length. If we later decide the flown reentry body
 for a shaped MaRV is the forward taper rather than the whole tube, that changes
 `_boost_front_geometry`'s returned body length and therefore drag/heating: treat
 it as a distinct, measured change — report before/after range and heating for the
-KN-23 and the body-mode library entries, keep axisymmetric byte-identity for
+a quasi-ballistic body and the body-mode library entries, keep axisymmetric byte-identity for
 everything not in body mode, and pin with tests. Do **not** fold it into the
 drawing work above.
 
@@ -202,7 +202,7 @@ test (`test_front_end_consistency.py`) stand as the guarantee.
 
 - The invariant test (Phase 0) is green and runs in CI over every library
   vehicle plus the body-mode fixture.
-- The KN-23 draws at 6.7 m with a Von Kármán nose and no "too long" warning.
+- The a quasi-ballistic body draws at 6.7 m with a Von Kármán nose and no "too long" warning.
 - No input shown to the user in the RO editor is silently discarded by the code.
 - Separating-RV, multi-object, and lifting-body behavior is unchanged (pinned).
 - Any change to flown numbers (Phase 3) is reported with before/after, never
@@ -304,7 +304,7 @@ nose and (especially) fins. A body that *cannot* hold that attitude **tumbles** 
 a bluff spinning cylinder with a far lower β (heavy drag, near-terminal impact),
 which `effective_ro` already derives from `tumbling_cylinder_beta` when
 `reentry_attitude == 'tumbling'`. These are physically distinct — a finned
-KN-23 strikes fast, a bare spent stage flutters down — and the tool already has
+a quasi-ballistic body strikes fast, a bare spent stage flutters down — and the tool already has
 the discriminator: the **trim gate** (which includes the fins in the CP) decides
 nose-first-vs-tumbling, and β simply follows it. So the nose-first β(Mach) table
 is used only while the body is nose-first; the moment the gate (or the user)
@@ -364,7 +364,7 @@ Follow-ups — **all done (2026-08-21):**
 
 Open question deferred to build time: the CG estimate is *full-tank* (§ Part I,
 `estimate_cg` docstring) but reentry stability wants the *empty/burnout* CG;
-with a near-neutral body (the KN-23 came out SM ≈ 0) that difference can flip the
+with a near-neutral body (the a quasi-ballistic body came out SM ≈ 0) that difference can flip the
 verdict. Worth a burnout-CG option, but it is a separate correctness item from
 the ownership/β framing here.
 
@@ -458,7 +458,7 @@ separate baseline) is what makes A2 safe.
 ## 14. Separation is a vehicle property — `body_reenters`
 
 Separation used to live only on the reentry plan (chosen so one aeroshell could
-be A/B'd separating vs. integrated). But for a Scud / KN-23 the body reenters —
+be A/B'd separating vs. integrated). But for a Scud / a quasi-ballistic body the body reenters —
 full stop; that is a fact about the missile, not the flight. `BoosterParams.
 body_reenters` (a checkbox in the booster editor's Payload / Front End section)
 makes the vehicle the master: when set, the sidebar locks the reentry-plan
@@ -470,7 +470,7 @@ flag only drives the editor lock. Default off → existing boosters unchanged.
 
 ## 15. Acceptance (Part III)
 
-- A biconic KN-23 shows a different Cd0, CP/static margin, L/D and flyout range
+- A biconic a quasi-ballistic body shows a different Cd0, CP/static margin, L/D and flyout range
   than the single-cone control, and the schematic matches. ✓ (15 tests)
 - Reduction identities exact (Cd0 to machine precision, CP to 2/3). ✓
 - Payload 0 = byte-identical; +N raises boost and reentry mass and shortens

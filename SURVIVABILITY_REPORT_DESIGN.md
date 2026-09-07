@@ -63,7 +63,7 @@ maneuvering quasi-ballistic on the transient pull-up spike.
 |---|---|---|
 | **Ballistic RV** | glider disabled (mode `ballistic`) | A |
 | **Glider / HGV** | numerical or analytic glide, no terminal pull-up emphasis | B |
-| **Maneuvering quasi-ballistic (MaRV)** | glide with terminal dive / dive-at-target / pull-up-dominated profile (Hwasong-11 class) | ~~C~~ *(retired)* |
+| **Maneuvering quasi-ballistic (MaRV)** | glide with terminal dive / dive-at-target / pull-up-dominated profile (quasi-ballistic body) | ~~C~~ *(retired)* |
 
 ## 3. Form A — Ballistic RV: the accuracy ladder
 
@@ -172,7 +172,7 @@ existing, and the maneuver-load anchors on a commanded lift cap
 treated as one vehicle class.  METHODS §13.14 records why.  Original text:
 
 Form B plus a **transient-pulse block** for the terminal dive / pull-up
-(Hwasong-11 class, crosscheck §0 row 3): the binding event is a low-altitude
+(quasi-ballistic body, crosscheck §0 row 3): the binding event is a low-altitude
 high-q̄ flux spike on the **windward flank / fin leading edge**, not the nose,
 and it is heat-sink-limited (too fast for equilibrium).  Screening version
 (ships with the existing stagnation trace): isolate the dive segment, report

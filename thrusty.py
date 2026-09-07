@@ -1659,7 +1659,7 @@ class BoosterDialog(tk.Toplevel):
 
         # ── Non-separating vehicle (body reenters) ──────────────────────────
         # A whole-vehicle property: the last stage IS the reentry body
-        # (Hwasong-11 / Iskander / Scud / KN-23 class).  When ticked, the
+        # (Scud class, unitary airframe).  When ticked, the
         # sidebar locks the reentry-plan separation to "body" so the separation
         # choice lives with the missile, not the flight plan (the reentry mode
         # still defaults to ballistic and stays switchable).
@@ -1667,7 +1667,7 @@ class BoosterDialog(tk.Toplevel):
             row=8, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=(6, 2))
         self._body_reenters_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            pl, text="Non-separating — the body reenters (Scud / KN-23 class)",
+            pl, text="Non-separating — the body reenters (Scud class)",
             variable=self._body_reenters_var).grid(
             row=9, column=0, columnspan=2, sticky=tk.W, padx=(6, 2), pady=(0, 4))
         ttk.Label(pl, foreground="gray", wraplength=340,
@@ -8682,7 +8682,7 @@ class BoosterFlyoutApp(tk.Tk):
 
         # Row 2: Separation — the run-level choice of whether the reentry
         # object separates at burnout or the last stage reenters whole
-        # (Hwasong-11 / MaRV class).  A reentry-PLAN field like the glide law:
+        # (MaRV class).  A reentry-PLAN field like the glide law:
         # live here, written through to the active plan on every run, so the
         # same aeroshell can be A/B'd separating vs. integrated in two clicks.
         # Separation and Mode rows share fixed label width + combobox width so

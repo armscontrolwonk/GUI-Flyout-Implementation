@@ -1,13 +1,13 @@
 """Non-separating body CG / stability: the nose is subtractive, not stacked.
 
-A body-mode vehicle (V-2 / Scud / KN-23) is one airframe; its nose is carved
+A body-mode vehicle (V-2 / Scud) is one airframe; its nose is carved
 from the last stage's length (FRONT_END_DESIGN.md), not added on top.  The CG /
 static-margin machinery (grid_fin_sizing.estimate_cg, _stack_layout, feeding
 trim_gate) used to take the nose length from effective_ro.length_m — which in
 body mode is the *inherited stage length* — and ADD it to the stage length,
 doubling the airframe (6.7 m body → 13.4 m) and floating the CG out past the
 tail.  trim_gate then read CP ahead of CG and declared a perfectly good body
-"unstable → tumbles → no glide", so a KN-23 flown with L/D left at the
+"unstable → tumbles → no glide", so a a quasi-ballistic body flown with L/D left at the
 auto-derive sentinel (0) never pulled up.
 
 These tests pin the corrected geometry: the estimated airframe length equals the
@@ -27,12 +27,12 @@ from trajectory import integrate_trajectory
 load_booster_library()
 
 
-def _kn23(glider_LD=0.0, glider_enabled=True):
+def _body(glider_LD=0.0, glider_enabled=True):
     p = get_booster("Scud-B (R-17)")
     p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
-    ro = ROParams(name="KN23", mass_kg=500.0, beta_kg_m2=3000.0, shape="karman",
+    ro = ROParams(name="quasi-ballistic body", mass_kg=500.0, beta_kg_m2=3000.0, shape="karman",
                   diameter_m=1.1, length_m=2.0, separation_mode="body",
                   glider_enabled=glider_enabled, glider_LD=glider_LD,
                   glider_guidance="damped_glide", body_nose_length_m=2.0)
@@ -43,26 +43,26 @@ def _kn23(glider_LD=0.0, glider_enabled=True):
 
 def test_estimated_length_is_the_airframe_not_double():
     """estimate_cg's total length is the airframe (6.7 m), not airframe+nose."""
-    _x_cg, total = gfs.estimate_cg(_kn23())
+    _x_cg, total = gfs.estimate_cg(_body())
     assert total == pytest.approx(6.7, abs=1e-6)
 
 
 def test_cg_lands_inside_the_body():
     """The CG must sit within the airframe, not out past the tail."""
-    x_cg, total = gfs.estimate_cg(_kn23())
+    x_cg, total = gfs.estimate_cg(_body())
     assert 0.0 < x_cg < total
 
 
 def test_stack_layout_length_is_the_airframe():
     """_stack_layout agrees: the body isn't doubled."""
-    _nd, _xcp, _sections, L_total = gfs._stack_layout(_kn23())
+    _nd, _xcp, _sections, L_total = gfs._stack_layout(_body())
     assert L_total == pytest.approx(6.7, abs=1e-6)
 
 
 def test_body_is_not_falsely_unstable_at_reference_mach():
-    """At the glide reference Mach the KN-23-class body trims and glides — it is
+    """At the glide reference Mach the quasi-ballistic body trims and glides — it is
     not spuriously flagged unstable by a CG floated out past the tail."""
-    g = trim_gate.trim_gate(_kn23(), mach=glider_ld.GLIDE_MACH_REF)
+    g = trim_gate.trim_gate(_body(), mach=glider_ld.GLIDE_MACH_REF)
     assert not g.get("error")
     assert g["static_margin_cal"] > 0.0
     assert g["LD_achievable"] > 1.0
@@ -71,9 +71,9 @@ def test_body_is_not_falsely_unstable_at_reference_mach():
 def test_auto_derived_body_pulls_up():
     """L/D left at the sentinel 0 → the body derives its L/D from geometry and
     glides materially past the ballistic baseline (the reported bug)."""
-    r_derive = integrate_trajectory(_kn23(glider_LD=0.0), 39.12, 125.67, 90.0,
+    r_derive = integrate_trajectory(_body(glider_LD=0.0), 39.12, 125.67, 90.0,
                                     burnout_angle_deg=-2.0, max_time_s=3600.0)
-    r_ball = integrate_trajectory(_kn23(glider_enabled=False), 39.12, 125.67,
+    r_ball = integrate_trajectory(_body(glider_enabled=False), 39.12, 125.67,
                                   90.0, burnout_angle_deg=-2.0, max_time_s=3600.0)
     assert r_derive["reentry_trim"] is not None
     assert r_derive["reentry_trim"]["LD_achievable"] > 1.0
@@ -97,12 +97,12 @@ def test_separating_rv_length_is_unchanged():
 
 # ── reentry CG override (warhead-forward) ───────────────────────────────────
 
-def _kn23_cg(reentry_cg_m):
+def _body_cg(reentry_cg_m):
     p = get_booster("Scud-B (R-17)")
     p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
-    ro = ROParams(name="KN23", mass_kg=500.0, beta_kg_m2=0.0, shape="karman",
+    ro = ROParams(name="quasi-ballistic body", mass_kg=500.0, beta_kg_m2=0.0, shape="karman",
                   diameter_m=1.1, length_m=2.0, separation_mode="body",
                   glider_enabled=True, glider_LD=0.0, glider_guidance="damped_glide",
                   body_nose_length_m=2.0, reentry_cg_m=reentry_cg_m)
@@ -112,16 +112,16 @@ def _kn23_cg(reentry_cg_m):
 
 
 def _fly_cg(reentry_cg_m):
-    return integrate_trajectory(_kn23_cg(reentry_cg_m), 39.12, 125.67, 90.0,
+    return integrate_trajectory(_body_cg(reentry_cg_m), 39.12, 125.67, 90.0,
                                 burnout_angle_deg=-2.0, max_time_s=3600.0)
 
 
 def test_reentry_cg_override_moves_the_static_margin():
     """A forward CG raises the static margin; an aft CG drops it below zero
     (CP ahead of CG) — the override is honoured by the trim gate."""
-    g_fwd = trim_gate.trim_gate(_kn23_cg(2.0), mach=glider_ld.GLIDE_MACH_REF,
+    g_fwd = trim_gate.trim_gate(_body_cg(2.0), mach=glider_ld.GLIDE_MACH_REF,
                                 x_cg_m=2.0)
-    g_aft = trim_gate.trim_gate(_kn23_cg(6.0), mach=glider_ld.GLIDE_MACH_REF,
+    g_aft = trim_gate.trim_gate(_body_cg(6.0), mach=glider_ld.GLIDE_MACH_REF,
                                 x_cg_m=6.0)
     assert g_fwd["static_margin_cal"] > g_aft["static_margin_cal"]
     assert g_fwd["static_margin_cal"] > 0.0            # forward -> stable
@@ -140,14 +140,14 @@ def test_reentry_cg_forward_glides_aft_tumbles():
 def test_reentry_cg_auto_is_the_airframe_centroid():
     """0 = auto places the CG at the uniform-airframe centre (half the
     airframe length)."""
-    x_cg, total = gfs.estimate_cg(_kn23_cg(0.0))
+    x_cg, total = gfs.estimate_cg(_body_cg(0.0))
     assert abs(x_cg - 0.5 * total) < 1e-6
 
 
 # ── declared warhead (payload_kg) is auto-placed forward ────────────────────
 
 def _body_with_warhead(struct_kg, warhead_kg, nose_len, length=9.18, diam=1.10):
-    """A long-nosed heavy-warhead body (KN-23A class): the airframe structure is
+    """A long-nosed heavy-warhead body (the generic body missile class): the airframe structure is
     the body mass, the warhead is a DECLARED forward payload."""
     p = get_booster("Scud-B (R-17)")
     p.body_reenters = True
@@ -198,7 +198,7 @@ def test_fuelled_cg_is_aft_of_reentry_cg():
 
 
 def test_heavy_warhead_body_glides_on_auto_cg():
-    """The long-nosed KN-23A tumbles on the bare tube centroid but, with the
+    """The long-nosed the generic body missile tumbles on the bare tube centroid but, with the
     warhead declared, Thrusty's auto CG makes it stable and it glides at best
     glide — the reported behaviour with no hand-set CG."""
     p = _body_with_warhead(struct_kg=988.0, warhead_kg=2500.0, nose_len=4.44)

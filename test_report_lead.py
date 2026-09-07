@@ -65,7 +65,7 @@ def test_lead_ballistic_load_record_and_fail():
     assert "δ/R_n" not in lead                 # no recession point-estimate
     assert "accuracy degraded" not in deg["headline"]
 
-    fail = sr.build_report(_fly_ballistic("Hwasong-11", "Scud-B (R-17)"))
+    fail = sr.build_report(_fly_ballistic("Generic-Maneuvering-Body", "Scud-B (R-17)"))
     lead = _lead(fail["body"])
     assert fail["tier"] == "fail"
     # names the true failure mode (steel nose melts — it is not an ablator)
@@ -118,10 +118,10 @@ def test_ablator_regime_four_bands():
 
 def test_ablator_budget_omits_teq():
     # An ablator's Peak T_eq (a flux restated in kelvin) is suppressed in the
-    # budget; the reradiative Hwasong-11 steel nose keeps its T_eq line.
+    # budget; the reradiative quasi-ballistic maneuvering body steel nose keeps its T_eq line.
     abl = sr.build_report(_fly_ballistic("Mk21", "Generic ICBM"))["body"]
     assert "Peak T_eq" not in abl.split("═══ Full")[1].split("Reentry-arc")[0]
-    metal = sr.build_report(_fly_ballistic("Hwasong-11", "Scud-B (R-17)"))["body"]
+    metal = sr.build_report(_fly_ballistic("Generic-Maneuvering-Body", "Scud-B (R-17)"))["body"]
     assert "Peak T_eq" in metal
 
 

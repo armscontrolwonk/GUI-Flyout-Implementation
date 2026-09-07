@@ -29,7 +29,7 @@ handed to the sidebar.
 
 The doctrine now:
 
-* **There is always a reentry object.**  A V2 or a KN-23 *has* a warhead — it
+* **There is always a reentry object.**  A V2 or a a quasi-ballistic body *has* a warhead — it
   simply doesn't separate.  So there is no "booster with no reentry object,"
   only an object that separates (`separating_ro`) or reenters attached
   (`body`).  The thought experiment that fixes ownership: *what if the Germans
@@ -53,7 +53,7 @@ The doctrine now:
   tally (`N × object + PBV = total`).
 * **Ascent nose drag follows the front end.**  Fairing present → the fairing
   governs until jettison; no fairing → the single object's shape is the nose
-  (V2/KN-23/Scud).  For **N > 1** the exposed front is a bus face with a
+  (V2/a quasi-ballistic body/Scud).  For **N > 1** the exposed front is a bus face with a
   cluster of cones, so `_boost_front_geometry` keeps the blunt-cylinder nose
   rather than crediting one RV's slender shape — conservative (more drag)
   exactly where a low fairing-jettison altitude on a depressed trajectory
@@ -93,7 +93,7 @@ The doctrine now:
    percentage.
 
 5. **Frozen L/D.** The derived L/D is evaluated once at `GLIDE_MACH_REF = 5`
-   and flown as a constant.  Measured swing for the Scud/Hwasong-11 airframe:
+   and flown as a constant.  Measured swing for the Scud/generic maneuvering body airframe:
    2.28 (M2) → 2.56 (M5), ~12%.  Negligible for aeroballistic *range*
    (sub-1%), but 5–10% for glider range and largest for terminal-phase
    quantities flown at M2–4.
@@ -155,7 +155,7 @@ The doctrine now:
   separating HGV's L/D is a designed property of an aeroshape Thrusty does
   not store, and the slender-missile build-up would be wrong for it.
   Changes:
-  - Shipped body-mode objects (Hwasong-11) migrate to the sentinel (drop the
+  - Shipped body-mode objects (generic maneuvering body) migrate to the sentinel (drop the
     explicit 1.0) so the derivation actually runs; `commanded_LD` remains the
     way to fly it worse.
   - Optional **"estimate from geometry"** button for *separating conical*
@@ -204,7 +204,7 @@ The doctrine now:
 
 ## 5. Migration
 
-* `Hwasong-11.ro.json`: `separation_mode` dropped; `glider_LD` 1.0 → 0
+* `Generic-Maneuvering-Body.ro.json`: `separation_mode` dropped; `glider_LD` 1.0 → 0
   (sentinel).  Its reentry plan pins nothing new; flying values preserved via
   plan `commanded_LD` if the curator wants the old 1.0 (decide: keep 1.0 as
   commanded_LD in the shipped plan so behaviour is unchanged until the user

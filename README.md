@@ -234,7 +234,7 @@ tabbed notebook**.
   family, so the law is switchable *within* the family, never across it. To
   compare across families, keep one plan per family and flip the Reentry Plan
   dropdown. Each object ships with a default law tied to its type
-  (C-HGB/Hwasong-11 → their characterized damped-glide; the other gliders →
+  (C-HGB/generic maneuvering body → their characterized damped-glide; the other gliders →
   dynamic equilibrium glide; ballistic RVs → Ballistic, which lives inside the
   numerical family so glide on/off is an in-family tweak). (The old discrete
   `skip→equilibrium` mode is retired — it now flies the equivalent
@@ -640,7 +640,7 @@ lifting-body property; see below).  CG is estimated from the stage mass stack
 ### No-separation glider: L/D derived from geometry
 
 A **separating** reentry object carries its own designed `glider_LD`.  But when the
-object does **not** separate (Hwasong-11 / Pershing II MaRV class), the gliding body
+object does **not** separate (generic maneuvering body / Pershing II MaRV class), the gliding body
 *is* the whole airframe, so its L/D is an emergent geometric property, not an
 input. `glider_ld.py` derives it from the semi-empirical body+fin force build-up
 at angle of attack — the analytic core of Missile DATCOM — assembled from the

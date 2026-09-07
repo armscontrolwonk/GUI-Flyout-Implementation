@@ -1,6 +1,6 @@
 """Glide activation is gated at APOGEE, not at the 100 km Acton pierce.
 
-A quasi-ballistic missile (KN-23 / Iskander class) flies a depressed trajectory
+A quasi-ballistic missile (quasi-ballistic maneuvering class) flies a depressed trajectory
 whose apogee is ~40–60 km — it never reaches 100 km — and pulls up on the way
 down using aerodynamic lift.  The numerical glide laws (phugoid / skip-glide,
 damped phugoid, dynamic-equilibrium) previously armed only through the
@@ -8,7 +8,7 @@ damped phugoid, dynamic-equilibrium) previously armed only through the
 above 100 km and was descending back through it.  That gate belongs to the
 exo-atmospheric Acton skip-glide entry (its own analytic path); imposed on the
 endo-atmospheric laws it silently disabled lift for any vehicle whose apogee
-stayed below 100 km — the KN-23 could not pull up at all, a validation failure.
+stayed below 100 km — the a quasi-ballistic body could not pull up at all, a validation failure.
 
 The physical trigger is APOGEE — the start of the descending glide — which the
 pre-/post-apogee integration split already marks (params._glider_phase1).  These
@@ -50,7 +50,7 @@ def _fly(glider_enabled, burnout_angle_deg, beta=3000.0, ld=2.5):
     return _CACHE[key]
 
 
-# ── 1. sub-100 km glider pulls up (the KN-23 case) ──────────────────────────
+# ── 1. sub-100 km glider pulls up (the a quasi-ballistic body case) ──────────────────────────
 
 def test_depressed_glider_is_not_inert():
     """A depressed shot (apogee < 100 km) with the glider on must glide

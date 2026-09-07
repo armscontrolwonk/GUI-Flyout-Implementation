@@ -61,14 +61,14 @@ def test_legacy_ro_loads_unchanged(key):
 
 
 @pytest.mark.parametrize('path', sorted(glob.glob('booster_library/*.booster.json')
-                                        + ['KN-23A.booster.json']))
+                                        + ['Generic_Body_Missile.booster.json']))
 def test_shipped_booster_file_loads_unchanged(path):
     got = _booster_snapshot(booster_from_dict(json.load(open(path))))
     assert got == GOLDEN['boosters']['file:' + os.path.basename(path)]
 
 
 @pytest.mark.parametrize('path', sorted(glob.glob('ro_library/*.ro.json')
-                                        + ['KN-23A_warhead.ro.json']))
+                                        + ['Generic_Body_Missile_warhead.ro.json']))
 def test_shipped_ro_file_loads_unchanged(path):
     got = _json(ro_to_dict(ro_from_dict(json.load(open(path)))))
     assert got == GOLDEN['ros']['file:' + os.path.basename(path)]

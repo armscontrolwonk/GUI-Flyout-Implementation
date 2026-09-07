@@ -148,7 +148,7 @@ Dennis NACA 1328 (SOSE), Vukelich-Jenkins (Missile DATCOM feasibility),
 Fournier-Dupuis AIAA 96-3399, Intrieri TM X-569, Yates-Chapman AIAA 96-3360.
 
 ### 8. Canards / lifting surfaces on a non-separating body — DEFERRED (2026-08-22)
-Deferred with the user's agreement: "for a KN-23 the current approach is
+Deferred with the user's agreement: "for a a quasi-ballistic body the current approach is
 fine.  But at some point we have to deal with canards."
 
 Current state (verified this session).  `glider_ld.whole_booster_LD` — the
@@ -161,7 +161,7 @@ independent; only fins raise it.  The reentry object's OWN wing fields
 (`wing_area_m2`, `wing_root_chord_m`, `wing_span_exposed_m`,
 `wing_aspect_ratio`, `wing_sweep_deg`) are NOT read by this path — they
 feed only the 3-D depiction and (for a SEPARATING RV) the trajectory drag
-polar.  So a KN-23, whose control surfaces are stage-level tail fins, is
+polar.  So a a quasi-ballistic body, whose control surfaces are stage-level tail fins, is
 modeled correctly; a body with its OWN lifting surfaces cannot express
 them in the derived L/D.  (The body-mode wing hint now says this, rather
 than telling a body user to "enter the planform" — 2026-08-22.)
@@ -177,7 +177,7 @@ What a canard build needs (its own design pass):
     mean what they appear to), and how stage fins + RO wings + canards
     combine (sum vs. mutually-exclusive roles: tail vs. canard vs. wing).
   - Downwash / surface-to-surface interference between a forward canard and
-    an aft fin (the KN-23 has only the tail set, so this is untested).
+    an aft fin (the a quasi-ballistic body has only the tail set, so this is untested).
   - Schematic: draw canards forward of the CG, distinct from tail fins, so
     DRAWN ≡ FLOWN holds for the two-surface layout.
 Not needed for the ballistic / tail-fin-controlled quasi-ballistic bodies

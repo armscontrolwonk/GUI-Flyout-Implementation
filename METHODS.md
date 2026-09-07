@@ -682,8 +682,8 @@ re-entry vehicle (Section 8.2).
 Whether the reentry object separates from the final-stage body at burnout is a
 property of the **booster**, and the one place the booster and the reentry
 object are linked. `BoosterParams.body_reenters` (a checkbox in the booster
-editor) marks a vehicle whose front end never separates — Scud / KN-23 /
-Hwasong class — so the last stage *is* the reentering body. The run derives the
+editor) marks a vehicle whose front end never separates — Scud / a quasi-ballistic body /
+unitary-airframe class — so the last stage *is* the reentering body. The run derives the
 object's `separation_mode ∈ {separating_ro, body}` from that flag
 (`run_separation_mode`; `bind_ro_separation` stamps it onto the object at the
 start of every integration, and `effective_ro` on every read), so every path
@@ -707,7 +707,7 @@ than its hardware allows, never better.
   (`mass_initial − mass_propellant`) minus the object's mass, so a warhead that
   was carried inside the stage's mass budget is not counted twice.
 - **Non-separating** (`body`): the last stage *is* the reentering vehicle
-  (Hwasong-11 / Pershing-II MaRV class). `effective_ro` inherits the stage's
+  (generic maneuvering body / Pershing-II MaRV class). `effective_ro` inherits the stage's
   burnout mass, diameter, and length; no separate last-stage debris arc is
   emitted. Attitude (§8.11) then decides trimmed vs. tumbling drag. Because the
   airframe is one body, its nose is drawn **subtractively** — the forward
@@ -3185,7 +3185,7 @@ climb above 100 km and descend back through it before any lift was allowed.
 For an exo-atmospheric entry this is identical to the apogee rule — the
 vehicle is post-apogee *and* below 100 km at the same instant — but it
 silently disabled lift for any vehicle whose apogee never reached 100 km. A
-KN-23-class quasi-ballistic missile (apogee ~50 km, a commanded pull-up at
+quasi-ballistic quasi-ballistic missile (apogee ~50 km, a commanded pull-up at
 ~40 km) therefore could not glide *at all*: turning the glider on changed
 its range by < 1 km. Gating the numerical laws on the apogee transition
 instead fixes this while leaving every exo-atmospheric benchmark
@@ -4604,7 +4604,7 @@ ran in both directions:
   classified as a plain glider and was denied both the windward-flank heating
   block (§13.8) and the maneuver-load anchors (§13.7): the two blocks most
   specifically about what it did.  In fact **no shipped vehicle ever reached
-  Form C**: the C-HGB, AHW and Hwasong-11 plans set `glider_terminal_dive =
+  Form C**: the C-HGB, AHW and generic maneuvering body plans set `glider_terminal_dive =
   True` with `glider_terminal_alt_km = 0.0`, which the integrator reads as
   *glide to impact*, not as a dive.  Both blocks were effectively dead code
   for the whole shipped library.

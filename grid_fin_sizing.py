@@ -133,7 +133,7 @@ def estimate_cg(params: BoosterParams, fuelled: bool = False):
     that governs re-entry glide stability, used by the trim gate; True adds the
     motor propellant in the aft body, giving the fuelled liftoff CG (the one the
     schematic labels 'fuelled').  The two differ substantially for a heavy motor
-    (KN-23A: ~0.31 L empty vs ~0.57 L fuelled).  For a stack (separating RV) the
+    (worked example: ~0.31 L empty vs ~0.57 L fuelled).  For a stack (separating RV) the
     normal path already uses fuelled stage masses, so the flag is a no-op."""
     nose_shape, nose_len, d = _front_nose(params)
     ro = effective_ro(params)
@@ -178,7 +178,7 @@ def estimate_cg(params: BoosterParams, fuelled: bool = False):
         # body — is NOT smeared over the tube: it rides in the nose region, so
         # place it at the nose centroid and mass-weight it against the empty
         # airframe.  This is what pulls the CG ahead of the CP for a
-        # long-nosed, heavy-warhead body (KN-23A: 2.5 t in a 4.44 m nose →
+        # long-nosed, heavy-warhead body (worked example: 2.5 t in a 4.44 m nose →
         # CG ~0.30 L, ~1.5 cal stable → it glides instead of tumbling).  A body
         # with NO declared payload keeps the uniform-tube centroid (legacy,
         # backward-compatible); ROParams.reentry_cg_m still overrides either at

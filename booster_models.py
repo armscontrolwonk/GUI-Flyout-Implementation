@@ -107,8 +107,8 @@ class BoosterParams:
     body_payload_kg: float = 0.0
 
     # Non-separating vehicle: True marks this booster as one whose front end
-    # does NOT separate — the last stage IS the reentry body (Hwasong-11 /
-    # Iskander / Scud / KN-23 class).  This is the SINGLE SOURCE of the
+    # does NOT separate — the last stage IS the reentry body (quasi-ballistic maneuvering body /
+    # Iskander / Scud class).  This is the SINGLE SOURCE of the
     # booster↔reentry-object link, the one place the four inputs (booster,
     # reentry object, flight plan, reentry plan) are allowed to touch: neither
     # the object file nor the reentry plan stores a separation choice.  The
@@ -356,7 +356,7 @@ class ROParams:
     body_span_m: float = 0.0
 
     # Forward-taper (nose) length of a NON-SEPARATING body, in metres.  A
-    # unitary missile (V-2 / Scud / KN-23) is one airframe whose length is the
+    # unitary missile (V-2 / Scud) is one airframe whose length is the
     # last stage's length_m; this field is the forward portion of that length
     # that tapers into the nose (shape = self.shape), carved SUBTRACTIVELY from
     # the top — never a section stacked on top (see FRONT_END_DESIGN.md §4).
@@ -376,7 +376,7 @@ class ROParams:
     reentry_cg_m: float = 0.0
 
     # Payload mass (kg) carried by a NON-SEPARATING body, ON TOP of the
-    # airframe's own last-stage burnout mass.  A body (V-2 / Scud / KN-23) IS
+    # airframe's own last-stage burnout mass.  A body (V-2 / Scud) IS
     # the last stage, so its structural + residual burnout mass comes from the
     # booster (effective_ro inherits it); this field is the ADDED payload the
     # front end owns — warhead, bus, guidance — that the modeller enters here
@@ -391,7 +391,7 @@ class ROParams:
     # body, or IS the booster body the terminal vehicle?
     #   "separating_ro" — distinct payload, mass/beta/diameter independent
     #                     (ICBM with MIRV, Scud-style separated warhead, …)
-    #   "body"          — vehicle IS the booster body (Hwasong-11 / Iskander,
+    #   "body"          — vehicle IS the booster body (quasi-ballistic maneuvering body,
     #                     Pershing II MaRV, single-stage maneuvering body).
     #                     mass/beta/diameter are inherited from the booster's
     #                     last stage (mass_final, beta_kg_m2, diameter_m)
@@ -951,7 +951,7 @@ def effective_ro(params: 'BoosterParams') -> Optional[ROParams]:
 
     When the booster is marked ``body_reenters`` (the single source of the
     separation link; ro.separation_mode is derived from it and stamped onto the
-    returned object) the reentering body IS the booster's own last stage (Hwasong-11 / Iskander, Pershing II MaRV class, or an
+    returned object) the reentering body IS the booster's own last stage (Pershing II MaRV class, or an
     SSTO where that stage is the whole vehicle) — not a separating object.
     In that case mass_kg / diameter_m / length_m are
     inherited from the booster's last-stage burnout state (mass_final,
@@ -1051,7 +1051,7 @@ def compose_loadout(params: 'BoosterParams', ro=None,
     if run_separation_mode(params) == 'body':
         # NON-SEPARATING body: the airframe IS the last stage, so its structural
         # + residual burnout mass is ALREADY in the stage masses — adding the
-        # RO's mass_kg would double-count (a KN-23 seeded with the 2198 kg
+        # RO's mass_kg would double-count (a unitary body seeded with the 2198 kg
         # burnout mass gained 2198 kg and its range collapsed 574 → 137 km), so
         # mass_kg is NEVER added for a body.  What the front end DOES own is an
         # explicit ADDED payload (ro.payload_kg: warhead / bus / guidance), which
@@ -3653,7 +3653,7 @@ def _boost_front_geometry(top_params: 'BoosterParams', params: BoosterParams,
     # single clean cone.  Keep the blunt/default nose drag rather than crediting
     # one RV's slender shape.  Conservative (more drag) exactly where it matters:
     # a low fairing-jettison altitude on a depressed trajectory, in thick air.
-    # A single-object loadout (V2 / KN-23 / Scud) IS a lone nose, so it keeps
+    # A single-object loadout (V-2 / Scud) IS a lone nose, so it keeps
     # the RV shape below.
     _multi = (top_params is not None and getattr(top_params, 'num_ros', 1) > 1)
     ro = effective_ro(top_params) if top_params is not None else None

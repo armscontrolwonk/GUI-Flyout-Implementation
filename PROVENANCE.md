@@ -62,7 +62,7 @@ working rules in `CLAUDE.md`.
   fixture exists in the test suite. Rule: synthetic tests use synthetic
   coordinates; real launch sites and impact zones appear only when
   reproducing a specific documented test event.
-- **Refusal of a benign bug report (2026-05-08).** The message "KN-23
+- **Refusal of a benign bug report (2026-05-08).** The message "a quasi-ballistic body
   won't skip glide." was refused by the API usage-policy filter. The
   project statement at the top of `CLAUDE.md` exists partly so that
   ordinary simulator work on named vehicles is understood for what it is.

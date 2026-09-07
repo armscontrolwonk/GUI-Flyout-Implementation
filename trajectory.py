@@ -1125,7 +1125,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
             # atmospheric Acton skip-glide entry only, and lives on its own
             # analytic path (the _glider_pierce_atmosphere event).  Requiring it
             # HERE silently disabled lift for any vehicle whose apogee never
-            # reaches 100 km — a KN-23-class quasi-ballistic missile that pulls
+            # reaches 100 km — a quasi-ballistic quasi-ballistic missile that pulls
             # up at ~40–50 km could not glide at all (the _gl_above_pierce latch
             # never armed).  Dropping that requirement is byte-identical for an
             # exo-atmospheric entry: there the vehicle is post-apogee AND below
@@ -2601,7 +2601,7 @@ def integrate_trajectory(params: BoosterParams,
 
             # _analytical_equil_glide returns a single point when the
             # pierce speed is below the equilibrium-glide terminal speed
-            # — e.g. a quasi-ballistic booster (Hwasong-11 class) that just
+            # — e.g. a quasi-ballistic booster (quasi-ballistic body) that just
             # clipped 100 km rather than arriving at hypersonic glide
             # conditions.  Fall back to the full EOM with lift so we get
             # a physically correct skip-glide trajectory rather than a

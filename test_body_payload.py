@@ -1,6 +1,6 @@
 """A non-separating body's payload lives on the front end (A2 ownership).
 
-A body (V-2 / Scud / KN-23) IS the booster's last stage, so its structural +
+A body (V-2 / Scud) IS the booster's last stage, so its structural +
 residual burnout mass is inherited from the stage.  What the front end OWNS is
 an explicit ADDED payload — warhead / bus / guidance — entered on the reentry
 object as ``payload_kg``.  compose_loadout adds it to the boosted stack and
@@ -24,12 +24,12 @@ from trajectory import integrate_trajectory
 load_booster_library()
 
 
-def _kn23(payload=0.0, mass_kg=2198.0, glider=False):
+def _body(payload=0.0, mass_kg=2198.0, glider=False):
     p = get_booster("Scud-B (R-17)")
     p.body_reenters = True
     p.diameter_m = 1.1
     p.length_m = 6.7
-    ro = ROParams(name="KN23", mass_kg=mass_kg, beta_kg_m2=3000.0, shape="karman",
+    ro = ROParams(name="quasi-ballistic body", mass_kg=mass_kg, beta_kg_m2=3000.0, shape="karman",
                   diameter_m=1.1, length_m=6.7, separation_mode="body",
                   glider_enabled=glider, body_nose_length_m=2.0,
                   payload_kg=payload)
@@ -37,7 +37,7 @@ def _kn23(payload=0.0, mass_kg=2198.0, glider=False):
 
 
 def _compose(payload=0.0, mass_kg=2198.0):
-    p, ro = _kn23(payload, mass_kg)
+    p, ro = _body(payload, mass_kg)
     c = compose_loadout(p, ro, 1)
     c.ro = ro
     return c
@@ -50,7 +50,7 @@ def _fly(p):
 
 def test_zero_payload_is_byte_identical():
     """payload 0 (every existing file) adds nothing to the stack."""
-    p, ro = _kn23(0.0)
+    p, ro = _body(0.0)
     base = compose_loadout(p, ro, 1).mass_initial
     built = get_booster("Scud-B (R-17)")
     built.diameter_m = 1.1
@@ -77,7 +77,7 @@ def test_payload_raises_both_boost_and_reentry_mass():
 
 def test_compose_twice_is_idempotent():
     """Composing an already-composed body adds the payload once, not twice."""
-    p, ro = _kn23(500.0)
+    p, ro = _body(500.0)
     once = compose_loadout(p, ro, 1)
     twice = compose_loadout(once, ro, 1)
     assert twice.mass_initial == pytest.approx(once.mass_initial, abs=1e-9)
@@ -91,7 +91,7 @@ def test_heavier_payload_flies_shorter():
 
 
 def test_payload_round_trips():
-    _p, ro = _kn23(750.0)
+    _p, ro = _body(750.0)
     assert ro_from_dict(ro_to_dict(ro)).payload_kg == pytest.approx(750.0)
 
 
@@ -143,10 +143,10 @@ def test_body_reenters_is_the_separation_switch():
     p1.diameter_m = 1.1
     p1.length_m = 6.7
     p1.body_reenters = True
-    ro_body = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
+    ro_body = ROParams(name="quasi-ballistic body", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
                        diameter_m=1.1, length_m=6.7, separation_mode="body",
                        body_nose_length_m=2.0)
-    ro_sep = ROParams(name="KN23", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
+    ro_sep = ROParams(name="quasi-ballistic body", mass_kg=2198.0, beta_kg_m2=3000.0, shape="karman",
                       diameter_m=1.1, length_m=6.7, separation_mode="separating_ro",
                       body_nose_length_m=2.0)
     # Derivation follows the booster, whatever the object says.
