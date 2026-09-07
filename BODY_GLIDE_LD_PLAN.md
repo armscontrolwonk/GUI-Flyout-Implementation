@@ -146,8 +146,8 @@ as the static margin approached zero.
 reentry object's existing `glider_control_surfaces` descriptor carries it, so no
 field was added and the GUI already edits it. `none` ⇒ no commanded deflection
 ⇒ trims at α = 0 ⇒ no glide (the passive case). `small`/`substantial` ⇒ 5°/15°,
-mapped onto the Kumar & Stollery separation band already used by
-`damping_estimate.py`; `unknown` ⇒ 10°, reported as an assumption. The trim α is
+capped at the same incipient-separation limit `damping_estimate.py` uses;
+`unknown` ⇒ 10°, reported as an assumption. The trim α is
 now the root of a **nonlinear** moment balance summed term by term at each
 term's own station (`glider_ld.cn_components`), bisected on the build-up's own
 1–59° sweep, so nothing is extrapolated and the aft-migrating crossflow c.p.
@@ -162,10 +162,22 @@ outcomes depending on the declared control surfaces. See METHODS.md §8.10;
 pinned by `test_ld_calibration.py` (`test_fixed_surfaces_do_not_glide`,
 `test_control_tier_orders_the_achievable_glide`, `test_trim_alpha_stays_physical`).
 
-**Still open:** `control_eff = 0.85` remains unverified (NACA 1307 is not in the
-repo and only the α-factors `K_W(B)/K_B(W)` are implemented, not the deflection
-factor `k_W(B)`), and the Kumar & Stollery deflection band is marked
-**[snippet]** in `docs/cl_margin_references.md`. Both are recorded in the code.
+**Both of this section's open items have since closed** (recorded here rather
+than deleted, because each closed differently):
+
+- `control_eff = 0.85` is gone. It is now DERIVED as the N-K-P deflection-vs-AoA
+  ratio `k_W(B)/K_W(B)` from NACA Rep. 1307 Eq. (19), validated against that
+  report's Chart 1 — a function of body-radius/semispan (~1.0 to ~0.52), so no
+  constant could have been right in form. See METHODS.md §8.10.
+- The deflection cap is no longer a `[snippet]`. Both primaries were read on
+  2026-09-07 and the entry in `docs/cl_margin_references.md` is `[verified]`.
+  Two earlier readings of that source were wrong — first a "5–15° band at M ≈ 10"
+  that the paper does not contain, then a 2026-09-04 "correction" whose citation
+  fix and onset angles were themselves wrong. What the paper reports is 6.6° at
+  M 8.2, and it carries the Needham & Stollery criterion as its Eq. (6). At
+  Thrusty's flight Reynolds numbers the criterion's **turbulent** branch applies
+  (17–41°), so 15° is a conservative cap. Values unchanged; justification
+  replaced. See `TODO.md` item 9(d).
 
 ### 7.2 Glide-law energy budget (phugoid / skip-glide)
 Range at a given L/D is set by how much energy the glide law bleeds per skip. If

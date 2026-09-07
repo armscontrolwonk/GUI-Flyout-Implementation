@@ -101,47 +101,180 @@ marked **[derived]** are standard closed-form results computed directly.
 ## 5. Caveats that bound the usable margin
 
 - **Needham, D. A. & Stollery, J. L., "Boundary Layer Separation in Hypersonic
-  Flow," AIAA 66-455 (1966).** **[snippet]** Incipient-separation criterion for
-  a deflected ramp/flap; incipient angle decreases with Mach, increases with Re.
-- **Kumar, D. & Stollery, J. L., "Hypersonic Control Flap Effectiveness,"
-  ICAS-94-4.4.3, 19th Congress of the International Council of the Aeronautical
-  Sciences, 1994, pp. 1194-1204. College of Aeronautics, Cranfield University,
-  Cranfield, Bedford, MK43 0AL, UK. Copyright 1994 by ICAS and AIAA.**
-  **[verified]** — read against the paper 2026-09-04.
+  Flow," AIAA Paper No. 66-455, AIAA 4th Aerospace Sciences Meeting, 1966
+  (Imperial College, London).** **[verified]** — read against the PDF
+  2026-09-07.  Incipient-separation criterion for a deflected ramp/flap.
 
-  CORRECTION: the previous entry here cited this as *Aeronautical Journal*
-  100(996), 1996, and that is WRONG — it is an ICAS congress paper from 1994.
-  The technical claim was wrong too, and the code rested on it; both are
-  restated below from the paper itself.
+  Their **Fig. 11** ("Correlation of laminar, transitional and turbulent
+  incipient separation on the wedge compression corner") is the usable result.
+  It plots **α_i/√M∞ against Re_L** — the running-length Reynolds number to the
+  corner — which collapses Mach out of the laminar branch entirely, and shows
+  **three distinct branches**:
+
+  | Branch | α_i/√M∞ | Notes |
+  |---|---|---|
+  | laminar | `80·(C/Re_L)^¼` | the closed form below; ≈4.5 at Re_L 10⁵ falling to ≈2.1 at 2×10⁶ |
+  | transitional | dips below laminar, then climbs steeply past Re_L ≈ 2×10⁶ | dashed, M 8.2 data |
+  | **turbulent** | **≈ 9.7–13**, nearly flat over Re_L 10⁶–2×10⁷ | Kuehn M 3, Sterrett & Emery M 6 |
+
+  The turbulent branch sits **5-8× above** the laminar one — 5.1× at
+  Re_L = 10⁶ widening to ~8× at 2×10⁷, because the laminar line is much the
+  steeper of the two (slope −¼ in Re_L, against roughly −0.1 for the turbulent).
+  A turbulent boundary layer needs a far larger pressure rise to separate.
+
+  Needham's own text flags the laminar correlation as "a very tentative
+  correlation", emphasised by "our lack of knowledge concerning the effect of
+  T_w" — so band it rather than trusting it to a decimal.
+
+- **Kumar, D. & Stollery, J. L., "Hypersonic control flap effectiveness,"
+  *The Aeronautical Journal* **100**(996), June/July 1996, pp. 197–208.
+  Paper No. 2151, DOI 10.1017/S0001924000067154.  College of Aeronautics,
+  Cranfield University.  Also published as ICAS-94-4.4.3, 19th ICAS Congress,
+  1994, pp. 1194-1204.** **[verified]** — read against the PDF 2026-09-07.
+
+  RETRACTION OF THE 2026-09-04 "CORRECTION".  An earlier pass here asserted that
+  the *Aeronautical Journal* 100(996), 1996 citation was WRONG and that this is
+  "an ICAS congress paper, not Aeronautical Journal".  **That assertion was
+  itself wrong and is withdrawn.**  The PDF is the Aeronautical Journal article:
+  June/July 1996, pp. 197–208, Paper No. 2151, manuscript received 17 August
+  1995 and accepted 1 March 1996.  The ICAS-94 congress paper is the earlier
+  printing of the same study, not a replacement for it.  The original citation
+  in this file was correct all along.
+
+  (Precision, so the next reader does not have to re-derive it: what the PDF
+  itself prints is the journal name, "June/July 1996", the page range, and the
+  paper number — the **volume and issue are not printed on the article pages**.
+  Volume 100 is The Aeronautical Journal's 1996 volume, so `100(996)` is
+  consistent with the article and with the pre-existing citation, but it is
+  carried over rather than read off the PDF.)
+
+  The same pass also introduced two numbers that are **not in the paper** —
+  "incipient separation 7.8° at α = 5°" and "eq. 12 predicts 8.4° at α = 10°".
+  Neither appears as a deflection angle anywhere in it.  See below.
 
   What the paper actually reports.  Hypersonic gun tunnel, **M∞ = 8.2**
   (NOT "M ≈ 10"), Re∞/cm = 9.0 × 10⁴, quasi-2D flat plate with a full-span
-  trailing-edge control flap, flap deflection **0 ≤ β ≤ 30°**, incidence
+  trailing-edge control flap, hingeline length **L = 15.9 cm** and flap chord
+  4.4 cm (their Fig. 2), flap deflection **0 ≤ β ≤ 30°**, incidence
   0 ≤ α ≤ 10°, sharp and hemi-cylindrically blunted leading edges.
 
-  * **Incipient separation flap angle, laminar interaction: 7.8° at α = 5°**,
-    and eq. 12 predicts **8.4° at α = 10°** (their §7.2.3).  These are the
-    paper's actual separation-onset numbers.
-  * Incidence DELAYS separation: at α = 10°, β = 10° the flow was observed
-    attached, above the laminar prediction, because transition occurs upstream
-    of the hingeline.
-  * Flap boundary-layer state with deflection: **laminar at β = 5°,
-    transitional at β = 15°, turbulent at β = 25°** (their §7.3.2).
+  * **Incipient separation flap angle: 6.6°** — "Under the present test
+    conditions, the flap deflection for incipient separation is 6·6°" (their
+    §5.1.2, α = 0°, sharp leading edge).  This is the paper's only
+    separation-onset number.
+
+    **Read what that number is, carefully** — this is where two earlier passes
+    went wrong.  6.6° is **not a measurement**.  It is Eq. (6) below (the
+    Needham & Stollery criterion) *evaluated at the tunnel conditions*, and the
+    paper says so: the sentence before it credits Inger's triple-deck theory,
+    and the sentence after concludes "This supports the prediction of the above
+    criterion."  What Kumar & Stollery *measured* is only a bracket around it —
+    attached at β = 5°, separated at β = 10°.  Consequence for us: the 6.6° and
+    the criterion are **one source, not two**, so recomputing 6.62° from Eq. (6)
+    checks our transcription and unit convention, **not** the physics.
+  * At α = 0° with a **sharp** leading edge the Schlieren brackets it: "while
+    for β = 5°, the flow is attached, the dual shock structure for β = 10°
+    indicates that the flow has separated."
+  * **Bluntness, not incidence, is what makes β = 10° attach.**  At α = 0°,
+    β = 10°, with a hemi-cylindrical blunt leading edge of d = 4.0 and 6.0 mm,
+    "the single flap shock implies that the suppression of separation is
+    complete and the flow is attached" (their §5.3.2, Figs. 16 and 17(a),
+    p. 206) — while the sharp configuration at the same condition is "well
+    separated".  This is *not* a free gain in control authority: the same
+    bluntness "reduces the pressure recovered downstream of the hingeline and
+    hence causes significant loss of control effectiveness".
+  * Incidence separately DELAYS separation — for β = 10° with a sharp leading
+    edge, their Fig. 11 "shows a delay in separation as the incidence is
+    increased to α = 5°" (§5.2.3) — but the sharp β = 10° case stays separated
+    at every incidence tested.  A 2026-09-04 pass claimed the paper observed
+    *attached* flow at β = 10° through incidence at α = 10°; that specific
+    mechanism is not what the paper reports, though attached β = 10° flow does
+    exist in it under bluntness.
+  * Flap boundary-layer state with deflection: "The flap boundary layer changes
+    from laminar for β = 5° to transitional at β = 15° and to a turbulent
+    structure at β = 25°."  **Scope matters**: this sentence is in §5.3.2, the
+    **blunt** leading-edge results (d = 6 mm, α = 0°, Fig. 20) — it is not a
+    general law.  On the *sharp* leading edge (§5.1.2) transition is already
+    under way earlier: at β = 15° transition is complete by the flap trailing
+    edge and the local turbulent heat-transfer level is attained there.  This
+    sentence is nevertheless the likely origin of the old "5–15°" band, since
+    it is the only place those two numbers appear together.
   * Conclusions: "Flap deflection promotes separation of laminar boundary
     layers"; "Incidence promotes transition of the flap boundary layer.  It
     delays separation"; large bluntness "substantially delays separation" but
     "reduces the pressure recovered downstream of the hingeline and hence causes
-    **significant loss of control effectiveness**".
+    significant loss of control effectiveness".
+
+  **It carries the Needham & Stollery criterion in implementable form**, as
+  their Eqs. (6) and (7):
+
+  ```
+  M∞·β_i   = 80·χ̄_L^(1/2)        (6)   incipient separation flap angle
+  M∞·β_sep = 50·[χ̄_sep]^(1/2)     (7)   separation streamline angle, well-separated
+  χ = M³·√(C/Re_x)                      viscous interaction parameter (their nomenclature)
+  ```
+
+  **β in DEGREES**, Re at the hingeline length, C the Chapman-Rubesin constant.
+  Transcription check (**not** an independent validation — see the caveat above,
+  the paper's 6.6° is itself this equation): at the paper's own conditions
+  (M 8.2, Re∞/cm 9.0 × 10⁴, L = 15.9 cm → Re_L = 1.43 × 10⁶, C = 1) Eq. (6)
+  returns **6.62°** against the paper's stated 6.6°, which pins the unit
+  convention (degrees, not radians) and the choice of length scale.
+
+  **⚠ Which χ, exactly — read this before implementing.** The overbar in χ̄_L is
+  **never defined in the paper**. Its nomenclature defines a bare
+  `χ = M³√(C/Re_x)` and, separately, a wall-temperature-weighted
+  `χ_e = ε[0.664 + 1.73(T_w/T_0∞)]·χ` with `ε = (γ−1)/(γ+1)` — carried by a
+  subscript, not an overbar. Their own Fig. 6 annotation writes the same
+  relation as `M∞β_i = 80·χ_L^(1/2)` with **no** overbar. The ambiguity is
+  resolved numerically, and it matters a lot:
+
+  | reading of χ̄_L | value at the paper's conditions | β_i |
+  |---|---|---|
+  | **bare χ, C = 1** | 0.461 | **6.62°** ✓ matches their 6.6° |
+  | χ_e, T_w/T_0∞ = 0.3 | 0.091 | 2.94° ✗ |
+
+  So **χ̄_L is the bare viscous-interaction parameter**. Anyone implementing this
+  from the nomenclature alone would reach for χ_e and land 2.2× low.  Eq. (6) is exactly the laminar branch of Needham's
+  Fig. 11 — it reduces to `β_i/√M∞ = 80·(C/Re_L)^¼`, Mach-independent, which is
+  why that figure's ordinate collapses.
 
   There is **no "usable deflection ≈ 5–15°" statement in the paper**, and no
-  "critical deflection ≈ 15°".  The old 5–15° band appears to have conflated the
+  "critical deflection ≈ 15°".  The old 5–15° band conflated the
   boundary-layer-state sequence (laminar 5° / transitional 15°) with a usable
-  limit, and the Mach number was wrong by ~2.  A band anchored on what the paper
-  DOES say would sit near 8°, not 15°.
+  limit.  As for "M ≈ 10": this study's own condition is M 8.2 throughout, but
+  M ≈ 10 does appear in the paper several times — always about *other* work or
+  as borrowed data.  Their §2 cites Townsend at M∞ = 10.0 and Coet et al. at
+  M∞ = 10.0, §2 also cites Sanator et al. at M∞ = 10.55, and §§3.4/5.3.3 build
+  the entropy-layer model on Stone's Mach 10.4 pitot data.  So the misattributed
+  Mach number has several candidate sources, not one; what is certain is that it
+  is never this paper's test condition.
 
-  LOAD-BEARING: `trim_gate._DELTA_MAX_BY_CONTROL` (5/15/10°) and
-  `damping_estimate.DELTA_MAX_DEG` (15°) both rest on the superseded reading.
-  See TODO.md — this needs a decision, not a silent re-anchor.
+  The "8.4" is narrower and can be pinned exactly: it occurs **once** in the
+  paper, as `Re∞/cm = 8·4 × 10⁴` in "In tests at M∞ = 10·0 and
+  Re∞/cm = 8·4 × 10⁴ on a compression corner, Coet et al. found…" (§2).  It is a
+  **Reynolds number**, not a deflection angle — and it is where the 2026-09-04
+  pass got the "8.4°" it reported as a separation onset.
+
+  WHAT THIS MEANS FOR THE CODE.  Applying Eq. (6) to a Thrusty body gives 2–6°
+  across the glide envelope — but that is the **laminar** branch, and a flight
+  vehicle is not laminar at the hingeline.  Re_L for a 6 m body over M 3–10 and
+  25–40 km runs **1.4 × 10⁶ to 4.9 × 10⁷**, at or beyond where Needham's laminar
+  branch ends.  On the turbulent branch the same correlation gives
+
+  | Condition (L = 6 m) | Re_L | laminar | turbulent |
+  |---|---|---|---|
+  | 40 km, M 3 | 1.4 × 10⁶ | 4.0° | 17–23° |
+  | 35 km, M 5 | 5.0 × 10⁶ | 3.8° | 22–29° |
+  | 30 km, M 8 | 1.8 × 10⁷ | 3.5° | 27–37° |
+  | 25 km, M 10 | 4.9 × 10⁷ | 3.0° | 31–41° |
+
+  So the evidence does **not** support tightening the deflection cap below 15°;
+  it points the other way.  `trim_gate._DELTA_MAX_BY_CONTROL['substantial']` and
+  `damping_estimate.DELTA_MAX_DEG` at 15° are **conservative against the
+  turbulent onset**, which is the regime Thrusty actually flies in.  The right
+  long-run fix is not another constant but a branch-selected β_max(M, Re_L, BL
+  state); see TODO.md item 9(d).
 
   (Note `kumar2015.pdf` in the Drive Thrusty folder is a DIFFERENT paper —
   Kumar & Mahulikar, TPS materials, ASME JTSEA 8(2), 2016 — a name collision.)
@@ -167,7 +300,9 @@ marked **[derived]** are standard closed-form results computed directly.
 | Flap ΔC_L | (S_flap/S_ref)·Cp,max·[sin²(α+δ)−sin²α]·cosα | Grant & Braun | verified+derived |
 | Cone/biconic C_L,max | ≈ 0.4–0.5 (at α ≈ 25–50°) | TN D-840, D-4098 | verified |
 | Biconic max-L/D trim α | ≈ 8–10° | NTRS 19770017117 | snippet |
-| Laminar incipient separation flap angle | **7.8° at α=5°, 8.4° at α=10°** (M 8.2); attached to β=10° at α=10° | Kumar & Stollery ICAS-94-4.4.3 | **verified** |
+| Laminar incipient separation flap angle | **6.6°** at M 8.2, Re_L 1.43×10⁶ — Eq. (6) evaluated, not measured; measurement is the bracket β=5° attached / β=10° separated (sharp LE, α=0°) | Kumar & Stollery 1996 §5.1.2 | **verified** |
+| Incipient separation criterion | `M∞·β_i = 80·χ̄_L^(1/2)`, χ = M³√(C/Re_x), β in degrees | Kumar & Stollery Eq. (6) / Needham & Stollery | **verified** |
+| Turbulent incipient separation branch | `β_i/√M∞ ≈ 9.7–13` → **17–41°** over M 3–10 at flight Re_L | Needham & Stollery Fig. 11 | **verified** |
 | L/D cost at 1.5× C_L,opt | ≈ 8 % (20 % at 2×) | parabolic polar | derived |
 | Trim deflection L/D cost | up to ~30 % | Ferretto 2023 | verified |
 | Typical S_flap/S_ref | ~5–8 % (Shuttle elevon 8 %, body flap 5 %) | Bornemann | snippet |

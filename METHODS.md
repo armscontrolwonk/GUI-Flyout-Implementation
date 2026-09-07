@@ -2185,15 +2185,39 @@ preliminary gate, not a 6-DOF trim solution.
 
 **Control authority is read from the vehicle, not assumed.** The reentry
 object's `glider_control_surfaces` descriptor (`none` / `small` /
-`substantial` / `unknown`) sets the usable one-sided deflection, mapped onto the
-5–15° band `docs/cl_margin_references.md` already records for the damping
-estimator (Kumar & Stollery, *Aeronautical Journal* 100(996), 1996; incipient
-separation per Needham & Stollery, AIAA 66-455): `none` → 0°, `small` → 5°,
-`substantial` → 15°, `unknown` → 10° **reported as an assumption**. An explicit
-`glider_flap_deflection_deg` overrides the tier, still capped at the separation
-limit; `damping_estimate.py` caps at the same 15°. Control effectiveness is
-real-gas derated above M≈7 (Maus et al., *J. Spacecraft & Rockets* 21(2), 1984,
-and the STS-1 trim anomaly), matching that module's `REAL_GAS_DERATE`.
+`substantial` / `unknown`) sets the usable one-sided deflection: `none` → 0°,
+`small` → 5°, `substantial` → 15°, `unknown` → 10° **reported as an
+assumption**. An explicit `glider_flap_deflection_deg` overrides the tier, still
+capped at the separation limit; `damping_estimate.py` caps at the same 15°.
+Control effectiveness is real-gas derated above M≈7 (Maus et al., *J. Spacecraft
+& Rockets* 21(2), 1984, and the STS-1 trim anomaly), matching that module's
+`REAL_GAS_DERATE`.
+
+The cap is bounded by **incipient separation** of the flap boundary layer.
+Kumar & Stollery (*The Aeronautical Journal* **100**(996), June/July 1996,
+pp. 197–208) carry the Needham & Stollery criterion (AIAA 66-455) as their
+Eq. (6):
+
+```
+M∞·β_i = 80·χ̄_L^(1/2) ,    χ = M³·√(C/Re_x) ,    β_i in degrees
+```
+
+evaluated at the hingeline length. At the paper's own conditions (M 8.2,
+Re∞/cm 9.0 × 10⁴, L = 15.9 cm) this returns 6.62° against their stated 6.6° —
+a check on our transcription and units, not an independent validation, since
+their 6.6° is this same equation evaluated rather than a measured angle. What
+they measured is the bracket around it: with a sharp leading edge β = 5° is
+attached and β = 10° separated. (Leading-edge bluntness changes that — at
+d = 4–6 mm, β = 10° attaches — but it also "causes significant loss of control
+effectiveness", so it buys attachment rather than authority.)
+That is the **laminar** branch. Needham's Fig. 11 also gives a transitional
+branch and a **turbulent** branch roughly 5× higher (`β_i/√M∞ ≈ 9.7–13`).
+Thrusty's bodies run Re_L ≈ 1.4 × 10⁶–4.9 × 10⁷ (6 m body) at the fin station over
+M 3–10 and 25–40 km, i.e. past the laminar branch, where the criterion gives
+**17–41°**. The 15° cap is therefore *conservative* against the onset in the
+regime actually flown, not a laminar limit being exceeded. Turning the tiers
+into a computed `β_max(M, Re_L, boundary-layer state)` is the outstanding
+improvement — see `TODO.md` item 9(d).
 
 **Control effectiveness is now derived, not assumed.** `C_Nδ = control_eff ·
 C_Nα,fin` with
@@ -2228,11 +2252,18 @@ For typical tail fins it lands well below 0.85 — a Scud-B's fins give 0.66 —
 meaning the old constant overstated control authority, the non-conservative
 direction.
 
-*Provenance, stated plainly.* The Kumar & Stollery deflection band is marked
-**[snippet]** in `docs/cl_margin_references.md` — a web-search extract, not read
-against the primary, and that paper is in neither the repo nor the Drive library.
-It is reused as an in-repo precedent of recorded but unverified provenance,
-replacing a 25° default that carried **no citation at all**.
+*Provenance, stated plainly.* Both anchors are now marked **[verified]** in
+`docs/cl_margin_references.md`, read against the primary PDFs on 2026-09-07:
+Kumar & Stollery 1996 and Needham & Stollery AIAA 66-455. Getting here took two
+wrong readings, both recorded in that file rather than quietly overwritten. The
+figure entered as a `[snippet]` — a web-search extract describing a "5–15° band
+at M ≈ 10" that the paper does not contain — adopted because it replaced a 25°
+default carrying **no citation at all**. A later pass then "corrected" the
+citation and the numbers in the wrong direction. The lesson worth keeping is not
+about the marking, which worked: it is that the snippet became load-bearing by
+being *reused across modules on internal authority* rather than by anyone opening
+the paper, and that a correction made without the primary in hand can be worse
+than the error it replaces.
 
 **Where the CG has to be (`cg_targets`).** "Set the CG forward" is not
 actionable without a station, so the gate answers the question directly. Since

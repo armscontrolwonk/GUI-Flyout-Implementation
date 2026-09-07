@@ -37,12 +37,14 @@ is not a gate.
 
 Control authority is READ FROM THE VEHICLE (control_authority(), below), not
 assumed: the reentry object's `glider_control_surfaces` descriptor sets the
-usable deflection, within the Kumar & Stollery separation band this repo already
-uses for the damping estimator.  A body with fixed surfaces ('none') has no
-commanded deflection, trims at zero incidence, and does not glide — the branch a
-fin-stabilised ballistic missile body belongs in, which the gate could not
-previously express because it assumed a 25° all-moving control on every finned
-airframe.
+usable deflection, capped at the same incipient-separation limit the damping
+estimator uses (Kumar & Stollery 1996 / Needham & Stollery AIAA 66-455, read
+against the primaries — see the SOURCE note above `_DELTA_MAX_BY_CONTROL` for
+which branch of that criterion applies in flight).  A body with fixed surfaces
+('none') has no commanded deflection, trims at zero incidence, and does not
+glide — the branch a fin-stabilised ballistic missile body belongs in, which the
+gate could not previously express because it assumed a 25° all-moving control on
+every finned airframe.
 
 Control normal-force slope (all-moving-fin model, ref body base area):
     C_Nδ = control_eff · C_Nα,fin
@@ -123,38 +125,98 @@ import grid_fin_sizing as gfs
 # angle the boundary layer separates ahead of the surface and effectiveness
 # collapses.  The tiers below map onto that physics.
 #
-# SOURCE, NOW VERIFIED AND PARTLY CONTRADICTING THESE NUMBERS (2026-09-04).
-# The anchor is Kumar, D. & Stollery, J. L., "Hypersonic Control Flap
-# Effectiveness", ICAS-94-4.4.3, 19th ICAS Congress, 1994, pp. 1194-1204
-# (Cranfield).  It was read against the paper on 2026-09-04, and two things it
-# had been cited for are wrong:
-#   * It is an ICAS 1994 congress paper, not Aeronautical Journal 100(996) 1996.
-#   * It is at M 8.2, not "M ~ 10", and it states NO "usable deflection 5-15 deg"
-#     band and no "critical deflection ~ 15 deg".
-# What it DOES report: laminar incipient separation at flap angle 7.8 deg at
-# alpha = 5 deg and 8.4 deg at alpha = 10 deg; flow still attached at beta = 10
-# deg when alpha = 10 deg (incidence delays separation); and the flap boundary
-# layer laminar at beta = 5, transitional at 15, turbulent at 25.  Bluntness
-# "causes significant loss of control effectiveness".
+# SOURCE, VERIFIED AGAINST THE PDFs (2026-09-07).
+# The anchor is Kumar, D. & Stollery, J. L., "Hypersonic control flap
+# effectiveness", The Aeronautical Journal 100(996), June/July 1996, pp. 197-208
+# (Paper No. 2151, DOI 10.1017/S0001924000067154; also printed as ICAS-94-4.4.3,
+# 19th ICAS Congress, 1994).  Both that paper and Needham & Stollery AIAA 66-455
+# have now been read against the primary PDFs.
 #
-# So the paper anchors separation onset near 8 deg, not 15.  The 15 deg upper
-# tier below is therefore NOT sourced -- it survives from the superseded reading,
-# and damping_estimate.DELTA_MAX_DEG rests on the same one.  Re-anchoring both is
-# a physics decision with flown consequences (it would cut achievable glide for
-# every control-rich body), so it is FLAGGED here and in TODO.md rather than
-# changed silently.  See docs/cl_margin_references.md for the verified entry.
+# TWO EARLIER READINGS OF THIS SOURCE WERE WRONG.  Recorded here because the
+# constants below have twice been justified from mistaken readings:
+#   * The ORIGINAL entry cited a "usable deflection 5-15 deg" band at "M ~ 10".
+#     The paper is at M 8.2 and states no such band.  The 5-15 came from the
+#     flap BOUNDARY-LAYER STATE sequence (laminar at beta = 5, transitional at
+#     15, turbulent at 25) -- which is not a usable-deflection limit, and is
+#     stated for the BLUNT leading edge at alpha = 0 (their 5.3.2), not as a
+#     general law.
+#   * A 2026-09-04 "correction" then asserted the journal citation was wrong and
+#     that the paper reports incipient separation at 7.8 deg / 8.4 deg.  BOTH
+#     claims are false.  The journal citation was right all along, and neither
+#     angle appears in the paper -- "8.4" occurs exactly once in it, as
+#     Re_inf/cm = 8.4e4 in a literature-review sentence about Coet et al. at
+#     M 10.0.  That correction is withdrawn.  (M ~ 10 does appear in the paper
+#     in several places, all of them OTHER people's work or borrowed data --
+#     Townsend and Coet at M 10.0, Sanator at 10.55, Stone's Mach 10.4 pitot
+#     profile -- but never as this study's own condition, which is M 8.2.)
 #
-# The qualitative tiers map onto that band:
+# WHAT THE PAPER ACTUALLY REPORTS: incipient separation at a flap angle of
+# 6.6 deg (their 5.1.2, alpha = 0, sharp leading edge, M 8.2, hingeline
+# L = 15.9 cm).  Note WHAT that number is: it is Eq. (6) below EVALUATED at the
+# tunnel conditions, not a measurement -- the paper concludes "This supports the
+# prediction of the above criterion".  The measurement is only the bracket
+# around it: with a SHARP leading edge, beta = 5 attached and beta = 10
+# separated.
+#
+# The leading edge matters, and the old note here got the mechanism wrong.  With
+# a BLUNT leading edge (hemi-cylindrical, d = 4-6 mm) at alpha = 0, beta = 10 IS
+# attached -- "the suppression of separation is complete" (their 5.3.2).  So it
+# is BLUNTNESS, not incidence, that suppresses separation there.  That is not a
+# free gain: the same bluntness "causes significant loss of control
+# effectiveness".  Incidence separately delays (does not eliminate) separation
+# on the sharp configuration.
+#
+# AND IT CARRIES THE CRITERION, as its Eq. (6):
+#
+#     M_inf * beta_i = 80 * chi_L**0.5 ,   chi = M**3 * sqrt(C / Re_x)
+#
+# with beta in DEGREES and Re at the hingeline length.  Transcription check (NOT
+# independent validation -- the paper's 6.6 IS this equation): at the paper's
+# own conditions (Re_L = 1.43e6, C = 1) it returns 6.62 deg vs the stated 6.6,
+# which pins degrees-not-radians and the length scale.
+#
+# IF YOU IMPLEMENT THIS, note the symbol trap.  The paper prints Eq. (6) with an
+# OVERBAR on chi that it never defines.  Its nomenclature offers a bare
+# chi = M**3*sqrt(C/Re_x) AND a wall-weighted chi_e = eps*[0.664 +
+# 1.73*(Tw/T0)]*chi.  Only the BARE form reproduces their 6.6 deg (6.62); chi_e
+# gives ~2.9 deg, i.e. 2.2x low.  Use the bare parameter.
+#
+# This is the LAMINAR branch of Needham & Stollery Fig. 11, which also plots a
+# transitional branch and a TURBULENT branch 5-8x higher (ordinate
+# beta_i/sqrt(M_inf) ~ 9.7-13, near-flat over Re_L 1e6-2e7; the gap widens with
+# Re_L because the laminar branch falls as Re_L**-0.25 and the turbulent one
+# barely falls at all).
+#
+# WHICH BRANCH APPLIES HERE, and why 15 deg stands.  Re_L for a 6 m body over
+# M 3-10 and 25-40 km is 1.4e6 to 4.9e7 -- at or beyond where the laminar branch
+# ends.  The laminar form would give 2-6 deg; the turbulent branch gives 17-41
+# deg.  Thrusty flies the turbulent branch, so 15 deg is CONSERVATIVE against
+# incipient separation rather than optimistic, and the earlier plan to re-anchor
+# DOWNWARD toward 8 deg would have applied a laminar 2-D tunnel result to
+# turbulent flight vehicles.  The values below are therefore unchanged.
+#
+# The right long-run fix is not another constant but a branch-selected
+# beta_max(M, Re_L, boundary-layer state) -- TODO.md item 9(d).  Note that
+# heating.transition_factor keys on Re_Rn (nose radius) and answers a DIFFERENT
+# question than Re_L (running length to the hingeline); it cannot be reused
+# as-is.  See docs/cl_margin_references.md for the full verified entry.
+#
+# The qualitative tiers:
 #
 #   none        -- fixed surfaces: no commanded deflection at all.  The body
 #                  trims where its own aerodynamics put it (alpha ~ 0 for a
 #                  statically stable airframe), so it does not glide.
-#   small       -- 5 deg, laminar and attached in the paper's tests.
-#   substantial -- 15 deg.  NOT sourced; see the note above.
+#   small       -- 5 deg.  Attached and laminar in the paper's own tests, and
+#                  below the 6.6 deg laminar onset, so it holds on either branch.
+#   substantial -- 15 deg.  Conservative against the turbulent-branch onset
+#                  (17-41 deg over the flight envelope); above the laminar onset,
+#                  which is the regime a flight vehicle is not in.
 #   unknown     -- 10 deg, reported as an ASSUMPTION.  Set the reentry object's
-#                  glider_control_surfaces to replace it.  Notably this is the
-#                  one tier the paper does support: attached flow was observed
-#                  at beta = 10 deg with incidence.
+#                  glider_control_surfaces to replace it.  It is a midpoint
+#                  between the other two tiers.  The paper's beta = 10 cases cut
+#                  both ways -- separated on the sharp leading edge, attached on
+#                  the blunt one -- so it is not evidence for this tier either
+#                  way; treat it as the assumption it is labelled as.
 #
 # Laying tier names onto deflection angles is a modelling choice either way; no
 # document in this repo grades those three words.

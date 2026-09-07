@@ -703,9 +703,14 @@ control-limited → the best L/D over the reachable band `(0, α_trim,max]`.
 **Control authority is read from the vehicle,** not assumed: the reentry
 object's `glider_control_surfaces` descriptor sets the usable deflection
 (`none` → 0°, `small` → 5°, `substantial` → 15°, `unknown` → 10° reported as an
-assumption), on the Kumar & Stollery separation band `damping_estimate.py`
-already uses.  A previous 25° all-moving-control default made the gate unable to
-limit a fin-stabilised body at *any* CG; see METHODS.md §8.10.
+assumption), capped at the same incipient-separation limit `damping_estimate.py`
+uses.  That limit comes from the Needham & Stollery criterion (AIAA 66-455) as
+carried by Kumar & Stollery, *The Aeronautical Journal* 100(996), 1996 — both
+read against the primaries.  At Thrusty's flight Reynolds numbers the criterion's
+turbulent branch puts incipient separation at 17–41°, so 15° is a conservative
+cap rather than a laminar limit; see METHODS.md §8.10.  A previous 25°
+all-moving-control default made the gate unable to limit a fin-stabilised body at
+*any* CG.
 
 **Reentry attitude — trimmed vs. tumbling.** The reentry plan carries
 `reentry_attitude ∈ {trim, tumbling}`. *Trim* (default) is the stable controlled

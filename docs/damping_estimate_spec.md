@@ -52,8 +52,10 @@ limited to ~ζ_max."
   flaps, few-% area) / `substantial` (elevons, body flaps, or lifting fins,
   Shuttle / HL-20 / C-HGB class). Selecting a tier alone returns a band.
 - **Advanced (optional, sharpens the estimate):** control-surface area ratio
-  `S_flap/S_ref`, usable deflection `δ` (default 12°, capped ~15° by
-  separation), and the glide-state overrides below.
+  `S_flap/S_ref`, usable deflection `δ` (default 12°, capped at 15° by
+  incipient separation — see `cl_margin_references.md` §5 for what that cap
+  rests on and why it is conservative, not a laminar tunnel value), and the
+  glide-state overrides below.
 
 **Glide state** (V, altitude): **if a trajectory has been flown, pre-fill the
 actual mid-glide V and altitude; otherwise leave blank.** Always editable, with
@@ -77,7 +79,8 @@ Anchored at the **equilibrium glide**, derived from the vehicle's own β and L/D
    increment the **minimum** of three bounds:
    - **Newtonian flap** (Grant & Braun; control surface ≈ flat plate):
      `ΔC_L = (S_flap/S_ref)·Cp,max·[sin²(α+δ) − sin²α]·cosα`, `Cp,max ≈ 1.84`,
-     derated ×0.85 for real-gas (M > 7), at usable `δ ≤ 15°` (separation limit);
+     derated ×0.85 for real-gas (M > 7), at usable `δ ≤ 15°` (incipient-separation
+     limit — conservative against the turbulent branch, `cl_margin_references.md` §5);
    - **range knee:** `ΔC_L ≤ 0.5·C_L,trim` (flying to ~1.5× C_L,opt costs only
      ~8 % L/D; beyond that range falls off steeply);
    - **aerodynamic ceiling:** `C_L,trim + ΔC_L ≤ C_L,max ≈ 0.45` (cone/biconic).

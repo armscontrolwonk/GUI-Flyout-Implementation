@@ -594,13 +594,23 @@ class ROParams:
     # analytic family, which flies its own closed-form pull-up arc.
     glider_pullup_start_alt_km: float = 0.0
 
-    # Control-surface descriptor used only by the damping-ratio estimator
-    # (docs/damping_estimate_spec.md): how much lifting/control-surface area the
-    # vehicle carries, which bounds the achievable ζ.  "unknown" → the estimator
-    # returns its widest band; "none"/"small"/"substantial" select a tier.
+    # Control-surface descriptor: how much lifting/control-surface area the
+    # vehicle carries.  Read by TWO consumers, and for one of them it DOES
+    # change the flown trajectory:
+    #   * damping_estimate (docs/damping_estimate_spec.md) — bounds the
+    #     achievable ζ.  "unknown" → the estimator returns its widest band;
+    #     "none"/"small"/"substantial" select a tier.  Estimate only.
+    #   * trim_gate.control_authority — maps the tier to a usable one-sided
+    #     deflection (none/small/substantial/unknown → 0/5/15/10°), which sets
+    #     the trimmable α and hence LD_achievable.  For a NO-SEPARATION body
+    #     (separation_mode "body", attitude "trim", glider_enabled, glider_LD
+    #     left at 0) that feeds the flown glide — so the tier changes range.
+    #     A separating RV with its own designed glider_LD is unaffected.
     # glider_flap_area_ratio (S_flap/S_ref) and glider_flap_deflection_deg, when
-    # > 0, override the tier with an explicit Newtonian-flap computation.  These
-    # do not affect the flown trajectory — only the estimate.
+    # > 0, override the tier with an explicit Newtonian-flap computation in the
+    # damping estimator; glider_flap_deflection_deg ALSO overrides the trim
+    # gate's tier deflection (still capped at the separation limit).
+    # glider_flap_area_ratio is read by the damping estimator only.
     glider_control_surfaces:   str   = "unknown"
     glider_flap_area_ratio:    float = 0.0      # 0 ⇒ use the tier default
     glider_flap_deflection_deg: float = 0.0     # 0 ⇒ use the 12° default

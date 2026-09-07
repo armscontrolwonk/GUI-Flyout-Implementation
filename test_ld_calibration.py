@@ -205,9 +205,19 @@ def test_unknown_control_is_flagged_as_assumed():
 
 
 def test_deflection_respects_the_separation_limit():
-    """Usable deflection is capped at the Kumar & Stollery separation limit
-    (docs/cl_margin_references.md), the same 15 deg damping_estimate.py uses --
-    not the uncited 25 deg this replaced."""
+    """Usable deflection is capped at 15 deg, the same value damping_estimate.py
+    uses -- not the uncited 25 deg this replaced.
+
+    What 15 deg rests on (docs/cl_margin_references.md, both primaries read
+    2026-09-07): incipient separation of the flap boundary layer, per the
+    Needham & Stollery criterion (AIAA 66-455) as carried by Kumar & Stollery,
+    Aeronautical Journal 100(996) 1996, Eq. (6).  Thrusty's bodies fly at
+    Re_L ~ 1e6-5e7, on that criterion's TURBULENT branch, where onset is
+    17-41 deg -- so 15 deg is conservative.  It is NOT the paper's 6.6 deg
+    laminar tunnel value, which applies to a regime flight vehicles are not in.
+
+    The load-bearing property here is that the two modules agree: whatever the
+    cap is, trim_gate and damping_estimate must not drift apart."""
     assert tg._DELTA_MAX_BY_CONTROL['substantial'] == 15.0
     assert tg._DELTA_MAX_BY_CONTROL['none'] == 0.0
     import damping_estimate as de

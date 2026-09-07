@@ -23,8 +23,16 @@ CP_MAX          = 1.84    # modified-Newtonian stagnation Cp (γ=1.4, M→∞)
 REAL_GAS_DERATE = 0.85    # control-surface effectiveness derate above ~M7
 CL_TRIM         = 0.12    # assumed max-L/D trim C_L of a slender glide body
 ALPHA_TRIM_DEG  = 8.0     # assumed max-L/D trim α (NASA M=6 biconic; TN D-840)
-DELTA_DEFAULT_DEG = 12.0
-DELTA_MAX_DEG   = 15.0    # separation-limited usable deflection (Kumar/Stollery)
+DELTA_DEFAULT_DEG = 12.0  # NOT separately sourced; it is this module's real anchor
+                          # because it sits below DELTA_MAX_DEG and so binds first
+DELTA_MAX_DEG   = 15.0    # separation-limited usable deflection.  Conservative
+                          # against the TURBULENT incipient-separation branch
+                          # (17-41 deg over M 3-10 at flight Re_L): Kumar &
+                          # Stollery, Aeronautical Journal 100(996) 1996, Eq. (6)
+                          # + Needham & Stollery AIAA 66-455 Fig. 11, both read
+                          # against the primaries 2026-09-07.  Must stay equal to
+                          # trim_gate._DELTA_MAX_BY_CONTROL['substantial'] --
+                          # see docs/cl_margin_references.md and TODO.md 9(d).
 CL_MAX_CONE     = 0.45    # cone/biconic aerodynamic C_L ceiling (TN D-840/D-4098)
 RANGE_KNEE      = 0.5     # usable ΔC_L ≤ 0.5·C_L,trim (~1.5× C_L,opt, ~8% L/D)
 ZETA_FLOOR      = 0.05    # passive atmospheric-drag damping floor

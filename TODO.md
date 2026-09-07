@@ -43,8 +43,9 @@ best-glide L/D; a control-rich body does).  Also fixed the stale
 DONE: trim_gate's 25-deg control-deflection assumption no longer over-grants
 best-glide trim.  Control authority is read from the reentry object's
 glider_control_surfaces descriptor (none => no commanded deflection => trims at
-zero incidence => no glide), deflection is capped at the Kumar & Stollery
-separation limit damping_estimate.py already uses, and the trim angle is the
+zero incidence => no glide), deflection is capped at the same
+incipient-separation limit damping_estimate.py uses (see (d) below for what that
+cap actually rests on), and the trim angle is the
 root of a nonlinear moment balance rather than a linearised relation that
 returned 144 deg for a Scud-B and could not limit that vehicle at ANY cg.
 See BODY_GLIDE_LD_PLAN.md 7.1 and METHODS.md 8.10.
@@ -116,29 +117,62 @@ Scud-B fins give 0.66, well below the old 0.85 -- the constant had been
 overstating control authority.  Achievable L/D for a Scud-B body at the
 'substantial' tier drops 3.19 -> 2.70 accordingly.
 
-(d) DEFLECTION BAND -- SOURCE NOW VERIFIED, AND IT DOES NOT SAY WHAT WE CITED.
-Kumar & Stollery was read against the paper 2026-09-04.  Two corrections:
-  * Citation: it is "Hypersonic Control Flap Effectiveness", ICAS-94-4.4.3,
-    19th ICAS Congress, 1994, pp. 1194-1204 (Cranfield) -- NOT Aeronautical
-    Journal 100(996), 1996 as recorded.
-  * Content: it is at M 8.2, not "M ~ 10", and it contains NO "usable deflection
-    5-15 deg" band and no "critical deflection ~ 15 deg".  What it reports is
-    laminar INCIPIENT SEPARATION at flap angle 7.8 deg (alpha = 5 deg) and
-    8.4 deg (alpha = 10 deg), with flow still attached at beta = 10 deg when
-    alpha = 10 deg because incidence delays separation, and the flap boundary
-    layer laminar at beta = 5 / transitional at 15 / turbulent at 25.  The old
-    "5-15" appears to have conflated that boundary-layer-state sequence with a
-    usable-deflection limit.
+(d) DEFLECTION BAND -- RESOLVED 2026-09-07.  BOTH PRIMARIES NOW READ; 15 DEG
+STANDS, ON DIFFERENT REASONING.  Kumar & Stollery 1996 and Needham & Stollery
+AIAA 66-455 have both been read against the PDFs.  Two EARLIER readings were
+wrong and are superseded:
+  * The ORIGINAL citation was for a "usable deflection 5-15 deg" band at
+    "M ~ 10".  The paper is at M 8.2 and contains no such band; the 5-15 came
+    from the flap boundary-layer STATE sequence (laminar at beta = 5,
+    transitional at 15, turbulent at 25) -- not a usable-deflection limit, and
+    stated for the BLUNT leading edge at alpha = 0 (5.3.2), not generally.
+  * The 2026-09-04 "correction" then claimed the journal citation was wrong and
+    that the paper reports onset at 7.8 / 8.4 deg.  BOTH are false and are
+    WITHDRAWN.  The Aeronautical Journal 100(996), 1996 citation was correct all
+    along (June/July 1996, pp. 197-208, Paper No. 2151); ICAS-94-4.4.3 is the
+    earlier printing of the same study.  Neither 7.8 nor 8.4 is a deflection
+    angle in the paper -- "8.4" is Re_inf/cm = 8.4e4 from a literature-review
+    sentence about Coet et al. at M 10.0, which is also the source of the
+    original "M ~ 10".
 
-DECISION NEEDED, not a silent fix.  The paper anchors separation onset near
-8 deg.  trim_gate._DELTA_MAX_BY_CONTROL uses 5/15/10 and
-damping_estimate.DELTA_MAX_DEG uses 15; the 15 deg figure is now unsourced in
-both.  Re-anchoring the 'substantial' tier from 15 to ~8-10 deg would cut
-achievable glide for every control-rich body -- a real change to flown results,
-in the conservative direction -- and the two modules must move together.  Note
-separation onset is not the same as zero effectiveness, so 8 deg is a lower
-bound on usable travel rather than a hard cap; that is exactly the judgement
-that needs making.  Verified entry: docs/cl_margin_references.md.
+WHAT THE PAPER REPORTS: incipient separation at 6.6 deg (5.1.2, alpha = 0,
+sharp LE, M 8.2, hingeline L = 15.9 cm).  Note what that number IS -- Eq. (6)
+EVALUATED at the tunnel conditions, not a measurement ("This supports the
+prediction of the above criterion").  The measurement is the bracket: sharp LE,
+beta = 5 attached and beta = 10 separated.  Bluntness changes that -- with a
+hemi-cylindrical blunt LE (d = 4-6 mm) at alpha = 0, beta = 10 IS attached
+(5.3.2), though the same bluntness "causes significant loss of control
+effectiveness".  So it is bluntness, not incidence, that suppresses separation
+there; incidence only delays it on the sharp configuration.  The paper also
+carries the criterion itself, as Eq. (6):
+M_inf * beta_i = 80 * chi_L**0.5, chi = M**3 * sqrt(C/Re_x), beta in degrees.
+Recomputing it returns 6.62 vs their 6.6 -- a TRANSCRIPTION check (units, length
+scale), not independent validation, since their 6.6 is this same equation.
+
+WHY 15 DEG STANDS.  Eq. (6) is the LAMINAR branch of Needham Fig. 11, which also
+plots a transitional branch and a turbulent branch 5-8x higher
+(beta_i/sqrt(M_inf) ~ 9.7-13; the gap widens with Re_L).  Thrusty's bodies run Re_L ~ 1.4e6-4.9e7 at the
+fin station over M 3-10 / 25-40 km -- past the laminar branch.  The laminar form
+would give 2-6 deg; the turbulent branch gives 17-41 deg.  So 15 deg is
+CONSERVATIVE against onset in the regime actually flown, and the previously
+planned re-anchor DOWN toward 8 deg would have applied a laminar 2-D tunnel
+result to turbulent flight vehicles.  Values in trim_gate and damping_estimate
+are unchanged; only their justification is.
+
+STILL OPEN, and now the real item: replace the constant with a branch-selected
+beta_max(M, Re_L, boundary-layer state) from Needham Fig. 11, so the cap tracks
+flight condition instead of being a single number -- the same move control_eff
+already made from a hard-coded 0.85 to a derived N-K-P ratio.  Two cautions:
+  * heating.transition_factor keys on Re_Rn (nose radius) and reports "laminar"
+    at glide conditions; that answers a DIFFERENT question than Re_L (running
+    length to the hingeline) and cannot be reused as the branch selector.
+  * Needham calls his laminar correlation "a very tentative correlation" and
+    flags the unknown effect of wall temperature; the turbulent branch is read
+    off a figure with M 3 and M 6 data only.  Band it, do not over-trust it.
+Verified entry with both equations and the branch table:
+docs/cl_margin_references.md.  Also still worth having: a finned, deflected
+DATCOM deck (item 2 in TRIM_GATE_APPROACH.md 7), which would calibrate
+effectiveness roll-off PAST onset rather than only locating onset.
 
 Open (only if a user still sees unrealistic glide range with correct cg):
 audit whether the phugoid / skip-glide LAW loses too little energy per skip

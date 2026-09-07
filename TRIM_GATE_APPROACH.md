@@ -154,7 +154,12 @@ This is the part worth being blunt about.
   angles is a modelling choice; no document here grades those three words. The
   `unknown` tier is reported as an assumption in the gate's own verdict string
   wherever it produces a glide.
-- **The upper tier specifically is now unsourced.** See §6.
+- **The upper tier (15 deg) is sourced, but to a branch rather than a number.**
+  It is conservative against the turbulent incipient-separation branch of
+  Needham & Stollery Fig. 11 (17-41 deg over the flight envelope), not against
+  the 6.6 deg laminar tunnel value — which applies to a regime these vehicles
+  are not in. Replacing the constant with a computed `β_max(M, Re_L, BL state)`
+  is the outstanding item. See §7.3.
 - **The 25 deg linear-fin validity threshold**, beyond which a trim solution is
   reported but marked indicative because the fin term is linear wing theory with
   no stall.
@@ -271,17 +276,30 @@ estimate falls back to the uniform tube regardless of the declared payload.
 2. **A finned, deflected DATCOM run.** The single highest-value missing
    evidence. It would move the fin and control paths from unvalidated to
    measured, exactly as reading the `CM`/`XCP` columns did for the body.
-3. **The upper deflection tier.** Kumar & Stollery was read against the primary
-   on 2026-09-04 and does **not** support the 5-15 deg band it had been cited
-   for. It is at M 8.2 (not ~10), states no usable-deflection band, and reports
-   laminar incipient separation at **7.8 deg** (a = 5 deg) and 8.4 deg
-   (a = 10 deg). The old band appears to have mistaken the boundary-layer-state
-   sequence (laminar 5 / transitional 15) for a usable limit. So the
-   `substantial` tier at 15 deg is unsourced, as is the same figure in
-   `damping_estimate.DELTA_MAX_DEG`. Re-anchoring is a physics decision with
-   flown consequences and the two modules must move together; separation onset
-   is also not zero effectiveness, so 8 deg is a floor on usable travel rather
-   than a cap.
+3. **The upper deflection tier — settled 2026-09-07, but not as a constant.**
+   Both primaries have now been read. Kumar & Stollery (*Aeronautical Journal*
+   100(996), 1996 — the citation was right; a 2026-09-04 "correction" of it is
+   withdrawn) does **not** support the 5-15 deg band it was originally cited
+   for: it is at M 8.2, states no usable-deflection band, and its one onset
+   number is **6.6 deg** at α = 0 with a **15.9 cm** hingeline — and even that
+   is Eq. (6) *evaluated*, not measured; the measurement is the bracket β = 5
+   attached / β = 10 separated on a sharp leading edge. The old band mistook the
+   boundary-layer-state sequence (laminar 5 / transitional 15) for a usable
+   limit.
+
+   But 6.6 deg is a *laminar* tunnel value. The paper carries the criterion
+   itself as Eq. (6), `M∞·β_i = 80·χ̄_L^(1/2)`, which is the laminar branch of
+   Needham & Stollery Fig. 11; that figure also plots a turbulent branch 5-8×
+   higher. Thrusty flies Re_L ≈ 1.4e6–4.9e7 at the fin station, on the
+   turbulent branch, where onset is **17-41 deg**. So `substantial` at 15 deg
+   is *conservative*, and the earlier plan to re-anchor down to ~8 deg is
+   abandoned — it would have applied a laminar 2-D result to turbulent vehicles.
+
+   What remains is to stop using a constant at all: make `β_max` a
+   branch-selected function of Mach, Re_L and boundary-layer state, the same
+   move `control_eff` made from a hard-coded 0.85 to a derived N-K-P ratio.
+   `heating.transition_factor` cannot serve as the branch selector — it keys on
+   Re_Rn, a different Reynolds number. See `TODO.md` item 9(d).
 
 ---
 
