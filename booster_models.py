@@ -603,9 +603,12 @@ class ROParams:
     #   * trim_gate.control_authority — maps the tier to a usable one-sided
     #     deflection (none/small/substantial/unknown → 0/5/15/10°), which sets
     #     the trimmable α and hence LD_achievable.  For a NO-SEPARATION body
-    #     (separation_mode "body", attitude "trim", glider_enabled, glider_LD
-    #     left at 0) that feeds the flown glide — so the tier changes range.
-    #     A separating RV with its own designed glider_LD is unaffected.
+    #     that feeds the flown glide — so the tier changes range.  A separating
+    #     RV with its own designed glider_LD is unaffected.  ("No-separation"
+    #     is not stored here: the run derives ro.separation_mode from the
+    #     booster's body_reenters flag, per the note on that field.  The gate
+    #     fires when the derived mode is "body" with reentry_attitude "trim",
+    #     glider_enabled, and glider_LD left at 0.)
     # glider_flap_area_ratio (S_flap/S_ref) and glider_flap_deflection_deg, when
     # > 0, override the tier with an explicit Newtonian-flap computation in the
     # damping estimator; glider_flap_deflection_deg ALSO overrides the trim
