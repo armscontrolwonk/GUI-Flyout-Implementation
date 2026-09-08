@@ -589,8 +589,8 @@ class ROParams:
     # law takes over, one-way.  0 = no commanded pull: capture happens however
     # the glide law does it (byte-identical to pre-modifier behaviour).
     # Flight precedent: SWERVE III commanded its pull-out at Mach 12 /
-    # high altitude as a discrete event (Iliff & Shafer AIAA 93-0311; the
-    # -10 deg AoA pull at t=20 s in Williamson Fig. 20).  Ignored by the
+    # high altitude as a discrete event (the -10 deg AoA pull at t=20 s in
+    # Iliff & Shafer, AIAA 93-0311, Fig. 20).  Ignored by the
     # analytic family, which flies its own closed-form pull-up arc.
     glider_pullup_start_alt_km: float = 0.0
 

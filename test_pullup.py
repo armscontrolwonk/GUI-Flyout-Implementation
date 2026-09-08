@@ -5,7 +5,7 @@ corridor (benchmarks/swerve/): the constant-ζ capture architecture traces a
 smooth frontier — every knob trades trough depth against arrival speed — and
 the flight point (a 25.8 km shelf held at Mach 12.2) sits outside the whole
 family, because the real vehicle captured with a discrete commanded pull at
-Mach 12 (Iliff & Shafer 1993; Williamson Fig. 20), not a damping loop.
+Mach 12 (Iliff & Shafer, AIAA 93-0311, Fig. 20), not a damping loop.
 
 The modifier: zero commanded lift above the trigger altitude (ballistic
 fall), full-authority pull at it (capped by the structural g-limit AND by

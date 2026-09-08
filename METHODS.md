@@ -3068,7 +3068,7 @@ capture-trough depth against arrival speed, and the flight point — a 25.8 km
 shelf held from Mach 12 — sits outside the reachable set.  The reason is
 structural: one damping gain was being asked to be both "off during the fall"
 and "10 g at the shelf".  The real vehicle did not do that — Iliff & Shafer
-(AIAA 93-0311) and Williamson (Fig. 20) describe SWERVE III's capture as a
+(AIAA 93-0311, Fig. 20) describe SWERVE III's capture as a
 **discrete commanded pull-out at Mach 12** (a −10° AoA pull at t = 20 s), which
 is exactly this modifier.  With the pull owning capture, ζ returns to the job
 its linearization assumes — damping small residuals near equilibrium — instead

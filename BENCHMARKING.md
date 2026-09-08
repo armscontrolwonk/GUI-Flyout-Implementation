@@ -1841,13 +1841,31 @@ of Hypersonic Flight and Prediction Results"), read from primary; PDF in
 
 Covers X-15, Reentry F, SWERVE and the Space Shuttle.  Four results:
 
-1. **SWERVE geometry VERIFIED against a published source — 3 for 3.**  Iliff
-   gives the third SWERVE vehicle as a 5.25° half-angle cone, "a little over
-   100 in." long, nose-tip/base-radius ratio ~0.07.  Thrusty's
-   `ro_library/SWERVE.ro.json` yields **5.23°** (atan[(D/2)/L]), **0.070**, and
-   **2.60 m** — matching to within 0.02° and 0.001 on the radius ratio.  The
-   shipped SWERVE object's geometry is now externally verified, not just
-   internally consistent.
+1. ~~**SWERVE geometry VERIFIED against a published source — 3 for 3.**~~
+   **WITHDRAWN 2026-09-08 — the check was circular, and the geometry it
+   checked was wrong.**  Iliff gives the third SWERVE vehicle as a 5.25°
+   half-angle cone, "a little over 100 in." long, nose-tip/base-radius ratio
+   ~0.07, and the original note reported `ro_library/SWERVE.ro.json` yielding
+   5.23° via atan[(D/2)/L], 0.070, and 2.60 m.
+
+   Two things are wrong with that.  **It is circular**: the object's base
+   radius was *constructed* as `L·tan(5.25°)` and its nose radius as
+   `0.07·R_base`, so recomputing 5.25° and 0.07 from those numbers recovers the
+   inputs and tests nothing.  And **the construction was wrong**: Iliff's own
+   sentence says "All vehicles flown were spherically blunted conical
+   vehicles", and for a blunted cone at fixed overall length the base is
+   *larger* than the sharp-cone value, not equal to it.  Correct construction
+   and the corrected values are in the object's `notes`; base diameter moves
+   0.476 → 0.5385 m and nose radius 0.0167 → 0.01885 m at the revised
+   L = 2.743 m (Murbach's explicit 2.75 m for the flown version, replacing an
+   unsourced 2.60 m).
+
+   Note the consequence for any future check: **atan[(D/2)/L] is a sharp-cone
+   identity and no longer recovers the half-angle.**  On the corrected geometry
+   it returns 5.61°, not 5.25° — the difference is the blunting, not an error.
+   The radius ratio (0.07) is still recovered exactly, and still circularly.
+   What would constitute a real external check is a *measured* base diameter or
+   nose radius from a source independent of the 0.07 ratio; none is known.
 
 2. **Transition ran BACKWARDS on SWERVE — the sharpest caveat yet on our
    transition gate (METHODS §13.11).**  *"Surprisingly, the flight data

@@ -1215,7 +1215,7 @@ def _eom(t, state, params, cutoff_time, azimuth_rad, gt_turn_start_s,
                         # damping small residuals near equilibrium — instead
                         # of arresting a km/s-class fall.  Flight precedent:
                         # SWERVE III's discrete commanded pull-out at Mach 12
-                        # (Iliff & Shafer 1993; Williamson Fig. 20, t = 20 s).
+                        # (Iliff & Shafer, AIAA 93-0311, Fig. 20, t = 20 s).
                         # Unset (0) is byte-identical to the plain glide laws.
                         _pu_handled = False
                         _pu_alt_m = float(getattr(_ero, 'glider_pullup_start_alt_km',

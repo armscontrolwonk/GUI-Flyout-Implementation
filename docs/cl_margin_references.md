@@ -61,9 +61,34 @@ marked **[derived]** are standard closed-form results computed directly.
 
 - **Gulan, A. E., "Conceptual, Trajectory-Based Structural Sizing Method for
   Hypersonic Glide Vehicles," M.S. thesis, Georgia Tech, Dec. 2024.**
-  **[verified]** The repo's cited source for C-HGB/SWERVe dimensions.
+  **[verified]** — but **SECOND-HAND for the vehicle, and wrong on the booster**;
+  read the correction below before using this row.
   **Table 2 (SWERVe, the public C-HGB predecessor):** length **2.75 m**,
   half-cone angle **5°**, span **0.87 m**, **4 fins**, US Navy 0.876 m booster.
+
+  **CORRECTION (2026-09-08).** "SWERVe" here is not a separate vehicle: it is
+  Sandia's SWERVE, rendered second-hand through the Murbach / Aeolus
+  Mars-derivative literature. Every Gulan dimension traces there —
+  2.75 m to Murbach, AIAA 93-0313, p. 1 ("flown three times in the 2.75 m long
+  version") and Murbach/Keese/Farmer, SSC97-V-2, p. 6; the 5° half-angle and the
+  four cruciform wings to SSC97-V-2 p. 6 ("a sharp 5 deg half-cone with four
+  wings arranged in a cruciform"). Treat this row as a **downstream citation of
+  Murbach**, not as independent corroboration, and prefer the primaries.
+
+  Two specific traps:
+
+  * **The "US Navy booster" attribute is wrong.** SWERVE flew on Sandia's
+    **STRYPI VIII-R** (Sandia LAB NEWS, 23 Jan 1981). The Navy association
+    belongs to the AHW/CPS *descendants* — AvWeek (11 Oct 2018) reports the 2011
+    AHW flight on a Polaris-derived stack, and the Navy leads CPS. Gulan has
+    collapsed SWERVE and the C-HGB programme into one row.
+  * **The 5° half-angle is a rounding.** The flown article is **5.25°**
+    (Iliff & Shafer, AIAA 93-0311), corroborated by Griswold/Stein/Redding,
+    SAE 820850, Fig. 2 (10.5° included) and by Murbach's own 1993 paper
+    ("a sharp 10.5 degree cone") — the same author who wrote 5° in 1997.
+
+  `ro_library/SWERVE.ro.json` carries the primary-sourced values and its own
+  provenance breakdown.
   Derived base diameter ≈ 0.48 m (max cross-section ≈ 0.18 m²); span ≈ 1.8× body
   diameter. **Key modelling fact:** the **lift reference area is the fin area**
   (drag reference is the max cross-section) — i.e. the C-HGB's lift is generated
