@@ -47,7 +47,15 @@ law over the geometry yields `C_L(α)` and `C_D(α)` as a coupled pair, so `C_D0
 *and* `k` both fall out of one shape. β and L/D then stop being independent
 inputs; they become two projections of the same curve. Entering both would
 over-determine the vehicle, and the schema question becomes which one is data
-and which is an override with a stated reason.
+and which is an override.
+
+Which one is data is not a close call for this project's evidence base. **β is
+observable** — it falls out of measured deceleration along a track, given an
+atmosphere. **L/D is not**: it is inferred from range and crossrange, which
+depend on a guidance law and bank schedule that open sources do not supply. So
+the intended shape is geometry plus β generating the polar, with L/D an
+*output*; an override remains available but should have to state a reason and,
+per §4a, say where the deficit goes.
 
 ## 3. Measured: C_D0 is well conditioned, k is not
 
@@ -73,10 +81,13 @@ existing `cd_cone_hypersonic` base term) on slender shapes:
   different behaviour at every other lift coefficient — and off-peak is where
   most of a maneuvering trajectory lives.
 
-The parabolic **form** is not the problem. Fitted against an impact-method
-sweep, `k` holds to ±8% over α = 2–15°, and the `C_D = 2·C_D0` identity at the
-peak emerges independently from the bottom-up build-up (~2.0× measured). The
-disagreement is calibration, not functional form.
+The parabolic **form** holds on a bare body and degrades once lifting
+surfaces are added. Fitted against an impact-method sweep, `k` holds to ±8%
+over α = 2–15° on an unfinned slender body, and the `C_D = 2·C_D0` identity at
+the peak emerges independently from that build-up (~2.0× measured). On a
+configuration with a wing the point-by-point `k` is **not** flat: over
+α = 2–12° it spreads 44% under tangent-wedge and 69% under Newtonian. Quote
+the ±8% as a body-alone result only.
 
 ## 4. The pressure law fixes C_L and C_D, not their ratio
 
@@ -109,6 +120,17 @@ the ones that add drag without adding lift: appendages, control-surface trim
 deflection, nose bluntness, and the laminar/turbulent state. Since
 `(L/D)max ∝ 1/sqrt(C_D0·k)`, doubling parasite drag costs ~30% of the peak.
 
+**The cancellation is a statement about the peak, not about the polar.** It
+holds where the pressure law is wrong by a level at fixed inclination. It does
+not hold where the law has the wrong *functional form* — and Newtonian's
+`sin²` law does, on a thin surface at low incidence, where real lift is nearly
+linear in α. That error lands in `k`. Measured on a winged configuration at
+M10, swapping Newtonian for the tangent laws moved fitted `C_D0` by ×1.23 and
+fitted `k` by ×0.83 while leaving `(L/D)max` at 6.25 → 6.17, a 1% change: the
+two errors cancel *in the peak formula* and not in the curve either side of
+it. Practical consequence — Newtonian is acceptable for a body-alone `C_D0`
+and must be kept out of the `k` path for fins.
+
 Corollary for diagnosis: if C_D0 agrees between the two routes and `k` does
 not, that is a finding, not just a discrepancy. It localises the deficit to
 drag-producing hardware absent from the geometry description, or to a
@@ -116,6 +138,33 @@ control-authority limit holding the vehicle off its aerodynamic peak — and
 both of those are checkable against open evidence in a way that a bare L/D
 number is not. `trim_gate` already expresses the second as
 `LD_max` vs `LD_achievable`.
+
+## 4a. Where a deficit should land: C_D0, not k
+
+When a derived (L/D)max exceeds an asserted one, the difference has to go
+somewhere, and the choice is not neutral. Holding the target peak fixed, a
+representative case — geometry `C_D0 = 0.0590`, `k = 0.708`, peak 2.45,
+asserted 1.80:
+
+| deficit absorbed into | C_D0 | k | C_L* | C_D at C_L* |
+|---|---|---|---|---|
+| `C_D0` (parasite) | 0.1090 | 0.708 | 0.392 | 0.218 |
+| `k` (induced) — what the back-solve does | 0.0590 | 1.308 | 0.212 | 0.118 |
+
+Same peak, same input pair, **C_L\* differing by a factor of 1.85**. The
+`k` route builds a polar that is too sharp: the vehicle trims at roughly half
+the lift coefficient, so it wants to fly lower and faster, and every
+high-`C_L` segment is over-penalised — by 1.06× at 1.5× the trim lift, 1.25×
+at 2×, 1.49× at 3×. Those are exactly the segments that matter in a
+maneuvering trajectory: equilibrium glide as the vehicle slows, commanded
+pull-ups, banked turns. The result is a range and terminal-energy error
+concentrated where the analysis is least forgiving.
+
+The physical argument points the same way. Drag that a clean body-plus-fins
+description omits — nose bluntness, trim deflection, gaps and protuberances,
+a turbulent rather than laminar wall — is nearly all **parasite**. So the
+default home for an unexplained deficit is `C_D0`, and routing it to `k`
+should require a reason.
 
 ## 5. Validation status — read carefully
 
@@ -133,25 +182,51 @@ The actual accuracy claim is one step further out: Cruz & Wilhite
 (AIAA-89-2173) put APAS within 10% of Space Shuttle databook values, with an
 ~11.8% overprediction of pressure drag against VSL3D. That is the bound any
 screening-tier estimator built on this method inherits, and it is the number
-to quote — not the 1%.
+to quote — not the 1%. Read it as optimistic for this application: the Shuttle
+case is blunt, high-α and large-winged, a different corner of the method's
+envelope from a slender body at low α. Note also the direction of the pressure
+bias — overpredicting pressure drag biases a *derived* L/D low, so correcting
+for it widens a gap against a lower asserted value rather than closing one.
+The magnitude is small (pressure is ~39% of the zero-lift build-up, so ~12% on
+pressure is ~2% on L/D), but the sign matters for diagnosis.
 
-## 6. Open items
+**The one non-circular check available is the cone-alone comparison** against
+the exact Taylor–Maccoll solution in §4, which uses no impact-method reference
+at all. Cite that, and the Cruz & Wilhite bound, in preference to the TM
+102610 agreement.
 
-- `_calc_beta` (thrusty.py) routes only `wedge` and `half_cone` body forms to
-  `lifting_body_sweep`; an axisymmetric form reaches the β-only dialog and
-  never sees the α-sweep estimator, even though `'cone'` is a member of
-  `_LIFTING_SWEEP_FORMS`.
-- The wing composite in `lifting_body_sweep` is gated to `half_cone`.
-- Wing-body carryover and shock-layer interference are absent from both
-  routes. NACA 1307 supplies slender-body carryover factors but assumes a
-  circular **cylinder**, which a cone frustum is not; the error grows with
-  the radius change over the fin chord. Unquantified, and the most likely
-  home for a residual in `k`.
-- β is a constant in the schema; a Mach-dependent β would need a schema and
-  integrator pass, not a data edit. `_beta_of_mach` and `_ld_of_mach` already
-  exist for derived no-separation bodies, but the setup gate at
-  trajectory.py:2115 requires `glider_LD <= 0` — so an *entered* L/D is
-  constant across Mach by construction.
+## 6. Open items, in order
+
+1. **`_calc_beta` routing.** thrusty.py routes only `wedge` and `half_cone`
+   body forms to `lifting_body_sweep`; an axisymmetric form reaches the β-only
+   dialog and never sees the α-sweep estimator, even though `'cone'` is a
+   member of `_LIFTING_SWEEP_FORMS`. This is first: it is the reason an
+   axisymmetric body cannot reach the estimator this memo argues should be
+   authoritative.
+2. **Nose bluntness.** Absent from the zero-lift build-up, and the largest
+   single missing parasite term for a shape described as a sharp cone. A
+   Newtonian cap estimate, `ΔC_D ≈ (Cp_stag/2)·(r_n/r_b)²` on base area, gives
+   +0.010 at `r_n/r_b` = 0.10 and +0.021 at 0.15 (modified, Cp_stag = 1.84) —
+   against a representative slender-cone `C_D0` of 0.059 that is 7% and 14%
+   off the peak L/D respectively. Large, but on its own **not** enough to
+   close a factor-two `k` gap, which would need roughly +0.050. The remainder
+   has to come from fins, trim deflection and wall state. `nose_radius_m` is
+   already stored, so this is computable now.
+3. **The wing composite** in `lifting_body_sweep` is gated to `half_cone`.
+4. **Wing-body carryover and shock-layer interference** are absent from both
+   routes. Note the sign: carryover adds lift at little drag, so including it
+   *lowers* `k` and *raises* the derived L/D — it cannot be the home for a
+   residual that needs `k` to rise, and adding it widens the gap against a
+   lower asserted value. That is further evidence the residual is drag
+   hardware rather than pressure-law error. NACA 1307 supplies slender-body
+   carryover factors but assumes a circular **cylinder**, which a cone frustum
+   is not, and it is likely generous for small fins near the base, where much
+   of the span sits in the body's boundary and entropy layers.
+5. **Constant β in the schema.** A Mach-dependent β would need a schema and
+   integrator pass, not a data edit. `_beta_of_mach` and `_ld_of_mach` already
+   exist for derived no-separation bodies, but the setup gate at
+   trajectory.py:2115 requires `glider_LD <= 0` — so an *entered* L/D is
+   constant across Mach by construction.
 
 ## References
 
