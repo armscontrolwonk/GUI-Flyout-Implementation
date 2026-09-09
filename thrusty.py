@@ -4063,6 +4063,13 @@ class ROEditorDialog(tk.Toplevel):
             self._glider_frm, text="", foreground="#2a7",
             wraplength=340, justify=tk.LEFT)
         self._LD_var.trace_add("write", lambda *_a: self._refresh_ld_preview())
+        # β is half of the pair the preview now tests, so a β edit must
+        # refresh the note too.
+        try:
+            self._beta_var.trace_add(
+                "write", lambda *_a: self._refresh_ld_preview())
+        except (AttributeError, tk.TclError):
+            pass
         # Structural pull-up limit (hardware).  The reentry plan COMMANDS a g
         # at or below this — the same shape as commanded L/D ≤ capability.
         ttk.Label(self._glider_frm, text="Pull-up g-limit (structural):").grid(
@@ -5398,6 +5405,24 @@ class ROEditorDialog(tk.Toplevel):
             payload_kg=_fv('_payload_var'),
             separation_mode='body', maneuvering=True, glider_enabled=True, glider_LD=0.0)
 
+    _PAIRING_COLOUR = {'none': "gray40", 'ok': "gray40",
+                       'warn': "#8a6d00", 'bad': "#a03000"}
+
+    def _pairing_note(self, typed_ld):
+        """One-line verdict on the typed (β, L/D) pair against the object's own
+        geometry.  Message text lives in `booster_models.pairing_note()` so it
+        is testable without a display; this only picks the colour and supplies
+        the fallback.  WARN ONLY — nothing here blocks a save.
+        """
+        _plain = "typed value — clear to 0 to derive from geometry"
+        try:
+            text, sev = mm.pairing_note(self._preview_ro())
+        except Exception:
+            self._pairing_colour = self._PAIRING_COLOUR['none']
+            return _plain
+        self._pairing_colour = self._PAIRING_COLOUR.get(sev, "gray40")
+        return f"typed — {text}" if text else _plain
+
     def _refresh_ld_preview(self):
         """Update the inline L/D preview next to the field (body mode): the
         geometry-derived, trim-gated L/D the run will use, composed from the live
@@ -5410,7 +5435,14 @@ class ROEditorDialog(tk.Toplevel):
         except (ValueError, tk.TclError):
             _ld = 0.0
         if _ld > 0.0:
-            lbl.config(text="typed value — clear to 0 to derive from geometry")
+            # A typed L/D is an assertion, and _aero_polar back-solves whatever
+            # k reconciles it with the typed β — so the polar can never
+            # disagree (docs/aero_polar_calibration.md §2).  Say so here
+            # instead: the swept geometry's C_D is a one-sided FLOOR, so this
+            # can report "less drag than the shape has" and never the reverse.
+            # WARN ONLY — the value is always accepted.
+            lbl.config(text=self._pairing_note(_ld),
+                       foreground=self._pairing_colour)
             return
         if self._booster is None:
             lbl.config(text="0 = derive from geometry (nose + body + fins)")

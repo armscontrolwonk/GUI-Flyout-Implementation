@@ -3217,6 +3217,325 @@ def lifting_body_sweep(form, theta_deg=None, mach=10.0, cf=None,
     return dict(conditions=conditions, alpha=rows, trim=trim)
 
 
+# Tolerance on the drag floor, as a fraction of the geometry's own C_D at the
+# tested lift.  The floor is only as good as its friction term: route-to-route
+# C_D0 agreement is ~10%, and the Eckert-vs-internal friction convention alone
+# moves C_D0 by ~16% (docs/aero_polar_calibration.md §3).  A violation smaller
+# than this is inside the modelling band, not a finding.
+PAIRING_DRAG_TOL = 0.15
+
+
+def check_beta_ld_pairing(sweep, mass_kg, a_ref_m2, beta_kg_m2, glider_LD,
+                          tol=PAIRING_DRAG_TOL):
+    """Is an entered (β, (L/D)max) pair physically consistent with the shape?
+
+    β and glider_LD are entered independently, and `trajectory._aero_polar`
+    back-solves whatever `k` reconciles them — so the polar can never disagree
+    with the user (docs/aero_polar_calibration.md §2).  This is the missing
+    disagreement.
+
+    The pair already fixes its own trim point, with no geometry involved::
+
+        C_D0 = m / (β · A_ref)          (β is a zero-lift statement)
+        C_L* = 2 · C_D0 · (L/D)         (the lift the pair trims to)
+        C_D* = 2 · C_D0                 (the drag it claims there)
+
+    The last two are identities of the back-solve, not results.  So ask the
+    swept geometry ONE question — what is *your* drag at C_L*? — and compare.
+
+    Deliberately no fitted `k`.  Point-by-point `k` is flat to ±8% on a bare
+    body but spreads 44-69% once a lifting surface is added (§3), so a
+    parabola is a poor summary; evaluating at the single lift coefficient the
+    pair actually trims to sidesteps the question.
+
+    ONE-SIDED BY CONSTRUCTION.  The sweep's C_D is a floor — pressure plus
+    friction plus base, and every term it omits (nose bluntness, fins, trim
+    deflection, protuberances, a turbulent rather than laminar wall) ADDS
+    drag.  So this can say "you cannot have less drag than this" and can never
+    say "you must have this much."  An entered L/D *below* what the geometry
+    supports is normal and is never a failure; the surplus is reported as the
+    parasite drag the pairing implies but the shape description does not
+    explain.  Carryover lift is the one term that pushes the other way (it
+    lowers `k`, raising the derived L/D) and is absent from both sides, which
+    makes the floor conservative rather than optimistic (§6.4).
+
+    `sweep` is a `lifting_body_sweep()` result; its `conditions` are carried
+    into the verdict, because a drag floor without its Mach, Reynolds number
+    and wall state is not a number (Fetterman).
+
+    Returns a dict with `verdict` one of:
+
+      'ok'               C_D* ≥ the shape's drag at C_L*.  `implied_parasite`
+                         is the unexplained surplus (≥ 0).
+      'marginal'         C_D* short of the floor, but inside `tol`.
+      'drag_below_shape' C_D* short of the floor by more than `tol` — the pair
+                         claims less total drag than the shape has at the lift
+                         it needs.
+      'lift_unreachable' C_L* exceeds the largest C_L on the sweep: the shape
+                         cannot make that much lift at any swept α.
+      'insufficient'     inputs missing; nothing tested.
+
+    Never raises on a bad pairing and never blocks — the caller decides.
+    """
+    out = dict(verdict='insufficient', reason='', conditions=sweep.get(
+        'conditions', {}) if isinstance(sweep, dict) else {})
+    try:
+        m = float(mass_kg or 0.0); a = float(a_ref_m2 or 0.0)
+        bet = float(beta_kg_m2 or 0.0); ld = float(glider_LD or 0.0)
+    except (TypeError, ValueError):
+        out['reason'] = 'non-numeric input'
+        return out
+    if not (m > 0.0 and a > 0.0 and bet > 0.0 and ld > 0.0):
+        out['reason'] = 'need mass, A_ref, beta and glider_LD all > 0'
+        return out
+    rows = [r for r in (sweep.get('alpha') or []) if r['alpha_deg'] >= 0.0]
+    if len(rows) < 2:
+        out['reason'] = 'sweep has no positive-alpha rows'
+        return out
+
+    C_D0 = m / (bet * a)
+    C_L_star = 2.0 * C_D0 * ld
+    C_D_star = 2.0 * C_D0
+    out.update(C_D0_entered=C_D0, C_L_star=C_L_star, C_D_star=C_D_star)
+
+    # Ceilings, reported whatever the verdict.  beta_ceiling: the shape's own
+    # zero-lift drag is a floor, so its beta is a ceiling.  ld_ceiling: give
+    # the shape the user's unexplained parasite drag (the §4a "deficit into
+    # C_D0" route) and re-peak — that is the best L/D their beta can support.
+    geo = sweep.get('trim') or {}
+    C_D0_geo = float(geo.get('C_D0', 0.0) or 0.0)
+    if C_D0_geo <= 0.0:
+        out['reason'] = 'sweep produced no zero-lift drag'
+        return out
+    out['beta_ceiling'] = m / (C_D0_geo * a)
+    extra = max(0.0, C_D0 - C_D0_geo)
+    out['ld_ceiling'] = max((r['C_L'] / (r['C_D'] + extra))
+                            for r in rows if (r['C_D'] + extra) > 0.0)
+    out['LD_max_geo'] = float(geo.get('LD_max', 0.0) or 0.0)
+
+    # Two independent one-sided tests.  beta alone can be impossible even when
+    # the trim point passes: C_D0 is compared at zero lift, C_D* at C_L*, and
+    # a small C_L* leaves room for one to pass while the other fails.
+    beta_short = (C_D0_geo - C_D0) if C_D0_geo > 0.0 else 0.0
+    if beta_short > tol * C_D0_geo:
+        out['beta_verdict'] = 'beta_below_shape'
+    elif beta_short > 0.0:
+        out['beta_verdict'] = 'marginal'
+    else:
+        out['beta_verdict'] = 'ok'
+
+    cl = [r['C_L'] for r in rows]
+    if C_L_star > max(cl):
+        out.update(verdict='lift_unreachable', C_L_max_geo=max(cl),
+                   reason=(f"trim C_L* = {C_L_star:.4f} exceeds the shape's "
+                           f"largest swept C_L = {max(cl):.4f}"))
+        return out
+
+    # C_L rises monotonically with alpha over the positive range for every
+    # form the sweep implements, so a straight interpolation on C_L is safe.
+    import numpy as _np
+    order = _np.argsort(_np.asarray(cl))
+    C_D_geo = float(_np.interp(C_L_star, _np.asarray(cl)[order],
+                               _np.asarray([r['C_D'] for r in rows])[order]))
+    a_geo = float(_np.interp(C_L_star, _np.asarray(cl)[order],
+                             _np.asarray([r['alpha_deg'] for r in rows])[order]))
+    surplus = C_D_star - C_D_geo
+    out.update(C_D_geo_at_C_L_star=C_D_geo, alpha_star_deg_geo=a_geo,
+               implied_parasite=surplus)
+    if surplus >= 0.0:
+        trim_verdict, why = 'ok', (
+            f"pairing implies {surplus:.4f} of C_D beyond the modelled shape")
+    elif -surplus <= tol * C_D_geo:
+        trim_verdict, why = 'marginal', (
+            f"C_D* = {C_D_star:.4f} is {-surplus:.4f} short of the shape's "
+            f"{C_D_geo:.4f} at C_L* — inside the {tol:.0%} modelling band")
+    else:
+        trim_verdict, why = 'drag_below_shape', (
+            f"C_D* = {C_D_star:.4f} is below the shape's own {C_D_geo:.4f} at "
+            f"C_L* = {C_L_star:.4f} (alpha ~ {a_geo:.1f} deg) by "
+            f"{-surplus / C_D_geo:.0%}")
+    out['trim_verdict'] = trim_verdict
+
+    # Summary verdict: the more severe of the two, with the reason naming both
+    # when both fail.  beta_below_shape is reported only when the trim test
+    # passes, so a single verdict never hides the stronger statement.
+    _rank = {'ok': 0, 'marginal': 1, 'beta_below_shape': 2,
+             'drag_below_shape': 3}
+    bv = out['beta_verdict']
+    if _rank.get(bv, 0) > _rank[trim_verdict]:
+        out.update(verdict=bv, reason=(
+            f"entered beta implies C_D0 = {C_D0:.4f}, below the shape's own "
+            f"{C_D0_geo:.4f} by {beta_short / C_D0_geo:.0%} — less zero-lift "
+            f"drag than the geometry has ({why})"))
+    else:
+        out.update(verdict=trim_verdict, reason=(
+            why if bv == 'ok' else f"{why}; beta test: {bv}"))
+    return out
+
+
+def sweep_and_check_ro(ro, mach=5.0, reynolds_length=None,
+                       wall_temp_ratio=1.0, turbulent=True,
+                       tol=PAIRING_DRAG_TOL):
+    """Run the α-sweep for a reentry object's own geometry and test its stored
+    (β, glider_LD) pair against it.  Convenience wrapper over
+    `lifting_body_sweep()` + `check_beta_ld_pairing()`; the single entry point
+    the GUI warning and the library test both use, so the geometry mapping
+    lives in one place.
+
+    `mach` defaults to 5.0, matching `glider_ld.GLIDE_MACH_REF` (not imported
+    here — glider_ld imports this module).
+
+    **`reynolds_length=None` (the default) gives the INVISCID floor**, and that
+    is the deliberate choice for an impossibility test: pressure plus base drag
+    alone, with no friction term to argue about.  A pairing that violates the
+    inviscid floor is impossible on any friction convention.  Supply a Reynolds
+    number to tighten the floor to a plausibility test at stated conditions —
+    stricter, but only as good as the wall-state assumption
+    (docs/aero_polar_calibration.md §3).
+
+    Returns the `check_beta_ld_pairing()` dict, with 'insufficient' whenever
+    the object lacks the geometry to sweep.  Never raises on bad data.
+    """
+    import math
+
+    def _bad(why):
+        return dict(verdict='insufficient', reason=why, conditions={})
+
+    form = str(getattr(ro, 'body_form', '') or 'axisymmetric')
+    d = float(getattr(ro, 'diameter_m', 0.0) or 0.0)
+    L = float(getattr(ro, 'length_m', 0.0) or 0.0)
+    m = float(getattr(ro, 'mass_kg', 0.0) or 0.0)
+    if not (d > 0.0 and L > 0.0):
+        return _bad('object has no diameter/length to sweep')
+    a_ref = 0.25 * math.pi * d * d
+    kw = dict(mach=mach, reynolds_length=reynolds_length,
+              wall_temp_ratio=wall_temp_ratio, turbulent=turbulent,
+              mass_kg=m, a_ref_m2=a_ref, length_m=L)
+    theta = math.degrees(math.atan2(d / 2.0, L))
+    if form == 'wedge':
+        span = float(getattr(ro, 'body_span_m', 0.0) or 0.0)
+        if span <= 0.0:
+            return _bad('wedge body has no body_span_m; sweep needs the span')
+        kw.update(form='wedge', span_m=span, depth_m=d)
+        kw['a_ref_m2'] = a_ref                # beta is base-referenced
+    elif form == 'half_cone':
+        s_e = float(getattr(ro, 'wing_span_exposed_m', 0.0) or 0.0)
+        c_r = float(getattr(ro, 'wing_root_chord_m', 0.0) or 0.0)
+        wing = 0.0
+        if s_e > 0.0 and c_r > 0.0:
+            sw = math.radians(float(getattr(ro, 'wing_sweep_deg', 0.0) or 0.0))
+            c_t = max(0.0, c_r - s_e * math.tan(sw))
+            wing = 0.5 * (c_r + c_t) * s_e
+        kw.update(form='half_cone', theta_deg=theta, wing_exposed_m2=wing)
+    else:
+        kw.update(form='cone', theta_deg=theta)
+    try:
+        sweep = lifting_body_sweep(**kw)
+    except (ValueError, ZeroDivisionError) as exc:
+        return _bad(f'sweep failed: {exc}')
+    return check_beta_ld_pairing(
+        sweep, m, a_ref,
+        float(getattr(ro, 'beta_kg_m2', 0.0) or 0.0),
+        float(getattr(ro, 'glider_LD', 0.0) or 0.0), tol=tol)
+
+
+# Mach band a reentry / glide body is swept over when the schema does not say
+# where its beta was claimed.  beta_kg_m2 is a single constant but a shape's
+# own beta varies several-fold across this band, so a verdict at one Mach is an
+# artefact of that choice (docs/aero_polar_calibration.md §6.5).
+PAIRING_MACH_BAND = (3.0, 5.0, 8.0, 10.0, 12.0, 15.0, 20.0)
+
+_PAIRING_RANK = {'ok': 0, 'marginal': 1, 'beta_below_shape': 2,
+                 'drag_below_shape': 3, 'lift_unreachable': 4,
+                 'insufficient': 5}
+
+
+def check_ro_pairing_band(ro, machs=PAIRING_MACH_BAND, **kw):
+    """`sweep_and_check_ro()` over a Mach band, reporting the MOST PERMISSIVE
+    verdict and where it holds.
+
+    `beta_kg_m2` is one number and the schema does not record the Mach at which
+    it is claimed, while the same shape's zero-lift beta varies several-fold
+    across a glide band.  A verdict at a single Mach therefore says as much
+    about the Mach chosen as about the pairing.  The defensible one-sided
+    statement is over the whole band: **a pairing is impossible only if no Mach
+    in the band supports it.**  That is what this returns.
+
+    Result adds to the `check_beta_ld_pairing()` dict of the best Mach:
+      `mach_best`     the Mach giving the least severe verdict
+      `mach_band`     the band swept
+      `mach_ok`       Machs whose verdict was 'ok' or 'marginal'
+      `by_mach`       {mach: verdict} for the whole band
+
+    Use this, not the single-Mach form, whenever the object does not state the
+    conditions its beta belongs to.
+    """
+    best, by_mach = None, {}
+    for M in machs:
+        r = sweep_and_check_ro(ro, mach=float(M), **kw)
+        by_mach[float(M)] = r.get('verdict', 'insufficient')
+        if best is None or (_PAIRING_RANK.get(r.get('verdict'), 5)
+                            < _PAIRING_RANK.get(best[1].get('verdict'), 5)):
+            best = (float(M), r)
+    if best is None:
+        return dict(verdict='insufficient', reason='empty Mach band',
+                    conditions={}, by_mach={})
+    out = dict(best[1])
+    out['mach_best'] = best[0]
+    out['mach_band'] = tuple(float(m) for m in machs)
+    out['mach_ok'] = tuple(m for m, v in by_mach.items()
+                           if v in ('ok', 'marginal'))
+    out['by_mach'] = by_mach
+    if out['mach_ok']:
+        out['reason'] = (f"{out['reason']}  [best at M{best[0]:.0f}; "
+                         f"supported at M "
+                         f"{', '.join(f'{m:.0f}' for m in out['mach_ok'])}]")
+    else:
+        out['reason'] = (f"{out['reason']}  [no Mach in "
+                         f"{min(out['mach_band']):.0f}-"
+                         f"{max(out['mach_band']):.0f} supports this pairing]")
+    return out
+
+
+def pairing_note(ro, machs=PAIRING_MACH_BAND, **kw):
+    """One-line, user-facing verdict on an object's stored (β, glider_LD) pair.
+
+    Pure formatting over `check_ro_pairing_band()`, kept out of the GUI so it
+    is testable without a display.  Returns `(text, severity)` where severity
+    is 'none' (nothing to say), 'ok', 'warn' or 'bad' — the caller maps it to a
+    colour.  **Advisory only**: nothing here blocks a save.
+    """
+    try:
+        r = check_ro_pairing_band(ro, machs=machs, **kw)
+    except Exception as exc:                      # never break an editor
+        return (f"pairing not checked ({exc.__class__.__name__})", 'none')
+    v = r.get('verdict', 'insufficient')
+    if v == 'insufficient':
+        return ('', 'none')
+    ceil = float(r.get('ld_ceiling', 0.0) or 0.0)
+    m_ok = tuple(r.get('mach_ok') or ())
+    if v == 'ok':
+        surplus = float(r.get('implied_parasite', 0.0) or 0.0)
+        band = (f"M {min(m_ok):.0f}–{max(m_ok):.0f}" if len(m_ok) > 1
+                else (f"M {m_ok[0]:.0f}" if m_ok else "the swept band"))
+        return (f"consistent with the shape over {band}; implies "
+                f"+{surplus:.3f} C_D of parasite drag the geometry does not "
+                f"model", 'ok')
+    if v == 'marginal':
+        return (f"borderline — at this β the shape supports about L/D "
+                f"{ceil:.2f}, inside the modelling band", 'warn')
+    if v == 'lift_unreachable':
+        return ("the shape cannot reach the lift this pair needs at any swept "
+                "angle of attack", 'bad')
+    if v == 'beta_below_shape':
+        bc = float(r.get('beta_ceiling', 0.0) or 0.0)
+        return (f"β claims less drag than the shape has — its own β ceiling "
+                f"is {bc:,.0f} kg/m²", 'bad')
+    return (f"no Mach supports this pair — at this β the shape reaches about "
+            f"L/D {ceil:.2f}; check the fin and nose geometry before the "
+            f"numbers", 'bad')
+
+
 def wing_geometry(ro):
     """Effective wing (S, AR, source) for a reentry object — single source of
     truth for every consumer (drag polar, β estimator, editor, schematic).

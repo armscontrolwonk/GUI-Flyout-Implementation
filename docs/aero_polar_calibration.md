@@ -195,14 +195,56 @@ the exact Taylor–Maccoll solution in §4, which uses no impact-method referenc
 at all. Cite that, and the Cruz & Wilhite bound, in preference to the TM
 102610 agreement.
 
-## 6. Open items, in order
+## 6. What is now enforced
+
+`booster_models.check_beta_ld_pairing()` supplies the disagreement §2 says the
+polar cannot make. The entered pair fixes its own trim point with no geometry
+involved — `C_D0 = m/(β·A_ref)`, `C_L* = 2·C_D0·(L/D)`, `C_D* = 2·C_D0`, the
+last two being identities of the back-solve — and the swept geometry is asked
+one question: *what is your drag at C_L\*?* Deliberately **no fitted k**, since
+§3 shows a parabola is a poor summary once a lifting surface is present.
+
+Two one-sided tests, because the sweep's C_D is a floor: `beta_below_shape`
+(entered β claims less zero-lift drag than the shape has) and
+`drag_below_shape` (the pair claims less drag than the shape has at the lift it
+needs). Both can fail independently — a small `C_L*` leaves room for one to
+pass while the other fails. An L/D *below* what the geometry supports is never
+a failure; the surplus is reported as the parasite drag the pairing implies but
+the description does not explain.
+
+`check_ro_pairing_band()` sweeps M3–M20 and returns the **most permissive**
+verdict, because β is a schema constant with no stated conditions while a
+shape's own β varies several-fold across that band — a single-Mach verdict is
+partly an artefact of the Mach chosen. Only *"no Mach in the band supports
+this"* is defensible.
+
+`pairing_note()` is the pure text/severity formatter, kept out of the GUI so it
+is testable without a display; `thrusty._pairing_note` only picks a colour. The
+note appears inline beside the L/D field and is **advisory only** — nothing
+blocks a save. `test_beta_ld_pairing.py` carries the unit tests and a
+characterisation table of the shipped library, so a change to any object's β,
+L/D or dimensions surfaces in review.
+
+A flag means the stored *geometry description* cannot support the stored pair,
+which is as often an incomplete description as a wrong pair. Every shipped
+lifting object declares fins with no stored planform, so the floor is a bare
+body — which is exactly why the check warns rather than blocks.
+
+## 7. Open items, in order
 
 1. **`_calc_beta` routing.** thrusty.py routes only `wedge` and `half_cone`
    body forms to `lifting_body_sweep`; an axisymmetric form reaches the β-only
    dialog and never sees the α-sweep estimator, even though `'cone'` is a
    member of `_LIFTING_SWEEP_FORMS`. This is first: it is the reason an
    axisymmetric body cannot reach the estimator this memo argues should be
-   authoritative.
+   authoritative — it can now be *told* its pair is inconsistent, but still
+   cannot be given an estimated L/D to replace it. The fix is not a one-liner:
+   `_calc_beta_lifting`'s non-wedge branch is written for `half_cone` (title,
+   and a wing composite that `lifting_body_sweep` honours only for that form),
+   so routing `cone` through it would silently drop the wing planform. Either
+   extend the sweep's wing composite to `cone`, or branch the dialog
+   explicitly — and keep the existing β-only dialog reachable, since it is the
+   only path that handles biconic geometry.
 2. **Nose bluntness.** Absent from the zero-lift build-up, and the largest
    single missing parasite term for a shape described as a sharp cone. A
    Newtonian cap estimate, `ΔC_D ≈ (Cp_stag/2)·(r_n/r_b)²` on base area, gives
