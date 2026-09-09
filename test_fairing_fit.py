@@ -32,21 +32,22 @@ def _load_ro(name):
 
 
 def test_swerve_on_stars1_fires_the_warning():
-    """The motivating case: SWERVE (⌀0.476 × 2.6 m) on STARS-1, which
-    declares NO fairing and NO nose — the check runs against the drawn
-    1.6×⌀ fallback cone (top stage ⌀0.71 → 1.136 m) and the length
-    overrun is the exact identity 2.6 − 1.136."""
+    """The motivating case: SWERVE on STARS-1, which declares NO fairing and
+    NO nose — the check runs against the drawn 1.6×⌀ fallback cone (top stage
+    ⌀0.71 → 1.136 m) and the object overruns it."""
     veh = _load_booster("STARS-1")
-    veh.ro = _load_ro("SWERVE")
+    ro = _load_ro("SWERVE")
+    veh.ro = ro
     fit = ff.fairing_fit(veh)
     assert fit is not None and not fit["fits"]
     assert fit["kind"] == "nose region"
     assert fit["env_len_m"] == pytest.approx(1.6 * 0.71)
     # the RO's PHYSICAL length is the blunted sphere-cone (apex identity
     # L − rn/sinθ + rn — the same body the 3-D export revolves), not the
-    # sharp-cone reference length
-    th = math.atan2(0.476 / 2, 2.6)
-    L_blunt = 2.6 - 0.0167 / math.sin(th) + 0.0167
+    # sharp-cone reference length.  Taken from the OBJECT: the identity holds
+    # for any dimensions, so it must not be re-typed as literals here.
+    th = math.atan2(ro.diameter_m / 2, ro.length_m)
+    L_blunt = ro.length_m - ro.nose_radius_m / math.sin(th) + ro.nose_radius_m
     assert fit["ro_len_m"] == pytest.approx(L_blunt)
     assert fit["len_over_m"] == pytest.approx(L_blunt - 1.6 * 0.71)
     note = ff.fairing_fit_note(fit)

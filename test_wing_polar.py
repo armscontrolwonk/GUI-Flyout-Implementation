@@ -33,10 +33,16 @@ def _swerve(**wing):
 
 # ── the identity that guards every shipped vehicle ──────────────────────────
 def test_no_wings_reproduces_the_old_polar_exactly():
-    p = _aero_polar(_swerve())
-    A = np.pi * (0.476 / 2) ** 2
-    C_D0 = 300.0 / (24733.0 * A)
-    k = 1.0 / (4.0 * C_D0 * 1.8 ** 2)
+    # Derive the closed form from the OBJECT, not from transcribed literals:
+    # this is an identity between _aero_polar and its own algebra, so it must
+    # hold for whatever the shipped file says.  Hard-coding the dimensions
+    # tests a snapshot of the data instead, and goes stale the next time the
+    # object is revised.
+    ro = _swerve()
+    p = _aero_polar(ro)
+    A = np.pi * (ro.diameter_m / 2) ** 2
+    C_D0 = ro.mass_kg / (ro.beta_kg_m2 * A)
+    k = 1.0 / (4.0 * C_D0 * ro.glider_LD ** 2)
     assert p.C_D0 == pytest.approx(C_D0)
     assert p.k == pytest.approx(k)
     assert p.C_L_max == pytest.approx(_C_L_MAX_BODY)     # universal 25° limit
