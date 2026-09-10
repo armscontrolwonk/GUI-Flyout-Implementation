@@ -150,6 +150,16 @@ _PACKAGED_NAMES: set[str] = set(BOOSTER_DB.keys())
 _OVERRIDDEN_PACKAGED: set[str] = set()
 # Where user-created boosters are saved.  Writers emit the new custom_boosters
 # path; the loader still reads the legacy custom_missiles file (see below).
+# Folium basemap.  CARTO's "positron" tiles began requiring an API key, which
+# stamps "API KEY REQUIRED" across every exported map, so the light basemap now
+# comes from Esri's World Light Gray Base — keyless, and still muted enough that
+# the trajectory lines carry the figure.  Attribution is required and supplied.
+# Set _FOLIUM_TILES = "OpenStreetMap" (and _FOLIUM_ATTR = None) for the
+# canonical no-key fallback if this endpoint ever gates too.
+_FOLIUM_TILES = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
+                 "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}")
+_FOLIUM_ATTR  = "Tiles &copy; Esri — Esri, DeLorme, NAVTEQ"
+
 _CUSTOM_PATH        = Path.home() / ".gui_missile_flyout" / "custom_boosters.json"
 _CUSTOM_PATH_LEGACY = Path.home() / ".gui_missile_flyout" / "custom_missiles.json"
 _TRAJ_PATH        = Path.home() / ".gui_missile_flyout" / "trajectory_profiles.json"
@@ -7298,7 +7308,7 @@ class FootprintDialog(tk.Toplevel):
 
         # Light basemap, matching the single-trajectory map (_export_folium).
         m = folium.Map(location=centre, zoom_start=4,
-                       tiles='CartoDB positron')
+                       tiles=_FOLIUM_TILES, attr=_FOLIUM_ATTR)
 
         # Diverging palette keyed to the BANK ANGLE, not the index: bank is a
         # diverging quantity (left turn ↔ straight ↔ right turn), so the
@@ -14827,7 +14837,7 @@ class BoosterFlyoutApp(tk.Tk):
         lon_uw_max = float(lon_uw.max())
 
         fmap = folium.Map(location=[mid_lat, mid_lon], zoom_start=4,
-                          tiles="CartoDB positron")
+                          tiles=_FOLIUM_TILES, attr=_FOLIUM_ATTR)
 
         # ── NOTAM overlay (loaded via File → Load NOTAM overlay…) ─────
         if self._notam_overlay:
