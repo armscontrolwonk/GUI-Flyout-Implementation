@@ -6,8 +6,10 @@ as a Python/Tkinter desktop application. It is usage-neutral: the same models
 serve ballistic missiles, space launch vehicles, sounding rockets, and reentry
 bodies.
 
-It is modelled after Geoffrey Forden's open-source MATLAB tool
-(*Simulating the Operation of Ballistic Missiles*, Science & Global Security, 2007).
+It is modelled after Geoffrey Forden's MATLAB tool
+(*Simulating the Operation of Ballistic Missiles*, Science & Global Security, 2007);
+the design was inferred from that program's file structure and the paper, and
+the code written independently (see *Lineage* in [`NOTICE.md`](NOTICE.md)).
 The integrator reproduces Forden's Table 3 maximum-range figures for the classic
 SRBM/MRBM set (Scud-B, Al Hussein, No-dong, Taepodong-I). No vehicle is defined
 in code: every booster, reentry object and launch site the pickers offer is
@@ -939,3 +941,22 @@ Data ▸ Offline Gazetteer) is bundled in `data/gazetteer/` and indexed with
 the standard library — no package needed; it replaces the old
 `geonamescache` dependency.  Standard library otherwise (tkinter, json,
 pathlib, threading, math).
+
+---
+
+## License
+
+- **Code** (all `.py` files, the app bundle, scripts): GNU General Public
+  License v3.0 or later — [`LICENSE`](LICENSE).
+- **Documentation and vehicle data authored for Thrusty** (`*.md`, the
+  `booster_library/`, `ro_library/`, `flight_plans/`, `reentry_plans/` and
+  `launch_sites.json` files, `design/`, `assets/`): Creative Commons
+  Attribution-ShareAlike 4.0 International — [`LICENSE-DATA`](LICENSE-DATA).
+- **Bundled third-party data** (gazetteer, terrain, borders, TPSX materials,
+  motor catalog values, digitised benchmarks) keeps its original terms, listed
+  with attributions in [`NOTICE.md`](NOTICE.md).
+
+Copyright © 2026 Jeffrey Lewis.  Contributions require a contributor license
+agreement; see [`CONTRIBUTING.md`](CONTRIBUTING.md).  The scope statement in
+`CLAUDE.md` (analytic verification, not design) is a project norm, not a
+license term.

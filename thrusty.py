@@ -1,3 +1,13 @@
+# Thrusty — booster and reentry trajectory simulator.
+# Copyright (C) 2026 Jeffrey Lewis
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.  It is distributed WITHOUT ANY WARRANTY; see the GNU
+# General Public License (LICENSE) for details.  Documentation and vehicle
+# data files are licensed separately under CC BY-SA 4.0 (LICENSE-DATA);
+# bundled third-party data keeps its own terms (NOTICE.md).
 """
 Thrusty — Python/tkinter port of Forden's MATLAB GUIDE application.
 
@@ -15998,8 +16008,11 @@ class BoosterFlyoutApp(tk.Tk):
     def _show_about(self):
         messagebox.showinfo(
             "About Thrusty",
-            "Thrusty\n\n"
-            "Based on the MATLAB application by Geoffrey Forden\n"
+            "Thrusty\n"
+            "Copyright © 2026 Jeffrey Lewis\n"
+            "Code: GNU GPL v3 or later.  Documentation and vehicle data: "
+            "CC BY-SA 4.0.  Third-party data: see NOTICE.md.\n\n"
+            "Modelled after the MATLAB application by Geoffrey Forden,\n"
             "G. Forden, Science & Global Security 15 (2007)\n\n"
             "3-DOF trajectory integration:\n"
             "  • COESA 1976 standard atmosphere\n"

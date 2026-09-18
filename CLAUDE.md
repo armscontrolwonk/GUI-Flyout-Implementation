@@ -31,6 +31,11 @@ improve this."
 - Gazetteer and terrain data are public BGN and AWS Terrarium tiles, used
   to identify test impact zones and launch-site elevations.
 
+- Licensing: code GPL-3.0-or-later (`LICENSE`), Thrusty-authored docs and
+  vehicle data CC BY-SA 4.0 (`LICENSE-DATA`), bundled third-party data under
+  its own terms (`NOTICE.md`). Outside contributions need the CLA in
+  `CONTRIBUTING.md`. Keep new data files' sources recorded in `NOTICE.md`.
+
 ## Working rules
 
 - **Derive, don't invent.** Never hard-code a coefficient from memory;

@@ -21,6 +21,14 @@ Conventions:
 - The Earth gravitational parameter `μ = GM = 3.986004418×10¹⁴ m³/s²` and
   equatorial radius `R_E = 6 378 137 m` are WGS-84 values.
 
+> **Lineage and provenance.** Thrusty follows the structure of Geoffrey
+> Forden's MATLAB tool (Science & Global Security 15, 2007). That program
+> reached the author in MATLAB-encrypted form; its file structure and the
+> paper defined the module boundaries and the Table 3 validation targets, and
+> every routine here was written independently from the cited sources. No
+> Forden code is included. The encrypted files formerly under
+> `archive/matlab` were removed on 2026-09-18.
+
 > **Draft status note.** Specific equation, section, and figure numbers
 > for Chin (1961), *Missile Configuration Design* appearing in Section
 > 8 are taken from source-code docstrings; they have not been
