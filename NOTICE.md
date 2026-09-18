@@ -1,8 +1,9 @@
 # Third-party data and attributions
 
 Thrusty's own code is licensed under GPL-3.0-or-later (`LICENSE`) and its own
-documentation and vehicle data files under CC BY-SA 4.0 (`LICENSE-DATA`); see
-the *License* section of `README.md`.  The repository also bundles data
+documentation and vehicle data files under CC BY-SA 4.0 (`LICENSE-DATA`); the
+Thrusty mascot artwork and icon are all rights reserved (see *Artwork* below
+and the *License* section of `README.md`).  The repository also bundles data
 produced by others.  Those files keep their original terms, listed here.
 Where a source is a work of the United States Government it is not subject to
 copyright in the United States (17 U.S.C. § 105).
@@ -34,6 +35,12 @@ The gazetteer and terrain files are derived products; `gazetteer_build.py` and
 | `benchmarks/form_a/*.csv`, `benchmarks/verification/*.csv`, `benchmarks/swerve/*.csv` | Numeric values digitised from figures in published papers and NASA/NACA technical reports (Sutton & Graves 1971; the REENTRY-F, Stardust and Hayabusa flight reports; Finke, IDA P-2395; the SWERVE corridor). Full citations in `METHODS.md` §16 and `HEATING_TPS_REFERENCES.md` | Extracted data points, cited to their sources. Government reports are public domain; the digitised values from journal articles are factual data, reproduced for verification |
 | `benchmarks/form_a/*.png`, `benchmarks/verification/*.png` | Figure scans from the NASA/NACA and IDA reports above, kept beside their digitisations | U.S. Government works, public domain |
 | `validation/datcom/` | Input and output of USAF Digital DATCOM | Public domain (U.S. Government work) |
+
+## Artwork (not third-party, but separately reserved)
+
+| Files | Terms |
+|---|---|
+| `assets/` (thrusty.png, thrusty.icns, thrusty_diffuse.jpg, thrusty_figure.png, thrusty_scale.png, thrusty_mesh.obj.gz), `data/Thrusty.png`, `data/Thrusty2.png`, `data/Thrusty3.png`, `data/Thrusty_tall.png`, `data/Thrusty_silhouette.jpg`, `Thrusty.app/Contents/Resources/thrusty.icns` | © 2026 Jeffrey Lewis. All rights reserved. These files are aggregated with the program for convenience and are not part of the GPL-licensed work; they may not be reproduced, modified or redistributed without permission. The application runs without them (a missing icon falls back to the stock one). |
 
 ## Lineage
 

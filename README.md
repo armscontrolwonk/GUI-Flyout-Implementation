@@ -950,8 +950,13 @@ pathlib, threading, math).
   License v3.0 or later — [`LICENSE`](LICENSE).
 - **Documentation and vehicle data authored for Thrusty** (`*.md`, the
   `booster_library/`, `ro_library/`, `flight_plans/`, `reentry_plans/` and
-  `launch_sites.json` files, `design/`, `assets/`): Creative Commons
-  Attribution-ShareAlike 4.0 International — [`LICENSE-DATA`](LICENSE-DATA).
+  `launch_sites.json` files, `design/`, the diagrams under `docs/`): Creative
+  Commons Attribution-ShareAlike 4.0 International — [`LICENSE-DATA`](LICENSE-DATA).
+- **Artwork** — the Thrusty mascot and icon: everything in `assets/`, the
+  `Thrusty*.png` / `Thrusty_silhouette.jpg` renders in `data/`, and the
+  `.icns` in the app bundle: **© 2026 Jeffrey Lewis, all rights reserved.**
+  Not covered by either license above; a redistributed or modified Thrusty
+  must replace them.
 - **Bundled third-party data** (gazetteer, terrain, borders, TPSX materials,
   motor catalog values, digitised benchmarks) keeps its original terms, listed
   with attributions in [`NOTICE.md`](NOTICE.md).

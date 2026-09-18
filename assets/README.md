@@ -13,3 +13,7 @@ wrapper bundle whose launcher runs thrusty.py through an interpreter
 copy inside the bundle, so the Dock and menu bar say "Thrusty" (not
 "Python") with this icon.  Launch by double-clicking Thrusty.app in the
 repo root; running `python3 thrusty.py` by hand still works as before.
+
+**Rights.** The Thrusty mascot renders, mesh and icon in this folder (and the
+renders under `data/`) are © 2026 Jeffrey Lewis, all rights reserved. They are
+not covered by the repository's GPL or CC BY-SA licenses; see `NOTICE.md`.
