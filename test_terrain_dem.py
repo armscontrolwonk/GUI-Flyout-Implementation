@@ -223,8 +223,17 @@ def test_dem_terminates_on_terrain():
     last_alt = float(np.asarray(r['alt'])[-1])
     assert last_alt >= g - 30.0
     assert last_alt - g < abs(r['impact_speed_ms']) * 1.5
-    # The flat-Earth run keeps falling past the terrain to sea level.
-    assert float(np.asarray(_fly()['alt'])[-1]) < g
+    # The flat-Earth run keeps falling past the terrain to sea level.  Read
+    # that off a FINER output grid: at the default 1 s cadence the RV falls
+    # ~630 m per sample while the terrain here is only ~310 m, so the last
+    # sample lands above or below g on grid phase alone (varying only
+    # dt_output over 0.90-1.10 s, on one fixed trajectory, flips it 5 times
+    # in 11).  At 0.1 s the quantum is ~60 m and the two outcomes separate.
+    _DT = 0.1
+    flat = _fly(dt_output=_DT)
+    flat_last = float(np.asarray(flat['alt'])[-1])
+    assert flat_last < abs(flat['impact_speed_ms']) * _DT * 1.5, flat_last
+    assert flat_last < g, flat_last
 
 
 def test_dem_elevated_pad_extends_range():

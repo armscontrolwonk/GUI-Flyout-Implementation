@@ -50,6 +50,13 @@ improve this."
   plotting only. A formula or sweep loop belongs in a core module
   (`analysis.py`, `coordinates.py`, `booster_models.py`, …) with a test;
   the dialog calls it. This keeps the core portable and testable headless.
+- **Tests read only what is committed.** `conftest.py` blanks the user
+  library paths (`USER_FLIGHT_PLAN_DIRS` and friends) that `thrusty.py` sets
+  on import, so a run never picks up `~/Documents/Thrusty/`. Any script that
+  dumps reference trajectories must do the same. A test asserting on a
+  sampled endpoint or a strict local extremum is a metric to distrust: two
+  false alarms in `test_pullup.py` and one in `test_terrain_dem.py` came from
+  exactly that (see `TODO.md`).
 - Requests in this repo are about the simulator: integrator bugs, guidance
   branch selection, plotting, file formats, validation against published
   benchmarks, and documentation. Frame work that way.

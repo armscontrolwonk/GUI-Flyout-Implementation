@@ -65,9 +65,32 @@ def _v_at(r, alt_m):
 
 
 def _first_trough_m(r):
+    """Altitude of the capture shelf: where the fall is first arrested.
+
+    A strict local minimum finds it whenever the capture overshoots and
+    re-climbs.  A WELL-damped capture does not re-climb at all — skip
+    amplitude falls to zero as ζ grows (`DAMPED_GLIDE.md` §"the gain"), so
+    the shelf is a flattening, not a dip — and then no strict minimum
+    exists.  Falling back to `alt.min()` there reported the END OF THE
+    FLIGHT (ground impact) as the capture altitude, which made the metric
+    discontinuous on a rounding error: at pullup = 40 km the re-climb is
+    +1.4 mm at ζ = 0.670 and slightly negative at ζ = 0.700, yet both runs
+    hold the same ~24.92 km shelf and the whole trajectories differ by
+    ~0.4 %.  The old fallback reported 24923.7 m and 1.2 m for that pair.
+    The same fall-through hit the no-pull-up baseline at ζ ≥ 1.5.
+
+    So when nothing re-climbs, take the first local minimum of the SINK
+    RATE instead — the flattest point of the glide, which is the same shelf
+    the dip-based branch reports.  Fallback only: every case that has a
+    strict minimum is measured exactly as before.
+    """
     alt, _ = _downleg(r)
     for i in range(2, len(alt) - 1):
         if alt[i] < 45e3 and alt[i] <= alt[i - 1] and alt[i] < alt[i + 1]:
+            return float(alt[i])
+    d = np.diff(alt)
+    for i in range(1, len(d) - 1):
+        if alt[i] < 45e3 and d[i] >= d[i - 1] and d[i] > d[i + 1]:
             return float(alt[i])
     return float(alt.min())
 

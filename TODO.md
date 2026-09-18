@@ -677,6 +677,44 @@ The one phase that touches trajectory physics, gated to lifting forms
 - Wedge planform-span field: DONE earlier (body_span_m, 2026-07-30).
 
 ## Parked earlier in the project (context in METHODS / chat)
+- test_pullup's two "KNOWN FAILING" assertions — RESOLVED, AND THE RECORDED
+  CAUSE WAS WRONG (2026-09-18).  `a77e64c` left
+  `test_pullup_catches_higher_than_zeta_capture` and
+  `test_capture_altitude_decouples_from_zeta` failing on purpose, attributing
+  them to the SWERVE diameter correction (a 22% cut in C_D0, since
+  `_aero_polar` back-solves `C_D0 = m/(β·A_ref)`), and `c35194d` / `c96ecbe`
+  restate that.  The agreed next step on record was a Mach-dependent,
+  geometry-derived β to "close both".  **That work is not needed for these
+  tests, and would have hidden the real problem.**  The physics was never
+  broken: at ζ = 0.7 the pull-up run captures and holds the same ~24.92 km
+  shelf as at ζ = 0.67 — the two trajectories differ by ~0.4% — and the
+  reported "1.2 m trough" was the END OF THE FLIGHT.  `_first_trough_m`
+  demanded a STRICT local minimum, i.e. a re-climb; the re-climb at that
+  shelf is +1.4 mm at ζ = 0.670 and slightly negative at ζ = 0.700, so the
+  helper fell through to `alt.min()`.  A well-damped capture flattens without
+  rising at all (`DAMPED_GLIDE.md`: skip amplitude → 0 as ζ grows), so the
+  metric punished the behaviour ζ is supposed to produce.  The same
+  fall-through hit the NO-pull-up baseline at ζ ≥ 1.5, so it was never
+  pull-up-specific.  Fix is test-side only: when nothing re-climbs, take the
+  first local minimum of the SINK RATE (the same shelf), fallback-only so
+  every previously measured value is unchanged.  The metric is now continuous
+  over ζ = 0–2 on both columns, and it shows the feature working as designed —
+  with the pull-up, capture sits at 24.7–25.1 km regardless of ζ, while the
+  baseline walks 16.4 → 25.2 km.  This is the SECOND time this helper's metric
+  caused a false alarm (see the base-bleed entry below); it is now the part of
+  `test_pullup.py` to suspect first.  `trajectory.py` was not touched, and
+  `a77e64c`'s geometry correction stands.
+- Test suite was not hermetic — FIXED (2026-09-18).  `thrusty.py` points
+  `booster_models` at `~/Documents/Thrusty/{flight_plans,reentry_plans,
+  ro_library}` on import, and those take precedence over the shipped files, so
+  one GUI test import made every later `get_booster()` in the session fly the
+  developer's saved plans.  `test_dem_terminates_on_terrain` passed alone and
+  failed in a full run for exactly this reason: a personal
+  `No-dong.flightplan.json` with `burnout_angle_deg` 43.0 replaced the shipped
+  45.0 and moved the impact 19 km.  New `conftest.py` imports the GUI once up
+  front and then blanks those paths before every test.  **Any script that dumps
+  reference trajectories (the Rust port's golden outputs) must do the same, or
+  it will bake someone's personal flight plan into the specification.**
 - Boattail (V-2-style tapered aft body): NOT worth geometry modeling
   (agreed 2026-08-17).  Quantified from the model's own tables: a
   20%-necked boattail cuts base drag ~36% (ΔC_D ≈ 0.05–0.08 transonic,
