@@ -16,4 +16,6 @@ repo root; running `python3 thrusty.py` by hand still works as before.
 
 **Rights.** The Thrusty mascot renders, mesh and icon in this folder (and the
 renders under `data/`) are © 2026 Jeffrey Lewis, all rights reserved. They are
-not covered by the repository's GPL or CC BY-SA licenses; see `NOTICE.md`.
+not covered by the repository's GPL or CC BY-SA licenses. Unmodified copies of
+Thrusty may be passed along with them intact; anything else needs permission.
+See `NOTICE.md`.

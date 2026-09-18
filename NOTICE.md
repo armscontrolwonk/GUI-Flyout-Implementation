@@ -40,7 +40,7 @@ The gazetteer and terrain files are derived products; `gazetteer_build.py` and
 
 | Files | Terms |
 |---|---|
-| `assets/` (thrusty.png, thrusty.icns, thrusty_diffuse.jpg, thrusty_figure.png, thrusty_scale.png, thrusty_mesh.obj.gz), `data/Thrusty.png`, `data/Thrusty2.png`, `data/Thrusty3.png`, `data/Thrusty_tall.png`, `data/Thrusty_silhouette.jpg`, `Thrusty.app/Contents/Resources/thrusty.icns` | © 2026 Jeffrey Lewis. All rights reserved. These files are aggregated with the program for convenience and are not part of the GPL-licensed work; they may not be reproduced, modified or redistributed without permission. The application runs without them (a missing icon falls back to the stock one). |
+| `assets/` (thrusty.png, thrusty.icns, thrusty_diffuse.jpg, thrusty_figure.png, thrusty_scale.png, thrusty_mesh.obj.gz), `data/Thrusty.png`, `data/Thrusty2.png`, `data/Thrusty3.png`, `data/Thrusty_tall.png`, `data/Thrusty_silhouette.jpg`, `Thrusty.app/Contents/Resources/thrusty.icns` | © 2026 Jeffrey Lewis. All rights reserved. These files are aggregated with the program for convenience and are not part of the GPL-licensed work; Permission is granted to redistribute unmodified copies of Thrusty with these files intact. Any other reproduction, modification or redistribution, including in a modified Thrusty, requires the author's permission or replacement of the files. The application runs without them (a missing icon falls back to the stock one). |
 
 ## Lineage
 

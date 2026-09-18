@@ -955,8 +955,9 @@ pathlib, threading, math).
 - **Artwork** — the Thrusty mascot and icon: everything in `assets/`, the
   `Thrusty*.png` / `Thrusty_silhouette.jpg` renders in `data/`, and the
   `.icns` in the app bundle: **© 2026 Jeffrey Lewis, all rights reserved.**
-  Not covered by either license above; a redistributed or modified Thrusty
-  must replace them.
+  Not covered by either license above. You may pass along unmodified copies
+  of Thrusty with the artwork intact; any other use, and any modified
+  Thrusty, needs permission or must replace them.
 - **Bundled third-party data** (gazetteer, terrain, borders, TPSX materials,
   motor catalog values, digitised benchmarks) keeps its original terms, listed
   with attributions in [`NOTICE.md`](NOTICE.md).
