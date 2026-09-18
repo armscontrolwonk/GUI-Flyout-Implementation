@@ -121,14 +121,15 @@ variant per object is remembered in
 
 | File | Lines | Purpose |
 |---|---|---|
-| `thrusty.py` | ~10 200 | GUI application — all Tkinter widgets, dialogs, plotting, export |
+| `thrusty.py` | ~16 000 | GUI application — all Tkinter widgets, dialogs, plotting, export. Holds no physics: every number it shows comes from the modules below |
 | `trajectory.py` | ~3 460 | 3-DOF integrator, guidance laws, range optimiser, orbital planner, reentry glide |
 | `booster_models.py` | ~3 260 | `BoosterParams` + `ROParams` dataclasses, drag, thrust, mass, staging, grain profiles |
 | `heating.py` | ~610 | Reentry aerothermal screening (Sutton-Graves flux, radiative-equilibrium wall temp) + TPS material catalog |
 | `glider_ld.py` | ~275 | Geometry-derived L/D for non-separating reentry objects (Missile-DATCOM-style build-up) |
 | `grid_fin_sizing.py` | ~350 | Barrowman static-margin / centre-of-pressure sizing for finned boosters |
 | `trim_gate.py` | ~160 | Trim/control gate — is a derived L/D actually achievable? |
-| `coordinates.py` | ~190 | WGS-84 coordinate conversions, Vincenty geodesic, Coriolis/centrifugal |
+| `coordinates.py` | ~240 | WGS-84 coordinate conversions, Vincenty geodesic, Coriolis/centrifugal, great-circle bearing and Earth-rotation-corrected aiming |
+| `analysis.py` | ~330 | Sweep drivers (range ring, parametric sweep, bank-angle footprint) and result post-processing (impact point, derived Mach/q, footprint envelope) — the computation the dialogs used to do inline; the GUI only orchestrates |
 | `atmosphere.py` | ~355 | NRLMSISE-00 (default) / US Std Atm 1976 (fallback), 0–1000 km, dynamic pressure |
 | `gravity.py` | ~62 | WGS-84 J2 gravity vector in ECEF |
 | `slv_performance.py` | ~287 | Algebraic payload-to-orbit estimation (Schilling) |

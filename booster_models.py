@@ -8,6 +8,7 @@ four packaged models: Scud-B, Al Hussein, No-dong, and Taepodong-I.
 Loft angle / loft angle rate for Scud-B taken from Figure 3 of the same paper.
 """
 
+import math
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
@@ -1823,6 +1824,69 @@ def _gridfin_start_mach(contraction_ratio: float, gamma: float = 1.4) -> float:
 # Representative cells-across-frame used to estimate the (secondary) friction
 # wetted area when σ is given but the cell pitch is not.
 _GRIDFIN_DEFAULT_CELLS = 10.0
+
+
+# ---------------------------------------------------------------------------
+# Small design formulas the editor dialogs surface (moved out of thrusty.py
+# so the GUI holds no physics of its own)
+# ---------------------------------------------------------------------------
+
+def nozzle_exit_area_estimate(mdot_kg_s: float, isp_s: float,
+                              performance_factor: float,
+                              g0: float = _G0) -> float:
+    """Nozzle exit area (m²) as a fraction of the vacuum thrust per unit
+    sea-level pressure:  A_e ≈ pf · (ṁ·Isp·g₀) / p₀,  p₀ = 101 325 Pa.
+
+    `performance_factor` is the user's dimensionless knob (default 0.10 in
+    the editor); the result is a total across all nozzles."""
+    if mdot_kg_s <= 0 or isp_s <= 0 or performance_factor <= 0:
+        raise ValueError("mdot, Isp and performance factor must be > 0")
+    return (g0 / 101325.0) * mdot_kg_s * isp_s * performance_factor
+
+
+def thrust_for_acceleration(mass_kg: float, a_vertical_ms2: float,
+                            a_horizontal_ms2: float = 0.0,
+                            g0: float = _G0) -> float:
+    """Thrust (N) that gives a vehicle of `mass_kg` the stated vertical and
+    horizontal accelerations against gravity:
+        T = m · √(a_h² + (a_v + g₀)²)."""
+    if mass_kg <= 0:
+        raise ValueError("mass must be > 0")
+    return mass_kg * math.sqrt(a_horizontal_ms2 ** 2
+                               + (a_vertical_ms2 + g0) ** 2)
+
+
+def base_area_m2(diameter_m: float) -> float:
+    """Circular reference area π·(d/2)²."""
+    return math.pi * (float(diameter_m) / 2.0) ** 2
+
+
+def ballistic_coefficient(mass_kg: float, cd_total: float,
+                          diameter_m: float) -> float:
+    """β = m / (C_D · A) with A the circular base area (kg/m²); +inf when
+    the drag coefficient is zero."""
+    area = base_area_m2(diameter_m)
+    if cd_total <= 0 or area <= 0:
+        return float('inf')
+    return float(mass_kg) / (cd_total * area)
+
+
+def cone_half_angle_deg(diameter_m: float, length_m: float) -> float:
+    """Half-angle of a sharp cone from base diameter and length,
+    θ = atan(r_b / ℓ)."""
+    return math.degrees(math.atan2(float(diameter_m) / 2.0, float(length_m)))
+
+
+def wing_exposed_area_m2(root_chord_m: float, span_exposed_m: float,
+                         sweep_deg: float = 0.0) -> float:
+    """Both exposed wing panels, straight trailing edge:
+        c_t = max(0, c_r − s_e·tanΛ),   S_exp = (c_r + c_t)·s_e.
+    Zero unless both chord and span are positive."""
+    c_r, s_e = float(root_chord_m or 0.0), float(span_exposed_m or 0.0)
+    if c_r <= 0.0 or s_e <= 0.0:
+        return 0.0
+    c_t = max(0.0, c_r - s_e * math.tan(math.radians(float(sweep_deg or 0.0))))
+    return (c_r + c_t) * s_e
 
 
 def grid_fin_solidity(web_thickness_m: float, cell_pitch_m: float) -> float:

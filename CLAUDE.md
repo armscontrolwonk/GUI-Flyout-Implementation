@@ -41,6 +41,10 @@ improve this."
 - **Screening tier, not design tier.** Heating and survivability outputs
   are qualitative consequence bands anchored to flight experience. Do not
   add design-fidelity thermal, structural, or guidance models.
+- **The GUI computes nothing.** `thrusty.py` is widgets, threads and
+  plotting only. A formula or sweep loop belongs in a core module
+  (`analysis.py`, `coordinates.py`, `booster_models.py`, …) with a test;
+  the dialog calls it. This keeps the core portable and testable headless.
 - Requests in this repo are about the simulator: integrator bugs, guidance
   branch selection, plotting, file formats, validation against published
   benchmarks, and documentation. Frame work that way.
@@ -73,6 +77,7 @@ observed test-flight impact zones for analytic comparison.
 | `thrusty.py` | Tkinter GUI |
 | `trajectory.py` | 3-DOF integrator, guidance laws, range optimiser, orbital planner, reentry glide |
 | `booster_models.py` | Booster and reentry-object dataclasses, drag, thrust, staging |
+| `analysis.py` | Sweep drivers (range ring, parametric sweep, footprint) and result post-processing; the GUI orchestrates these, never computes |
 | `heating.py`, `tps_ladder.py`, `survivability_report.py` | Reentry aerothermal screening |
 | `slv_performance.py` | Schilling payload-to-orbit estimator |
 | `METHODS.md` | Governing equations and citations for every model |

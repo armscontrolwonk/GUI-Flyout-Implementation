@@ -195,3 +195,49 @@ def range_between(lat1, lon1, lat2, lon2, radius=None):
         )
     )
     return RP * A_v * (sigma - d_sig)
+
+
+# ---------------------------------------------------------------------------
+# Aiming geometry (moved here from the GUI's azimuth dialogs)
+# ---------------------------------------------------------------------------
+
+def initial_bearing_deg(lat1, lon1, lat2, lon2):
+    """Great-circle initial bearing from point 1 to point 2, degrees
+    clockwise from north in [0, 360).  Inputs in radians (spherical
+    formula; the ellipsoidal correction is well below the guidance
+    resolution this feeds)."""
+    dl = lon2 - lon1
+    x = np.sin(dl) * np.cos(lat2)
+    y = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(dl)
+    return float(np.degrees(np.arctan2(x, y)) % 360.0)
+
+
+def min_energy_flight_time_s(range_m, g=9.81):
+    """Flat-earth minimum-energy ballistic time of flight  T = √(2R/g)  —
+    a first-order estimate used only to size the Earth-rotation correction
+    before a trajectory has been flown."""
+    return float(np.sqrt(2.0 * float(range_m) / g))
+
+
+def rotation_corrected_azimuth(lat1, lon1, lat2, lon2, flight_time_s):
+    """Launch azimuth to reach a target that drifts east by Ω·T during the
+    flight, i.e. the bearing to where the target WILL BE (equivalently: the
+    inertial trajectory must end at the target's future ECI position).
+
+    Inputs in radians.  Returns a dict:
+        range_km               geodesic range to the target now
+        flight_time_s          T as given
+        drift_deg              Ω·T, the eastward longitude shift applied
+        azimuth_deg            corrected bearing
+        azimuth_uncorrected_deg  instantaneous great-circle bearing
+    """
+    rng_m = float(range_between(lat1, lon1, lat2, lon2))
+    T = float(flight_time_s)
+    dlon = OMEGA_EARTH * T
+    return dict(
+        range_km=rng_m / 1000.0,
+        flight_time_s=T,
+        drift_deg=float(np.degrees(dlon)),
+        azimuth_deg=initial_bearing_deg(lat1, lon1, lat2, lon2 + dlon),
+        azimuth_uncorrected_deg=initial_bearing_deg(lat1, lon1, lat2, lon2),
+    )

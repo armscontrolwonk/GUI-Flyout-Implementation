@@ -48,7 +48,10 @@ from booster_models import (BOOSTER_DB, get_booster,
 from trajectory import (integrate_trajectory, maximize_range, aim_booster,
                         plan_orbital_insertion, MaxRangeCancelled,
                         wheelon_burnout_angle)
-from coordinates import range_between
+from coordinates import (range_between, initial_bearing_deg,
+                         min_energy_flight_time_s, rotation_corrected_azimuth)
+import analysis
+from analysis import glide_state_from_result as _glide_state_from_result
 from slv_performance import schilling_performance
 import mass_estimator as mest
 import heating
@@ -1154,9 +1157,7 @@ class _StageFrame(ttk.LabelFrame):
             try:
                 isp  = float(isp_var.get())
                 pf   = float(pf_var.get())
-                if isp <= 0 or pf <= 0:
-                    raise ValueError
-                ae = (self._G0 / 101325.0) * mdot * isp * pf
+                ae = mm.nozzle_exit_area_estimate(mdot, isp, pf)
                 result_var.set(f"Ae ≈ {ae:.4f} m²")
                 return ae
             except (ValueError, TypeError):
@@ -1257,7 +1258,7 @@ class _StageFrame(ttk.LabelFrame):
             try:
                 av  = float(av_var.get())
                 ah  = float(ah_var.get())
-                f_n = mass * math.sqrt(ah**2 + (av + G0)**2)
+                f_n = mm.thrust_for_acceleration(mass, av, ah)
                 if f_n <= 0:
                     raise ValueError
             except (ValueError, TypeError):
@@ -4387,7 +4388,7 @@ class ROEditorDialog(tk.Toplevel):
                     _l.config(text="—")
                 beta_lbl.config(text="invalid input"); _result[0] = None
                 return
-            area = math.pi * (d / 2.0) ** 2
+            area = mm.base_area_m2(d)
             _war = (wa / area if area > 0 else 0.0)
             if bicon_var.get():
                 try:
@@ -4403,7 +4404,7 @@ class ROEditorDialog(tk.Toplevel):
                                            wing_area_ratio=_war)
             else:
                 c = _cd_cone_hypersonic(th, ep, mach=mk, wing_area_ratio=_war)
-            beta = m / (c['total'] * area) if c['total'] > 0 else float('inf')
+            beta = mm.ballistic_coefficient(m, c['total'], d)
             cdw_lbl.config(text=f"{c['pressure']:.4f}")
             cdf_lbl.config(text=f"{c['friction']:.4f}")
             cdb_lbl.config(text=f"{c['base']:.4f}")
@@ -4589,20 +4590,17 @@ class ROEditorDialog(tk.Toplevel):
                     d = float(dia_var.get())
                     if d <= 0:
                         return _clear("enter base diameter")
-                    th = math.degrees(math.atan2(d / 2.0, L))
+                    th = mm.cone_half_angle_deg(d, L)
                     theta_lbl.config(text=f"{th:.2f}°  (atan(r_b/ℓ))")
                     # Wing composite: exposed panels (c_r + c_t)·s_e from the
                     # editor's planform, only when Maneuvering declares wings.
                     s_exp = 0.0
                     try:
                         if bool(self._glider_var.get()):
-                            c_r = float(self._wing_root_var.get() or 0.0)
-                            s_e = float(self._wing_span_var.get() or 0.0)
-                            swp = float(self._wing_sweep_var.get() or 0.0)
-                            if c_r > 0.0 and s_e > 0.0:
-                                c_t = max(0.0, c_r - s_e * math.tan(
-                                    math.radians(swp)))
-                                s_exp = (c_r + c_t) * s_e
+                            s_exp = mm.wing_exposed_area_m2(
+                                self._wing_root_var.get() or 0.0,
+                                self._wing_span_var.get() or 0.0,
+                                self._wing_sweep_var.get() or 0.0)
                     except (ValueError, AttributeError, tk.TclError):
                         s_exp = 0.0
                     wing_lbl.config(
@@ -4610,7 +4608,7 @@ class ROEditorDialog(tk.Toplevel):
                               "config)" if s_exp > 0.0
                               else "none (body alone)"))
                     kw = dict(theta_deg=th, wing_exposed_m2=s_exp)
-                    a_ref = math.pi * (d / 2.0) ** 2   # full-circle base area
+                    a_ref = mm.base_area_m2(d)          # full-circle base area
             except (ValueError, AttributeError):
                 return _clear("invalid input")
             r = _lifting_body_sweep(form, mach=mk,
@@ -6497,37 +6495,17 @@ class RangeRingDialog(tk.Toplevel):
 
     def _worker(self, booster, guidance, lat, lon, la,
                 gt_start_s, gt_stop_s, launch_elevation_deg):
-        azimuths = np.linspace(0.0, 360.0, self._N_AZ, endpoint=False)
-        points   = []   # (az, impact_lon, impact_lat)
-
-        for i, az in enumerate(azimuths):
+        points = []   # (az, impact_lon, impact_lat)
+        ring = analysis.iter_range_ring(
+            booster, lat, lon, n_az=self._N_AZ,
+            guidance=guidance, burnout_angle_deg=la,
+            gt_turn_start_s=gt_start_s, gt_turn_stop_s=gt_stop_s)
+        for i, (az, imp_lon, imp_lat) in enumerate(ring):
             if self._stop.is_set():
                 self.after(0, self._on_cancelled)
                 return
-            try:
-                result = maximize_range(
-                    booster, lat, lon, az,
-                    guidance=guidance,
-                    burnout_angle_deg=la,
-                    gt_turn_start_s=gt_start_s,
-                    gt_turn_stop_s=gt_stop_s,
-                )
-                ms_list = result.get('milestones', [])
-                impact  = next(
-                    (m for m in ms_list
-                     if 'impact' in m.get('event', '').lower()
-                     and not m.get('is_debris', False)),
-                    None)
-                if impact:
-                    t_arr  = np.asarray(result['t'])
-                    la_arr = np.asarray(result['lat'])
-                    lo_arr = np.asarray(result['lon'])
-                    imp_lat = float(np.interp(impact['t_s'], t_arr, la_arr))
-                    imp_lon = float(np.interp(impact['t_s'], t_arr, lo_arr))
-                    points.append((az, imp_lon, imp_lat))
-            except Exception:
-                pass   # skip failed azimuths silently
-
+            if imp_lon is not None:
+                points.append((az, imp_lon, imp_lat))
             self.after(0, self._on_progress, i + 1, len(points))
 
         self.after(0, self._on_done, points, lat, lon)
@@ -6555,9 +6533,6 @@ class RangeRingDialog(tk.Toplevel):
             self._prog_var.set(
                 f"Too few valid azimuths ({len(points)}). Check booster params.")
             return
-        avg_range = float(np.mean([
-            np.sqrt((p[2] - launch_lat)**2 + (p[1] - launch_lon)**2)
-            for p in points]))
         self._ring         = points
         self._launch_lat   = launch_lat
         self._launch_lon   = launch_lon
@@ -6653,17 +6628,11 @@ class RangeRingDialog(tk.Toplevel):
                 transform=geo, zorder=6)
 
         # Estimate average max range for the title.
-        ranges_km = []
-        for _, imp_lon, imp_lat in self._ring:
-            try:
-                km = range_between(
-                    np.radians(self._launch_lat), np.radians(self._launch_lon),
-                    np.radians(imp_lat), np.radians(imp_lon)) / 1000.0
-                ranges_km.append(km)
-            except Exception:
-                pass
-        rng_str = (f"~{np.mean(ranges_km):.0f} km max range"
-                   if ranges_km else "max range")
+        _mean_km = analysis.mean_range_km(
+            self._launch_lat, self._launch_lon,
+            [(p[1], p[2]) for p in self._ring])
+        rng_str = (f"~{_mean_km:.0f} km max range"
+                   if _mean_km is not None else "max range")
         booster_name = self._app._booster_var.get()
         ax.set_title(f"{booster_name}  ·  {rng_str}", fontsize=11, pad=8)
 
@@ -6827,13 +6796,8 @@ class ParametricSweepDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------
     def _make_points(self):
-        lo   = float(self._lo_var.get())
-        hi   = float(self._hi_var.get())
-        step = float(self._step_var.get())
-        if step <= 0:
-            raise ValueError("Step must be > 0.")
-        n = max(2, int(round((hi - lo) / step)) + 1)
-        return np.linspace(lo, hi, n)
+        return analysis.sweep_points(self._lo_var.get(), self._hi_var.get(),
+                                     self._step_var.get())
 
     # ------------------------------------------------------------------
     def _run(self):
@@ -6887,36 +6851,17 @@ class ParametricSweepDialog(tk.Toplevel):
     def _sweep_worker(self, booster, guidance, lat, lon, az, la, cutoff,
                       param_key, points, store_trajs, gt_start_s=5.0, gt_stop_s=None,
                       launch_elevation_deg=90.0):
-        for i, val in enumerate(points):
+        sweep = analysis.iter_parametric_sweep(
+            booster, lat, lon, param_key, points,
+            azimuth_deg=az, burnout_angle_deg=la, cutoff_time_s=cutoff,
+            gt_turn_start_s=gt_start_s, gt_turn_stop_s=gt_stop_s,
+            keep_trajectories=store_trajs,
+            guidance=guidance, launch_elevation_deg=launch_elevation_deg)
+        for i, sr in enumerate(sweep):
             if self._stop_evt.is_set():
                 break
-            run_az      = val if param_key == "azimuth"    else az
-            run_la      = val if param_key == "burnout_angle" else la
-            run_cut     = val if param_key == "cutoff"     else cutoff
-            run_gt_stop = val if param_key == "turn_stop"  else gt_stop_s
-            try:
-                r = integrate_trajectory(
-                    booster, lat, lon, run_az,
-                    guidance=guidance,
-                    burnout_angle_deg=run_la,
-                    cutoff_time_s=run_cut,
-                    gt_turn_start_s=gt_start_s,
-                    gt_turn_stop_s=run_gt_stop,
-                    launch_elevation_deg=launch_elevation_deg,
-                )
-                # Heating axes come free: integrate_trajectory computes the
-                # survivability FOM per run (result['heating_fom']).
-                _fom = r.get("heating_fom") or {}
-                row  = (val, r["range_km"] if r["range_km"] is not None else float("nan"),
-                        r["apogee_km"],
-                        float(_fom.get("q_peak_MW_m2") or float("nan")),
-                        float(_fom.get("integrated_load_MJ_m2") or float("nan")))
-                traj = (val, r) if store_trajs else None
-            except Exception:
-                row  = (val, float("nan"), float("nan"),
-                        float("nan"), float("nan"))
-                traj = None
-            self.after(0, self._add_point, row, traj, i + 1, len(points))
+            traj = (sr.value, sr.result) if store_trajs and sr.result else None
+            self.after(0, self._add_point, sr.as_tuple(), traj, i + 1, len(points))
         self.after(0, self._sweep_done)
 
     # ------------------------------------------------------------------
@@ -7173,11 +7118,8 @@ class FootprintDialog(tk.Toplevel):
     # ------------------------------------------------------------------
     def _run(self):
         try:
-            lo   = float(self._lo_var.get())
-            hi   = float(self._hi_var.get())
-            step = float(self._step_var.get())
-            if step <= 0 or lo > hi:
-                raise ValueError
+            bank_angles = analysis.bank_angles(
+                self._lo_var.get(), self._hi_var.get(), self._step_var.get())
         except ValueError:
             messagebox.showerror("Input error",
                                  "Check sweep range (lo ≤ hi, step > 0).", parent=self)
@@ -7189,12 +7131,6 @@ class FootprintDialog(tk.Toplevel):
         except Exception as exc:
             messagebox.showerror("Input error", str(exc), parent=self)
             return
-
-        bank_angles = []
-        v = lo
-        while v <= hi + 1e-9:
-            bank_angles.append(round(v, 6))
-            v += step
 
         self._results = []
         self._map_path = None
@@ -7218,55 +7154,20 @@ class FootprintDialog(tk.Toplevel):
 
     def _worker(self, booster, guidance, lat, lon, az, cutoff, la,
                 gt_start, gt_stop, orb, yaw, el, bank_angles):
-        import copy, dataclasses
-        from trajectory import integrate_trajectory
-        from booster_models import effective_ro
-
-        _max_t = 3600.0
         results = []
-
-        for i, bk in enumerate(bank_angles):
+        sweep = analysis.iter_bank_footprint(
+            booster, lat, lon, bank_angles, max_time_s=3600.0,
+            azimuth_deg=az, guidance=guidance, burnout_angle_deg=la,
+            cutoff_time_s=cutoff, gt_turn_start_s=gt_start,
+            gt_turn_stop_s=gt_stop, yaw_maneuvers=yaw,
+            launch_elevation_deg=el,
+            alpha_limit_deg=self._app._alpha_limit_value(),
+            alpha_induced_drag=self._app._alpha_induced_value(),
+            terrain_dem=self._app._terrain_dem_value(),
+            launch_elev_m=self._app._launch_elev_value())
+        for i, (bk, r) in enumerate(sweep):
             if self._stop_evt.is_set():
                 break
-
-            m = copy.deepcopy(booster)
-            _ero = effective_ro(m)
-            if _ero is not None:
-                # Hold the swept bank angle for the entire flight.  The bank
-                # is only applied while the glider is active (post-pierce
-                # lift block in _eom), so the [0, _max_t] window safely
-                # covers the whole glide phase regardless of when it starts.
-                new_ro = dataclasses.replace(
-                    _ero,
-                    glider_enabled=True,
-                    glider_bank_schedule=[(0.0, _max_t, float(bk))],
-                )
-                node = m
-                while node is not None:
-                    if node.ro is not None:
-                        node.ro = new_ro
-                        break
-                    node = node.stage2
-
-            try:
-                r = integrate_trajectory(
-                    m, lat, lon, az,
-                    guidance=guidance,
-                    burnout_angle_deg=la,
-                    cutoff_time_s=cutoff,
-                    gt_turn_start_s=gt_start,
-                    gt_turn_stop_s=gt_stop,
-                    yaw_maneuvers=yaw,
-                    launch_elevation_deg=el,
-                    alpha_limit_deg=self._app._alpha_limit_value(),
-                    alpha_induced_drag=self._app._alpha_induced_value(),
-                    terrain_dem=self._app._terrain_dem_value(),
-                    launch_elev_m=self._app._launch_elev_value(),
-                    max_time_s=_max_t,
-                )
-            except Exception:
-                r = None
-
             results.append((bk, r))
             done = i + 1
             self.after(0, lambda d=done, tot=len(bank_angles): (
@@ -7351,17 +7252,8 @@ class FootprintDialog(tk.Toplevel):
         # inverted-lift dive trajectories whose impacts crash short, so
         # they fall *inside* the hull and don't distort the boundary.
         if len(valid) >= 3:
-            try:
-                from scipy.spatial import ConvexHull
-                _pts = np.array([[r['lat'][-1], r['lon'][-1]] for _, r in valid])
-                _hull = ConvexHull(_pts)
-                env = [_pts[i].tolist() for i in _hull.vertices]
-                env.append(env[0])
-            except Exception:
-                # Fallback: sweep-order polyline (degenerate hull, e.g. all
-                # impacts collinear).
-                env = [[r['lat'][-1], r['lon'][-1]] for _, r in valid]
-                env.append(env[0])
+            env = analysis.footprint_envelope(
+                [analysis.final_position(r) for _, r in valid])
             # The envelope is the headline of this map (the reachable
             # footprint), so it reads as an AREA, not a faint outline: a very
             # light neutral fill inside a dashed boundary.  The 10 % fill is a
@@ -7392,27 +7284,6 @@ class FootprintDialog(tk.Toplevel):
         import webbrowser
         if self._map_path:
             webbrowser.open(f"file://{self._map_path}")
-
-
-def _glide_state_from_result(res):
-    """Mid-glide (V_kms, alt_km) from a trajectory result dict, or None.
-
-    Takes the median speed/altitude over the post-apogee in-atmosphere glide
-    (25-55 km) so the damping estimate can anchor on a flown state."""
-    try:
-        import numpy as _np
-        alt = _np.asarray(res['alt']).ravel() / 1000.0
-        spd = _np.asarray(res['speed']).ravel() / 1000.0
-        if alt.size < 5:
-            return None
-        iap = int(_np.argmax(alt))
-        a, v = alt[iap:], spd[iap:]
-        m = (a >= 25.0) & (a <= 55.0)
-        if not m.any():
-            return None
-        return float(_np.median(v[m])), float(_np.median(a[m]))
-    except Exception:
-        return None
 
 
 class DampingEstimatorDialog(tk.Toplevel):
@@ -12168,9 +12039,6 @@ class BoosterFlyoutApp(tk.Tk):
         last_t = (self._result.get('time_of_flight_s')
                   if self._result is not None else None)
 
-        OMEGA = 7.2921e-5   # Earth rotation rate (rad/s, sidereal)
-        G_MS2 = 9.81
-
         def _compute():
             try:
                 lat1 = np.radians(float(self._launch_lat.get()))
@@ -12180,15 +12048,9 @@ class BoosterFlyoutApp(tk.Tk):
             except (ValueError, AttributeError):
                 return None
 
-            rng_m  = float(range_between(lat1, lon1, lat2, lon2))
-            rng_km = rng_m / 1000.0
-
             method = method_var.get()
-            if method == "none":
-                T = 0.0
-            elif method == "ballistic":
-                # Minimum-energy ballistic flight time: T = sqrt(2 R / g)
-                T = float(np.sqrt(2.0 * rng_m / G_MS2))
+            if method == "ballistic":
+                T = min_energy_flight_time_s(range_between(lat1, lon1, lat2, lon2))
             elif method == "last_sim":
                 T = float(last_t) if last_t else 0.0
             elif method == "user_t":
@@ -12196,25 +12058,12 @@ class BoosterFlyoutApp(tk.Tk):
                     T = float(user_t_var.get()) * 60.0
                 except ValueError:
                     T = 0.0
-            else:
+            else:               # "none": instantaneous bearing
                 T = 0.0
 
-            # Target drifts east by Ω·T during flight; aim at where it
-            # WILL BE, i.e. shift the aim longitude east by the same amount.
-            # (Equivalently: the booster's inertial trajectory must end
-            # at the target's future ECI position.)
-            dlon_corr = OMEGA * T
-
-            def _bearing(la1, lo1, la2, lo2):
-                dl = lo2 - lo1
-                x  = np.sin(dl) * np.cos(la2)
-                y  = (np.cos(la1) * np.sin(la2)
-                      - np.sin(la1) * np.cos(la2) * np.cos(dl))
-                return float(np.degrees(np.arctan2(x, y)) % 360.0)
-
-            az_u = _bearing(lat1, lon1, lat2, lon2)
-            az   = _bearing(lat1, lon1, lat2, lon2 + dlon_corr)
-            return rng_km, T, float(np.degrees(dlon_corr)), az, az_u
+            c = rotation_corrected_azimuth(lat1, lon1, lat2, lon2, T)
+            return (c['range_km'], c['flight_time_s'], c['drift_deg'],
+                    c['azimuth_deg'], c['azimuth_uncorrected_deg'])
 
         def _update(*_):
             r = _compute()
@@ -12365,10 +12214,7 @@ class BoosterFlyoutApp(tk.Tk):
             lat2 = np.radians(lat2_dd)
             lon2 = np.radians(lon2_dd)
 
-            dlon = lon2 - lon1
-            x = np.sin(dlon) * np.cos(lat2)
-            y = np.cos(lat1)*np.sin(lat2) - np.sin(lat1)*np.cos(lat2)*np.cos(dlon)
-            az = np.degrees(np.arctan2(x, y)) % 360
+            az = initial_bearing_deg(lat1, lon1, lat2, lon2)
             self._azimuth_var.set(f"{az:.2f}")
 
             rng_km = range_between(lat1, lon1, lat2, lon2) / 1000.0
@@ -13618,14 +13464,10 @@ class BoosterFlyoutApp(tk.Tk):
         self._ax_spd.set_xlabel("Time (s)", fontsize=8)
         self._ax_spd.set_ylabel("Speed (km/s)", fontsize=8)
         self._ax_spd.set_title("Speed vs Time", fontsize=9)
-        # Altitude-corrected Mach on twin axis
-        _alt_m_s = np.asarray(r.get('alt', []))
-        _spd_ms  = np.asarray(r['speed'])
-        _mach_s  = np.full(len(_alt_m_s), np.nan)
-        for _i, _h in enumerate(_alt_m_s):
-            _, _, _, _snd = _atm_fn(float(_h))
-            if _snd > 10.0:          # NaN above ~86 km where atmosphere model → 0
-                _mach_s[_i] = _spd_ms[_i] / _snd
+        # Altitude-corrected Mach on twin axis (NaN above ~86 km where the
+        # atmosphere model's sound speed → 0)
+        _aero = analysis.derived_aero(r, _atm_fn)
+        _mach_s = _aero['mach'] if _aero else np.full(len(t), np.nan)
         _ax_m = self._ax_spd_twin
         _ax_m.plot(t, _mach_s, color='steelblue', linewidth=1.2, ls='--', label='Mach')
         _ax_m.set_ylabel("Mach", fontsize=8, color='steelblue')
@@ -13679,8 +13521,7 @@ class BoosterFlyoutApp(tk.Tk):
             ]:
                 if _t_ev is None or _t_ev > t[-1]:
                     continue
-                _ev_lat = float(np.interp(_t_ev, t, lat_arr))
-                _ev_lon = float(np.interp(_t_ev, t, lon_arr))
+                _ev_lat, _ev_lon = analysis.position_at_time(r, _t_ev)
                 _ev_lon_c = ((_ev_lon - center_lon + 180.0) % 360.0) - 180.0
                 self._ax_trk.plot(_ev_lon_c, _ev_lat, mkr, color=col,
                                   markersize=7, label=lbl, zorder=6)
@@ -13799,30 +13640,17 @@ class BoosterFlyoutApp(tk.Tk):
         ax_g.grid(True, alpha=0.35)
 
         # ── Dyn. Pressure & Mach (burn period only) ──────────────────
-        from atmosphere import atmosphere as _atm
-        _alt_m  = np.asarray(r.get('alt', []))
         _vel_ec = np.asarray(r.get('vel_ecef', []))
+        _alt_m  = np.asarray(r.get('alt', []))
         _t_aero = np.asarray(r['t'])
 
-        if len(_alt_m) > 1 and _vel_ec.ndim == 2 and len(_vel_ec) == len(_alt_m):
-            _spd_ms = np.asarray(r['speed'])
-            _rho    = np.empty(len(_alt_m))
-            _sound  = np.empty(len(_alt_m))
-            for _i, _h in enumerate(_alt_m):
-                _, _, _rho[_i], _sound[_i] = _atm(float(_h))
-            _q_kpa = 0.5 * _rho * _spd_ms**2 / 1e3
-            _mach  = _spd_ms / np.where(_sound > 0, _sound, 1.0)
-
+        if (len(_alt_m) > 1 and _vel_ec.ndim == 2 and len(_vel_ec) == len(_alt_m)
+                and _aero is not None):
             # Restrict to burn period (t ≤ last burnout milestone)
-            _ms = r.get('milestones', [])
-            _bo_times = [float(m['t_s']) for m in _ms
-                         if any(k in m.get('event', '').lower()
-                                for k in ('burnout', 'cutoff', 'burn out'))]
-            _t_cutoff = max(_bo_times) if _bo_times else float(_t_aero[-1])
-            _mask = _t_aero <= _t_cutoff
-            _tb   = _t_aero[_mask]
-            _qb   = _q_kpa[_mask]
-            _mb   = _mach[_mask]
+            _mask = _aero['burn_mask']
+            _tb   = _aero['t'][_mask]
+            _qb   = _aero['q_kpa'][_mask]
+            _mb   = _aero['mach'][_mask]
 
             ax_qm  = self._ax_qmach
             ax_mch = self._ax_qmach_twin
@@ -15443,23 +15271,13 @@ class BoosterFlyoutApp(tk.Tk):
                 "instant.", parent=self)
             return
         r = self._result
-        t = np.asarray(r['t'])
         la = np.asarray(r['lat'])
         lo = np.asarray(r['lon'])
-        # unwrap for interpolation, wrap the sample back to [-180, 180]
-        _d = np.diff(lo)
-        _d = (_d + 180.0) % 360.0 - 180.0
-        lo_uw = np.empty_like(lo, dtype=float)
-        lo_uw[0] = lo[0]
-        if len(_d):
-            lo_uw[1:] = lo[0] + np.cumsum(_d)
 
         import re as _re
 
         def _at(ts):
-            lon = float(np.interp(ts, t, lo_uw))
-            return (float(np.interp(ts, t, la)),
-                    ((lon + 180.0) % 360.0) - 180.0)
+            return analysis.position_at_time(r, ts)
 
         def _short(e):
             return _re.sub(r'\s*\(\d[^)]*\)\s*$', '', e).strip()
