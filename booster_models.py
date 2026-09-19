@@ -2252,9 +2252,11 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
 
     With ``include_flight_plan=False`` the flight-plan fields (guidance and the
     per-stage schedule -- everything in ``_FLIGHT_PLAN_TOP_KEYS`` and
-    ``_FLIGHT_PLAN_STAGE_KEYS``) are omitted at every nesting level, yielding a
-    hardware-only booster.  That is the form the booster library stores; the
-    flight plan travels separately in a ``.flightplan.json`` file.  The default
+    ``_FLIGHT_PLAN_STAGE_KEYS``), the run-time loadout record and the embedded
+    reentry object are omitted at every nesting level, yielding a hardware-only
+    booster.  That is the form the booster library stores; the flight plan
+    travels separately in a ``.flightplan.json`` file and names the object it
+    flies, and the object itself is a separate ``.ro.json``.  The default
     (``True``) keeps the full serialisation for internal round-trips.
     """
     d = {
@@ -2334,8 +2336,9 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         'booster_core_delay_s':   p.booster_core_delay_s,
         'booster_jettison_s':     p.booster_jettison_s,
     }
-    # Reentry object: written as the embedded 'ro' dict when present.  The
-    # booster carries no reentry hardware, so there is nothing else to write.
+    # Reentry object: written as the embedded 'ro' dict for the full
+    # (internal) round-trip.  The hardware-only form drops it again below --
+    # see the note there.
     if p.ro is not None:
         d['ro'] = ro_to_dict(p.ro)
     # Per-stage pitch overrides — only written when set (keeps dicts compact)
@@ -2362,6 +2365,18 @@ def booster_to_dict(p: BoosterParams, include_flight_plan: bool = True) -> dict:
         for _k in (*_FLIGHT_PLAN_TOP_KEYS, *_FLIGHT_PLAN_STAGE_KEYS,
                    *_RUN_LOADOUT_KEYS):
             d.pop(_k, None)
+        # ...and no embedded reentry object.  A booster file is STACK-ONLY:
+        # the object is a separate library file, named by the flight plan's
+        # `reentry_object`.  Writing it here was a leak with two heads.  It
+        # put reentry HARDWARE in a booster file, and because it called the
+        # full object serialiser it also carried the object's REENTRY PLAN --
+        # guidance, bank schedule, dive target — into a file that is supposed
+        # to hold no plan at all.  Nothing caught it: the schema test walks
+        # the stage chain and never looks inside 'ro'.  A reader of such a
+        # file also got the stale embedded plan in preference to the object's
+        # real one, because get_booster only consults the reentry-plan store
+        # when the booster has no object of its own.
+        d.pop('ro', None)
     return d
 
 
@@ -2620,6 +2635,15 @@ def booster_from_dict(d: dict) -> BoosterParams:
     # never lives on the booster in the current schema.
     if d.get('ro') is not None:
         _p.ro = ro_from_dict(d['ro'])
+        # Still honoured, so no file becomes unreadable — but say so.  A
+        # booster file is stack-only; an embedded object is a pre-split shape
+        # that also carries that object's REENTRY PLAN, and get_booster
+        # resolves the plan-named object only when the booster has none of its
+        # own, so this copy quietly outranks the object's real plan.
+        print(f"Warning: booster '{d.get('name', '?')}' embeds reentry object "
+              f"'{d['ro'].get('name', '?')}' and the plan that came with it. "
+              f"Booster files are stack-only: the flight plan should name the "
+              f"object instead. Re-saving this booster drops the embedded copy.")
     return _p  # type: ignore[return-value]
 
 

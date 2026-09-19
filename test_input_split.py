@@ -42,10 +42,24 @@ BOOSTER_HARDWARE = ({f.name for f in dc.fields(BoosterParams)}
                     - FLIGHT_PLAN_KEYS - META - RUN_SCRATCH - {'ro'})
 RO_HARDWARE = {f.name for f in dc.fields(ROParams)} - REENTRY_PLAN_KEYS - META - DERIVED
 
+# A shipped booster whose flight plan names the object it flies, for the
+# export/import link test.  Picked from the data rather than hard-coded, so it
+# survives the library being re-curated.
+def _first_plan_naming_an_object():
+    for _fp in sorted(glob.glob('flight_plans/*.flightplan.json')):
+        _d = json.load(open(_fp))
+        if _d.get('reentry_object'):
+            return json.load(open(
+                _fp.replace('flight_plans/', 'booster_library/')
+                   .replace('.flightplan.json', '.booster.json')))['name']
+    return None
+
+
 BOOSTER_FILES = sorted(glob.glob('booster_library/*.booster.json') + glob.glob('*.booster.json'))
 RO_FILES = sorted(glob.glob('ro_library/*.ro.json') + glob.glob('*.ro.json'))
 FLIGHT_PLAN_FILES = sorted(glob.glob('flight_plans/*.flightplan.json'))
 REENTRY_PLAN_FILES = sorted(glob.glob('reentry_plans/*.reentryplan.json'))
+FLIGHT_PLAN_NAMING_AN_OBJECT = _first_plan_naming_an_object()
 
 
 def _stages(d):
@@ -79,12 +93,82 @@ def test_no_key_is_both_hardware_and_plan():
 
 # ── the shipped files ───────────────────────────────────────────────────────
 
+# Flat reentry fields from before the object became its own file.  They are
+# not plan keys and not booster hardware, so no key-set check saw them -- but
+# `upgrade_booster_dict` still reconstructs a whole object, reentry plan and
+# all, from `ro_beta_kg_m2` plus whichever of these are present.
+LEGACY_OBJECT_KEYS = {
+    'ro_beta_kg_m2', 'rv_beta_kg_m2', 'ro_mass_kg', 'rv_mass_kg',
+    'ro_shape', 'rv_shape', 'ro_diameter_m', 'rv_diameter_m',
+    'ro_length_m', 'rv_length_m', 'ro_nose_radius_m', 'rv_nose_radius_m',
+}
+
+
+def test_the_shipped_library_is_present():
+    """Fails loudly where the parametrized checks would go quiet.
+
+    Seven tests in this file are parametrized over a glob of the four data
+    directories, and pytest SKIPS a parametrized test whose argument list is
+    empty -- it does not fail.  So emptying those directories, or running
+    pytest from another working directory, silently removes most of the
+    enforcement while the run still reports green.  This is the one assertion
+    that notices."""
+    assert BOOSTER_FILES and RO_FILES and FLIGHT_PLAN_FILES and REENTRY_PLAN_FILES, (
+        f"no library to check (wrong working directory, or the data was "
+        f"removed): {len(BOOSTER_FILES)} boosters, {len(RO_FILES)} objects, "
+        f"{len(FLIGHT_PLAN_FILES)} flight plans, "
+        f"{len(REENTRY_PLAN_FILES)} reentry plans")
+
+
 @pytest.mark.parametrize('path', BOOSTER_FILES)
 def test_booster_file_is_hardware_only(path):
     d = json.load(open(path))
     for i, st in enumerate(_stages(d)):
-        leaked = set(st) & (FLIGHT_PLAN_KEYS | DERIVED | RUN_SCRATCH)
+        leaked = set(st) & (FLIGHT_PLAN_KEYS | REENTRY_PLAN_KEYS | DERIVED
+                            | RUN_SCRATCH | LEGACY_OBJECT_KEYS)
         assert not leaked, f"{path} stage {i + 1} stores plan/derived/loadout keys {sorted(leaked)}"
+
+
+def _nested_objects(node, path='$'):
+    """Every reentry-object-shaped dict anywhere inside a booster dict.
+
+    A walk, not a key lookup, because the reader takes an embedded object from
+    more than one place: `booster_from_dict` accepts `rv` as an alias for `ro`,
+    and a hand-edited or pre-rename file can nest one below the stage2 chain
+    that `_stages` follows.  Shape, not name, is the test: anything carrying a
+    ballistic coefficient or reentry-plan keys is an object.
+    """
+    def _is_object(v):
+        return isinstance(v, dict) and ('beta_kg_m2' in v
+                                        or bool(set(v) & REENTRY_PLAN_KEYS))
+
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if _is_object(v):
+                yield f"{path}.{k}", v
+            yield from _nested_objects(v, f"{path}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            if _is_object(v):
+                yield f"{path}[{i}]", v
+            yield from _nested_objects(v, f"{path}[{i}]")
+
+
+@pytest.mark.parametrize('path', BOOSTER_FILES)
+def test_booster_file_embeds_no_reentry_object(path):
+    """Stack-only, checked INSIDE the file rather than across its top keys.
+
+    Every other check here intersects a dict's own key set with the forbidden
+    ones, which cannot see a nested object: `ro` is subtracted out of
+    BOOSTER_HARDWARE and `_stages` follows only the stage2 chain.  An embedded
+    object is a violation twice over -- reentry hardware living in a booster
+    file, and (because it is written by the full object serialiser) that
+    object's whole reentry plan with it."""
+    found = list(_nested_objects(json.load(open(path))))
+    assert not found, "; ".join(
+        f"{path} embeds a reentry object at {where} "
+        f"({obj.get('name', '?')}, plan keys "
+        f"{sorted(set(obj) & REENTRY_PLAN_KEYS)})" for where, obj in found)
 
 
 @pytest.mark.parametrize('path', RO_FILES)
@@ -124,6 +208,76 @@ def test_booster_serialiser_omits_plan_keys_at_every_level():
     # ...and the full round-trip still carries them for in-memory use.
     q = booster_from_dict(booster_to_dict(p))
     assert q.interstage_jettison_s == 12.0 and q.booster_core_delay_s == 3.0
+
+
+def test_hardware_only_booster_serialiser_drops_the_embedded_object():
+    """Regression for the leak the file checks could not see.
+
+    `booster_to_dict(..., include_flight_plan=False)` -- the form the library
+    stores and Export Booster writes -- used to emit `d['ro']` from the FULL
+    object serialiser, so a "hardware-only" booster carried the object's
+    reentry hardware AND all of its plan keys: guidance, damping, bank
+    schedule, dive target.  Worse on read-back, because `get_booster` resolves
+    the plan-named object only when the booster has none of its own, so the
+    stale embedded plan won over the object's real one, silently.
+
+    The object belongs in its own file; the flight plan names it.
+
+    Built from bare dataclasses on purpose: this holds the serialiser itself
+    and keeps working with no library at all, where the file-parametrized
+    checks above would go quiet (see test_the_shipped_library_is_present).
+    """
+    p = BoosterParams(name="T", mass_initial=1000.0, mass_propellant=700.0,
+                      mass_final=300.0, diameter_m=1.0, length_m=8.0,
+                      thrust_N=30e3, burn_time_s=60.0, isp_s=250.0)
+    p.ro = ROParams(name="w", mass_kg=800.0, beta_kg_m2=5000.0, shape="cone",
+                    diameter_m=0.88, length_m=2.0, maneuvering=True,
+                    glider_LD=2.0, glider_enabled=True,
+                    glider_guidance='skip_glide',
+                    glider_dive_target_lat_deg=38.5,
+                    glider_dive_target_lon_deg=127.1)
+    d = booster_to_dict(p, include_flight_plan=False)
+    for i, st in enumerate(_stages(d)):
+        assert 'ro' not in st, (
+            f"stage {i + 1} embeds the object, carrying "
+            f"{sorted(set(st['ro']) & REENTRY_PLAN_KEYS)}")
+    # the full (internal) form still round-trips it, plan and all
+    q = booster_from_dict(booster_to_dict(p))
+    assert q.ro is not None and q.ro.name == "w"
+    assert q.ro.glider_guidance == 'skip_glide'
+
+
+def test_export_import_round_trip_keeps_the_object_link():
+    """Dropping the embedded object is only safe if the link comes back.
+
+    Export writes a hardware-only booster plus a companion flight plan, and
+    the plan NAMES the object.  The booster alone can no longer reconstruct
+    it, so the name in the plan is the whole of the link: if a reader ignores
+    it, the visible leak this change removed is replaced by a silent loss, and
+    the vehicle flies as a bare stack.  Pin both halves.
+    """
+    name = FLIGHT_PLAN_NAMING_AN_OBJECT
+    if not name:
+        pytest.skip("no shipped plan names an object "
+                    "(test_the_shipped_library_is_present is the signal)")
+    p = get_booster(name)
+    assert p.ro is not None, f"{name}'s plan should name an object"
+    oname = p.ro.name
+
+    # export: the object is gone from the booster, the plan carries the name
+    d = booster_to_dict(p, include_flight_plan=False)
+    assert 'ro' not in d
+    fp = dict(extract_flight_plan(p), reentry_object=oname)
+
+    # import: the booster alone really has lost it...
+    q = booster_from_dict(d)
+    assert q.ro is None
+    assert apply_flight_plan(q, fp).ro is None, (
+        "apply_flight_plan copies guidance keys, not the object link — "
+        "a reader must resolve 'reentry_object' itself")
+    # ...and the name in the plan is enough to get it back
+    back = mm.resolve_reentry_object(fp['reentry_object'], extra_dirs=mm.USER_RO_DIRS)
+    assert back is not None and back.name == oname
 
 
 def test_ro_serialiser_never_writes_separation_mode():

@@ -15658,13 +15658,31 @@ class BoosterFlyoutApp(tk.Tk):
         # get_booster applies the booster's flight plan, so the extracted plan
         # reflects the shipped guidance rather than hardware defaults.
         p = get_booster(name)
-        # Booster files are hardware-only; the flight plan travels beside them
-        # as a companion .flightplan.json so guidance never lives on hardware.
+        # Booster files are hardware-only AND stack-only: guidance travels
+        # beside them as a companion .flightplan.json, and the reentry object
+        # is a library file of its own.  The plan NAMES the object it flies,
+        # which is the only booster-to-object link the four-inputs rule
+        # allows; embedding the object here would smuggle both its hardware
+        # and its reentry plan into a booster file.  Export Reentry Object
+        # writes the object's own pair.
         data = booster_to_dict(p, include_flight_plan=False)
         Path(path).write_text(json.dumps(data, indent=2))
-        fp_path = save_flight_plan(name, extract_flight_plan(p), Path(path).parent)
-        self._status_var.set(
-            f"Booster exported: {path}  (+ flight plan {Path(fp_path).name})")
+        fp = extract_flight_plan(p)
+        # The link is the PLAN's, so read it from the plan first and fall back
+        # to the attached object.  Taking it from p.ro alone would drop the
+        # key whenever the named object fails to resolve here (renamed, moved,
+        # or shadowed by the user library) — deleting the very link this is
+        # meant to preserve.
+        _src = mm.load_flight_plan(name, extra_dirs=mm.USER_FLIGHT_PLAN_DIRS) or {}
+        oname = (str(_src.get('reentry_object', '') or '')
+                 or (getattr(p.ro, 'name', '') if p.ro is not None else ''))
+        if oname:
+            fp['reentry_object'] = oname
+        fp_path = save_flight_plan(name, fp, Path(path).parent)
+        _note = (f"  (+ flight plan {Path(fp_path).name}, which flies "
+                 f"'{oname}' — export that object separately)"
+                 if oname else f"  (+ flight plan {Path(fp_path).name})")
+        self._status_var.set(f"Booster exported: {path}{_note}")
 
     def _load_ro(self):
         """Import a .ro.json file into the RV library (parallel to Load Booster)."""
@@ -15931,11 +15949,13 @@ class BoosterFlyoutApp(tk.Tk):
         _fp_sibling = Path(path).with_name(
             Path(path).name.replace('.booster.json', '').replace('.json', '')
             + '.flightplan.json')
+        _fp_data = None
         if _fp_sibling.exists():
             try:
-                p = apply_flight_plan(p, json.loads(_fp_sibling.read_text()))
+                _fp_data = json.loads(_fp_sibling.read_text())
+                p = apply_flight_plan(p, _fp_data)
             except Exception:
-                pass
+                _fp_data = None
         name = data.get('name') or Path(path).stem.replace('.booster', '').replace('.booster', '')
         if not name:
             messagebox.showerror("Load error", "Booster file has no name field.")
@@ -15943,10 +15963,35 @@ class BoosterFlyoutApp(tk.Tk):
         if name in BOOSTER_DB and not messagebox.askyesno(
                 "Overwrite?", f"'{name}' already exists. Overwrite?"):
             return
+        # Booster files are stack-only, so the companion plan is the ONLY
+        # record of which reentry object this booster flies.  apply_flight_plan
+        # copies guidance keys and not that link, so resolve it here, and
+        # persist the plan into the library — otherwise the name is gone by
+        # the next session (_save_custom_boosters writes hardware-only) and
+        # the import would silently produce a bare stack.
+        _oname = str((_fp_data or {}).get('reentry_object', '') or '')
+        _missing = ''
+        if _oname:
+            _obj = mm.resolve_reentry_object(_oname, extra_dirs=mm.USER_RO_DIRS)
+            if _obj is not None:
+                p.ro = _obj
+            else:
+                _missing = _oname
         BOOSTER_DB[name] = lambda p=p: p
+        if _fp_data is not None:
+            try:
+                save_flight_plan(name, _fp_data, _FLIGHT_PLAN_LIBRARY_PATH)
+            except Exception:
+                pass
         _save_custom_boosters()
         self._refresh_booster_list(select_name=name)
         self._status_var.set(f"Booster '{name}' loaded from {Path(path).name}")
+        if _missing:
+            messagebox.showwarning(
+                "Reentry object not found",
+                f"'{name}' flies '{_missing}', which is not in your "
+                f"reentry-object library.\n\nImport that object too "
+                f"(File ▸ Load Reentry Object), or the booster flies bare.")
 
     def _export_site(self):
         """Export the current launch site to a .site.json file."""
